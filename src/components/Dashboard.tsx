@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import LiveProvider, { useLive } from "./LiveProvider";
 import StatusBar from "./StatusBar";
 import Panel from "./Panel";
@@ -194,6 +195,13 @@ export default function Dashboard({ bundle }: { bundle: DashboardBundle }) {
           <span className="numeral text-[9px] tracking-[0.15em] text-faint">
             MISSION CONTROL · open telemetry over public GitHub data
           </span>
+          <Link
+            prefetch={false}
+            href="/explore"
+            className="numeral text-[9px] tracking-[0.15em] text-accent/80 transition-colors hover:text-accent"
+          >
+            EXPLORE ANY REPO →
+          </Link>
           <span className="numeral text-[9px] text-faint">
             {repo ? (
               <a

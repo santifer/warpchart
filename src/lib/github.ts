@@ -10,7 +10,10 @@ function token(): string {
 
 // GitHub returns transient 502s now and then; retry briefly (the budget is
 // fine: these routes are ISR/edge-cached, not user-blocking).
-async function ghFetch<T>(path: string, init?: { method?: string; body?: unknown }): Promise<T> {
+async function ghFetch<T>(
+  path: string,
+  init?: { method?: string; body?: unknown; accept?: string }
+): Promise<T> {
   const delays = [400, 900, 2000];
   for (let attempt = 0; ; attempt++) {
     let res: Response | null = null;
@@ -20,7 +23,7 @@ async function ghFetch<T>(path: string, init?: { method?: string; body?: unknown
         body: init?.body ? JSON.stringify(init.body) : undefined,
         headers: {
           Authorization: `Bearer ${token()}`,
-          Accept: "application/vnd.github+json",
+          Accept: init?.accept ?? "application/vnd.github+json",
           "User-Agent": "mission-control",
           ...(init?.body ? { "Content-Type": "application/json" } : {}),
         },
@@ -199,4 +202,46 @@ export async function neighborsVelocity(
     });
   }
   return out;
+}
+
+// Free-text repository search for the explore landing. One REST call,
+// cached upstream (unstable_cache + edge headers in the API route).
+export async function searchRepos(
+  q: string,
+  limit = 6
+): Promise<{ r: string; s: number; d: string | null }[]> {
+  const res = await ghFetch<{
+    items?: { full_name: string; stargazers_count: number; description: string | null }[];
+  }>(`/search/repositories?q=${encodeURIComponent(q)}&per_page=${limit}&sort=stars&order=desc`);
+  return (res.items ?? []).map((i) => ({
+    r: i.full_name,
+    s: i.stargazers_count,
+    d: i.description ? i.description.slice(0, 90) : null,
+  }));
+}
+
+// REST basics for the embeddable chart of arbitrary repos.
+export async function repoBasic(
+  owner: string,
+  name: string
+): Promise<{ r: string; s: number; created: string }> {
+  const d = await ghFetch<{ full_name: string; stargazers_count: number; created_at: string }>(
+    `/repos/${owner}/${name}`
+  );
+  return { r: d.full_name, s: d.stargazers_count, created: d.created_at };
+}
+
+// First starred_at of a given stargazer page (100/page, ascending order).
+// Sampling spaced pages reconstructs the cumulative curve the same way
+// star-history does; the REST API caps pagination at page 400 (40K stars).
+export async function stargazerPageFirst(
+  owner: string,
+  name: string,
+  page: number
+): Promise<string | null> {
+  const items = await ghFetch<{ starred_at: string }[]>(
+    `/repos/${owner}/${name}/stargazers?per_page=100&page=${page}`,
+    { accept: "application/vnd.github.star+json" }
+  );
+  return items.length ? items[0].starred_at : null;
 }
