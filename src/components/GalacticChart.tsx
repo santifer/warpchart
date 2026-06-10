@@ -151,7 +151,22 @@ export default function GalacticChart({
   const span = logHi - logLo;
 
   const ax = (s: number) => 40 + ((log10(s) - logLo) / span) * (W - 80);
-  const bx = (s: number) => 40 + ((log10(s) - bMin) / (bMax - bMin)) * (W - 80);
+
+  // Route band: focus+context scale. Position follows log(1 + distance/K)
+  // measured FROM OUR CURRENT STARS, so the stretch we are flying right now
+  // gets the most room, compressing toward the core; as we overtake and our
+  // star count grows, the map re-expands around us automatically.
+  const dMax = Math.max(coreStars - stars, 10);
+  const KD = dMax / 150;
+  const bSpan = Math.log1p(dMax / KD);
+  const bx = (s: number) => {
+    const d = s - stars;
+    if (d <= 0) {
+      // small tail for things just behind us (origin marker, passed ships)
+      return 40 - Math.min(10, (-d / Math.max(stars * 0.02, 1)) * 10);
+    }
+    return 40 + (Math.log1p(d / KD) / bSpan) * (W - 80);
+  };
   const inWindow = (s: number) => {
     const l = log10(s);
     return l >= logLo - 0.0005 && l <= logHi + 0.0005;
@@ -580,7 +595,7 @@ export default function GalacticChart({
             ROUTE TO THE CORE
           </text>
           <text x={40} y={BAND_B_Y - 72} fill={C.faint} fontSize={9}>
-            log scale · every dot is a worldwide top 1000 repo · [ ] marks the window above
+            distance scale, widest around you · every dot is a top 1000 repo · [ ] marks the window above
           </text>
 
           <line x1={40} y1={BAND_B_Y} x2={W - 40} y2={BAND_B_Y} stroke="url(#routeGrad)" strokeWidth={0.5} />
