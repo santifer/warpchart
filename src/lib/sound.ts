@@ -177,28 +177,54 @@ class AudioEngine {
     });
   }
 
+  // Soft "air pass" for panning: low-passed noise with a gentle DOWNWARD
+  // sweep and a slow envelope. (An upward bandpass sweep with high Q reads
+  // as squeaking shoes; this reads as inertia.)
   panWhoosh(): void {
     if (!this._enabled || !this.ctx || !this.master) return;
     const now = performance.now();
-    if (now - this.lastWhoosh < 350) return;
+    if (now - this.lastWhoosh < 220) return;
     this.lastWhoosh = now;
     const ctx = this.ctx;
     const t = ctx.currentTime;
-    const len = Math.floor(ctx.sampleRate * 0.22);
+    const len = Math.floor(ctx.sampleRate * 0.2);
     const buf = ctx.createBuffer(1, len, ctx.sampleRate);
     const data = buf.getChannelData(0);
-    for (let i = 0; i < len; i++) data[i] = (Math.random() * 2 - 1) * (1 - i / len);
+    for (let i = 0; i < len; i++) data[i] = Math.random() * 2 - 1;
     const src = ctx.createBufferSource();
     src.buffer = buf;
-    const bp = ctx.createBiquadFilter();
-    bp.type = "bandpass";
-    bp.Q.value = 1.2;
-    bp.frequency.setValueAtTime(420, t);
-    bp.frequency.exponentialRampToValueAtTime(950, t + 0.2);
+    const lp = ctx.createBiquadFilter();
+    lp.type = "lowpass";
+    lp.Q.value = 0.7;
+    lp.frequency.setValueAtTime(620, t);
+    lp.frequency.exponentialRampToValueAtTime(260, t + 0.18);
     const g = ctx.createGain();
-    g.gain.value = 0.035;
-    src.connect(bp).connect(g).connect(this.master);
+    g.gain.setValueAtTime(0, t);
+    g.gain.linearRampToValueAtTime(0.05, t + 0.045);
+    g.gain.exponentialRampToValueAtTime(0.0008, t + 0.2);
+    src.connect(lp).connect(g).connect(this.master);
     src.start(t);
+  }
+
+  // Tiny directional gliss for zooming: pitch up when zooming in, down when
+  // zooming out.
+  zoomTick(zoomIn: boolean): void {
+    if (!this._enabled || !this.ctx || !this.master) return;
+    const now = performance.now();
+    if (now - this.lastWhoosh < 90) return;
+    this.lastWhoosh = now;
+    const ctx = this.ctx;
+    const t = ctx.currentTime;
+    const osc = ctx.createOscillator();
+    osc.type = "sine";
+    osc.frequency.setValueAtTime(zoomIn ? 500 : 680, t);
+    osc.frequency.exponentialRampToValueAtTime(zoomIn ? 680 : 500, t + 0.055);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.028, t);
+    g.gain.exponentialRampToValueAtTime(0.0006, t + 0.1);
+    osc.connect(g).connect(this.master);
+    osc.start(t);
+    osc.stop(t + 0.12);
   }
 
   // serene three-note arpeggio for milestone crossings

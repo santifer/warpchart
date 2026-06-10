@@ -10,6 +10,8 @@
 // so both the tenant dashboard and the /r/ explorer can render it.
 // Clicking a repo pins it as chase target (when onPinTarget is provided).
 import { useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
 import type { ChartInputs, RouteRepo } from "@/lib/types";
 import { usePalette } from "@/lib/usePalette";
 import { fmt, fmtCompact, fmtEtaDays, etaDate, shortName } from "@/lib/format";
@@ -60,13 +62,45 @@ export default function GalacticChart({
   onPinTarget?: (r: string | null) => void;
 }) {
   const C = usePalette();
+  const router = useRouter();
   const [scan, setScan] = useState<Scan | null>(null);
   const [view, setView] = useState<{ lo: number; hi: number } | null>(null);
   const svgRef = useRef<SVGSVGElement | null>(null);
 
+  // Origin marker: when arriving via ?from=owner/name (a jump from another
+  // chart), show where you came from on this system's map.
+  const [origin, setOrigin] = useState<{ r: string; s: number } | null>(null);
+  useEffect(() => {
+    const from = new URLSearchParams(window.location.search).get("from");
+    if (!from || from.toLowerCase() === inputs.repo.toLowerCase()) return;
+    const hit =
+      inputs.routeAll.find((p) => p.r.toLowerCase() === from.toLowerCase()) ??
+      inputs.neighbors.find((n) => n.r.toLowerCase() === from.toLowerCase());
+    if (hit) setOrigin({ r: hit.r, s: hit.s });
+  }, [inputs.repo, inputs.routeAll, inputs.neighbors]);
+
   const { stars, rank, v7d: vOwn, apex, nowMs } = inputs;
   const repoName = shortName(inputs.repo);
   const nextMilestone = inputs.milestones[0] ?? null;
+
+  // Warm the avatars of likely scan targets (neighbors + a handful of route
+  // landmarks) during idle time, so the first hover card never shows a hole.
+  // Images come straight from GitHub's CDN, which handles freshness itself.
+  useEffect(() => {
+    const owners = new Set<string>();
+    for (const n of inputs.neighbors) owners.add(n.r.split("/")[0]);
+    for (const p of inputs.routeDots.slice(0, 30)) owners.add(p.r.split("/")[0]);
+    const warm = () => {
+      for (const o of owners) {
+        const img = new Image();
+        img.src = `https://github.com/${o}.png?size=64`;
+      }
+    };
+    const idle = (window as Window & { requestIdleCallback?: (cb: () => void) => number })
+      .requestIdleCallback;
+    if (idle) idle(warm);
+    else setTimeout(warm, 1200);
+  }, [inputs.neighbors, inputs.routeDots]);
 
   const etas = useMemo(
     () => neighborEtas(inputs.neighbors, stars, vOwn),
@@ -117,7 +151,8 @@ export default function GalacticChart({
       const horizontal = Math.abs(e.deltaX) > Math.abs(e.deltaY);
       if (!e.ctrlKey && !horizontal && !e.shiftKey) return;
       e.preventDefault();
-      sound.panWhoosh();
+      if (e.ctrlKey) sound.zoomTick(e.deltaY < 0);
+      else sound.panWhoosh();
       const g = geom.current;
       setView((v) => {
         const lo = v?.lo ?? g.defLo;
@@ -160,17 +195,20 @@ export default function GalacticChart({
     ...visDots.filter((p) => labeledDotSet.has(p.r)).map((p): AItem => ({ kind: "d", s: p.s, p })),
   ].sort((a, b) => a.s - b.s);
 
+  // Tier assignment is aware of each label's real width, so long names like
+  // "coding-interview-university" never overlap their neighbors.
   const tiers: number[] = [];
   {
-    const lastAbove: number[] = [-1e9, -1e9, -1e9];
-    const lastBelow: number[] = [-1e9, -1e9, -1e9];
+    const rowsAbove: number[] = [-1e9, -1e9, -1e9]; // rightmost occupied edge per tier
+    const rowsBelow: number[] = [-1e9, -1e9, -1e9];
     for (const it of items) {
       const x = ax(it.s);
-      const below = it.kind === "n" && it.n.gap <= 0;
-      const rows = below ? lastBelow : lastAbove;
+      const name = trunc(shortName(it.kind === "n" ? it.n.r : it.p.r));
+      const halfW = (Math.max(name.length, 12) * 6.2) / 2 + 8;
+      const rows = it.kind === "n" && it.n.gap <= 0 ? rowsBelow : rowsAbove;
       let tier = 0;
-      while (tier < rows.length - 1 && x - rows[tier] < 118) tier++;
-      rows[tier] = x;
+      while (tier < rows.length - 1 && x - halfW < rows[tier] + 8) tier++;
+      rows[tier] = x + halfW;
       tiers.push(tier);
     }
   }
@@ -194,7 +232,7 @@ export default function GalacticChart({
       onPinTarget(target === r ? null : r);
       sound.hoverBlip();
     } else {
-      window.location.href = `/r/${r}`;
+      router.push(`/r/${r}?from=${encodeURIComponent(inputs.repo)}`);
     }
   };
 
@@ -344,7 +382,7 @@ export default function GalacticChart({
                     <circle className="nbr-dot" cx={x} cy={BAND_A_Y} r={3.2} fill={color} opacity={isAhead ? 0.95 : 0.55} />
                     <text className="nbr-name" x={x} y={tierY - 12} fill={isAhead ? C.ink : C.faint} fontSize={10}
                       textAnchor="middle">
-                      {shortName(n.r)}
+                      {trunc(shortName(n.r))}
                     </text>
                     <text x={x} y={tierY} fill={C.dim} fontSize={9} textAnchor="middle">
                       {fmtSignedGap(n.gap)} · {Math.round(n.v)}/d
@@ -374,7 +412,7 @@ export default function GalacticChart({
                   ) : null}
                   <circle className="nbr-dot" cx={x} cy={BAND_A_Y} r={2.4} fill={C.white} opacity={0.8} />
                   <text className="nbr-name" x={x} y={tierY - 2} fill={C.ink} fontSize={10} textAnchor="middle">
-                    {shortName(p.r)}
+                    {trunc(shortName(p.r))}
                   </text>
                   <text x={x} y={tierY + 10} fill={C.dim} fontSize={9} textAnchor="middle">
                     {fmtCompact(p.s)} · #{p.rank}
@@ -382,6 +420,19 @@ export default function GalacticChart({
                 </g>
               );
             })}
+
+            {origin && inWindow(origin.s) ? (
+              <g>
+                <path
+                  d={`M ${ax(origin.s)} ${BAND_A_Y - 7} L ${ax(origin.s) + 5} ${BAND_A_Y} L ${ax(origin.s)} ${BAND_A_Y + 7} L ${ax(origin.s) - 5} ${BAND_A_Y} Z`}
+                  fill="none" stroke={C.accent} strokeWidth={1.3}
+                />
+                <text x={ax(origin.s) + 9} y={BAND_A_Y + 3.5} fill={C.accent} fontSize={9.5}
+                  textAnchor="start" opacity={0.9}>
+                  {trunc(shortName(origin.r))} · origin
+                </text>
+              </g>
+            ) : null}
 
             {apex && inWindow(coreStars) ? (
               <g className="core-glow">
@@ -515,6 +566,19 @@ export default function GalacticChart({
             </g>
           ) : null}
 
+          {origin ? (
+            <g>
+              <path
+                d={`M ${bx(origin.s)} ${BAND_B_Y - 6} L ${bx(origin.s) + 4.5} ${BAND_B_Y} L ${bx(origin.s)} ${BAND_B_Y + 6} L ${bx(origin.s) - 4.5} ${BAND_B_Y} Z`}
+                fill="none" stroke={C.accent} strokeWidth={1.2}
+              />
+              <text x={bx(origin.s)} y={BAND_B_Y + 52} fill={C.accent} fontSize={9}
+                textAnchor="middle" opacity={0.85}>
+                {trunc(shortName(origin.r))} · origin
+              </text>
+            </g>
+          ) : null}
+
           <g>
             <path
               d={`M ${bx(stars) - 5} ${BAND_B_Y - 6} L ${bx(stars) + 7} ${BAND_B_Y} L ${bx(stars) - 5} ${BAND_B_Y + 6} Z`}
@@ -545,12 +609,13 @@ export default function GalacticChart({
           >
             <ScanContent scan={scan} ownV={vOwn} nowMs={nowMs} />
             <div className="mt-2 flex items-center gap-2 border-t border-grid pt-2">
-              <a
-                href={`/r/${scan.kind === "neighbor" ? scan.n.r : scan.p.r}`}
+              <Link
+                prefetch
+                href={`/r/${scan.kind === "neighbor" ? scan.n.r : scan.p.r}?from=${encodeURIComponent(inputs.repo)}`}
                 className="numeral flex-1 border border-accent/40 px-2 py-1 text-center text-[9px] tracking-[0.18em] text-accent transition-colors hover:bg-accent/10"
               >
                 OPEN SCAN
-              </a>
+              </Link>
               {onPinTarget ? (
                 <button
                   onClick={() => togglePin(scan.kind === "neighbor" ? scan.n.r : scan.p.r)}
@@ -638,6 +703,10 @@ function Row({ k, v }: { k: string; v: string }) {
       <span className="text-ink">{v}</span>
     </div>
   );
+}
+
+function trunc(s: string): string {
+  return s.length > 24 ? s.slice(0, 23) + "…" : s;
 }
 
 function clampPct(p: number): number {

@@ -28,13 +28,22 @@ Mission Control turns the public GitHub API into a live flight console:
 
 ### Shareable everywhere
 
-**Embeddable badge** (SVG, edge-cached, updates hourly):
+**Embeddable badge** (SVG, edge-cached, updates hourly, adapts to light and dark automatically):
 
 ```markdown
 [![World rank](https://mission-control.career-ops.org/api/badge?repo=OWNER/NAME)](https://mission-control.career-ops.org/r/OWNER/NAME)
 ```
 
-**Embeddable live chart** (SVG, replaces a static star-history image in your README):
+Both the badge and the chart accept `?theme=light|dark` to pin a scheme, for GitHub's picture pattern:
+
+```html
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="https://mission-control.career-ops.org/api/badge?theme=dark">
+  <img alt="World rank" src="https://mission-control.career-ops.org/api/badge?theme=light">
+</picture>
+```
+
+**Embeddable live chart** (SVG, replaces a static star-history image in your README, theme-aware too):
 
 ```markdown
 [![Star growth](https://mission-control.career-ops.org/api/chart?w=800&h=240)](https://mission-control.career-ops.org)
