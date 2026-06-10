@@ -13,8 +13,8 @@ import { fmt, fmtCompact } from "@/lib/format";
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
-const DARK = "--bg:#060c12;--bd:#11263b;--gr:#0d1c2b;--dm:#8aa3ba;--ac:#53d6e8;--st:#f5fbff;";
-const LIGHT = "--bg:#f6f9fc;--bd:#c9d8e4;--gr:#dde7ef;--dm:#43607a;--ac:#0c7d92;--st:#3a5268;";
+const DARK = "--bg:#060c12;--bd:#11263b;--gr:#0d1c2b;--dm:#8aa3ba;--ac:#53d6e8;--st:#f5fbff;--wn:#f2c46a;";
+const LIGHT = "--bg:#f6f9fc;--bd:#c9d8e4;--gr:#dde7ef;--dm:#43607a;--ac:#0c7d92;--st:#3a5268;--wn:#a05a00;";
 
 function schemeStyle(theme: string | null): string {
   if (theme === "light") return `:root{${LIGHT}}`;
@@ -159,16 +159,18 @@ export async function GET(req: Request) {
 
   // twinkling star field, deterministic per repo
   const rand = seeded(repo);
+  // variable twinkle periods resist habituation better than a uniform beat
   const specks = Array.from({ length: 16 }, () => ({
     x: padL + rand() * iw,
     y: padT + rand() * (ih * 0.82),
     r: rand() < 0.8 ? 0.7 : 1.1,
     d: (rand() * 4).toFixed(2),
+    dur: (2.8 + rand() * 2).toFixed(2),
     o: 0.15 + rand() * 0.4,
   }))
     .map(
       (s) =>
-        `<circle class="tw" cx="${s.x.toFixed(1)}" cy="${s.y.toFixed(1)}" r="${s.r}" style="fill:var(--st);animation-delay:${s.d}s" opacity="${s.o.toFixed(2)}"/>`
+        `<circle class="tw" cx="${s.x.toFixed(1)}" cy="${s.y.toFixed(1)}" r="${s.r}" style="fill:var(--st);animation-delay:${s.d}s;animation-duration:${s.dur}s" opacity="${s.o.toFixed(2)}"/>`
     )
     .join("\n");
 
@@ -206,23 +208,35 @@ export async function GET(req: Request) {
 
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" role="img" aria-label="Cumulative stars of ${esc(repo)}">
 <style>${schemeStyle(theme)}
-/* The whole chart is ONE looping choreography (14s): draw-on, hold, fade,
-   invisible reset. Viewport-triggered start is impossible inside an image
-   element (no JS through Camo), so the loop guarantees every reader
-   catches the draw. NOTE: no angle brackets in this CSS, the SVG is
-   parsed as strict XML when served as an image. */
-.ln{stroke-dasharray:${L};stroke-dashoffset:${L};animation:lc 14s cubic-bezier(.25,.6,.3,1) infinite}
-.dl{opacity:0;animation:dc 14s ease-out infinite}
-.ar{opacity:0;animation:ac 14s ease-out infinite}
-.dot{opacity:0;animation:ac 14s ease-out infinite}
-.pp{transform-origin:${endX}px ${endY}px;animation:pp 2.8s cubic-bezier(.2,.6,.4,1) infinite}
+/* One looping 12.6s choreography tuned for attention without fatigue:
+   draw-on with bloom (0-2.6s), arrival overshoot + counter pop, a live
+   hold with golden double-ring pings at staggered windows, one shooting
+   star landing on the endpoint (+1) at 57 percent, graceful fade and a
+   0.6s blank gap so the next draw re-captures as a fresh onset. History
+   is cyan, the living present is gold. Strict XML: no angle brackets. */
+.ln{stroke-dasharray:${L};stroke-dashoffset:${L};animation:lc 12.6s cubic-bezier(.25,.6,.3,1) infinite}
+.dl{opacity:0;animation:dc 12.6s ease-out infinite,dlf 1.3s linear infinite}
+.ar{opacity:0;animation:ac 12.6s ease-out infinite}
+.dotp{transform-box:fill-box;transform-origin:center;opacity:0;animation:dp 12.6s cubic-bezier(.3,1.4,.4,1) infinite}
+.cp{transform-box:fill-box;transform-origin:center;animation:cp 12.6s ease-out infinite}
+.pga{transform-box:fill-box;transform-origin:center;opacity:0;animation:pg 12.6s cubic-bezier(.2,.6,.4,1) infinite}
+.pgb{animation-delay:.22s}
+.ss{opacity:0;animation:ss 12.6s cubic-bezier(.35,0,.7,1) infinite}
+.fl{transform-box:fill-box;transform-origin:center;opacity:0;animation:fl 12.6s ease-out infinite}
+.pl{opacity:0;animation:pl 12.6s ease-out infinite}
 .tw{animation:tw 3.4s ease-in-out infinite}
-@keyframes lc{0%{stroke-dashoffset:${L};opacity:1}18%{stroke-dashoffset:0;opacity:1}85%{stroke-dashoffset:0;opacity:1}90%{stroke-dashoffset:0;opacity:0}90.1%{stroke-dashoffset:${L};opacity:0}100%{stroke-dashoffset:${L};opacity:1}}
-@keyframes ac{0%,16%{opacity:0}23%{opacity:1}85%{opacity:1}90%,100%{opacity:0}}
-@keyframes dc{0%,19%{opacity:0}26%{opacity:.7}85%{opacity:.7}90%,100%{opacity:0}}
-@keyframes pp{0%{transform:scale(.35);opacity:.9}70%{opacity:.12}100%{transform:scale(2.8);opacity:0}}
+@keyframes lc{0%{stroke-dashoffset:${L};opacity:1}20.6%{stroke-dashoffset:0;opacity:1}88.9%{stroke-dashoffset:0;opacity:1}94.4%{stroke-dashoffset:0;opacity:0}94.5%{stroke-dashoffset:${L};opacity:0}100%{stroke-dashoffset:${L};opacity:0}}
+@keyframes ac{0%,13%{opacity:0}27%{opacity:1}88.9%{opacity:1}93.7%,100%{opacity:0}}
+@keyframes dc{0%,21%{opacity:0}28%{opacity:.7}88.9%{opacity:.7}93.7%,100%{opacity:0}}
+@keyframes dlf{to{stroke-dashoffset:-8}}
+@keyframes dp{0%,20%{transform:scale(0);opacity:0}20.6%{transform:scale(.2);opacity:1}23.8%{transform:scale(1.35)}26.2%{transform:scale(1)}89.7%{transform:scale(1);opacity:1}94.8%,100%{transform:scale(1);opacity:0}}
+@keyframes cp{0%,21%{transform:scale(1)}23%{transform:scale(1.07)}26%,100%{transform:scale(1)}}
+@keyframes pg{0%,23%{transform:scale(.3);opacity:0}24.2%{opacity:.85}31%{transform:scale(2.7);opacity:0}45%{transform:scale(.3);opacity:0}46.2%{opacity:.85}53%{transform:scale(2.7);opacity:0}78%{transform:scale(.3);opacity:0}79.2%{opacity:.85}86%{transform:scale(2.7);opacity:0}100%{opacity:0}}
+@keyframes ss{0%,56.5%{transform:translate(-170px,-95px);opacity:0}58%{opacity:.95}63.5%{transform:translate(0px,0px);opacity:.95}64.2%,100%{transform:translate(0px,0px);opacity:0}}
+@keyframes fl{0%,63%{transform:scale(.2);opacity:0}64.2%{opacity:.9}68.5%{transform:scale(2.2);opacity:0}100%{opacity:0}}
+@keyframes pl{0%,63.5%{transform:translateY(0);opacity:0}65.5%{opacity:.95}73%{transform:translateY(-15px);opacity:0}100%{opacity:0}}
 @keyframes tw{0%,100%{opacity:.1}50%{opacity:.6}}
-@media (prefers-reduced-motion:reduce){.ln{animation:none;stroke-dashoffset:0;opacity:1}.ar,.dl,.dot{animation:none;opacity:1}.pp,.tw{animation:none;opacity:0}}
+@media (prefers-reduced-motion:reduce){.ln{animation:none;stroke-dashoffset:0;opacity:1}.ar,.dl{animation:none;opacity:1}.dotp{animation:none;opacity:1;transform:scale(1)}.cp{animation:none}.pga,.ss,.fl,.pl,.tw{animation:none;opacity:0}}
 </style>
 <defs>
   <linearGradient id="fill" x1="0" y1="0" x2="0" y2="1">
@@ -238,14 +252,23 @@ export async function GET(req: Request) {
 ${specks}
 <text x="${padL}" y="22" font-family="${mono}" font-size="11" letter-spacing="2" style="fill:var(--dm)">${esc(repo.toUpperCase())}</text>
 ${branding}
-<text x="${w - 16}" y="22" text-anchor="end" font-family="${mono}" font-size="12" font-weight="700" style="fill:var(--ac)">${fmt(total)} ★</text>
+<text class="cp" x="${w - 16}" y="22" text-anchor="end" font-family="${mono}" font-size="12" font-weight="700" style="fill:var(--ac)">${fmt(total)} ★</text>
 ${yMarks}
 <line x1="${padL}" y1="${axisY}" x2="${padL + iw}" y2="${axisY}" style="stroke:var(--bd)"/>
 <path class="ar" d="${area}" fill="url(#fill)"/>
+<g opacity="0.11"><path class="ln" d="${line}" fill="none" style="stroke:var(--ac)" stroke-width="4"/></g>
 <path class="ln" d="${line}" fill="none" style="stroke:var(--ac)" stroke-width="1.5"/>
 ${dashedLine ? `<path class="dl" d="${dashedLine}" fill="none" style="stroke:var(--ac)" stroke-width="1.2" stroke-dasharray="3 5" opacity="0.7"/>` : ""}
-<circle class="pp" cx="${endX}" cy="${endY}" r="5" fill="none" style="stroke:var(--ac)" stroke-width="1"/>
-<circle class="dot" cx="${endX}" cy="${endY}" r="2.6" style="fill:var(--ac)"/>
+<circle class="pga" cx="${endX}" cy="${endY}" r="5.5" fill="none" style="stroke:var(--wn)" stroke-width="1.1"/>
+<circle class="pga pgb" cx="${endX}" cy="${endY}" r="5.5" fill="none" style="stroke:var(--wn)" stroke-width="1.1"/>
+<circle class="dotp" cx="${endX}" cy="${endY}" r="7" style="fill:var(--ac)" opacity="0.22"/>
+<circle class="dotp" cx="${endX}" cy="${endY}" r="2.8" style="fill:var(--ac)"/>
+<g class="ss">
+  <line x1="${endX}" y1="${endY}" x2="${(Number(endX) - 24).toFixed(1)}" y2="${(Number(endY) - 13.5).toFixed(1)}" style="stroke:var(--wn)" stroke-width="1.1" opacity="0.7"/>
+  <circle cx="${endX}" cy="${endY}" r="1.6" style="fill:var(--wn)"/>
+</g>
+<circle class="fl" cx="${endX}" cy="${endY}" r="6" fill="none" style="stroke:var(--wn)" stroke-width="1.4"/>
+<text class="pl" x="${(Number(endX) - 10).toFixed(1)}" y="${(Number(endY) - 10).toFixed(1)}" text-anchor="end" font-family="${mono}" font-size="10" font-weight="700" style="fill:var(--wn)">+1 ★</text>
 ${xMarks}
 </svg>`;
 
