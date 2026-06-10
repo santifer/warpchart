@@ -6,6 +6,9 @@ import Link from "next/link";
 import ExploreSearch, { type CatalogEntry } from "@/components/ExploreSearch";
 import EmbedGenerator from "@/components/EmbedGenerator";
 import ExploreBackdrop from "@/components/ExploreBackdrop";
+import GalacticChart from "@/components/GalacticChart";
+import VerticalChart from "@/components/VerticalChart";
+import { buildDemoSpotlight } from "@/lib/demo";
 import { loadRoute, loadMeta } from "@/lib/history";
 import { fmtCompact } from "@/lib/format";
 
@@ -17,9 +20,10 @@ export const metadata: Metadata = {
     "Growth telemetry for any GitHub repository: live star chart, worldwide rank, ranking neighbors and an embeddable animated star history chart for your README.",
 };
 
-export default function Explore() {
+export default async function Explore() {
   const route = loadRoute();
   const meta = loadMeta();
+  const spotlight = await buildDemoSpotlight().catch(() => null);
   const catalog: CatalogEntry[] = (route?.repos ?? []).map((p, i) => ({
     r: p.r,
     s: p.s,
@@ -57,6 +61,27 @@ export default function Explore() {
           <ExploreSearch catalog={catalog} />
         </div>
       </section>
+
+      {spotlight ? (
+        <section className="rise flex flex-col gap-3" style={{ animationDelay: "120ms" }}>
+          <div className="flex flex-wrap items-baseline justify-between gap-2">
+            <h2 className="module-title">
+              TODAY&apos;S SPOTLIGHT · {spotlight.inputs.repo} · #{spotlight.rank} worldwide
+            </h2>
+            <span className="numeral text-[9px] text-faint">
+              a real top 1000 system, rotating daily · pan it, hover the ships
+            </span>
+          </div>
+          <div className="hud p-2">
+            <div className="hidden lg:block">
+              <GalacticChart inputs={spotlight.inputs} />
+            </div>
+            <div className="lg:hidden">
+              <VerticalChart inputs={spotlight.inputs} />
+            </div>
+          </div>
+        </section>
+      ) : null}
 
       <section className="rise flex flex-col gap-3" style={{ animationDelay: "160ms" }}>
         <h2 className="module-title">FEATURED SCANS</h2>

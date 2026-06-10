@@ -207,9 +207,10 @@ export async function GET(req: Request) {
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" role="img" aria-label="Cumulative stars of ${esc(repo)}">
 <style>${schemeStyle(theme)}
 /* The whole chart is ONE looping choreography (14s): draw-on, hold, fade,
-   invisible reset. Viewport-triggered start is impossible inside an <img>
-   (no JS through Camo), so the loop guarantees every reader catches the
-   draw no matter when they scroll to it. */
+   invisible reset. Viewport-triggered start is impossible inside an image
+   element (no JS through Camo), so the loop guarantees every reader
+   catches the draw. NOTE: no angle brackets in this CSS, the SVG is
+   parsed as strict XML when served as an image. */
 .ln{stroke-dasharray:${L};stroke-dashoffset:${L};animation:lc 14s cubic-bezier(.25,.6,.3,1) infinite}
 .dl{opacity:0;animation:dc 14s ease-out infinite}
 .ar{opacity:0;animation:ac 14s ease-out infinite}
