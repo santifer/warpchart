@@ -1,7 +1,7 @@
 // Assembles every build-time series into one serializable bundle that the
 // client dashboard receives as props. Runs on the server only (fs).
 import {
-  loadTimestamps, loadHistory, loadMeta, loadMilestones,
+  loadTimestamps, loadHistory, loadMeta, loadMilestones, loadRoute,
 } from "./history";
 import {
   hourlyBuckets, dailyCounts, movingAverage, madrugadaFloor,
@@ -11,7 +11,7 @@ import {
 import { driftPerDay } from "./projections";
 import type {
   RepoMetaFile, Snapshot, HourPoint, DayPoint, CumPoint, RankPoint,
-  FloorPoint, Neighbor, Apex,
+  FloorPoint, Neighbor, Apex, RouteRepo,
 } from "./types";
 
 export interface MilestoneInfo {
@@ -40,6 +40,49 @@ export interface DashboardBundle {
   neighbors: Neighbor[];
   milestones: MilestoneInfo[];
   apex: Apex | null;
+  routeDots: RouteRepo[];
+  routeLandmarks: RouteRepo[];
+}
+
+// Every dot on the route band is a real repo from the worldwide top 1000.
+// Sampling halves per band away from the core: all repos in the top band,
+// every 2nd in the next, every 4th, every 8th... (generalizes to any depth).
+function buildRouteLayers(
+  stars: number,
+  milestones: MilestoneInfo[],
+  apex: Apex | null,
+  ownRepo: string | null
+): { dots: RouteRepo[]; landmarks: RouteRepo[] } {
+  const route = loadRoute();
+  if (!route || !apex || !route.repos.length) return { dots: [], landmarks: [] };
+  const ranked: RouteRepo[] = route.repos.map((p, i) => ({ ...p, rank: i + 1 }));
+  const thresholdsAsc = milestones
+    .map((m) => m.threshold)
+    .filter((t) => t > stars)
+    .sort((a, b) => a - b);
+  const bounds = [stars, ...thresholdsAsc, apex.s];
+
+  const dots: RouteRepo[] = [];
+  const landmarks: RouteRepo[] = [];
+  const nSeg = bounds.length - 1;
+  for (let i = 0; i < nSeg; i++) {
+    const lo = bounds[i];
+    const hi = bounds[i + 1];
+    const seg = ranked.filter(
+      (p) => p.s > lo && p.s < hi && p.r !== apex.r && p.r !== ownRepo
+    );
+    const fromTop = nSeg - 1 - i;
+    const step = 2 ** fromTop;
+    dots.push(...seg.filter((_, idx) => idx % step === 0));
+    if (fromTop === 0) {
+      // The widest band in log space gets a few famous anchors.
+      for (const idx of [1, 5, 19]) if (seg[idx]) landmarks.push(seg[idx]);
+    } else {
+      const mid = seg[Math.floor(seg.length / 2)];
+      if (mid) landmarks.push(mid);
+    }
+  }
+  return { dots, landmarks };
 }
 
 export function buildBundle(): DashboardBundle {
@@ -69,12 +112,16 @@ export function buildBundle(): DashboardBundle {
   }
 
   const daily = dailyCounts(timestamps, 35, nowMs);
+  const netStars = latest?.stars ?? timestamps.length;
+  const { dots: routeDots, landmarks: routeLandmarks } = buildRouteLayers(
+    netStars, milestones, apex, meta?.repo ?? null
+  );
 
   return {
     meta,
     generatedAt: new Date(nowMs).toISOString(),
     totalStars: timestamps.length,
-    netStars: latest?.stars ?? timestamps.length,
+    netStars,
     rank: latest?.rank ?? null,
     lastTimestamp: timestamps.length ? timestamps[timestamps.length - 1] : null,
     lastSnapshotAt: latest?.ts ?? null,
@@ -90,5 +137,7 @@ export function buildBundle(): DashboardBundle {
     neighbors,
     milestones,
     apex,
+    routeDots,
+    routeLandmarks,
   };
 }

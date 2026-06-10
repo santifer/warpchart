@@ -2,11 +2,27 @@ export interface Neighbor {
   r: string; // full name owner/name
   s: number; // stars
   v: number; // stars/day over its last 100 stars
+  d?: string | null; // description, trimmed
+  l?: string | null; // primary language
 }
 
 export interface Apex {
   r: string;
   s: number;
+}
+
+// A worldwide top-N repo used as a dot/landmark on the route band.
+export interface RouteRepo {
+  r: string;
+  s: number;
+  rank: number;
+  d?: string | null;
+  l?: string | null;
+}
+
+export interface RouteFile {
+  generated_at: string;
+  repos: { r: string; s: number; d?: string | null; l?: string | null }[];
 }
 
 export interface Snapshot {

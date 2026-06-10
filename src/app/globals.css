@@ -217,6 +217,106 @@ svg text {
   font-family: var(--font-jbmono), monospace;
 }
 
+/* ---- Star chart motion ---- */
+
+.dust-layer {
+  animation: dust-drift 90s ease-in-out infinite alternate;
+}
+
+@keyframes dust-drift {
+  from { transform: translateX(0); }
+  to { transform: translateX(-18px); }
+}
+
+.dust-tw {
+  animation: dust-twinkle 5.5s ease-in-out infinite alternate;
+}
+
+@keyframes dust-twinkle {
+  from { opacity: 0.08; }
+  to { opacity: 0.6; }
+}
+
+/* Energy particles flowing along the route toward the core */
+.route-flow {
+  stroke-dasharray: 1 9;
+  animation: route-flow 1.6s linear infinite;
+}
+
+@keyframes route-flow {
+  from { stroke-dashoffset: 0; }
+  to { stroke-dashoffset: -10; }
+}
+
+/* Expanding ping ring around our ship */
+.ship-ping {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: ship-ping 2.8s cubic-bezier(0.2, 0.6, 0.4, 1) infinite;
+}
+
+@keyframes ship-ping {
+  0% { transform: scale(0.35); opacity: 0.75; }
+  75% { transform: scale(1.7); opacity: 0; }
+  100% { transform: scale(1.7); opacity: 0; }
+}
+
+/* Neighbor hover affordances */
+.nbr {
+  cursor: pointer;
+}
+
+.nbr .nbr-dot {
+  transform-box: fill-box;
+  transform-origin: center;
+  transition: transform 0.18s ease;
+}
+
+.nbr:hover .nbr-dot {
+  transform: scale(2);
+}
+
+.nbr .nbr-name {
+  transition: fill 0.15s ease;
+}
+
+.nbr:hover .nbr-name {
+  fill: var(--star-white);
+}
+
+/* Game-style temporal scan card. position declared here because .hud sets
+   position: relative and both rules are unlayered (utilities would lose). */
+.scan-card {
+  position: absolute;
+  animation: scan-in 0.16s cubic-bezier(0.2, 0.9, 0.3, 1) both;
+}
+
+@keyframes scan-in {
+  from { opacity: 0; transform: translate(-50%, -96%) scale(0.96); }
+  to { opacity: 1; transform: translate(-50%, -100%) scale(1); }
+}
+
+.scan-card::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(105deg, transparent 30%, rgba(83, 214, 232, 0.16) 48%, transparent 60%);
+  background-size: 250% 100%;
+  animation: scan-sweep 0.8s ease-out 1;
+}
+
+@keyframes scan-sweep {
+  from { background-position: 120% 0; }
+  to { background-position: -60% 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dust-layer, .dust-tw, .route-flow, .ship-ping, .scan-card, .scan-card::after {
+    animation: none;
+  }
+}
+
 ::selection {
   background: rgba(83, 214, 232, 0.28);
 }

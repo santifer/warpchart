@@ -12,7 +12,7 @@ import { readFileSync, writeFileSync, appendFileSync, existsSync } from "node:fs
 import { join } from "node:path";
 import {
   DATA_DIR, readConfig, repoMeta, backwalk, countAbove,
-  nextMilestones, thresholdForRank, findNeighbors, reposVelocity, apexRepo, token,
+  nextMilestones, thresholdForRank, findNeighbors, reposVelocity, apexRepo, topRepos, token,
 } from "./lib.mjs";
 
 token(); // fail fast
@@ -87,6 +87,23 @@ try {
   apex = await apexRepo();
 } catch (err) {
   console.error(`[collect] apex failed: ${err.message}`);
+}
+
+// 6. Route landmarks (top 1000): refresh at most once a day (best effort).
+const routePath = join(DATA_DIR, "route.json");
+try {
+  let staleRoute = true;
+  if (existsSync(routePath)) {
+    const prev = JSON.parse(readFileSync(routePath, "utf8"));
+    staleRoute = now - new Date(prev.generated_at) > 20 * 3600 * 1000;
+  }
+  if (staleRoute) {
+    const route = await topRepos();
+    if (!dryRun) writeFileSync(routePath, JSON.stringify({ generated_at: nowISO, repos: route }) + "\n");
+    console.log(`[collect] route landmarks refreshed: ${route.length} repos`);
+  }
+} catch (err) {
+  console.error(`[collect] route refresh failed: ${err.message}`);
 }
 
 const snapshot = {

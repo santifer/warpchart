@@ -167,6 +167,26 @@ export async function apexRepo() {
   return item ? { r: item.full_name, s: item.stargazers_count } : null;
 }
 
+// The worldwide top 1000 (search enumeration cap), used as route landmarks.
+// 10 search calls, throttled.
+export async function topRepos() {
+  const out = [];
+  for (let page = 1; page <= 10; page++) {
+    const r = await search({
+      q: "stars:>10000", sort: "stars", order: "desc", per_page: "100", page: String(page),
+    });
+    for (const item of r.items ?? []) {
+      out.push({
+        r: item.full_name,
+        s: item.stargazers_count,
+        d: item.description ? item.description.slice(0, 80) : null,
+        l: item.language ?? null,
+      });
+    }
+  }
+  return out;
+}
+
 // Star count of the repo at worldwide rank `rank`.
 // Ranks <= 1000 are read directly from search pages (exact). Deeper ranks use
 // a binary search over countAbove (total_count is not capped).
@@ -215,13 +235,15 @@ export async function findNeighbors(ownFullName, stars, { above = 15, below = 5 
 }
 
 // Recent velocity (stars/day over the last 100 stars) for up to ~25 repos in
-// ONE GraphQL request using aliases.
+// ONE GraphQL request using aliases. Includes description and language for
+// the hover scan cards.
 export async function reposVelocity(fullNames, now = new Date()) {
   if (!fullNames.length) return [];
   const parts = fullNames.map((fn, i) => {
     const [o, n] = fn.split("/");
     return `r${i}: repository(owner:${JSON.stringify(o)}, name:${JSON.stringify(n)}){
-      nameWithOwner stargazerCount stargazers(last:100){ edges{ starredAt } } }`;
+      nameWithOwner stargazerCount description primaryLanguage{ name }
+      stargazers(last:100){ edges{ starredAt } } }`;
   });
   const data = await graphql(`{ ${parts.join("\n")} }`);
   const out = [];
@@ -235,7 +257,13 @@ export async function reposVelocity(fullNames, now = new Date()) {
       const days = Math.max((now - oldest) / 864e5, 0.01);
       v = edges.length / days;
     }
-    out.push({ r: d.nameWithOwner, s: d.stargazerCount, v: Math.round(v * 10) / 10 });
+    out.push({
+      r: d.nameWithOwner,
+      s: d.stargazerCount,
+      v: Math.round(v * 10) / 10,
+      d: d.description ? d.description.slice(0, 90) : null,
+      l: d.primaryLanguage?.name ?? null,
+    });
   }
   return out;
 }

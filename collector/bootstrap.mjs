@@ -13,7 +13,7 @@ import { writeFileSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import {
   ROOT, DATA_DIR, readConfig, repoMeta, backwalk, countAbove,
-  nextMilestones, thresholdForRank, findNeighbors, reposVelocity, apexRepo, token,
+  nextMilestones, thresholdForRank, findNeighbors, reposVelocity, apexRepo, topRepos, token,
 } from "./lib.mjs";
 
 token(); // fail fast if missing
@@ -73,6 +73,11 @@ console.log(`[bootstrap] ${neighbors.length} neighbors measured`);
 const apex = await apexRepo();
 if (apex) console.log(`[bootstrap] galactic core: ${apex.r} (${apex.s} stars)`);
 
+// 6. Route landmarks: the worldwide top 1000
+console.log("[bootstrap] fetching worldwide top 1000 (route landmarks)...");
+const route = await topRepos();
+console.log(`[bootstrap] route landmarks: ${route.length} repos`);
+
 const snapshot = {
   ts: nowISO,
   stars: meta.stargazerCount,
@@ -104,6 +109,10 @@ if (dryRun) {
 
 mkdirSync(DATA_DIR, { recursive: true });
 writeFileSync(join(DATA_DIR, "stargazer_timestamps.txt"), timestamps.join("\n") + "\n");
+writeFileSync(
+  join(DATA_DIR, "route.json"),
+  JSON.stringify({ generated_at: nowISO, repos: route }) + "\n"
+);
 writeFileSync(join(DATA_DIR, "meta.json"), JSON.stringify(metaOut, null, 2) + "\n");
 writeFileSync(
   join(DATA_DIR, "milestones.json"),

@@ -96,23 +96,27 @@ export async function backwalkSince(
   return { timestamps, stars, complete };
 }
 
-// One aliased GraphQL query: recent velocity for up to ~25 repos.
+// One aliased GraphQL query: recent velocity for up to ~25 repos, plus
+// description and language for the hover scan cards.
 export async function neighborsVelocity(
   fullNames: string[],
   now = Date.now()
-): Promise<{ r: string; s: number; v: number }[]> {
+): Promise<{ r: string; s: number; v: number; d: string | null; l: string | null }[]> {
   if (!fullNames.length) return [];
   const parts = fullNames.slice(0, 25).map((fn, i) => {
     const [o, n] = fn.split("/");
     return `r${i}: repository(owner:${JSON.stringify(o)}, name:${JSON.stringify(n)}){
-      nameWithOwner stargazerCount stargazers(last:100){ edges{ starredAt } } }`;
+      nameWithOwner stargazerCount description primaryLanguage{ name }
+      stargazers(last:100){ edges{ starredAt } } }`;
   });
   const data = await graphql<Record<string, {
     nameWithOwner: string;
     stargazerCount: number;
+    description: string | null;
+    primaryLanguage: { name: string } | null;
     stargazers: { edges: { starredAt: string }[] };
   } | null>>(`{ ${parts.join("\n")} }`);
-  const out: { r: string; s: number; v: number }[] = [];
+  const out: { r: string; s: number; v: number; d: string | null; l: string | null }[] = [];
   for (let i = 0; i < Math.min(fullNames.length, 25); i++) {
     const d = data[`r${i}`];
     if (!d) continue;
@@ -122,7 +126,13 @@ export async function neighborsVelocity(
       const days = Math.max((now - Date.parse(edges[0].starredAt)) / 864e5, 0.01);
       v = edges.length / days;
     }
-    out.push({ r: d.nameWithOwner, s: d.stargazerCount, v: Math.round(v * 10) / 10 });
+    out.push({
+      r: d.nameWithOwner,
+      s: d.stargazerCount,
+      v: Math.round(v * 10) / 10,
+      d: d.description ? d.description.slice(0, 90) : null,
+      l: d.primaryLanguage?.name ?? null,
+    });
   }
   return out;
 }
