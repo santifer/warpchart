@@ -42,6 +42,7 @@ export interface DashboardBundle {
   apex: Apex | null;
   routeDots: RouteRepo[];
   routeLandmarks: RouteRepo[];
+  routeAll: RouteRepo[]; // full top 1000, for the pannable local-system window
 }
 
 // Every dot on the route band is a real repo from the worldwide top 1000.
@@ -52,9 +53,9 @@ function buildRouteLayers(
   milestones: MilestoneInfo[],
   apex: Apex | null,
   ownRepo: string | null
-): { dots: RouteRepo[]; landmarks: RouteRepo[] } {
+): { dots: RouteRepo[]; landmarks: RouteRepo[]; all: RouteRepo[] } {
   const route = loadRoute();
-  if (!route || !apex || !route.repos.length) return { dots: [], landmarks: [] };
+  if (!route || !apex || !route.repos.length) return { dots: [], landmarks: [], all: [] };
   const ranked: RouteRepo[] = route.repos.map((p, i) => ({ ...p, rank: i + 1 }));
   const thresholdsAsc = milestones
     .map((m) => m.threshold)
@@ -82,7 +83,7 @@ function buildRouteLayers(
       if (mid) landmarks.push(mid);
     }
   }
-  return { dots, landmarks };
+  return { dots, landmarks, all: ranked };
 }
 
 export function buildBundle(): DashboardBundle {
@@ -113,7 +114,7 @@ export function buildBundle(): DashboardBundle {
 
   const daily = dailyCounts(timestamps, 35, nowMs);
   const netStars = latest?.stars ?? timestamps.length;
-  const { dots: routeDots, landmarks: routeLandmarks } = buildRouteLayers(
+  const { dots: routeDots, landmarks: routeLandmarks, all: routeAll } = buildRouteLayers(
     netStars, milestones, apex, meta?.repo ?? null
   );
 
@@ -139,5 +140,6 @@ export function buildBundle(): DashboardBundle {
     apex,
     routeDots,
     routeLandmarks,
+    routeAll,
   };
 }

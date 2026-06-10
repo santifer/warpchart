@@ -1,13 +1,15 @@
 "use client";
 
 // The signature panel: a star chart in two bands.
-//   Band A (LOCAL SYSTEM): linear zoom around our position. Neighbor repos as
-//   stars, the next milestone as a jump gate.
-//   Band B (ROUTE TO THE CORE): log-scale route to the worldwide #1 repo.
-//   Every dot on the route IS a real repo from the worldwide top 1000;
-//   sampling halves per band away from the core (all, 1/2, 1/4, 1/8...).
+//   Band A (LOCAL SYSTEM): a pannable zoom window over the route. Horizontal
+//   wheel / trackpad pans it, ctrl+wheel (pinch) zooms, double-click resets.
+//   Neighbors carry full chase telemetry; deeper territory shows real top
+//   1000 repos, milestone gates and eventually the core itself.
+//   Band B (ROUTE TO THE CORE): the full log-scale route from our current
+//   position to the worldwide #1 repo. A [ ] viewport bracket mirrors what
+//   band A is showing, so the zoom relationship is explicit.
 // Hovering a neighbor or a route dot opens a temporal scan card, game style.
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useLive } from "./LiveProvider";
 import type { DashboardBundle } from "@/lib/bundle";
 import type { RouteRepo } from "@/lib/types";
@@ -19,10 +21,15 @@ const W = 1200;
 const H = 470;
 const BAND_A_Y = 150;
 const BAND_B_Y = 388;
+const CLIP_BOTTOM = 292; // band A clip ends here; viewport connectors start here
 
 type Scan =
   | { kind: "neighbor"; n: NeighborEta; xPct: number; topPct: number }
   | { kind: "route"; p: RouteRepo; xPct: number; topPct: number };
+
+type AItem =
+  | { kind: "n"; s: number; n: NeighborEta }
+  | { kind: "d"; s: number; p: RouteRepo };
 
 // Deterministic PRNG so the decorative dust is stable across server/client.
 function mulberry32(seed: number) {
@@ -41,9 +48,15 @@ function seedFrom(text: string): number {
   return h >>> 0;
 }
 
+const log10 = Math.log10;
+
 export default function GalacticChart({ bundle }: { bundle: DashboardBundle }) {
   const live = useLive();
   const [scan, setScan] = useState<Scan | null>(null);
+  // Pan/zoom window over the route, as log10(stars) bounds. null = default.
+  const [view, setView] = useState<{ lo: number; hi: number } | null>(null);
+  const svgRef = useRef<SVGSVGElement | null>(null);
+
   const stars = live.stars;
   const vOwn = bundle.v7d;
   const repoName = bundle.meta ? shortName(bundle.meta.repo) : "this repo";
@@ -65,25 +78,98 @@ export default function GalacticChart({ bundle }: { bundle: DashboardBundle }) {
     }));
   }, [bundle.meta?.repo]);
 
-  // ---------- Band A: local system (linear) ----------
+  // ---------- geometry ----------
   const ahead = etas.filter((n) => n.gap > 0).sort((a, b) => a.gap - b.gap).slice(0, 10);
   const behind = etas.filter((n) => n.gap <= 0).sort((a, b) => b.gap - a.gap).slice(0, 3);
   const gateX = nextMilestone?.threshold ?? null;
 
-  const aMin = Math.min(stars, ...behind.map((n) => n.s)) - 80;
-  const aMax = Math.max(gateX ?? 0, ...ahead.map((n) => n.s), stars + 400) + 250;
-  const ax = (s: number) => 40 + ((s - aMin) / (aMax - aMin)) * (W - 80);
+  // Default window: the immediate neighborhood plus the next gate.
+  const aMinDefault = Math.max(1, Math.min(stars, ...behind.map((n) => n.s)) - 80);
+  const aMaxDefault = Math.max(gateX ?? 0, ...ahead.map((n) => n.s), stars + 400) + 250;
 
-  // Label tiers to avoid collisions: repos ahead of us stack above the band
-  // line, repos already passed stack below it.
-  const labeled = [...behind, ...ahead].sort((a, b) => a.s - b.s);
+  // Full route domain (band B): always from our position to the core.
+  const coreStars = apex?.s ?? Math.max(stars * 8, 400_000);
+  const bMin = log10(Math.min(stars * 0.96, aMinDefault));
+  const bMax = log10(coreStars * 1.06);
+
+  const defLo = Math.max(bMin, log10(aMinDefault));
+  const defHi = Math.min(bMax, log10(aMaxDefault));
+  const logLo = view?.lo ?? defLo;
+  const logHi = view?.hi ?? defHi;
+  const span = logHi - logLo;
+
+  const ax = (s: number) => 40 + ((log10(s) - logLo) / span) * (W - 80);
+  const bx = (s: number) => 40 + ((log10(s) - bMin) / (bMax - bMin)) * (W - 80);
+  const inWindow = (s: number) => {
+    const l = log10(s);
+    return l >= logLo - 0.0005 && l <= logHi + 0.0005;
+  };
+
+  // Native wheel listener: React root wheel handlers are passive, so
+  // preventDefault (needed to keep the page still) requires this.
+  const geom = useRef({ defLo, defHi, bMin, bMax });
+  geom.current = { defLo, defHi, bMin, bMax };
+  useEffect(() => {
+    const el = svgRef.current;
+    if (!el) return;
+    const onWheel = (e: WheelEvent) => {
+      const horizontal = Math.abs(e.deltaX) > Math.abs(e.deltaY);
+      if (!e.ctrlKey && !horizontal && !e.shiftKey) return; // plain vertical: let the page scroll
+      e.preventDefault();
+      const g = geom.current;
+      setView((v) => {
+        const lo = v?.lo ?? g.defLo;
+        const hi = v?.hi ?? g.defHi;
+        const sp = hi - lo;
+        if (e.ctrlKey) {
+          // pinch / ctrl+wheel: zoom around the window center
+          const c = (lo + hi) / 2;
+          let ns = sp * (1 + e.deltaY / 250);
+          ns = Math.min(Math.max(ns, 0.004), g.bMax - g.bMin);
+          let nLo = c - ns / 2;
+          nLo = Math.min(Math.max(nLo, g.bMin), g.bMax - ns);
+          return { lo: nLo, hi: nLo + ns };
+        }
+        const d = horizontal ? e.deltaX : e.deltaY;
+        const shift = (d / 600) * sp * 4;
+        const nLo = Math.min(Math.max(lo + shift, g.bMin), g.bMax - sp);
+        return { lo: nLo, hi: nLo + sp };
+      });
+    };
+    el.addEventListener("wheel", onWheel, { passive: false });
+    return () => el.removeEventListener("wheel", onWheel);
+  }, []);
+
+  // ---------- band A content ----------
+  const neighborNames = useMemo(() => new Set(etas.map((n) => n.r)), [etas]);
+  const visNbrs = [...behind, ...ahead].filter((n) => inWindow(n.s));
+  // Inside the window we show EVERY top 1000 repo (the route band below keeps
+  // the halving-density sample).
+  const visDots = bundle.routeAll.filter(
+    (p) => inWindow(p.s) && !neighborNames.has(p.r) && p.r !== apex?.r && p.r !== bundle.meta?.repo
+  );
+
+  // Label budget: neighbors always labeled; route dots fill what is left.
+  const LABEL_MAX = 13;
+  const dotBudget = Math.max(0, LABEL_MAX - visNbrs.length);
+  const dotStep = dotBudget > 0 ? Math.max(1, Math.ceil(visDots.length / dotBudget)) : Infinity;
+  const labeledDotSet = new Set(
+    visDots.filter((_, i) => i % dotStep === 0).slice(0, dotBudget).map((p) => p.r)
+  );
+
+  const items: AItem[] = [
+    ...visNbrs.map((n): AItem => ({ kind: "n", s: n.s, n })),
+    ...visDots.filter((p) => labeledDotSet.has(p.r)).map((p): AItem => ({ kind: "d", s: p.s, p })),
+  ].sort((a, b) => a.s - b.s);
+
   const tiers: number[] = [];
   {
     const lastAbove: number[] = [-1e9, -1e9, -1e9];
     const lastBelow: number[] = [-1e9, -1e9, -1e9];
-    for (const n of labeled) {
-      const x = ax(n.s);
-      const rows = n.gap > 0 ? lastAbove : lastBelow;
+    for (const it of items) {
+      const x = ax(it.s);
+      const below = it.kind === "n" && it.n.gap <= 0;
+      const rows = below ? lastBelow : lastAbove;
       let tier = 0;
       while (tier < rows.length - 1 && x - rows[tier] < 118) tier++;
       rows[tier] = x;
@@ -91,39 +177,27 @@ export default function GalacticChart({ bundle }: { bundle: DashboardBundle }) {
     }
   }
 
-  // ---------- Band B: route to the core (log) ----------
-  const coreStars = apex?.s ?? Math.max(stars * 8, 400_000);
-  const bMin = Math.log10(stars * 0.96);
-  const bMax = Math.log10(coreStars * 1.06);
-  const bx = (s: number) => 40 + ((Math.log10(s) - bMin) / (bMax - bMin)) * (W - 80);
+  const visGates = bundle.milestones.filter((m) => inWindow(m.threshold));
+  const isDefaultView = view === null;
 
-  const waypoints = [...bundle.milestones].sort((a, b) => b.rank - a.rank);
-  const routeDots = bundle.routeDots;
-  const landmarks = bundle.routeLandmarks;
+  // viewport bracket on the route band
+  const vx0 = bx(Math.pow(10, logLo));
+  const vx1 = bx(Math.pow(10, logHi));
 
-  const showNeighborScan = (n: NeighborEta) =>
-    setScan({
-      kind: "neighbor",
-      n,
-      xPct: clampPct((ax(n.s) / W) * 100),
-      topPct: ((BAND_A_Y - 12) / H) * 100,
-    });
-  const showRouteScan = (p: RouteRepo) =>
-    setScan({
-      kind: "route",
-      p,
-      xPct: clampPct((bx(p.s) / W) * 100),
-      topPct: ((BAND_B_Y - 14) / H) * 100,
-    });
+  const showScanAt = (s: Scan) => setScan(s);
+  const bandATop = ((BAND_A_Y - 12) / H) * 100;
+  const bandBTop = ((BAND_B_Y - 14) / H) * 100;
 
   return (
     <div className="w-full overflow-x-auto">
       <div className="relative min-w-[760px]">
         <svg
+          ref={svgRef}
           viewBox={`0 0 ${W} ${H}`}
           className="h-auto w-full"
           role="img"
-          aria-label="Star chart: local ranking neighbors and the route to the worldwide number one repository"
+          aria-label="Star chart: pannable local system window and the route to the worldwide number one repository"
+          onDoubleClick={() => setView(null)}
         >
           <defs>
             <linearGradient id="routeGrad" x1="0" y1="0" x2="1" y2="0">
@@ -140,6 +214,9 @@ export default function GalacticChart({ bundle }: { bundle: DashboardBundle }) {
               <stop offset="0%" stopColor={C.accent} stopOpacity="0.9" />
               <stop offset="100%" stopColor={C.accent} stopOpacity="0" />
             </radialGradient>
+            <clipPath id="bandAClip">
+              <rect x={28} y={0} width={W - 56} height={CLIP_BOTTOM} />
+            </clipPath>
           </defs>
 
           {/* decorative dust, slowly drifting; a third of it twinkles */}
@@ -157,98 +234,163 @@ export default function GalacticChart({ bundle }: { bundle: DashboardBundle }) {
             ))}
           </g>
 
-          {/* ============ BAND A: LOCAL SYSTEM ============ */}
+          {/* ============ BAND A: LOCAL SYSTEM (pannable window) ============ */}
           <text x={40} y={30} fill={C.dim} fontSize={10} letterSpacing={4} className="font-display">
             LOCAL SYSTEM
           </text>
           <text x={40} y={46} fill={C.faint} fontSize={9}>
-            linear scale · stars · closing speed vs our v7d {fmt(Math.round(vOwn))}/day
+            zoom window over the route · scroll sideways to pan · pinch to zoom · double-click to reset
           </text>
+          {!isDefaultView ? (
+            <text x={W - 40} y={30} fill={C.accent} fontSize={9} textAnchor="end" opacity={0.8}>
+              window {fmtCompact(Math.round(Math.pow(10, logLo)))} .. {fmtCompact(Math.round(Math.pow(10, logHi)))} ★
+            </text>
+          ) : null}
 
           <line x1={40} y1={BAND_A_Y} x2={W - 40} y2={BAND_A_Y} stroke={C.grid} strokeWidth={1} />
 
-          {/* jump gate: next milestone threshold */}
-          {gateX !== null && nextMilestone ? (
-            <g>
-              <line
-                x1={ax(gateX)} y1={BAND_A_Y - 124} x2={ax(gateX)} y2={BAND_A_Y + 38}
-                stroke={C.accent} strokeWidth={1} strokeDasharray="2 4" opacity={0.7}
-              />
-              <text
-                x={Math.min(ax(gateX), W - 170)} y={BAND_A_Y - 132} fill={C.accent} fontSize={10}
-                textAnchor="middle" letterSpacing={2}
-              >
-                TOP {nextMilestone.rank} GATE · {fmt(nextMilestone.threshold)}
-              </text>
-            </g>
-          ) : null}
-
-          {/* neighbors */}
-          {labeled.map((n, i) => {
-            const x = ax(n.s);
-            const isAhead = n.gap > 0;
-            const color = !isAhead ? C.faint : n.receding ? C.warn : C.accent;
-            const tierY = isAhead
-              ? BAND_A_Y - 38 - tiers[i] * 34
-              : BAND_A_Y + 62 + tiers[i] * 36;
-            const lineY1 = isAhead ? tierY + 8 : BAND_A_Y + 6;
-            const lineY2 = isAhead ? BAND_A_Y - 5 : tierY - 20;
-            return (
-              <g
-                key={n.r}
-                className="nbr"
-                onMouseEnter={() => showNeighborScan(n)}
-                onMouseLeave={() => setScan(null)}
-              >
-                <line x1={x} y1={lineY1} x2={x} y2={lineY2} stroke={C.grid} strokeWidth={1} />
-                <circle className="nbr-dot" cx={x} cy={BAND_A_Y} r={3.2} fill={color} opacity={isAhead ? 0.95 : 0.55} />
-                <text className="nbr-name" x={x} y={tierY - 12} fill={isAhead ? C.ink : C.faint} fontSize={10}
-                  textAnchor="middle">
-                  {shortName(n.r)}
-                </text>
-                <text x={x} y={tierY} fill={C.dim} fontSize={9} textAnchor="middle">
-                  {fmtSignedGap(n.gap)} · {Math.round(n.v)}/d
-                </text>
-                <text x={x} y={tierY + 11} fontSize={9} textAnchor="middle"
-                  fill={!isAhead ? C.faint : n.receding ? C.warn : C.accent}>
-                  {!isAhead ? "passed" : n.receding ? "receding" : `eta ${fmtEtaDays(n.etaDays)}`}
+          <g clipPath="url(#bandAClip)">
+            {/* milestone gates inside the window */}
+            {visGates.map((m) => (
+              <g key={m.rank}>
+                <line
+                  x1={ax(m.threshold)} y1={BAND_A_Y - 124} x2={ax(m.threshold)} y2={BAND_A_Y + 38}
+                  stroke={C.accent} strokeWidth={1} strokeDasharray="2 4" opacity={0.7}
+                />
+                <text
+                  x={ax(m.threshold)} y={BAND_A_Y - 132} fill={C.accent} fontSize={10}
+                  textAnchor="middle" letterSpacing={2}
+                >
+                  TOP {m.rank} GATE · {fmt(m.threshold)}
                 </text>
               </g>
-            );
-          })}
+            ))}
 
-          {/* our ship */}
-          <g>
-            <circle cx={ax(stars)} cy={BAND_A_Y} r={16} fill="url(#shipGrad)" opacity={0.5} />
-            <circle className="ship-ping" cx={ax(stars)} cy={BAND_A_Y} r={13}
-              fill="none" stroke={C.accent} strokeWidth={1} />
-            <path
-              d={`M ${ax(stars)} ${BAND_A_Y - 7} L ${ax(stars) + 6} ${BAND_A_Y + 5} L ${ax(stars) - 6} ${BAND_A_Y + 5} Z`}
-              fill={C.accent}
-              className="core-glow"
-            />
-            <text x={ax(stars)} y={BAND_A_Y + 24} fill={C.white} fontSize={10.5}
-              textAnchor="middle" fontWeight={700}>
-              {repoName}
-            </text>
-            <text x={ax(stars)} y={BAND_A_Y + 37} fill={C.accent} fontSize={9.5}
-              textAnchor="middle">
-              {fmt(stars)} ★
-            </text>
+            {/* unlabeled route repos inside the window */}
+            {visDots
+              .filter((p) => !labeledDotSet.has(p.r))
+              .map((p) => (
+                <g
+                  key={p.r}
+                  className="nbr"
+                  onMouseEnter={() =>
+                    showScanAt({ kind: "route", p, xPct: clampPct((ax(p.s) / W) * 100), topPct: bandATop })
+                  }
+                  onMouseLeave={() => setScan(null)}
+                >
+                  <circle cx={ax(p.s)} cy={BAND_A_Y} r={8} fill="transparent" />
+                  <circle className="nbr-dot" cx={ax(p.s)} cy={BAND_A_Y} r={1.6}
+                    fill={C.white} opacity={0.55} />
+                </g>
+              ))}
+
+            {/* labeled items: neighbors with chase telemetry + sampled route repos */}
+            {items.map((it, i) => {
+              const x = ax(it.s);
+              if (it.kind === "n") {
+                const n = it.n;
+                const isAhead = n.gap > 0;
+                const color = !isAhead ? C.faint : n.receding ? C.warn : C.accent;
+                const tierY = isAhead
+                  ? BAND_A_Y - 38 - tiers[i] * 34
+                  : BAND_A_Y + 62 + tiers[i] * 36;
+                const lineY1 = isAhead ? tierY + 8 : BAND_A_Y + 6;
+                const lineY2 = isAhead ? BAND_A_Y - 5 : tierY - 20;
+                return (
+                  <g
+                    key={n.r}
+                    className="nbr"
+                    onMouseEnter={() =>
+                      showScanAt({ kind: "neighbor", n, xPct: clampPct((x / W) * 100), topPct: bandATop })
+                    }
+                    onMouseLeave={() => setScan(null)}
+                  >
+                    <line x1={x} y1={lineY1} x2={x} y2={lineY2} stroke={C.grid} strokeWidth={1} />
+                    <circle className="nbr-dot" cx={x} cy={BAND_A_Y} r={3.2} fill={color} opacity={isAhead ? 0.95 : 0.55} />
+                    <text className="nbr-name" x={x} y={tierY - 12} fill={isAhead ? C.ink : C.faint} fontSize={10}
+                      textAnchor="middle">
+                      {shortName(n.r)}
+                    </text>
+                    <text x={x} y={tierY} fill={C.dim} fontSize={9} textAnchor="middle">
+                      {fmtSignedGap(n.gap)} · {Math.round(n.v)}/d
+                    </text>
+                    <text x={x} y={tierY + 11} fontSize={9} textAnchor="middle"
+                      fill={!isAhead ? C.faint : n.receding ? C.warn : C.accent}>
+                      {!isAhead ? "passed" : n.receding ? "receding" : `eta ${fmtEtaDays(n.etaDays)}`}
+                    </text>
+                  </g>
+                );
+              }
+              const p = it.p;
+              const tierY = BAND_A_Y - 38 - tiers[i] * 34;
+              return (
+                <g
+                  key={p.r}
+                  className="nbr"
+                  onMouseEnter={() =>
+                    showScanAt({ kind: "route", p, xPct: clampPct((x / W) * 100), topPct: bandATop })
+                  }
+                  onMouseLeave={() => setScan(null)}
+                >
+                  <line x1={x} y1={tierY + 8} x2={x} y2={BAND_A_Y - 5} stroke={C.grid} strokeWidth={1} />
+                  <circle className="nbr-dot" cx={x} cy={BAND_A_Y} r={2.4} fill={C.white} opacity={0.8} />
+                  <text className="nbr-name" x={x} y={tierY - 2} fill={C.ink} fontSize={10} textAnchor="middle">
+                    {shortName(p.r)}
+                  </text>
+                  <text x={x} y={tierY + 10} fill={C.dim} fontSize={9} textAnchor="middle">
+                    {fmtCompact(p.s)} · #{p.rank}
+                  </text>
+                </g>
+              );
+            })}
+
+            {/* the core, if the window reaches it */}
+            {apex && inWindow(coreStars) ? (
+              <g className="core-glow">
+                <circle cx={ax(coreStars)} cy={BAND_A_Y} r={30} fill="url(#coreGrad)" />
+                <circle cx={ax(coreStars)} cy={BAND_A_Y} r={4} fill={C.white} />
+                <text x={ax(coreStars)} y={BAND_A_Y - 44} fill={C.white} fontSize={10}
+                  textAnchor="middle" fontWeight={700}>
+                  GALACTIC CORE · #1 {shortName(apex.r)}
+                </text>
+              </g>
+            ) : null}
+
+            {/* our ship, while inside the window */}
+            {inWindow(stars) ? (
+              <g>
+                <circle cx={ax(stars)} cy={BAND_A_Y} r={16} fill="url(#shipGrad)" opacity={0.5} />
+                <circle className="ship-ping" cx={ax(stars)} cy={BAND_A_Y} r={13}
+                  fill="none" stroke={C.accent} strokeWidth={1} />
+                <path
+                  d={`M ${ax(stars)} ${BAND_A_Y - 7} L ${ax(stars) + 6} ${BAND_A_Y + 5} L ${ax(stars) - 6} ${BAND_A_Y + 5} Z`}
+                  fill={C.accent}
+                  className="core-glow"
+                />
+                <text x={ax(stars)} y={BAND_A_Y + 24} fill={C.white} fontSize={10.5}
+                  textAnchor="middle" fontWeight={700}>
+                  {repoName}
+                </text>
+                <text x={ax(stars)} y={BAND_A_Y + 37} fill={C.accent} fontSize={9.5}
+                  textAnchor="middle">
+                  {fmt(stars)} ★
+                </text>
+              </g>
+            ) : null}
           </g>
 
-          {/* ============ connector ============ */}
-          <line
-            x1={ax(stars)} y1={BAND_A_Y + 46} x2={bx(stars)} y2={BAND_B_Y - 56}
-            stroke={C.grid} strokeWidth={1} strokeDasharray="2 5"
-          />
+          {/* ============ viewport connectors: band A edges -> bracket ============ */}
+          <line x1={40} y1={CLIP_BOTTOM} x2={vx0} y2={BAND_B_Y - 15}
+            stroke={C.grid} strokeWidth={1} strokeDasharray="3 5" opacity={0.8} />
+          <line x1={W - 40} y1={CLIP_BOTTOM} x2={vx1} y2={BAND_B_Y - 15}
+            stroke={C.grid} strokeWidth={1} strokeDasharray="3 5" opacity={0.8} />
 
           {/* ============ BAND B: ROUTE TO THE CORE ============ */}
           <text x={40} y={BAND_B_Y - 88} fill={C.dim} fontSize={10} letterSpacing={4} className="font-display">
             ROUTE TO THE CORE
           </text>
           <text x={40} y={BAND_B_Y - 72} fill={C.faint} fontSize={9}>
-            log scale · every dot is a worldwide top 1000 repo · destination: rank 1
+            log scale · every dot is a worldwide top 1000 repo · [ ] marks the window above
           </text>
 
           {/* ultra-thin guide + flowing energy */}
@@ -256,12 +398,24 @@ export default function GalacticChart({ bundle }: { bundle: DashboardBundle }) {
           <line className="route-flow" x1={40} y1={BAND_B_Y} x2={W - 40} y2={BAND_B_Y}
             stroke={C.accent} strokeWidth={1.4} opacity={0.5} />
 
+          {/* viewport bracket [ ] mirroring band A */}
+          <g>
+            <rect x={vx0} y={BAND_B_Y - 13} width={Math.max(vx1 - vx0, 2)} height={26}
+              fill={C.accent} opacity={0.07} />
+            <path d={`M ${vx0 + 5} ${BAND_B_Y - 13} H ${vx0} V ${BAND_B_Y + 13} H ${vx0 + 5}`}
+              stroke={C.accent} fill="none" strokeWidth={1.2} />
+            <path d={`M ${vx1 - 5} ${BAND_B_Y - 13} H ${vx1} V ${BAND_B_Y + 13} H ${vx1 - 5}`}
+              stroke={C.accent} fill="none" strokeWidth={1.2} />
+          </g>
+
           {/* every dot is a repo */}
-          {routeDots.map((p) => (
+          {bundle.routeDots.map((p) => (
             <g
               key={p.r}
               className="nbr"
-              onMouseEnter={() => showRouteScan(p)}
+              onMouseEnter={() =>
+                showScanAt({ kind: "route", p, xPct: clampPct((bx(p.s) / W) * 100), topPct: bandBTop })
+              }
               onMouseLeave={() => setScan(null)}
             >
               <circle cx={bx(p.s)} cy={BAND_B_Y} r={9} fill="transparent" />
@@ -271,7 +425,7 @@ export default function GalacticChart({ bundle }: { bundle: DashboardBundle }) {
           ))}
 
           {/* famous landmarks (skip the ones crowding our ship label) */}
-          {landmarks
+          {bundle.routeLandmarks
             .filter((p) => Math.abs(bx(p.s) - bx(stars)) > 150)
             .map((p, i) => (
               <g key={p.r}>
@@ -285,16 +439,16 @@ export default function GalacticChart({ bundle }: { bundle: DashboardBundle }) {
             ))}
 
           {/* milestone waypoints */}
-          {waypoints.map((m) => (
+          {[...bundle.milestones].sort((a, b) => b.rank - a.rank).map((m) => (
             <g key={m.rank}>
               <circle cx={bx(m.threshold)} cy={BAND_B_Y} r={5} fill="none" stroke={C.accent}
                 strokeWidth={1} opacity={0.85} />
               <circle cx={bx(m.threshold)} cy={BAND_B_Y} r={1.6} fill={C.accent} />
-              <text x={bx(m.threshold)} y={BAND_B_Y - 16} fill={C.ink} fontSize={9.5}
+              <text x={bx(m.threshold)} y={BAND_B_Y - 20} fill={C.ink} fontSize={9.5}
                 textAnchor="middle">
                 TOP {m.rank}
               </text>
-              <text x={bx(m.threshold)} y={BAND_B_Y - 28} fill={C.faint} fontSize={8.5}
+              <text x={bx(m.threshold)} y={BAND_B_Y - 32} fill={C.faint} fontSize={8.5}
                 textAnchor="middle">
                 {fmtCompact(m.threshold)}
               </text>
@@ -334,7 +488,7 @@ export default function GalacticChart({ bundle }: { bundle: DashboardBundle }) {
         {/* temporal scan card */}
         {scan ? (
           <div
-            className="scan-card hud pointer-events-none absolute z-10 w-[250px] px-3 py-2.5"
+            className="scan-card hud pointer-events-none z-10 w-[250px] px-3 py-2.5"
             style={{
               left: `${scan.xPct}%`,
               top: `${scan.topPct}%`,
