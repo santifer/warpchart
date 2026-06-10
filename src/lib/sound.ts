@@ -21,6 +21,8 @@ class AudioEngine {
     gain: GainNode;
     sub: OscillatorNode;
     subGain: GainNode;
+    lfo: OscillatorNode;
+    lfoDepth: GainNode;
   } | null = null;
   private warpEndTimer: number | null = null;
 
@@ -247,9 +249,13 @@ class AudioEngine {
     if (!this._enabled || !this.ctx || !this.master) return;
     const ctx = this.ctx;
     const t = ctx.currentTime;
-    const cruiseGain = 0.035 + intensity * 0.04;
-    const cruiseSub = 0.022 + intensity * 0.025;
-    const cruiseCut = 500 + intensity * 1100;
+    // The route variant is the SAME character as the local one, just faster:
+    // slightly brighter and louder, sub a touch higher, and (the real speed
+    // cue) a flutter tremolo whose rate rises with the pace.
+    const cruiseGain = 0.035 + intensity * 0.01;
+    const cruiseSub = 0.022 + intensity * 0.008;
+    const cruiseCut = 500 + intensity * 220;
+    const flutterHz = 1.2 + intensity * 5.3;
 
     if (!this.warp) {
       // acceleration: build the bed and swell it over ~0.7s
@@ -271,22 +277,34 @@ class AudioEngine {
       const sub = ctx.createOscillator();
       sub.type = "sine";
       sub.frequency.setValueAtTime(46, t);
-      sub.frequency.exponentialRampToValueAtTime(64 + intensity * 18, t + 0.7);
+      sub.frequency.exponentialRampToValueAtTime(64 + intensity * 10, t + 0.7);
       const subGain = ctx.createGain();
       subGain.gain.setValueAtTime(0, t);
       subGain.gain.linearRampToValueAtTime(cruiseSub, t + 0.7);
+      // flutter: amplitude tremolo on the bed, rate = perceived speed
+      const lfo = ctx.createOscillator();
+      lfo.type = "sine";
+      lfo.frequency.setValueAtTime(flutterHz, t);
+      const lfoDepth = ctx.createGain();
+      lfoDepth.gain.setValueAtTime(0, t);
+      lfoDepth.gain.linearRampToValueAtTime(cruiseGain * 0.35, t + 0.7);
+      lfo.connect(lfoDepth).connect(gain.gain);
       noise.connect(lp).connect(gain);
       gain.connect(this.master);
       if (this.send) gain.connect(this.send);
       sub.connect(subGain).connect(this.master);
       noise.start(t);
       sub.start(t);
-      this.warp = { noise, lp, gain, sub, subGain };
+      lfo.start(t);
+      this.warp = { noise, lp, gain, sub, subGain, lfo, lfoDepth };
     } else {
       // cruise: glide the bed toward this zone's intensity
       this.warp.gain.gain.setTargetAtTime(cruiseGain, t, 0.12);
       this.warp.subGain.gain.setTargetAtTime(cruiseSub, t, 0.12);
       this.warp.lp.frequency.setTargetAtTime(cruiseCut, t, 0.12);
+      this.warp.lfo.frequency.setTargetAtTime(flutterHz, t, 0.15);
+      this.warp.lfoDepth.gain.setTargetAtTime(cruiseGain * 0.35, t, 0.15);
+      this.warp.sub.frequency.setTargetAtTime(64 + intensity * 10, t, 0.15);
     }
 
     if (this.warpEndTimer !== null) clearTimeout(this.warpEndTimer);
@@ -301,11 +319,14 @@ class AudioEngine {
     const w = this.warp;
     w.gain.gain.cancelScheduledValues(t);
     w.subGain.gain.cancelScheduledValues(t);
+    w.lfoDepth.gain.cancelScheduledValues(t);
     w.gain.gain.setTargetAtTime(0.0001, t, 0.045);
     w.subGain.gain.setTargetAtTime(0.0001, t, 0.045);
+    w.lfoDepth.gain.setTargetAtTime(0, t, 0.03);
     try {
       w.noise.stop(t + 0.3);
       w.sub.stop(t + 0.3);
+      w.lfo.stop(t + 0.3);
     } catch { /* already stopped */ }
     this.warp = null;
 
@@ -331,6 +352,7 @@ class AudioEngine {
       try {
         this.warp.noise.stop();
         this.warp.sub.stop();
+        this.warp.lfo.stop();
       } catch { /* already stopped */ }
       this.warp = null;
     }
