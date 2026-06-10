@@ -199,18 +199,24 @@ export default async function ExplorerPage({
             </p>
             <div className="flex flex-col gap-2">
               <a
+                href={`/explore#embed=${encodeURIComponent(`${owner}/${name}`)}`}
+                className="numeral border border-accent/40 px-3 py-2 text-center text-[11px] tracking-[0.2em] text-accent transition-colors hover:bg-accent/10"
+              >
+                EMBED THIS ANIMATED CHART →
+              </a>
+              <a
                 href="https://github.com/santifer/warpchart"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="numeral border border-accent/40 px-3 py-2 text-center text-[11px] tracking-[0.2em] text-accent transition-colors hover:bg-accent/10"
+                className="numeral border border-grid px-3 py-2 text-center text-[11px] tracking-[0.2em] text-dim transition-colors hover:text-ink"
               >
                 DEPLOY YOUR OWN · 5 MIN
               </a>
               <a
-                href="/"
+                href="/hq"
                 className="numeral border border-grid px-3 py-2 text-center text-[11px] tracking-[0.2em] text-dim transition-colors hover:text-ink"
               >
-                SEE THE LIVE DEMO
+                SEE A FULL MISSION LIVE
               </a>
             </div>
           </div>

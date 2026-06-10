@@ -117,28 +117,61 @@ export default function ExploreSearch({ catalog }: { catalog: CatalogEntry[] }) 
 
       {rows.length ? (
         <div className="hud absolute left-0 right-0 top-full z-20 mt-1 py-1">
-          {rows.map((hit, i) => (
-            <button
-              key={hit.r}
-              onMouseEnter={() => setSel(i)}
-              onClick={() => open(hit.r)}
-              className={`flex w-full items-baseline justify-between gap-3 px-4 py-2 text-left transition-colors ${
-                i === clampedSel ? "bg-accent/10" : ""
-              }`}
-            >
-              <span className="numeral min-w-0 truncate text-[12px] text-ink">
-                {hit.r}
-                {hit.d ? <span className="ml-2 text-[10px] text-faint">{hit.d}</span> : null}
-              </span>
-              <span className="numeral shrink-0 text-[10px] text-dim">
-                {hit.k !== null
-                  ? `#${hit.k} · ${fmtCompact(hit.s)} ★`
-                  : hit.s > 0
-                    ? `${fmtCompact(hit.s)} ★`
-                    : "OPEN SCAN →"}
-              </span>
-            </button>
-          ))}
+          {rows.map((hit, i) => {
+            const ownerName = hit.r.split("/")[0];
+            const repoName = hit.r.split("/")[1] ?? hit.r;
+            const firstDeep = hit.k === null && hit.s > 0 && rows[i - 1]?.k !== null;
+            return (
+              <div key={hit.r}>
+                {firstDeep ? (
+                  <div className="numeral border-t border-grid px-4 pb-1 pt-2 text-[8px] tracking-[0.3em] text-faint">
+                    DEEP SPACE
+                  </div>
+                ) : null}
+                <button
+                  onMouseEnter={() => setSel(i)}
+                  onClick={() => open(hit.r)}
+                  className={`flex w-full items-center justify-between gap-3 border-l-2 px-4 py-2 text-left transition-colors ${
+                    i === clampedSel
+                      ? "border-l-accent bg-accent/10"
+                      : "border-l-transparent"
+                  }`}
+                >
+                  <span className="flex min-w-0 items-center gap-2.5">
+                    {hit.s > 0 ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={`https://github.com/${ownerName}.png?size=44`}
+                        alt=""
+                        width={22}
+                        height={22}
+                        loading="lazy"
+                        className="h-[22px] w-[22px] shrink-0 border border-grid"
+                      />
+                    ) : (
+                      <span className="numeral flex h-[22px] w-[22px] shrink-0 items-center justify-center border border-dashed border-grid text-[10px] text-faint">
+                        ?
+                      </span>
+                    )}
+                    <span className="numeral min-w-0 truncate text-[12px]">
+                      <span className="text-dim">{ownerName}/</span>
+                      <span className="text-ink">{repoName}</span>
+                      {hit.d ? (
+                        <span className="ml-2 hidden text-[10px] text-faint sm:inline">{hit.d}</span>
+                      ) : null}
+                    </span>
+                  </span>
+                  <span className={`numeral shrink-0 text-[10px] ${i === clampedSel ? "text-accent" : "text-dim"}`}>
+                    {hit.k !== null
+                      ? `#${hit.k} · ${fmtCompact(hit.s)} ★`
+                      : hit.s > 0
+                        ? `${fmtCompact(hit.s)} ★`
+                        : "OPEN SCAN →"}
+                  </span>
+                </button>
+              </div>
+            );
+          })}
         </div>
       ) : null}
     </div>

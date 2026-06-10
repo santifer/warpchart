@@ -13,23 +13,39 @@ export default function EmbedGenerator({ defaultRepo }: { defaultRepo: string })
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
   const [copied, setCopied] = useState(false);
   const [origin, setOrigin] = useState("");
+  const [retry, setRetry] = useState(0);
 
   useEffect(() => {
     setOrigin(window.location.origin);
+    // deep link from the explorer: /explore#embed=owner/name pre-fills
+    const m = window.location.hash.match(/embed=([^&]+)/);
+    if (m) {
+      const r = decodeURIComponent(m[1]);
+      if (REPO_RE.test(r)) {
+        setRepo(r);
+        setApplied(r);
+        setStatus("loading");
+      }
+    }
   }, []);
 
   const valid = REPO_RE.test(repo.trim());
+  const isTenant = applied.toLowerCase() === defaultRepo.toLowerCase();
 
-  const chartUrl = (theme?: string) =>
-    `${origin}/api/chart?repo=${encodeURIComponent(applied)}${theme ? `&theme=${theme}` : ""}`;
+  // The tenant's chart needs no ?repo= : it reads the exact local archive
+  // (instant, zero GitHub calls), while other repos use sampled history.
+  const chartUrl = (theme?: string) => {
+    const params = new URLSearchParams();
+    if (!isTenant) params.set("repo", applied);
+    if (theme) params.set("theme", theme);
+    const qs = params.toString();
+    return `${origin}/api/chart${qs ? `?${qs}` : ""}`;
+  };
 
   // The embed links to the full live telemetry: the tenant's chart goes to
   // its mission dashboard (/hq works on the product domain and on any
   // self-hosted instance), any other repo to its explorer system.
-  const targetUrl =
-    applied.toLowerCase() === defaultRepo.toLowerCase()
-      ? `${origin}/hq`
-      : `${origin}/r/${applied}`;
+  const targetUrl = isTenant ? `${origin}/hq` : `${origin}/r/${applied}`;
 
   const snippet = useMemo(() => {
     if (!origin) return "";
@@ -52,6 +68,7 @@ export default function EmbedGenerator({ defaultRepo }: { defaultRepo: string })
     setStatus("loading");
     setApplied(repo.trim());
     setCopied(false);
+    setRetry(0);
   };
 
   return (
@@ -92,13 +109,18 @@ export default function EmbedGenerator({ defaultRepo }: { defaultRepo: string })
           <a href={targetUrl} title={`Open the full telemetry of ${applied}`}>
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
-              key={applied}
+              key={`${applied}:${retry}`}
               src={chartUrl()}
               alt={`Animated cumulative star chart of ${applied}`}
               className="w-full"
               style={{ opacity: status === "ready" ? 1 : 0 }}
               onLoad={() => setStatus("ready")}
-              onError={() => setStatus("error")}
+              onError={() => {
+                // cold render of a big repo can trip on a transient GitHub
+                // 5xx; retry twice before declaring the scan failed
+                if (retry < 2) setTimeout(() => setRetry((r) => r + 1), 2500);
+                else setStatus("error");
+              }}
             />
           </a>
         ) : null}
