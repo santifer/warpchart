@@ -4,6 +4,7 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import GalacticChart from "@/components/GalacticChart";
+import VerticalChart from "@/components/VerticalChart";
 import Panel from "@/components/Panel";
 import { getExplorerData } from "@/lib/explorer";
 import { fmt, fmtEtaDays, shortName } from "@/lib/format";
@@ -136,7 +137,12 @@ export default async function ExplorerPage({
         meta={inputs.apex ? `destination: ${inputs.apex.r} · ${fmt(inputs.apex.s)} stars` : undefined}
         delay={80}
       >
-        <GalacticChart inputs={inputs} />
+        <div className="hidden lg:block">
+          <GalacticChart inputs={inputs} />
+        </div>
+        <div className="lg:hidden">
+          <VerticalChart inputs={inputs} />
+        </div>
       </Panel>
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-12">

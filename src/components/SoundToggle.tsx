@@ -1,31 +1,39 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { sound } from "@/lib/sound";
 
 export default function SoundToggle() {
   const [on, setOn] = useState(false);
+  const btnRef = useRef<HTMLButtonElement | null>(null);
 
   // If the user had sound enabled last time, re-enable it on the first
-  // gesture anywhere (autoplay policy requires one).
+  // gesture anywhere EXCEPT this button (autoplay policy needs one gesture;
+  // the button's own click handles itself, otherwise the global pointerdown
+  // would turn sound on and the same gesture's click would toggle it back
+  // off).
   useEffect(() => {
     if (!sound.restoreFromStorage()) return;
-    const arm = () => {
+    const arm = (e: PointerEvent) => {
+      if (btnRef.current && e.target instanceof Node && btnRef.current.contains(e.target)) return;
+      window.removeEventListener("pointerdown", arm);
       sound.setEnabled(true);
       setOn(true);
     };
-    window.addEventListener("pointerdown", arm, { once: true });
+    window.addEventListener("pointerdown", arm);
     return () => window.removeEventListener("pointerdown", arm);
   }, []);
 
   const toggle = () => {
-    const next = !on;
+    // The engine is the single source of truth: immune to stale-closure races.
+    const next = !sound.enabled;
     sound.setEnabled(next);
     setOn(next);
   };
 
   return (
     <button
+      ref={btnRef}
       onClick={toggle}
       className="numeral flex items-center gap-1.5 text-[9px] tracking-[0.2em] text-dim transition-colors hover:text-ink"
       aria-pressed={on}

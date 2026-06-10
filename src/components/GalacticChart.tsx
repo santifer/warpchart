@@ -19,10 +19,10 @@ import { neighborEtas, type NeighborEta } from "@/lib/projections";
 import { sound } from "@/lib/sound";
 
 const W = 1200;
-const H = 470;
-const BAND_A_Y = 150;
-const BAND_B_Y = 388;
-const CLIP_BOTTOM = 292;
+const H = 520;
+const BAND_A_Y = 185; // headroom above keeps three label tiers clear of the header
+const BAND_B_Y = 436;
+const CLIP_BOTTOM = 330;
 
 type ScanPlace = "above" | "below";
 
@@ -117,6 +117,17 @@ export default function GalacticChart({
     }));
   }, [inputs.repo]);
 
+  // Directional star stream for the local system: conveys our own speed.
+  const stream = useMemo(() => {
+    const rand = mulberry32(seedFrom(inputs.repo + "::stream"));
+    return Array.from({ length: 70 }, () => ({
+      x: rand() * W,
+      y: 56 + rand() * (CLIP_BOTTOM - 110),
+      r: 0.5 + rand() * 0.9,
+      o: 0.1 + rand() * 0.35,
+    }));
+  }, [inputs.repo]);
+
   // ---------- geometry ----------
   const ahead = etas.filter((n) => n.gap > 0).sort((a, b) => a.gap - b.gap).slice(0, 10);
   const behind = etas.filter((n) => n.gap <= 0).sort((a, b) => b.gap - a.gap).slice(0, 3);
@@ -196,20 +207,38 @@ export default function GalacticChart({
   ].sort((a, b) => a.s - b.s);
 
   // Tier assignment is aware of each label's real width, so long names like
-  // "coding-interview-university" never overlap their neighbors.
-  const tiers: number[] = [];
+  // "coding-interview-university" never overlap their neighbors. Neighbors
+  // claim tiers first; whoever finds no free tier SHEDS its label and stays
+  // as a bare dot (tier -1), with all its data still on hover.
+  const tiers: number[] = new Array(items.length).fill(-1);
   {
     const rowsAbove: number[] = [-1e9, -1e9, -1e9]; // rightmost occupied edge per tier
     const rowsBelow: number[] = [-1e9, -1e9, -1e9];
-    for (const it of items) {
+    const order = items
+      .map((_, i) => i)
+      .sort((a, b) => {
+        const pa = items[a].kind === "n" ? 0 : 1;
+        const pb = items[b].kind === "n" ? 0 : 1;
+        return pa - pb || ax(items[a].s) - ax(items[b].s);
+      });
+    for (const i of order) {
+      const it = items[i];
       const x = ax(it.s);
       const name = trunc(shortName(it.kind === "n" ? it.n.r : it.p.r));
       const halfW = (Math.max(name.length, 12) * 6.2) / 2 + 8;
       const rows = it.kind === "n" && it.n.gap <= 0 ? rowsBelow : rowsAbove;
       let tier = 0;
-      while (tier < rows.length - 1 && x - halfW < rows[tier] + 8) tier++;
-      rows[tier] = x + halfW;
-      tiers.push(tier);
+      let fits = true;
+      while (x - halfW < rows[tier] + 8) {
+        if (tier >= rows.length - 1) {
+          fits = false;
+          break;
+        }
+        tier++;
+      }
+      if (!fits) continue; // sheds its label
+      rows[tier] = Math.max(rows[tier], x + halfW);
+      tiers[i] = tier;
     }
   }
 
@@ -324,14 +353,27 @@ export default function GalacticChart({
           <line x1={40} y1={BAND_A_Y} x2={W - 40} y2={BAND_A_Y} stroke={C.grid} strokeWidth={1} />
 
           <g clipPath="url(#bandAClip)">
+            {/* seamless directional star stream, speed follows our v7d */}
+            <g
+              className="dust-stream"
+              style={{ animationDuration: `${Math.max(10, 280 / Math.sqrt(Math.max(vOwn, 4))).toFixed(1)}s` }}
+            >
+              {[0, W].map((dx) => (
+                <g key={dx} transform={`translate(${dx} 0)`}>
+                  {stream.map((p, i) => (
+                    <circle key={i} cx={p.x} cy={p.y} r={p.r} fill={C.speck} opacity={p.o} />
+                  ))}
+                </g>
+              ))}
+            </g>
             {visGates.map((m) => (
               <g key={m.rank}>
                 <line
-                  x1={ax(m.threshold)} y1={BAND_A_Y - 124} x2={ax(m.threshold)} y2={BAND_A_Y + 38}
+                  x1={ax(m.threshold)} y1={26} x2={ax(m.threshold)} y2={BAND_A_Y + 38}
                   stroke={C.accent} strokeWidth={1} strokeDasharray="2 4" opacity={0.7}
                 />
                 <text
-                  x={Math.min(ax(m.threshold), W - 170)} y={BAND_A_Y - 132} fill={C.accent} fontSize={10}
+                  x={Math.min(Math.max(ax(m.threshold), 130), W - 170)} y={18} fill={C.accent} fontSize={10}
                   textAnchor="middle" letterSpacing={2}
                 >
                   TOP {m.rank} GATE · {fmt(m.threshold)}
@@ -364,9 +406,29 @@ export default function GalacticChart({
                 const n = it.n;
                 const isAhead = n.gap > 0;
                 const color = !isAhead ? C.faint : n.receding ? C.warn : C.accent;
+                if (tiers[i] === -1) {
+                  // label shed: bare interactive dot, data stays on hover
+                  return (
+                    <g
+                      key={n.r}
+                      className="nbr"
+                      onMouseEnter={() =>
+                        openScan({ kind: "neighbor", n, xPct: clampPct((x / W) * 100), topPct: bandATop, place: "below" })
+                      }
+                      onMouseLeave={scheduleClose}
+                      onClick={() => togglePin(n.r)}
+                    >
+                      <circle cx={x} cy={BAND_A_Y} r={8} fill="transparent" />
+                      {isTarget ? (
+                        <circle cx={x} cy={BAND_A_Y} r={8} fill="none" stroke={C.accent} strokeWidth={1.2} />
+                      ) : null}
+                      <circle className="nbr-dot" cx={x} cy={BAND_A_Y} r={3.2} fill={color} opacity={isAhead ? 0.95 : 0.55} />
+                    </g>
+                  );
+                }
                 const tierY = isAhead
                   ? BAND_A_Y - 38 - tiers[i] * 34
-                  : BAND_A_Y + 62 + tiers[i] * 36;
+                  : BAND_A_Y + 62 + tiers[i] * 30;
                 const lineY1 = isAhead ? tierY + 8 : BAND_A_Y + 6;
                 const lineY2 = isAhead ? BAND_A_Y - 5 : tierY - 20;
                 return (
@@ -412,6 +474,25 @@ export default function GalacticChart({
                 );
               }
               const p = it.p;
+              if (tiers[i] === -1) {
+                return (
+                  <g
+                    key={p.r}
+                    className="nbr"
+                    onMouseEnter={() =>
+                      openScan({ kind: "route", p, xPct: clampPct((x / W) * 100), topPct: bandATop, place: "below" })
+                    }
+                    onMouseLeave={scheduleClose}
+                    onClick={() => togglePin(p.r)}
+                  >
+                    <circle cx={x} cy={BAND_A_Y} r={8} fill="transparent" />
+                    {isTarget ? (
+                      <circle cx={x} cy={BAND_A_Y} r={8} fill="none" stroke={C.accent} strokeWidth={1.2} />
+                    ) : null}
+                    <circle className="nbr-dot" cx={x} cy={BAND_A_Y} r={1.6} fill={C.white} opacity={0.55} />
+                  </g>
+                );
+              }
               const tierY = BAND_A_Y - 38 - tiers[i] * 34;
               return (
                 <g

@@ -18,21 +18,19 @@
   --glow: rgba(83, 214, 232, 0.45);
 }
 
-@media (prefers-color-scheme: light) {
-  :root {
-    color-scheme: light;
-    --void: #eef3f8;
-    --hull: #f9fbfd;
-    --grid: #c9d8e4;
-    --ink: #16293c;
-    --dim: #43607a;
-    --faint: #5d7388;
-    --accent: #0c7d92;
-    --accent-soft: rgba(12, 125, 146, 0.10);
-    --warn: #a05a00;
-    --star-white: #0a1726;
-    --glow: rgba(12, 125, 146, 0.30);
-  }
+:root.scheme-light {
+  color-scheme: light;
+  --void: #eef3f8;
+  --hull: #f9fbfd;
+  --grid: #c9d8e4;
+  --ink: #16293c;
+  --dim: #43607a;
+  --faint: #5d7388;
+  --accent: #0c7d92;
+  --accent-soft: rgba(12, 125, 146, 0.10);
+  --warn: #a05a00;
+  --star-white: #0a1726;
+  --glow: rgba(12, 125, 146, 0.30);
 }
 
 @theme inline {
@@ -334,6 +332,18 @@ svg text {
   to { background-position: -60% 0; }
 }
 
+/* Continuous directional dust stream in the local system: two copies of the
+   same particle field scroll seamlessly; duration is set inline from our
+   current velocity. */
+.dust-stream {
+  animation: dust-stream 30s linear infinite;
+}
+
+@keyframes dust-stream {
+  from { transform: translateX(0); }
+  to { transform: translateX(-1200px); }
+}
+
 /* Relative-velocity streaks: a particle drifts from each neighbor toward us
    (closing) or away (receding); speed and direction come via CSS vars. */
 .vel-streak {
@@ -348,7 +358,7 @@ svg text {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .dust-layer, .dust-tw, .route-flow, .ship-ping, .scan-card, .scan-card::after, .vel-streak {
+  .dust-layer, .dust-tw, .dust-stream, .route-flow, .ship-ping, .scan-card, .scan-card::after, .vel-streak {
     animation: none;
   }
 }
@@ -359,8 +369,7 @@ svg text {
 
 /* ---- Light scheme variants of the decorative layers ---- */
 
-@media (prefers-color-scheme: light) {
-  .space-backdrop {
+.scheme-light .space-backdrop {
     background:
       radial-gradient(1100px 520px at 85% -10%, rgba(12, 125, 146, 0.07), transparent 70%),
       radial-gradient(900px 480px at 8% 108%, rgba(160, 90, 0, 0.05), transparent 70%),
@@ -368,14 +377,14 @@ svg text {
       var(--void);
   }
 
-  .space-grid {
+.scheme-light .space-grid {
     background-image:
       linear-gradient(rgba(12, 125, 146, 0.06) 1px, transparent 1px),
       linear-gradient(90deg, rgba(12, 125, 146, 0.06) 1px, transparent 1px);
   }
 
   /* daylight star chart: faint dark specks instead of bright stars */
-  .starfield {
+.scheme-light .starfield {
     background-image:
       radial-gradient(1px 1px at 12% 22%, rgba(22, 41, 60, 0.35), transparent 100%),
       radial-gradient(1.5px 1.5px at 41% 12%, rgba(12, 125, 146, 0.3), transparent 100%),
@@ -387,7 +396,7 @@ svg text {
       radial-gradient(1.5px 1.5px at 95% 38%, rgba(22, 41, 60, 0.28), transparent 100%);
   }
 
-  .starfield::after {
+.scheme-light .starfield::after {
     background-image:
       radial-gradient(1px 1px at 16% 9%, rgba(22, 41, 60, 0.3), transparent 100%),
       radial-gradient(1.5px 1.5px at 46% 56%, rgba(22, 41, 60, 0.26), transparent 100%),
@@ -396,15 +405,14 @@ svg text {
       radial-gradient(1px 1px at 24% 78%, rgba(12, 125, 146, 0.2), transparent 100%);
   }
 
-  .hud {
+.scheme-light .hud {
     background: linear-gradient(180deg, rgba(255, 255, 255, 0.82), rgba(244, 249, 252, 0.6));
   }
 
-  .scan-card::after {
+.scheme-light .scan-card::after {
     background: linear-gradient(105deg, transparent 30%, rgba(12, 125, 146, 0.10) 48%, transparent 60%);
   }
 
-  .core-glow {
+.scheme-light .core-glow {
     filter: drop-shadow(0 0 10px rgba(12, 125, 146, 0.45)) drop-shadow(0 0 26px rgba(12, 125, 146, 0.25));
   }
-}

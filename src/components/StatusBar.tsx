@@ -3,6 +3,7 @@
 import NumberFlow from "@number-flow/react";
 import { useLive } from "./LiveProvider";
 import SoundToggle from "./SoundToggle";
+import ThemeToggle from "./ThemeToggle";
 import type { DashboardBundle } from "@/lib/bundle";
 import { fmt, fmtEtaDays, timeAgo } from "@/lib/format";
 
@@ -122,6 +123,7 @@ export default function StatusBar({ bundle }: { bundle: DashboardBundle }) {
             MISSION CONTROL // GROWTH TELEMETRY
           </span>
           <SoundToggle />
+          <ThemeToggle />
         </div>
         <span className="numeral text-[9px] text-faint">
           {live.stale ? "STALE DATA · " : ""}

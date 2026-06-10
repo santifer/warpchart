@@ -5,6 +5,7 @@ import LiveProvider, { useLive } from "./LiveProvider";
 import StatusBar from "./StatusBar";
 import Panel from "./Panel";
 import GalacticChart from "./GalacticChart";
+import VerticalChart from "./VerticalChart";
 import VelocityChart from "./VelocityChart";
 import DailyLadder from "./DailyLadder";
 import CumulativeChart from "./CumulativeChart";
@@ -47,7 +48,16 @@ function ChartIsland({
     }),
     [bundle, live.stars, live.rank, live.neighbors, live.nowMs]
   );
-  return <GalacticChart inputs={inputs} target={target} onPinTarget={onPinTarget} />;
+  return (
+    <>
+      <div className="hidden lg:block">
+        <GalacticChart inputs={inputs} target={target} onPinTarget={onPinTarget} />
+      </div>
+      <div className="lg:hidden">
+        <VerticalChart inputs={inputs} target={target} onPinTarget={onPinTarget} />
+      </div>
+    </>
+  );
 }
 
 export default function Dashboard({ bundle }: { bundle: DashboardBundle }) {

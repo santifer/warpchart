@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Michroma, Chakra_Petch, JetBrains_Mono } from "next/font/google";
+import { ThemeProvider } from "@/lib/usePalette";
 import "./globals.css";
 
 const michroma = Michroma({
@@ -36,6 +37,10 @@ export const metadata: Metadata = {
   },
 };
 
+// Applies the resolved scheme before first paint (no flash). Mirrors the
+// logic in ThemeProvider; localStorage "mc_theme" overrides the OS scheme.
+const themeInit = `(function(){try{var m=localStorage.getItem("mc_theme");var l=m==="light"||(m!=="dark"&&window.matchMedia("(prefers-color-scheme: light)").matches);if(l)document.documentElement.classList.add("scheme-light");}catch(e){}})();`;
+
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -45,12 +50,16 @@ export default function RootLayout({
     <html
       lang="en"
       className={`${michroma.variable} ${chakra.variable} ${jbMono.variable} antialiased`}
+      suppressHydrationWarning
     >
       <body>
-        <div className="space-backdrop" aria-hidden />
-        <div className="space-grid" aria-hidden />
-        <div className="starfield" aria-hidden />
-        {children}
+        <script dangerouslySetInnerHTML={{ __html: themeInit }} />
+        <ThemeProvider>
+          <div className="space-backdrop" aria-hidden />
+          <div className="space-grid" aria-hidden />
+          <div className="starfield" aria-hidden />
+          {children}
+        </ThemeProvider>
       </body>
     </html>
   );
