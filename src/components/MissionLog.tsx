@@ -7,6 +7,7 @@ const GLYPH: Record<MissionEvent["kind"], { g: string; cls: string }> = {
   overtake: { g: "▸", cls: "text-ink" },
   record: { g: "★", cls: "text-warn" },
   online: { g: "●", cls: "text-faint" },
+  spike: { g: "◈", cls: "text-warn" },
 };
 
 function fmtTs(ts: string): string {
@@ -37,7 +38,18 @@ export default function MissionLog({
             <li key={`${e.ts}-${i}`} className="numeral flex items-baseline gap-3 text-[11px]">
               <span className={`shrink-0 ${GLYPH[e.kind].cls}`}>{GLYPH[e.kind].g}</span>
               <span className="shrink-0 text-faint" suppressHydrationWarning>{fmtTs(e.ts)}</span>
-              <span className="text-dim">{e.text}</span>
+              {e.url ? (
+                <a
+                  href={e.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-dim underline decoration-grid underline-offset-4 transition-colors hover:text-ink"
+                >
+                  {e.text}
+                </a>
+              ) : (
+                <span className="text-dim">{e.text}</span>
+              )}
             </li>
           ))}
         </ul>

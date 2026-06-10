@@ -13,7 +13,8 @@ import { writeFileSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import {
   ROOT, DATA_DIR, readConfig, repoMeta, backwalk, countAbove,
-  nextMilestones, thresholdForRank, findNeighbors, reposVelocity, apexRepo, topRepos, token,
+  nextMilestones, thresholdForRank, findNeighbors, reposVelocity, apexRepo, topRepos,
+  buildForensics, token,
 } from "./lib.mjs";
 
 token(); // fail fast if missing
@@ -78,6 +79,11 @@ console.log("[bootstrap] fetching worldwide top 1000 (route landmarks)...");
 const route = await topRepos();
 console.log(`[bootstrap] route landmarks: ${route.length} repos`);
 
+// 7. Spike forensics: correlate the repo's spikes with HN/Reddit/releases
+console.log("[bootstrap] running spike forensics...");
+const spikes = await buildForensics(meta.nameWithOwner, timestamps);
+console.log(`[bootstrap] forensics: ${spikes.length} spike days analyzed`);
+
 const snapshot = {
   ts: nowISO,
   stars: meta.stargazerCount,
@@ -112,6 +118,10 @@ writeFileSync(join(DATA_DIR, "stargazer_timestamps.txt"), timestamps.join("\n") 
 writeFileSync(
   join(DATA_DIR, "route.json"),
   JSON.stringify({ generated_at: nowISO, repos: route }) + "\n"
+);
+writeFileSync(
+  join(DATA_DIR, "forensics.json"),
+  JSON.stringify({ generated_at: nowISO, spikes }, null, 1) + "\n"
 );
 writeFileSync(join(DATA_DIR, "meta.json"), JSON.stringify(metaOut, null, 2) + "\n");
 writeFileSync(

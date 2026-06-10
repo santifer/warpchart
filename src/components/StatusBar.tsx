@@ -125,6 +125,15 @@ export default function StatusBar({ bundle }: { bundle: DashboardBundle }) {
         </div>
         <span className="numeral text-[9px] text-faint">
           {live.stale ? "STALE DATA · " : ""}
+          {bundle.forkRatio !== null ? (
+            <>
+              fork ratio {(bundle.forkRatio * 100).toFixed(1)}%
+              {bundle.forkPercentile !== null
+                ? ` (higher than ${bundle.forkPercentile}% of the top 1000)`
+                : ""}
+              {" · "}
+            </>
+          ) : null}
           sync {timeAgo(live.lastSync, live.nowMs)} · v7d {fmt(Math.round(bundle.v7d))}/day
         </span>
       </div>

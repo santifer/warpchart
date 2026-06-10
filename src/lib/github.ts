@@ -61,6 +61,7 @@ export async function currentStars(owner: string, name: string): Promise<number>
 export interface RepoLite {
   nameWithOwner: string;
   stargazerCount: number;
+  forkCount: number;
   description: string | null;
   primaryLanguage: { name: string } | null;
 }
@@ -69,7 +70,7 @@ export async function repoLite(owner: string, name: string): Promise<RepoLite> {
   const d = await graphql<{ repository: RepoLite | null }>(
     `query($owner:String!,$name:String!){
       repository(owner:$owner,name:$name){
-        nameWithOwner stargazerCount description primaryLanguage{ name }
+        nameWithOwner stargazerCount forkCount description primaryLanguage{ name }
       }
     }`,
     { owner, name }

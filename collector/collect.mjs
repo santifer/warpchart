@@ -12,7 +12,8 @@ import { readFileSync, writeFileSync, appendFileSync, existsSync } from "node:fs
 import { join } from "node:path";
 import {
   DATA_DIR, readConfig, repoMeta, backwalk, countAbove,
-  nextMilestones, thresholdForRank, findNeighbors, reposVelocity, apexRepo, topRepos, token,
+  nextMilestones, thresholdForRank, findNeighbors, reposVelocity, apexRepo, topRepos,
+  buildForensics, token,
 } from "./lib.mjs";
 
 token(); // fail fast
@@ -106,6 +107,26 @@ try {
   console.error(`[collect] route refresh failed: ${err.message}`);
 }
 
+// 7. Spike forensics: refresh at most once a day (best effort).
+const forensicsPath = join(DATA_DIR, "forensics.json");
+try {
+  let staleForensics = true;
+  if (existsSync(forensicsPath)) {
+    const prev = JSON.parse(readFileSync(forensicsPath, "utf8"));
+    staleForensics = now - new Date(prev.generated_at) > 20 * 3600 * 1000;
+  }
+  if (staleForensics) {
+    const allTs = readFileSync(tsPath, "utf8").trimEnd().split("\n");
+    const spikes = await buildForensics(meta.nameWithOwner, allTs);
+    if (!dryRun) writeFileSync(forensicsPath, JSON.stringify({ generated_at: nowISO, spikes }, null, 1) + "\n");
+    console.log(`[collect] forensics refreshed: ${spikes.length} spike days analyzed`);
+  }
+} catch (err) {
+  console.error(`[collect] forensics failed: ${err.message}`);
+}
+
+// (alerts run at the end of the script, after the new snapshot is appended)
+
 const snapshot = {
   ts: nowISO,
   stars,
@@ -146,3 +167,41 @@ try {
 }
 
 console.log(`[collect] snapshot appended (partial=${partial}).`);
+
+// Optional alerts to a Discord/Slack webhook (secret ALERT_WEBHOOK_URL).
+// Compares the two most recent snapshots, so it runs AFTER the append.
+try {
+  if (process.env.ALERT_WEBHOOK_URL) {
+    const history = readFileSync(historyPath, "utf8").trimEnd().split("\n");
+    if (history.length >= 2) {
+      const a = JSON.parse(history[history.length - 2]);
+      const b = JSON.parse(history[history.length - 1]);
+      const lines = [];
+      for (const m of Object.keys(b.milestones ?? {}).map(Number)) {
+        if (a.rank > m && b.rank <= m) lines.push(`entered the worldwide top ${m} (rank #${b.rank})`);
+      }
+      if (a.neighbors?.length && b.neighbors?.length) {
+        const prevN = new Map(a.neighbors.map((n) => [n.r, n.s]));
+        for (const n of b.neighbors) {
+          const pS = prevN.get(n.r);
+          if (pS !== undefined && pS > a.stars && n.s <= b.stars) {
+            lines.push(`passed ${n.r} (${n.s.toLocaleString("en-US")} stars)`);
+          }
+        }
+      }
+      if (lines.length) {
+        const url = process.env.ALERT_WEBHOOK_URL;
+        const text = lines.map((l) => `▸ ${meta.nameWithOwner}: ${l}`).join("\n");
+        const body = url.includes("hooks.slack.com") ? { text } : { content: text };
+        await fetch(url, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        });
+        console.log(`[collect] alert sent (${lines.length} events)`);
+      }
+    }
+  }
+} catch (err) {
+  console.error(`[collect] alert failed: ${err.message}`);
+}

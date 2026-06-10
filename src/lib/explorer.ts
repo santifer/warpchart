@@ -6,7 +6,7 @@
 import { loadRoute } from "./history";
 import { repoLite, worldwideRank, searchNeighbors, neighborsVelocity } from "./github";
 import { nextMilestones } from "./milestones";
-import { buildRouteLayers } from "./bundle";
+import { buildRouteLayers, forkRatioPercentile } from "./bundle";
 import type { ChartInputs, Neighbor, RouteRepo } from "./types";
 
 export interface ExplorerData {
@@ -15,6 +15,8 @@ export interface ExplorerData {
   lang: string | null;
   neighbors: Neighbor[];
   inTop1000: boolean;
+  forkRatio: number | null;
+  forkPercentile: number | null;
   generatedAt: string;
 }
 
@@ -34,6 +36,7 @@ export async function getExplorerData(owner: string, name: string): Promise<Expl
   let rank: number;
   let desc: string | null = null;
   let lang: string | null = null;
+  let forks: number | null = null;
   let neighborNames: string[];
 
   if (inTop1000) {
@@ -43,6 +46,7 @@ export async function getExplorerData(owner: string, name: string): Promise<Expl
     rank = e.rank;
     desc = e.d ?? null;
     lang = e.l ?? null;
+    forks = e.f ?? null;
     neighborNames = [
       ...ranked.slice(idx + 1, idx + 6).map((p) => p.r).reverse(), // just behind us
       ...ranked.slice(Math.max(0, idx - 15), idx).map((p) => p.r).reverse(), // ahead, nearest first
@@ -53,6 +57,7 @@ export async function getExplorerData(owner: string, name: string): Promise<Expl
     stars = lite.stargazerCount;
     desc = lite.description;
     lang = lite.primaryLanguage?.name ?? null;
+    forks = lite.forkCount;
     rank = await worldwideRank(stars);
     neighborNames = await searchNeighbors(repoName, stars);
   }
@@ -91,12 +96,18 @@ export async function getExplorerData(owner: string, name: string): Promise<Expl
     nowMs: Date.now(),
   };
 
+  const forkRatio = forks !== null && stars > 0 ? forks / stars : null;
+  const forkPercentile =
+    forkRatio !== null ? forkRatioPercentile(forkRatio, route?.repos ?? []) : null;
+
   return {
     inputs,
     desc,
     lang,
     neighbors,
     inTop1000,
+    forkRatio,
+    forkPercentile,
     generatedAt: new Date().toISOString(),
   };
 }

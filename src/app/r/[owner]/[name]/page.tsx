@@ -116,7 +116,16 @@ export default async function ExplorerPage({
             MISSION CONTROL // INSTANT SCAN
           </span>
           <span className="numeral text-[9px] text-faint">
-            live snapshot · refreshes every 15 min · velocity from the last 100 stars
+            {data.forkRatio !== null ? (
+              <>
+                fork ratio {(data.forkRatio * 100).toFixed(1)}%
+                {data.forkPercentile !== null
+                  ? ` (higher than ${data.forkPercentile}% of the top 1000)`
+                  : ""}
+                {" · "}
+              </>
+            ) : null}
+            live snapshot · refreshes every 15 min
           </span>
         </div>
       </header>

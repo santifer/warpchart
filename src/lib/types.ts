@@ -18,11 +18,30 @@ export interface RouteRepo {
   rank: number;
   d?: string | null;
   l?: string | null;
+  f?: number; // forks
 }
 
 export interface RouteFile {
   generated_at: string;
-  repos: { r: string; s: number; d?: string | null; l?: string | null }[];
+  repos: { r: string; s: number; d?: string | null; l?: string | null; f?: number }[];
+}
+
+export interface SpikeCause {
+  type: "hn" | "reddit" | "release";
+  title: string;
+  url: string;
+  points: number | null;
+}
+
+export interface Spike {
+  date: string; // YYYY-MM-DD
+  stars: number;
+  causes: SpikeCause[];
+}
+
+export interface ForensicsFile {
+  generated_at: string;
+  spikes: Spike[];
 }
 
 export interface Snapshot {
@@ -56,8 +75,9 @@ export interface MilestonesFile {
 
 export interface MissionEvent {
   ts: string;
-  kind: "gate" | "overtake" | "record" | "online";
+  kind: "gate" | "overtake" | "record" | "online" | "spike";
   text: string;
+  url?: string | null;
 }
 
 // Everything GalacticChart needs, decoupled from the bundle + live layer so

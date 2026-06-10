@@ -20,7 +20,10 @@ Mission Control turns the public GitHub API into a live flight console:
 - **Sound**: a fully synthesized Web Audio soundscape, zero audio files. Each new star is a sonar ping, ambient pad brightness follows velocity, milestone crossings play a quiet fanfare. Off by default, one click to enable. Leave the tab open and hear your repo grow.
 - **Velocity, daily ladder, cumulative, heatmap, rank over time**: the full instrument panel, including the night-floor line that tells compounding growth apart from a decaying spike.
 - **Replay**: re-draw the whole journey from day zero in 36 seconds, scrubber included. With sound on, ping density follows each moment's velocity.
-- **Mission log**: auto-detected events from telemetry. Milestone gates, neighbor overtakes, daily records, plus a daily captain's line.
+- **Spike forensics**: every star spike is correlated with Hacker News posts, Reddit posts and your own releases, then annotated on the daily chart and in the log. The dashboard does not just show the spike, it tells you what likely caused it.
+- **Mission log**: auto-detected events from telemetry. Milestone gates, neighbor overtakes, daily records, spike causes, plus a daily captain's line.
+- **Engagement percentile**: your fork/star ratio ranked against the worldwide top 1000 (a real-usage signal, not a popularity one).
+- **Alerts**: set an optional `ALERT_WEBHOOK_URL` secret (Discord or Slack incoming webhook) and the hourly collector notifies you of milestone gates and overtakes. There is also an RSS feed of the mission log at `/feed.xml`.
 - **Mission briefing**: come back after 18 hours and get a one-line delta summary since your last visit. Stored client-side, no accounts.
 
 ### Shareable everywhere
@@ -29,6 +32,12 @@ Mission Control turns the public GitHub API into a live flight console:
 
 ```markdown
 [![World rank](https://mission-control-lovat-delta.vercel.app/api/badge?repo=OWNER/NAME)](https://mission-control-lovat-delta.vercel.app/r/OWNER/NAME)
+```
+
+**Embeddable live chart** (SVG, replaces a static star-history image in your README):
+
+```markdown
+[![Star growth](https://mission-control-lovat-delta.vercel.app/api/chart?w=800&h=240)](https://mission-control-lovat-delta.vercel.app)
 ```
 
 **Instant explorer** for any repo, no setup: `/r/owner/name`. **Dynamic Open Graph cards**: every shared link renders a live stats card.

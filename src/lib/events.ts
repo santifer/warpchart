@@ -1,12 +1,28 @@
 // Mission log: notable events auto-detected from the hourly history and the
 // star timestamps. Pure functions, run at build time.
-import type { Snapshot, MissionEvent, DayPoint } from "./types";
+import type { Snapshot, MissionEvent, DayPoint, Spike } from "./types";
 import { fmt, shortName } from "./format";
 
-export function detectEvents(history: Snapshot[], dailyAll: DayPoint[]): MissionEvent[] {
+export function detectEvents(
+  history: Snapshot[],
+  dailyAll: DayPoint[],
+  spikes: Spike[] = []
+): MissionEvent[] {
   const events: MissionEvent[] = [];
   if (history.length) {
     events.push({ ts: history[0].ts, kind: "online", text: "telemetry online" });
+  }
+
+  // spike forensics: spikes with an identified cause
+  for (const s of spikes) {
+    const cause = s.causes[0];
+    if (!cause) continue;
+    events.push({
+      ts: s.date + "T12:00:00Z",
+      kind: "spike",
+      text: `spike of ${fmt(s.stars)} stars · ${cause.title}${cause.points ? ` (${fmt(cause.points)} pts)` : ""}`,
+      url: cause.url,
+    });
   }
 
   for (let i = 1; i < history.length; i++) {

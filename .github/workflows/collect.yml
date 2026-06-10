@@ -25,6 +25,9 @@ jobs:
           # The automatic Actions token covers public-data reads (1,000 req/h,
           # the collector uses ~12). No PAT or secret setup needed.
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Optional: a Discord or Slack incoming-webhook URL. If set, the
+          # collector posts milestone gates and overtakes as they happen.
+          ALERT_WEBHOOK_URL: ${{ secrets.ALERT_WEBHOOK_URL }}
       - name: Commit snapshot
         run: |
           git config user.name "mission-control-bot"

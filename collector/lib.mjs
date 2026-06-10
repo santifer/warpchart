@@ -167,8 +167,8 @@ export async function apexRepo() {
   return item ? { r: item.full_name, s: item.stargazers_count } : null;
 }
 
-// The worldwide top 1000 (search enumeration cap), used as route landmarks.
-// 10 search calls, throttled.
+// The worldwide top 1000 (search enumeration cap), used as route landmarks
+// and as the population for fork-ratio percentiles. 10 search calls.
 export async function topRepos() {
   const out = [];
   for (let page = 1; page <= 10; page++) {
@@ -181,8 +181,112 @@ export async function topRepos() {
         s: item.stargazers_count,
         d: item.description ? item.description.slice(0, 80) : null,
         l: item.language ?? null,
+        f: item.forks_count ?? 0,
       });
     }
+  }
+  return out;
+}
+
+// ---- Spike forensics: correlate star spikes with HN posts, Reddit posts
+// and the repo's own releases. External APIs are free and unauthenticated.
+
+async function getJsonQuiet(url, headers = {}) {
+  try {
+    const res = await fetch(url, { headers: { "User-Agent": "mission-control", ...headers } });
+    if (!res.ok) return null;
+    return await res.json();
+  } catch {
+    return null;
+  }
+}
+
+function dailyCountsFromTimestamps(lines) {
+  const counts = new Map();
+  for (const iso of lines) {
+    const d = iso.slice(0, 10);
+    counts.set(d, (counts.get(d) ?? 0) + 1);
+  }
+  return [...counts.entries()].sort((a, b) => (a[0] < b[0] ? -1 : 1));
+}
+
+export async function buildForensics(repoFull, timestampLines) {
+  const [owner, name] = repoFull.split("/");
+  const daily = dailyCountsFromTimestamps(timestampLines);
+
+  // spike days: well above the trailing week, or all-time top 3
+  const spikes = [];
+  for (let i = 0; i < daily.length; i++) {
+    const [day, c] = daily[i];
+    const prior = daily.slice(Math.max(0, i - 7), i).map((x) => x[1]).sort((a, b) => a - b);
+    const median = prior.length ? prior[Math.floor(prior.length / 2)] : 0;
+    if (c > Math.max(60, median * 2.5)) spikes.push({ day, c });
+  }
+  const topDays = [...daily].sort((a, b) => b[1] - a[1]).slice(0, 3)
+    .map(([day, c]) => ({ day, c }));
+  const byDay = new Map();
+  for (const s of [...spikes, ...topDays]) byDay.set(s.day, s.c);
+  const targets = [...byDay.entries()]
+    .map(([day, c]) => ({ day, c }))
+    .sort((a, b) => (a.day < b.day ? 1 : -1))
+    .slice(0, 8);
+
+  // releases once for all spikes
+  let releases = [];
+  try {
+    const rel = await ghFetch(`/repos/${owner}/${name}/releases?per_page=100`);
+    releases = (rel ?? []).map((x) => ({
+      tag: x.tag_name,
+      at: x.published_at,
+      url: x.html_url,
+    }));
+  } catch { /* repos without releases */ }
+
+  const out = [];
+  for (const t of targets) {
+    const t0 = Math.floor(Date.parse(t.day + "T00:00:00Z") / 1000) - 86400;
+    const t1 = t0 + 3 * 86400;
+    const causes = [];
+
+    const hn = await getJsonQuiet(
+      `https://hn.algolia.com/api/v1/search?query=${encodeURIComponent(name)}&numericFilters=created_at_i>${t0},created_at_i<${t1}&hitsPerPage=5`
+    );
+    for (const h of (hn?.hits ?? []).slice(0, 2)) {
+      if ((h.points ?? 0) < 10) continue;
+      causes.push({
+        type: "hn",
+        title: h.title ?? "Hacker News post",
+        url: `https://news.ycombinator.com/item?id=${h.objectID}`,
+        points: h.points ?? 0,
+      });
+    }
+
+    const rd = await getJsonQuiet(
+      `https://www.reddit.com/search.json?q=${encodeURIComponent(`"${name}"`)}&sort=top&limit=25&t=all`
+    );
+    const rdHits = (rd?.data?.children ?? [])
+      .map((x) => x.data)
+      .filter((p) => p.created_utc >= t0 && p.created_utc <= t1 && (p.score ?? 0) >= 50)
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 1);
+    for (const p of rdHits) {
+      causes.push({
+        type: "reddit",
+        title: `r/${p.subreddit}: ${p.title}`,
+        url: `https://www.reddit.com${p.permalink}`,
+        points: p.score,
+      });
+    }
+
+    for (const rel of releases) {
+      const at = Date.parse(rel.at ?? "") / 1000;
+      if (at >= t0 && at <= t1) {
+        causes.push({ type: "release", title: `release ${rel.tag}`, url: rel.url, points: null });
+      }
+    }
+
+    causes.sort((a, b) => (b.points ?? 0) - (a.points ?? 0));
+    out.push({ date: t.day, stars: t.c, causes: causes.slice(0, 3) });
   }
   return out;
 }

@@ -32,5 +32,8 @@ gh repo edit santifer/mission-control --add-topic github-stars --add-topic dashb
 ## After
 
 - [ ] Decide separately (brand-ops) whether the example tenant's README adds
-      the badge. That is a brand decision, not a release step.
+      the badge or the embedded chart. That is a brand decision, not a
+      release step.
+- [ ] Optional: `gh secret set ALERT_WEBHOOK_URL` with a Discord/Slack
+      incoming webhook to get gate/overtake alerts from the hourly collector.
 - [ ] Optional custom domain on Vercel.

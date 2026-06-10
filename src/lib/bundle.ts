@@ -1,7 +1,7 @@
 // Assembles every build-time series into one serializable bundle that the
 // client dashboard receives as props. Runs on the server only (fs).
 import {
-  loadTimestamps, loadHistory, loadMeta, loadMilestones, loadRoute,
+  loadTimestamps, loadHistory, loadMeta, loadMilestones, loadRoute, loadForensics,
 } from "./history";
 import {
   hourlyBuckets, dailyCounts, movingAverage, madrugadaFloor,
@@ -12,7 +12,7 @@ import { driftPerDay } from "./projections";
 import { detectEvents, captainsLog } from "./events";
 import type {
   RepoMetaFile, Snapshot, HourPoint, DayPoint, CumPoint, RankPoint,
-  FloorPoint, Neighbor, Apex, RouteRepo, MissionEvent,
+  FloorPoint, Neighbor, Apex, RouteRepo, MissionEvent, Spike,
 } from "./types";
 
 const HOUR = 3600_000;
@@ -50,6 +50,22 @@ export interface DashboardBundle {
   hourlyAll: HourPoint[]; // hourly counts over the repo's whole life (replay)
   events: MissionEvent[];
   captain: string | null;
+  spikes: Spike[];
+  forkRatio: number | null; // forks / stars
+  forkPercentile: number | null; // share of top 1000 repos with a LOWER ratio
+}
+
+// Percentile of a fork/star ratio against the top 1000 population.
+export function forkRatioPercentile(
+  ratio: number,
+  population: { s: number; f?: number }[]
+): number | null {
+  const ratios = population
+    .filter((p) => typeof p.f === "number" && p.s > 0)
+    .map((p) => (p.f as number) / p.s);
+  if (ratios.length < 100) return null;
+  const below = ratios.filter((x) => x < ratio).length;
+  return Math.round((below / ratios.length) * 100);
 }
 
 // Every dot on the route band is a real repo from the worldwide top 1000.
@@ -131,8 +147,18 @@ export function buildBundle(): DashboardBundle {
   const lifeDays = Math.min(Math.ceil((nowMs - firstMs) / DAY) + 1, 400);
   const hourlyAll = hourlyBuckets(timestamps, lifeHours, nowMs);
   const dailyAll = dailyCounts(timestamps, lifeDays, nowMs);
-  const events = detectEvents(history, dailyAll);
+  const spikes = loadForensics()?.spikes ?? [];
+  const events = detectEvents(history, dailyAll, spikes);
   const captain = captainsLog(dailyAll, latest?.rank ?? null);
+
+  // engagement: fork/star ratio vs the top 1000 population
+  const route = loadRoute();
+  let forkRatio: number | null = null;
+  let forkPercentile: number | null = null;
+  if (meta && meta.forks > 0 && netStars > 0) {
+    forkRatio = meta.forks / netStars;
+    forkPercentile = forkRatioPercentile(forkRatio, route?.repos ?? []);
+  }
 
   return {
     meta,
@@ -160,5 +186,8 @@ export function buildBundle(): DashboardBundle {
     hourlyAll,
     events,
     captain,
+    spikes,
+    forkRatio,
+    forkPercentile,
   };
 }

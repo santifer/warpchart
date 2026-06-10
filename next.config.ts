@@ -8,6 +8,8 @@ const nextConfig: NextConfig = {
     "/api/live/neighbors": ["./data/**"],
     "/api/badge": ["./data/**"],
     "/api/og": ["./data/**"],
+    "/api/chart": ["./data/**"],
+    "/feed.xml": ["./data/**"],
     "/r/*": ["./data/**"],
     "/r/**": ["./data/**"],
   },
