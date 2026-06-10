@@ -23,6 +23,10 @@ export interface Palette {
   scanBorderWarn: string;
   heat: HeatStop[];
   heatZero: string;
+  // Doppler ramp for RELATIVE growth velocity (vs our own): blueshift means
+  // we gain on them, redshift means they outrun us. Magnitude lives in the
+  // comet-tail length, so only three hue states are needed per side.
+  doppler: { cold: string; cool: string; neutral: string; warm: string; hot: string };
 }
 
 export const PALETTES: { dark: Palette; light: Palette } = {
@@ -48,6 +52,13 @@ export const PALETTES: { dark: Palette; light: Palette } = {
       { t: 1.0, c: [255, 233, 196] },
     ],
     heatZero: "rgba(83, 214, 232, 0.04)",
+    doppler: {
+      cold: "#8debff",
+      cool: "#53d6e8",
+      neutral: "#b9c9d9",
+      warm: "#f2a33c",
+      hot: "#ff7a55",
+    },
   },
   light: {
     void: "#eef3f8",
@@ -71,6 +82,13 @@ export const PALETTES: { dark: Palette; light: Palette } = {
       { t: 1.0, c: [92, 47, 0] },
     ],
     heatZero: "rgba(12, 125, 146, 0.05)",
+    doppler: {
+      cold: "#0894c4",
+      cool: "#0c7d92",
+      neutral: "#5d7388",
+      warm: "#a05a00",
+      hot: "#b3422a",
+    },
   },
 };
 

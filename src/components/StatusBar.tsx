@@ -58,10 +58,27 @@ export default function StatusBar({ bundle }: { bundle: DashboardBundle }) {
               <h1 className="font-display text-sm tracking-[0.18em] text-star uppercase truncate">
                 {repo}
               </h1>
-              <span className="flex items-center gap-1.5 shrink-0">
-                <span className={live.offline ? "h-[7px] w-[7px] rounded-full bg-warn" : "pulse-dot"} />
+              <span
+                className="flex items-center gap-1.5 shrink-0"
+                title={
+                  live.offline
+                    ? "live feed unreachable · showing last known data"
+                    : live.lastSync === null
+                      ? "catching up with the live feed"
+                      : "live · polls every 60s"
+                }
+              >
+                <span
+                  className={
+                    live.offline
+                      ? "h-[7px] w-[7px] rounded-full bg-warn"
+                      : live.lastSync === null
+                        ? "h-[7px] w-[7px] animate-pulse rounded-full bg-faint"
+                        : "pulse-dot"
+                  }
+                />
                 <span className="numeral text-[9px] tracking-[0.2em] text-dim">
-                  {live.offline ? "BUNDLED" : "LIVE"}
+                  {live.offline ? "SYNC LOST" : live.lastSync === null ? "SYNCING" : "LIVE"}
                 </span>
               </span>
             </div>

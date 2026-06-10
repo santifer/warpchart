@@ -6,6 +6,7 @@ import StatusBar from "./StatusBar";
 import Panel from "./Panel";
 import GalacticChart from "./GalacticChart";
 import VerticalChart from "./VerticalChart";
+import CommandDeck from "./CommandDeck";
 import VelocityChart from "./VelocityChart";
 import DailyLadder from "./DailyLadder";
 import CumulativeChart from "./CumulativeChart";
@@ -64,6 +65,7 @@ export default function Dashboard({ bundle }: { bundle: DashboardBundle }) {
   const repo = bundle.meta?.repo;
   const next = bundle.milestones[0] ?? null;
   const [target, setTarget] = useState<string | null>(null);
+  const [deck, setDeck] = useState(false);
 
   useEffect(() => {
     try {
@@ -99,8 +101,24 @@ export default function Dashboard({ bundle }: { bundle: DashboardBundle }) {
           }
           delay={80}
         >
+          <div className="mb-2 hidden justify-end lg:flex">
+            <button
+              onClick={() => setDeck(true)}
+              className="numeral border border-grid px-2.5 py-1 text-[9px] tracking-[0.2em] text-dim transition-colors hover:border-accent/50 hover:text-accent"
+            >
+              ⛶ COMMAND DECK
+            </button>
+          </div>
           <ChartIsland bundle={bundle} target={target} onPinTarget={pinTarget} />
         </Panel>
+        {deck ? (
+          <CommandDeck
+            bundle={bundle}
+            target={target}
+            onPinTarget={pinTarget}
+            onExit={() => setDeck(false)}
+          />
+        ) : null}
 
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-12">
           <Panel

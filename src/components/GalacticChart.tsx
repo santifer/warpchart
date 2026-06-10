@@ -13,6 +13,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { ChartInputs, RouteRepo } from "@/lib/types";
+import type { Palette } from "@/lib/theme";
 import { usePalette } from "@/lib/usePalette";
 import { fmt, fmtCompact, fmtEtaDays, etaDate, shortName } from "@/lib/format";
 import { neighborEtas, type NeighborEta } from "@/lib/projections";
@@ -51,6 +52,34 @@ function seedFrom(text: string): number {
 }
 
 const log10 = Math.log10;
+
+// Doppler reading of a repo's growth velocity RELATIVE to ours (rel = v/vOwn).
+// Hue carries the side (blueshift = we gain on it, redshift = it outruns us),
+// the comet tail carries the magnitude. Within ±15% it flies in formation.
+// The tail is its motion trail in OUR reference frame, so it points toward
+// the core when we are reeling the repo in (it falls behind us) and toward
+// us when it escapes: tail toward you = you are watching its lights leave.
+function dopplerFor(rel: number, P: Palette) {
+  const mag = Math.abs(1 - rel);
+  const paced = mag <= 0.15;
+  const color = paced
+    ? P.doppler.neutral
+    : rel < 1
+      ? rel < 0.1
+        ? P.doppler.cold
+        : P.doppler.cool
+      : rel > 2.5
+        ? P.doppler.hot
+        : P.doppler.warm;
+  const tailLen = paced ? 0 : Math.min(24, 7 + Math.min(mag, 1.3) * 13);
+  const tailDir = rel < 1 ? 1 : -1;
+  const dur = Math.max(0.9, 2.8 - Math.min(mag, 2) * 0.95);
+  return { color, tailLen, tailDir, dur };
+}
+
+function tailPath(x: number, y: number, len: number, dir: number): string {
+  return `M ${x} ${y - 1.7} L ${x + dir * len} ${y} L ${x} ${y + 1.7} Z`;
+}
 
 export default function GalacticChart({
   inputs,
@@ -113,6 +142,23 @@ export default function GalacticChart({
     [inputs.neighbors, stars, vOwn]
   );
 
+  // Golden pulsar: every REAL star (post-sync increments of the live count)
+  // fires an expanding ring on our ship. The first jump after load is the
+  // backlog catching up with the bundle, so it stays quiet.
+  const [pulse, setPulse] = useState(0);
+  const prevStars = useRef<number | null>(null);
+  const pulseArmed = useRef(false);
+  useEffect(() => {
+    const prev = prevStars.current;
+    prevStars.current = stars;
+    if (prev === null || stars <= prev) return;
+    if (!pulseArmed.current) {
+      pulseArmed.current = true;
+      return;
+    }
+    setPulse((p) => p + 1);
+  }, [stars]);
+
   const dust = useMemo(() => {
     const rand = mulberry32(seedFrom(inputs.repo));
     return Array.from({ length: 90 }, () => ({
@@ -136,17 +182,44 @@ export default function GalacticChart({
         o: oA + rand() * (oB - oA),
       }));
     };
+    // At relative rest the field barely drifts (5x slower than it used to):
+    // cruise is a crawl, so the FTL jump while panning lands much harder.
     return [
-      { id: 1, f: 0.15, dur: 150, warp: false, stars: mk("::far", 40, 0.4, 0.8, 0.08, 0.2) },
-      { id: 2, f: 0.45, dur: 80, warp: false, stars: mk("::mid", 55, 0.5, 1.0, 0.12, 0.3) },
+      { id: 1, f: 0.15, dur: 750, warp: false, stars: mk("::far", 40, 0.4, 0.8, 0.08, 0.2) },
+      { id: 2, f: 0.45, dur: 400, warp: false, stars: mk("::mid", 55, 0.5, 1.0, 0.12, 0.3) },
       { id: 3, f: 0.9, dur: 0, warp: true, stars: mk("::near", 45, 0.7, 1.5, 0.18, 0.45) },
     ];
+  }, [inputs.repo]);
+
+  // Parallel sequences beyond the core: when the window peeks past the
+  // worldwide #1, other faint galaxies surface in the deep background. They
+  // sit at infinite distance, so they are pinned to the viewport (zero
+  // parallax) and deliberately unnamed: the journey does not end at the core.
+  const galaxies = useMemo(() => {
+    const rand = mulberry32(seedFrom(inputs.repo + "::beyond"));
+    const tints = ["cool", "pale", "warm", "cool"] as const;
+    return Array.from({ length: 4 }, (_, i) => ({
+      fx: 0.5 + i * 0.13 + rand() * 0.05,
+      y: 66 + rand() * 92,
+      rx: 24 + rand() * 26,
+      ry: 6 + rand() * 8,
+      rot: -30 + rand() * 60,
+      tint: tints[i],
+      seq: ["02", "03", "05", "08"][i],
+      dots: Array.from({ length: 8 }, () => ({
+        dx: (rand() - 0.5) * 76,
+        dy: (rand() - 0.5) * 30,
+        r: 0.5 + rand() * 0.7,
+        o: 0.25 + rand() * 0.4,
+      })),
+    }));
   }, [inputs.repo]);
 
   // FTL stretch while panning: armed by wheel events, relaxes shortly after.
   // The zone sets the regime: "local" pans fine, "route" pans fast with a
   // more exaggerated stretch and a hotter sound bed.
   const [warpZone, setWarpZone] = useState<"local" | "route" | null>(null);
+  const [warpDir, setWarpDir] = useState<1 | -1>(1); // 1 = toward the core (blueshift)
   const warpTimer = useRef<number | null>(null);
   const armWarp = (zone: "local" | "route") => {
     setWarpZone(zone);
@@ -217,6 +290,7 @@ export default function GalacticChart({
       else {
         sound.warpPan(zone === "route" ? 1 : 0);
         armWarp(zone);
+        setWarpDir((horizontal ? e.deltaX : e.deltaY) > 0 ? 1 : -1);
       }
       const g = geom.current;
       setView((v) => {
@@ -312,6 +386,14 @@ export default function GalacticChart({
   const vx0 = bx(Math.pow(10, logLo));
   const vx1 = bx(Math.pow(10, logHi));
 
+  // Beyond-the-core reveal: as the core glow slides left inside the window,
+  // the uncharted side opens up on the right and the parallel sequences fade
+  // in. Each galaxy only shows once it has clear space right of the core.
+  const coreX = apex ? ax(coreStars) : null;
+  const beyondT =
+    coreX !== null ? Math.min(1, Math.max(0, ((W - 60 - coreX) / (W - 100)) * 1.4)) : 0;
+  const lineEndX = coreX !== null && coreX < W - 40 ? Math.max(coreX, 40) : W - 40;
+
   // chase target (pinned repo)
   const targetEntry = target
     ? etas.find((n) => n.r === target) ?? inputs.routeAll.find((p) => p.r === target) ?? null
@@ -381,12 +463,33 @@ export default function GalacticChart({
             <clipPath id="bandAClip">
               <rect x={28} y={0} width={W - 56} height={CLIP_BOTTOM} />
             </clipPath>
+            <radialGradient id="gal-cool">
+              <stop offset="0%" stopColor={C.white} stopOpacity="0.9" />
+              <stop offset="35%" stopColor={C.accent} stopOpacity="0.35" />
+              <stop offset="100%" stopColor={C.accent} stopOpacity="0" />
+            </radialGradient>
+            <radialGradient id="gal-warm">
+              <stop offset="0%" stopColor={C.white} stopOpacity="0.85" />
+              <stop offset="40%" stopColor={C.warn} stopOpacity="0.22" />
+              <stop offset="100%" stopColor={C.warn} stopOpacity="0" />
+            </radialGradient>
+            <radialGradient id="gal-pale">
+              <stop offset="0%" stopColor={C.white} stopOpacity="0.9" />
+              <stop offset="45%" stopColor={C.dim} stopOpacity="0.25" />
+              <stop offset="100%" stopColor={C.dim} stopOpacity="0" />
+            </radialGradient>
+            <linearGradient id="fadeBeyond" gradientUnits="userSpaceOnUse"
+              x1={lineEndX} y1="0" x2={W - 40} y2="0">
+              <stop offset="0%" stopColor={C.grid} stopOpacity="1" />
+              <stop offset="55%" stopColor={C.grid} stopOpacity="0.25" />
+              <stop offset="100%" stopColor={C.grid} stopOpacity="0" />
+            </linearGradient>
           </defs>
 
           {/* dust parallax: drift speed follows our own velocity */}
           <g
             className="dust-layer"
-            style={{ animationDuration: `${Math.max(25, 110 - vOwn / 8)}s` }}
+            style={{ animationDuration: `${Math.max(125, 550 - vOwn / 1.6)}s` }}
           >
             {dust.map((d, i) => (
               <circle
@@ -408,13 +511,21 @@ export default function GalacticChart({
           <text x={40} y={46} fill={C.faint} fontSize={9}>
             zoom window over the route · scroll sideways to pan · pinch to zoom · double-click to reset
           </text>
+          <text x={40} y={58} fill={C.faint} fontSize={8.5}>
+            doppler tails read relative growth · tail toward the core = you gain · tail toward you = it escapes
+          </text>
           {!isDefaultView ? (
             <text x={W - 40} y={30} fill={C.accent} fontSize={9} textAnchor="end" opacity={0.8}>
               window {fmtCompact(Math.round(Math.pow(10, logLo)))} .. {fmtCompact(Math.round(Math.pow(10, logHi)))} ★
             </text>
           ) : null}
 
-          <line x1={40} y1={BAND_A_Y} x2={W - 40} y2={BAND_A_Y} stroke={C.grid} strokeWidth={1} />
+          {/* the route line loses meaning past the #1: it fades into the dark */}
+          <line x1={40} y1={BAND_A_Y} x2={lineEndX} y2={BAND_A_Y} stroke={C.grid} strokeWidth={1} />
+          {lineEndX < W - 40 ? (
+            <line x1={lineEndX} y1={BAND_A_Y} x2={W - 40} y2={BAND_A_Y}
+              stroke="url(#fadeBeyond)" strokeWidth={1} />
+          ) : null}
 
           <g clipPath="url(#bandAClip)">
             {/* multi-depth parallax: each layer shifts with the pan at its
@@ -423,6 +534,13 @@ export default function GalacticChart({
             {starLayers.map((layer) => (
               <g
                 key={layer.id}
+                className={
+                  layer.warp && warpZone
+                    ? warpDir === 1
+                      ? "warp-tint-fwd"
+                      : "warp-tint-back"
+                    : undefined
+                }
                 style={{
                   transform: `translateX(${layerOffset(layer.f).toFixed(1)}px)`,
                   transition: "transform 90ms linear",
@@ -431,7 +549,7 @@ export default function GalacticChart({
                 <g
                   className="dust-stream"
                   style={{
-                    animationDuration: `${(layer.dur || Math.max(10, 280 / Math.sqrt(Math.max(vOwn, 4)))).toFixed(1)}s`,
+                    animationDuration: `${(layer.dur || Math.max(50, 1400 / Math.sqrt(Math.max(vOwn, 4)))).toFixed(1)}s`,
                   }}
                 >
                   {[0, W, 2 * W].map((dx) => (
@@ -460,6 +578,44 @@ export default function GalacticChart({
                 </g>
               </g>
             ))}
+            {beyondT > 0.04 ? (
+              <g>
+                {galaxies.map((g) => {
+                  const gx = g.fx * W;
+                  const local =
+                    beyondT * Math.min(1, Math.max(0, (gx - (coreX ?? 0) - 90) / 150));
+                  if (local <= 0.03) return null;
+                  return (
+                    <g key={g.seq} opacity={local}>
+                      <ellipse cx={gx} cy={g.y} rx={g.rx} ry={g.ry}
+                        transform={`rotate(${g.rot} ${gx} ${g.y})`}
+                        fill={`url(#gal-${g.tint})`} opacity={0.5} />
+                      <ellipse cx={gx} cy={g.y} rx={g.rx * 0.32} ry={g.ry * 0.5}
+                        transform={`rotate(${g.rot} ${gx} ${g.y})`}
+                        fill={`url(#gal-${g.tint})`} opacity={0.8} />
+                      {g.dots.map((d, j) => (
+                        <circle key={j} cx={gx + d.dx} cy={g.y + d.dy} r={d.r}
+                          fill={C.speck} opacity={d.o * 0.5} />
+                      ))}
+                      {local > 0.45 ? (
+                        <text x={Math.min(gx, W - 150)} y={g.y + g.ry + 18} fill={C.faint}
+                          fontSize={8} letterSpacing={2} textAnchor="middle">
+                          PARALLEL SEQUENCE {g.seq} · UNCHARTED
+                        </text>
+                      ) : null}
+                    </g>
+                  );
+                })}
+                <text x={W - 44} y={70} fill={C.accent} fontSize={9.5} letterSpacing={3}
+                  textAnchor="end" opacity={Math.min(0.9, beyondT)} className="font-display">
+                  EDGE OF CHARTED SPACE
+                </text>
+                <text x={W - 44} y={84} fill={C.dim} fontSize={8.5} textAnchor="end"
+                  opacity={Math.min(0.85, beyondT)}>
+                  parallel sequences detected · the journey does not end at the core
+                </text>
+              </g>
+            ) : null}
             {visGates.map((m) => (
               <g key={m.rank}>
                 <line
@@ -499,7 +655,8 @@ export default function GalacticChart({
               if (it.kind === "n") {
                 const n = it.n;
                 const isAhead = n.gap > 0;
-                const color = !isAhead ? C.faint : n.receding ? C.warn : C.accent;
+                const dop = dopplerFor(n.v / Math.max(vOwn, 1), C);
+                const color = dop.color;
                 if (tiers[i] === -1) {
                   // label shed: bare interactive dot, data stays on hover
                   return (
@@ -515,6 +672,10 @@ export default function GalacticChart({
                       <circle cx={x} cy={BAND_A_Y} r={8} fill="transparent" />
                       {isTarget ? (
                         <circle cx={x} cy={BAND_A_Y} r={8} fill="none" stroke={C.accent} strokeWidth={1.2} />
+                      ) : null}
+                      {dop.tailLen > 0 ? (
+                        <path d={tailPath(x, BAND_A_Y, dop.tailLen, dop.tailDir)}
+                          fill={color} opacity={isAhead ? 0.3 : 0.18} />
                       ) : null}
                       <circle className="nbr-dot" cx={x} cy={BAND_A_Y} r={3.2} fill={color} opacity={isAhead ? 0.95 : 0.55} />
                     </g>
@@ -539,20 +700,28 @@ export default function GalacticChart({
                     {isTarget ? (
                       <circle cx={x} cy={BAND_A_Y} r={8} fill="none" stroke={C.accent} strokeWidth={1.2} />
                     ) : null}
-                    <circle className="nbr-dot" cx={x} cy={BAND_A_Y} r={3.2} fill={color} opacity={isAhead ? 0.95 : 0.55} />
-                    {Math.abs(n.v - vOwn) >= 1 ? (
-                      <circle
-                        className="vel-streak"
-                        cx={x}
-                        cy={BAND_A_Y}
-                        r={1.3}
-                        fill={n.receding ? C.warn : C.accent}
-                        style={{
-                          "--drift": `${(n.v - vOwn < 0 ? -1 : 1) * 16}px`,
-                          "--dur": `${Math.max(1, 5.5 - Math.log10(Math.max(Math.abs(n.v - vOwn), 1)) * 1.6).toFixed(2)}s`,
-                        } as React.CSSProperties}
-                      />
+                    {dop.tailLen > 0 ? (
+                      <>
+                        <path d={tailPath(x, BAND_A_Y, dop.tailLen, dop.tailDir)}
+                          fill={color} opacity={isAhead ? 0.32 : 0.2} />
+                        {[0, 1].map((k) => (
+                          <circle
+                            key={k}
+                            className="vel-streak"
+                            cx={x}
+                            cy={BAND_A_Y}
+                            r={1.2}
+                            fill={color}
+                            style={{
+                              "--drift": `${dop.tailDir * (dop.tailLen + 5)}px`,
+                              "--dur": `${dop.dur.toFixed(2)}s`,
+                              animationDelay: k === 1 ? `${(dop.dur / 2).toFixed(2)}s` : undefined,
+                            } as React.CSSProperties}
+                          />
+                        ))}
+                      </>
                     ) : null}
+                    <circle className="nbr-dot" cx={x} cy={BAND_A_Y} r={3.2} fill={color} opacity={isAhead ? 0.95 : 0.55} />
                     <text className="nbr-name" x={x} y={tierY - 12} fill={isAhead ? C.ink : C.faint} fontSize={10}
                       textAnchor="middle">
                       {trunc(shortName(n.r))}
@@ -651,6 +820,10 @@ export default function GalacticChart({
                 <circle cx={ax(stars)} cy={BAND_A_Y} r={16} fill="url(#shipGrad)" opacity={0.5} />
                 <circle className="ship-ping" cx={ax(stars)} cy={BAND_A_Y} r={13}
                   fill="none" stroke={C.accent} strokeWidth={1} />
+                {pulse > 0 ? (
+                  <circle key={pulse} className="star-pulse" cx={ax(stars)} cy={BAND_A_Y}
+                    r={10} fill="none" stroke={C.warn} strokeWidth={1.5} />
+                ) : null}
                 <path
                   d={`M ${ax(stars)} ${BAND_A_Y - 7} L ${ax(stars) + 6} ${BAND_A_Y + 5} L ${ax(stars) - 6} ${BAND_A_Y + 5} Z`}
                   fill={C.accent}
@@ -907,6 +1080,13 @@ function ScanContent({ scan, ownV, nowMs }: { scan: Scan; ownV: number; nowMs: n
         {scan.kind === "neighbor" ? (
           <>
             <Row k="velocity" v={`${Math.round(scan.n.v)}/day`} />
+            <Row
+              k="rel v"
+              v={(() => {
+                const relPct = Math.round((scan.n.v / Math.max(ownV, 1) - 1) * 100);
+                return `${relPct >= 0 ? "+" : ""}${relPct}% vs us`;
+              })()}
+            />
             <Row k="gap" v={fmtSignedGap(scan.n.gap)} />
             <Row k="closing" v={`${scan.n.closing >= 0 ? "+" : ""}${Math.round(scan.n.closing)}/day`} />
             <Row

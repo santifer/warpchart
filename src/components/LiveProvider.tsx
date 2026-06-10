@@ -56,6 +56,10 @@ export default function LiveProvider({
   const [stars, setStars] = useState(bundle.netStars);
   const [rank, setRank] = useState<number | null>(bundle.rank);
   const [newTs, setNewTs] = useState<string[]>([]);
+  // Window metrics stay on the BUNDLE clock until the first velocity sync
+  // lands: otherwise the real-time clock races ahead of bundle-only data and
+  // "last 60 min" reads 0 on every refresh until the poll catches up.
+  const [winSynced, setWinSynced] = useState(false);
   const [neighbors, setNeighbors] = useState<Neighbor[]>(bundle.neighbors);
   const [neighborsFresh, setNeighborsFresh] = useState(false);
   const [stale, setStale] = useState(false);
@@ -76,7 +80,9 @@ export default function LiveProvider({
 
     async function pollFast() {
       const [summary, velocity] = await Promise.all([
-        getJson<{ stars: number; rank: number; fetchedAt: string }>("/api/live/summary"),
+        getJson<{ stars: number; rank: number; fetchedAt: string; stale?: boolean }>(
+          "/api/live/summary"
+        ),
         getJson<{ newTimestamps: string[]; partial: boolean }>("/api/live/velocity"),
       ]);
       if (stop) return;
@@ -87,8 +93,11 @@ export default function LiveProvider({
       }
       if (velocity) {
         setNewTs(velocity.newTimestamps);
-        setStale(velocity.partial);
+        setWinSynced(true);
       }
+      // stale = either feed degraded: summary fell back to the last snapshot
+      // (GitHub unreachable) or velocity could not walk back to the boundary
+      setStale(Boolean(summary?.stale) || Boolean(velocity?.partial));
       failures.current = summary && velocity ? 0 : failures.current + 1;
       setOffline(failures.current >= 3);
     }
@@ -123,11 +132,12 @@ export default function LiveProvider({
     let todayCount = 0;
     let yesterdaySameHour = 0;
 
-    const now = new Date(nowMs);
+    const winMs = winSynced ? nowMs : Date.parse(bundle.generatedAt);
+    const now = new Date(winMs);
     const todayKey = now.toISOString().slice(0, 10);
-    const yesterdayKey = new Date(nowMs - DAY).toISOString().slice(0, 10);
+    const yesterdayKey = new Date(winMs - DAY).toISOString().slice(0, 10);
     const timeOfDay = now.toISOString().slice(11, 19);
-    const hourCutoffMs = nowMs - HOUR;
+    const hourCutoffMs = winMs - HOUR;
 
     for (let i = merged.length - 1; i >= 0; i--) {
       const iso = merged[i];
@@ -158,7 +168,7 @@ export default function LiveProvider({
       lastSync,
       nowMs,
     };
-  }, [bundle.recent48h, newTs, stars, rank, neighbors, neighborsFresh, stale, offline, lastSync, nowMs]);
+  }, [bundle.recent48h, bundle.generatedAt, winSynced, newTs, stars, rank, neighbors, neighborsFresh, stale, offline, lastSync, nowMs]);
 
   return <LiveContext.Provider value={value}>{children}</LiveContext.Provider>;
 }

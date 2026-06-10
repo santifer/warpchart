@@ -16,6 +16,8 @@
   --warn: #f2a33c;
   --star-white: #f5fbff;
   --glow: rgba(83, 214, 232, 0.45);
+  --dop-fwd: #9fe2ff;
+  --dop-back: #ffb59c;
 }
 
 :root.scheme-light {
@@ -31,6 +33,8 @@
   --warn: #a05a00;
   --star-white: #0a1726;
   --glow: rgba(12, 125, 146, 0.30);
+  --dop-fwd: #0a6c9c;
+  --dop-back: #a04a2c;
 }
 
 @theme inline {
@@ -351,21 +355,40 @@ svg text {
 .star-warp {
   transform-box: fill-box;
   transform-origin: left center;
-  transition: transform 0.06s ease-out; /* arrival snap */
+  transition: transform 0.06s ease-out, fill 0.45s ease; /* arrival snap */
 }
 
 .star-warp.warping {
   transform: scaleX(13);
-  transition: transform 0.75s cubic-bezier(0.25, 0.55, 0.3, 1); /* slow build */
+  transition: transform 0.75s cubic-bezier(0.25, 0.55, 0.3, 1), fill 0.45s ease; /* slow build */
 }
 
 .star-warp.warping-fast {
   transform: scaleX(24);
-  transition: transform 0.6s cubic-bezier(0.25, 0.55, 0.3, 1);
+  transition: transform 0.6s cubic-bezier(0.25, 0.55, 0.3, 1), fill 0.45s ease;
 }
+
+/* Doppler tint of the streaks while warping: blueshift flying toward the
+   core, redshift backing away. At relative rest the field stays neutral:
+   background stars carry no velocity of their own, only ours. */
+.warp-tint-fwd .star-warp { fill: var(--dop-fwd); }
+.warp-tint-back .star-warp { fill: var(--dop-back); }
 
 @media (prefers-reduced-motion: reduce) {
   .star-warp.warping, .star-warp.warping-fast { transform: none; }
+}
+
+/* Golden pulsar: one expanding ring on our ship per REAL star landed. */
+.star-pulse {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: star-pulse 1.4s cubic-bezier(0.2, 0.6, 0.3, 1) forwards;
+}
+
+@keyframes star-pulse {
+  0% { transform: scale(0.35); opacity: 0.95; }
+  70% { opacity: 0.35; }
+  100% { transform: scale(3.4); opacity: 0; }
 }
 
 /* Relative-velocity streaks: a particle drifts from each neighbor toward us
@@ -382,7 +405,7 @@ svg text {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .dust-layer, .dust-tw, .dust-stream, .route-flow, .ship-ping, .scan-card, .scan-card::after, .vel-streak {
+  .dust-layer, .dust-tw, .dust-stream, .route-flow, .ship-ping, .scan-card, .scan-card::after, .vel-streak, .star-pulse {
     animation: none;
   }
 }
