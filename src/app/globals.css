@@ -378,6 +378,35 @@ svg text {
   .star-warp.warping, .star-warp.warping-fast { transform: none; }
 }
 
+/* Landing backdrop: drifting star layers + occasional FTL streak. */
+.lnd-drift {
+  animation: lnd-drift linear infinite;
+}
+
+@keyframes lnd-drift {
+  from { transform: translateX(0); }
+  to { transform: translateX(-1600px); }
+}
+
+.lnd-streak {
+  opacity: 0;
+  transform-box: fill-box;
+  transform-origin: left center;
+  animation: lnd-streak linear infinite;
+}
+
+@keyframes lnd-streak {
+  0% { opacity: 0; transform: translateX(0) scaleX(0.15); }
+  1.6% { opacity: 0.75; }
+  4.5% { opacity: 0; transform: translateX(520px) scaleX(1); }
+  100% { opacity: 0; transform: translateX(520px) scaleX(1); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lnd-drift, .lnd-streak { animation: none; }
+  .lnd-streak { opacity: 0; }
+}
+
 /* Golden pulsar: one expanding ring on our ship per REAL star landed. */
 .star-pulse {
   transform-box: fill-box;

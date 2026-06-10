@@ -24,10 +24,11 @@ export default function EmbedGenerator({ defaultRepo }: { defaultRepo: string })
     `${origin}/api/chart?repo=${encodeURIComponent(applied)}${theme ? `&theme=${theme}` : ""}`;
 
   // The embed links to the full live telemetry: the tenant's chart goes to
-  // its mission dashboard, any other repo to its explorer system.
+  // its mission dashboard (/hq works on the product domain and on any
+  // self-hosted instance), any other repo to its explorer system.
   const targetUrl =
     applied.toLowerCase() === defaultRepo.toLowerCase()
-      ? `${origin}/`
+      ? `${origin}/hq`
       : `${origin}/r/${applied}`;
 
   const snippet = useMemo(() => {

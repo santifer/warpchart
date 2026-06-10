@@ -5,6 +5,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import ExploreSearch, { type CatalogEntry } from "@/components/ExploreSearch";
 import EmbedGenerator from "@/components/EmbedGenerator";
+import ExploreBackdrop from "@/components/ExploreBackdrop";
 import { loadRoute, loadMeta } from "@/lib/history";
 import { fmtCompact } from "@/lib/format";
 
@@ -30,12 +31,13 @@ export default function Explore() {
 
   return (
     <main className="mx-auto flex min-h-screen max-w-[980px] flex-col gap-10 px-4 py-10 sm:px-6">
+      <ExploreBackdrop />
       <header className="rise flex items-center justify-between" style={{ animationDelay: "0ms" }}>
         <span className="font-display text-xs tracking-[0.3em] text-star">WARPCHART</span>
         {meta ? (
           <Link
-            prefetch
-            href="/"
+            prefetch={false}
+            href="/hq"
             className="numeral border border-grid px-3 py-1.5 text-[9px] tracking-[0.18em] text-dim transition-colors hover:border-accent/50 hover:text-accent"
           >
             LIVE DEMO MISSION: {meta.repo} →
@@ -90,6 +92,9 @@ export default function Explore() {
         <span className="numeral text-[9px] tracking-[0.15em] text-faint">
           WARPCHART · open telemetry over public GitHub data
         </span>
+        <Link href="/sponsors" className="numeral text-[9px] tracking-[0.15em] text-accent/80 transition-colors hover:text-accent">
+          MISSION PATRONS →
+        </Link>
         <span className="numeral text-[9px] text-faint">
           worldwide registry refreshed daily · live polling every 60s
         </span>
