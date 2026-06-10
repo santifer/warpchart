@@ -6,7 +6,7 @@
 
 ![Warpchart](assets/hero.png)
 
-**[Live demo](https://mission-control.career-ops.org)** (tracking [career-ops](https://github.com/santifer/career-ops) as example tenant) · **[Scan any repo instantly](https://mission-control.career-ops.org/r/tinygrad/tinygrad)** by changing the URL: `/r/owner/name`
+**[Live demo](https://warpchart.dev)** (tracking [career-ops](https://github.com/santifer/career-ops) as example tenant) · **[Scan any repo instantly](https://warpchart.dev/r/tinygrad/tinygrad)** by changing the URL: `/r/owner/name`
 
 ## What it is
 
@@ -31,25 +31,25 @@ Warpchart turns the public GitHub API into a live flight console:
 **Embeddable badge** (SVG, edge-cached, updates hourly, adapts to light and dark automatically):
 
 ```markdown
-[![World rank](https://mission-control.career-ops.org/api/badge?repo=OWNER/NAME)](https://mission-control.career-ops.org/r/OWNER/NAME)
+[![World rank](https://warpchart.dev/api/badge?repo=OWNER/NAME)](https://warpchart.dev/r/OWNER/NAME)
 ```
 
 Both the badge and the chart accept `?theme=light|dark` to pin a scheme, for GitHub's picture pattern:
 
 ```html
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="https://mission-control.career-ops.org/api/badge?theme=dark">
-  <img alt="World rank" src="https://mission-control.career-ops.org/api/badge?theme=light">
+  <source media="(prefers-color-scheme: dark)" srcset="https://warpchart.dev/api/badge?theme=dark">
+  <img alt="World rank" src="https://warpchart.dev/api/badge?theme=light">
 </picture>
 ```
 
 **Embeddable ANIMATED chart, for any repository** (the line draws itself on every README view: pure SVG animation, no JavaScript, survives GitHub's image proxy). Always wrap it in a link so readers can click through to the full live telemetry:
 
 ```html
-<a href="https://mission-control.career-ops.org/r/OWNER/NAME">
+<a href="https://warpchart.dev/r/OWNER/NAME">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="https://mission-control.career-ops.org/api/chart?repo=OWNER/NAME&theme=dark">
-    <img alt="Live star telemetry" src="https://mission-control.career-ops.org/api/chart?repo=OWNER/NAME&theme=light" loading="lazy">
+    <source media="(prefers-color-scheme: dark)" srcset="https://warpchart.dev/api/chart?repo=OWNER/NAME&theme=dark">
+    <img alt="Live star telemetry" src="https://warpchart.dev/api/chart?repo=OWNER/NAME&theme=light" loading="lazy">
   </picture>
 </a>
 ```
@@ -114,7 +114,7 @@ MIT
 
 > Telemetría de crecimiento para cualquier repositorio de GitHub. Una carta estelar en vivo del viaje de tu repo por el ranking mundial, con sonido.
 
-**[Demo en vivo](https://mission-control.career-ops.org)** (siguiendo a [career-ops](https://github.com/santifer/career-ops) como tenant de ejemplo) · **Escanea cualquier repo al instante** cambiando la URL: `/r/owner/name`
+**[Demo en vivo](https://warpchart.dev)** (siguiendo a [career-ops](https://github.com/santifer/career-ops) como tenant de ejemplo) · **Escanea cualquier repo al instante** cambiando la URL: `/r/owner/name`
 
 ## Qué es
 
