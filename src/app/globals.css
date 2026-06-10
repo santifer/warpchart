@@ -334,8 +334,21 @@ svg text {
   to { background-position: -60% 0; }
 }
 
+/* Relative-velocity streaks: a particle drifts from each neighbor toward us
+   (closing) or away (receding); speed and direction come via CSS vars. */
+.vel-streak {
+  transform-box: fill-box;
+  animation: vel-drift var(--dur, 3s) linear infinite;
+}
+
+@keyframes vel-drift {
+  0% { transform: translateX(0); opacity: 0; }
+  18% { opacity: 0.75; }
+  100% { transform: translateX(var(--drift, -16px)); opacity: 0; }
+}
+
 @media (prefers-reduced-motion: reduce) {
-  .dust-layer, .dust-tw, .route-flow, .ship-ping, .scan-card, .scan-card::after {
+  .dust-layer, .dust-tw, .route-flow, .ship-ping, .scan-card, .scan-card::after, .vel-streak {
     animation: none;
   }
 }

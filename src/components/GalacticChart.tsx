@@ -290,7 +290,11 @@ export default function GalacticChart({
             </clipPath>
           </defs>
 
-          <g className="dust-layer">
+          {/* dust parallax: drift speed follows our own velocity */}
+          <g
+            className="dust-layer"
+            style={{ animationDuration: `${Math.max(25, 110 - vOwn / 8)}s` }}
+          >
             {dust.map((d, i) => (
               <circle
                 key={i}
@@ -380,6 +384,19 @@ export default function GalacticChart({
                       <circle cx={x} cy={BAND_A_Y} r={8} fill="none" stroke={C.accent} strokeWidth={1.2} />
                     ) : null}
                     <circle className="nbr-dot" cx={x} cy={BAND_A_Y} r={3.2} fill={color} opacity={isAhead ? 0.95 : 0.55} />
+                    {Math.abs(n.v - vOwn) >= 1 ? (
+                      <circle
+                        className="vel-streak"
+                        cx={x}
+                        cy={BAND_A_Y}
+                        r={1.3}
+                        fill={n.receding ? C.warn : C.accent}
+                        style={{
+                          "--drift": `${(n.v - vOwn < 0 ? -1 : 1) * 16}px`,
+                          "--dur": `${Math.max(1, 5.5 - Math.log10(Math.max(Math.abs(n.v - vOwn), 1)) * 1.6).toFixed(2)}s`,
+                        } as React.CSSProperties}
+                      />
+                    ) : null}
                     <text className="nbr-name" x={x} y={tierY - 12} fill={isAhead ? C.ink : C.faint} fontSize={10}
                       textAnchor="middle">
                       {trunc(shortName(n.r))}
