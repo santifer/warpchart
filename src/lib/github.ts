@@ -11,7 +11,7 @@ function token(): string {
 // GitHub returns transient 502s now and then; retry briefly (the budget is
 // fine: these routes are ISR/edge-cached, not user-blocking).
 async function ghFetch<T>(path: string, init?: { method?: string; body?: unknown }): Promise<T> {
-  const delays = [400, 900];
+  const delays = [400, 900, 2000];
   for (let attempt = 0; ; attempt++) {
     let res: Response | null = null;
     try {

@@ -17,6 +17,7 @@ export interface ExplorerData {
   inTop1000: boolean;
   forkRatio: number | null;
   forkPercentile: number | null;
+  degraded: boolean; // velocity telemetry unavailable this refresh
   generatedAt: string;
 }
 
@@ -62,14 +63,29 @@ export async function getExplorerData(owner: string, name: string): Promise<Expl
     neighborNames = await searchNeighbors(repoName, stars);
   }
 
-  // one aliased call: own velocity + every neighbor's
-  const vel = await neighborsVelocity([repoName, ...neighborNames]);
-  const self = vel.find((v) => v.r.toLowerCase() === repoName.toLowerCase());
-  const neighbors = vel.filter((v) => v.r.toLowerCase() !== repoName.toLowerCase());
-  const v7d = self?.v ?? 0;
-  if (self) {
-    repoName = self.r;
-    stars = self.s;
+  // one aliased call: own velocity + every neighbor's. If JUST this fails
+  // (flaky GitHub 5xx after retries), degrade for top-1000 repos instead of
+  // erroring: route.json already gives us names and star counts.
+  let neighbors: Neighbor[];
+  let v7d = 0;
+  let degraded = false;
+  try {
+    const vel = await neighborsVelocity([repoName, ...neighborNames]);
+    const self = vel.find((v) => v.r.toLowerCase() === repoName.toLowerCase());
+    neighbors = vel.filter((v) => v.r.toLowerCase() !== repoName.toLowerCase());
+    v7d = self?.v ?? 0;
+    if (self) {
+      repoName = self.r;
+      stars = self.s;
+    }
+  } catch (err) {
+    if (!inTop1000) throw err;
+    degraded = true;
+    const byName = new Map(ranked.map((p) => [p.r, p]));
+    neighbors = neighborNames
+      .map((nm) => byName.get(nm))
+      .filter((p): p is RouteRepo => Boolean(p))
+      .map((p) => ({ r: p.r, s: p.s, v: 0, d: p.d ?? null, l: p.l ?? null }));
   }
 
   const milestoneRanks = nextMilestones(rank, 4).filter((m) => m <= ranked.length);
@@ -108,6 +124,7 @@ export async function getExplorerData(owner: string, name: string): Promise<Expl
     inTop1000,
     forkRatio,
     forkPercentile,
+    degraded,
     generatedAt: new Date().toISOString(),
   };
 }

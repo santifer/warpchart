@@ -11,6 +11,9 @@ import { fmt, fmtEtaDays, shortName } from "@/lib/format";
 import { neighborEtas } from "@/lib/projections";
 
 export const revalidate = 900;
+// First scans make several GitHub round-trips; on flaky days the retries can
+// exceed the default serverless budget, which surfaced as recurring 500s.
+export const maxDuration = 60;
 
 const VALID = /^[\w.-]+$/;
 
@@ -126,6 +129,7 @@ export default async function ExplorerPage({
                 {" · "}
               </>
             ) : null}
+            {data.degraded ? "velocity telemetry degraded, next refresh retries · " : ""}
             live snapshot · refreshes every 15 min
           </span>
         </div>
