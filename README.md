@@ -43,11 +43,18 @@ Both the badge and the chart accept `?theme=light|dark` to pin a scheme, for Git
 </picture>
 ```
 
-**Embeddable live chart** (SVG, replaces a static star-history image in your README, theme-aware too):
+**Embeddable ANIMATED chart, for any repository** (the line draws itself on every README view: pure SVG animation, no JavaScript, survives GitHub's image proxy). Always wrap it in a link so readers can click through to the full live telemetry:
 
-```markdown
-[![Star growth](https://mission-control.career-ops.org/api/chart?w=800&h=240)](https://mission-control.career-ops.org)
+```html
+<a href="https://mission-control.career-ops.org/r/OWNER/NAME">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="https://mission-control.career-ops.org/api/chart?repo=OWNER/NAME&theme=dark">
+    <img alt="Live star telemetry" src="https://mission-control.career-ops.org/api/chart?repo=OWNER/NAME&theme=light" loading="lazy">
+  </picture>
+</a>
 ```
+
+For the instance's own tracked repo, drop `?repo=` (exact archived history instead of sampled) and point the link at the dashboard root. A copy-paste generator for any repo lives at `/explore`.
 
 **Instant explorer** for any repo, no setup: `/r/owner/name`. **Dynamic Open Graph cards**: every shared link renders a live stats card.
 

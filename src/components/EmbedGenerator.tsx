@@ -23,13 +23,25 @@ export default function EmbedGenerator({ defaultRepo }: { defaultRepo: string })
   const chartUrl = (theme?: string) =>
     `${origin}/api/chart?repo=${encodeURIComponent(applied)}${theme ? `&theme=${theme}` : ""}`;
 
+  // The embed links to the full live telemetry: the tenant's chart goes to
+  // its mission dashboard, any other repo to its explorer system.
+  const targetUrl =
+    applied.toLowerCase() === defaultRepo.toLowerCase()
+      ? `${origin}/`
+      : `${origin}/r/${applied}`;
+
   const snippet = useMemo(() => {
     if (!origin) return "";
+    // loading="lazy" defers the fetch until the chart nears the viewport,
+    // so the draw-on animation fires as the reader scrolls to it (GitHub
+    // already lazy-loads README images; this extends it to any site).
     return [
-      `<picture>`,
-      `  <source media="(prefers-color-scheme: dark)" srcset="${chartUrl("dark")}">`,
-      `  <img alt="Star history of ${applied}" src="${chartUrl("light")}">`,
-      `</picture>`,
+      `<a href="${targetUrl}">`,
+      `  <picture>`,
+      `    <source media="(prefers-color-scheme: dark)" srcset="${chartUrl("dark")}">`,
+      `    <img alt="Live star telemetry of ${applied}" src="${chartUrl("light")}" loading="lazy">`,
+      `  </picture>`,
+      `</a>`,
     ].join("\n");
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [origin, applied]);
@@ -76,16 +88,18 @@ export default function EmbedGenerator({ defaultRepo }: { defaultRepo: string })
           </div>
         ) : null}
         {origin ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            key={applied}
-            src={chartUrl()}
-            alt={`Animated cumulative star chart of ${applied}`}
-            className="w-full"
-            style={{ opacity: status === "ready" ? 1 : 0 }}
-            onLoad={() => setStatus("ready")}
-            onError={() => setStatus("error")}
-          />
+          <a href={targetUrl} title={`Open the full telemetry of ${applied}`}>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              key={applied}
+              src={chartUrl()}
+              alt={`Animated cumulative star chart of ${applied}`}
+              className="w-full"
+              style={{ opacity: status === "ready" ? 1 : 0 }}
+              onLoad={() => setStatus("ready")}
+              onError={() => setStatus("error")}
+            />
+          </a>
         ) : null}
       </div>
 
