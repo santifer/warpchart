@@ -18,7 +18,7 @@ gh repo edit santifer/mission-control --visibility public --accept-visibility-ch
 gh repo edit santifer/mission-control --template
 gh repo edit santifer/mission-control \
   --description "Growth telemetry for any GitHub repository. Live star chart, worldwide rank, velocity, sound." \
-  --homepage "https://mission-control-lovat-delta.vercel.app"
+  --homepage "https://mission-control.career-ops.org"
 gh repo edit santifer/mission-control --add-topic github-stars --add-topic dashboard \
   --add-topic telemetry --add-topic nextjs --add-topic analytics --add-topic star-history
 ```

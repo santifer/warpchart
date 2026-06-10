@@ -6,7 +6,7 @@
 
 ![Mission Control](assets/hero.png)
 
-**[Live demo](https://mission-control-lovat-delta.vercel.app)** (tracking [career-ops](https://github.com/santifer/career-ops) as example tenant) · **[Scan any repo instantly](https://mission-control-lovat-delta.vercel.app/r/tinygrad/tinygrad)** by changing the URL: `/r/owner/name`
+**[Live demo](https://mission-control.career-ops.org)** (tracking [career-ops](https://github.com/santifer/career-ops) as example tenant) · **[Scan any repo instantly](https://mission-control.career-ops.org/r/tinygrad/tinygrad)** by changing the URL: `/r/owner/name`
 
 ## What it is
 
@@ -31,13 +31,13 @@ Mission Control turns the public GitHub API into a live flight console:
 **Embeddable badge** (SVG, edge-cached, updates hourly):
 
 ```markdown
-[![World rank](https://mission-control-lovat-delta.vercel.app/api/badge?repo=OWNER/NAME)](https://mission-control-lovat-delta.vercel.app/r/OWNER/NAME)
+[![World rank](https://mission-control.career-ops.org/api/badge?repo=OWNER/NAME)](https://mission-control.career-ops.org/r/OWNER/NAME)
 ```
 
 **Embeddable live chart** (SVG, replaces a static star-history image in your README):
 
 ```markdown
-[![Star growth](https://mission-control-lovat-delta.vercel.app/api/chart?w=800&h=240)](https://mission-control-lovat-delta.vercel.app)
+[![Star growth](https://mission-control.career-ops.org/api/chart?w=800&h=240)](https://mission-control.career-ops.org)
 ```
 
 **Instant explorer** for any repo, no setup: `/r/owner/name`. **Dynamic Open Graph cards**: every shared link renders a live stats card.
@@ -98,7 +98,7 @@ MIT
 
 > Telemetría de crecimiento para cualquier repositorio de GitHub. Una carta estelar en vivo del viaje de tu repo por el ranking mundial, con sonido.
 
-**[Demo en vivo](https://mission-control-lovat-delta.vercel.app)** (siguiendo a [career-ops](https://github.com/santifer/career-ops) como tenant de ejemplo) · **Escanea cualquier repo al instante** cambiando la URL: `/r/owner/name`
+**[Demo en vivo](https://mission-control.career-ops.org)** (siguiendo a [career-ops](https://github.com/santifer/career-ops) como tenant de ejemplo) · **Escanea cualquier repo al instante** cambiando la URL: `/r/owner/name`
 
 ## Qué es
 
