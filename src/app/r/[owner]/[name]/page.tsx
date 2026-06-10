@@ -50,6 +50,15 @@ function Locked({ unlockFor, children }: { unlockFor: string; children: React.Re
         >
           UNLOCK FOR {unlockFor} →
         </a>
+        {/* hosted = convenience, never lock-in: the software is free */}
+        <a
+          href="https://github.com/santifer/warpchart"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="numeral bg-void/75 px-2 py-0.5 text-[9px] tracking-[0.15em] text-faint underline-offset-2 transition-colors hover:text-dim hover:underline"
+        >
+          or fork the repo and self-host it free
+        </a>
       </div>
     </div>
   );
