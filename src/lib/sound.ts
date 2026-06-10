@@ -14,6 +14,15 @@ class AudioEngine {
   private lastBlip = 0;
   private lastWhoosh = 0;
   private _enabled = false;
+  // warp jump state machine (acceleration -> cruise -> arrival)
+  private warp: {
+    noise: AudioBufferSourceNode;
+    lp: BiquadFilterNode;
+    gain: GainNode;
+    sub: OscillatorNode;
+    subGain: GainNode;
+  } | null = null;
+  private warpEndTimer: number | null = null;
 
   get enabled(): boolean {
     return this._enabled;
@@ -62,6 +71,7 @@ class AudioEngine {
       this.confirmBlip();
     } else {
       this.stopPad();
+      this.killWarp();
       this.ctx?.suspend();
     }
   }
@@ -226,6 +236,103 @@ class AudioEngine {
         osc.start(t);
         osc.stop(t + 0.3);
       });
+    }
+  }
+
+  // ---- warp jump: a sustained bed with three phases.
+  // Called on every pan tick; intensity 0 = local system (fine), 1 = route
+  // band (fast). First tick swells in (acceleration), repeated ticks hold
+  // the cruise, and 380ms of silence triggers the arrival thump.
+  warpPan(intensity: number): void {
+    if (!this._enabled || !this.ctx || !this.master) return;
+    const ctx = this.ctx;
+    const t = ctx.currentTime;
+    const cruiseGain = 0.035 + intensity * 0.04;
+    const cruiseSub = 0.022 + intensity * 0.025;
+    const cruiseCut = 500 + intensity * 1100;
+
+    if (!this.warp) {
+      // acceleration: build the bed and swell it over ~0.7s
+      const len = Math.floor(ctx.sampleRate * 1.2);
+      const buf = ctx.createBuffer(1, len, ctx.sampleRate);
+      const data = buf.getChannelData(0);
+      for (let i = 0; i < len; i++) data[i] = Math.random() * 2 - 1;
+      const noise = ctx.createBufferSource();
+      noise.buffer = buf;
+      noise.loop = true;
+      const lp = ctx.createBiquadFilter();
+      lp.type = "lowpass";
+      lp.Q.value = 0.8;
+      lp.frequency.setValueAtTime(160, t);
+      lp.frequency.exponentialRampToValueAtTime(cruiseCut, t + 0.75);
+      const gain = ctx.createGain();
+      gain.gain.setValueAtTime(0, t);
+      gain.gain.linearRampToValueAtTime(cruiseGain, t + 0.7);
+      const sub = ctx.createOscillator();
+      sub.type = "sine";
+      sub.frequency.setValueAtTime(46, t);
+      sub.frequency.exponentialRampToValueAtTime(64 + intensity * 18, t + 0.7);
+      const subGain = ctx.createGain();
+      subGain.gain.setValueAtTime(0, t);
+      subGain.gain.linearRampToValueAtTime(cruiseSub, t + 0.7);
+      noise.connect(lp).connect(gain);
+      gain.connect(this.master);
+      if (this.send) gain.connect(this.send);
+      sub.connect(subGain).connect(this.master);
+      noise.start(t);
+      sub.start(t);
+      this.warp = { noise, lp, gain, sub, subGain };
+    } else {
+      // cruise: glide the bed toward this zone's intensity
+      this.warp.gain.gain.setTargetAtTime(cruiseGain, t, 0.12);
+      this.warp.subGain.gain.setTargetAtTime(cruiseSub, t, 0.12);
+      this.warp.lp.frequency.setTargetAtTime(cruiseCut, t, 0.12);
+    }
+
+    if (this.warpEndTimer !== null) clearTimeout(this.warpEndTimer);
+    this.warpEndTimer = window.setTimeout(() => this.warpArrival(), 260);
+  }
+
+  // arrival: cut the bed fast and land with a low thump
+  private warpArrival(): void {
+    if (!this.ctx || !this.master || !this.warp) return;
+    const ctx = this.ctx;
+    const t = ctx.currentTime;
+    const w = this.warp;
+    w.gain.gain.cancelScheduledValues(t);
+    w.subGain.gain.cancelScheduledValues(t);
+    w.gain.gain.setTargetAtTime(0.0001, t, 0.045);
+    w.subGain.gain.setTargetAtTime(0.0001, t, 0.045);
+    try {
+      w.noise.stop(t + 0.3);
+      w.sub.stop(t + 0.3);
+    } catch { /* already stopped */ }
+    this.warp = null;
+
+    const thump = ctx.createOscillator();
+    thump.type = "sine";
+    thump.frequency.setValueAtTime(95, t);
+    thump.frequency.exponentialRampToValueAtTime(42, t + 0.22);
+    const tg = ctx.createGain();
+    tg.gain.setValueAtTime(0.07, t);
+    tg.gain.exponentialRampToValueAtTime(0.0005, t + 0.3);
+    thump.connect(tg).connect(this.master);
+    if (this.send) tg.connect(this.send);
+    thump.start(t);
+    thump.stop(t + 0.32);
+  }
+
+  private killWarp(): void {
+    if (this.warpEndTimer !== null) {
+      clearTimeout(this.warpEndTimer);
+      this.warpEndTimer = null;
+    }
+    if (this.warp) {
+      try {
+        this.warp.noise.stop();
+        this.warp.sub.stop();
+      } catch { /* already stopped */ }
+      this.warp = null;
     }
   }
 

@@ -142,12 +142,14 @@ export default function GalacticChart({
   }, [inputs.repo]);
 
   // FTL stretch while panning: armed by wheel events, relaxes shortly after.
-  const [warping, setWarping] = useState(false);
+  // The zone sets the regime: "local" pans fine, "route" pans fast with a
+  // more exaggerated stretch and a hotter sound bed.
+  const [warpZone, setWarpZone] = useState<"local" | "route" | null>(null);
   const warpTimer = useRef<number | null>(null);
-  const armWarp = () => {
-    setWarping(true);
+  const armWarp = (zone: "local" | "route") => {
+    setWarpZone(zone);
     if (warpTimer.current !== null) clearTimeout(warpTimer.current);
-    warpTimer.current = window.setTimeout(() => setWarping(false), 280);
+    warpTimer.current = window.setTimeout(() => setWarpZone(null), 200);
   };
 
   // ---------- geometry ----------
@@ -204,10 +206,15 @@ export default function GalacticChart({
       const horizontal = Math.abs(e.deltaX) > Math.abs(e.deltaY);
       if (!e.ctrlKey && !horizontal && !e.shiftKey) return;
       e.preventDefault();
+      // panning regime by pointer zone: fine over the local system, fast
+      // over the route band (it is a faster ship down there)
+      const rect = el.getBoundingClientRect();
+      const yView = ((e.clientY - rect.top) / Math.max(rect.height, 1)) * H;
+      const zone: "local" | "route" = yView > CLIP_BOTTOM + 12 ? "route" : "local";
       if (e.ctrlKey) sound.zoomTick(e.deltaY < 0);
       else {
-        sound.panWhoosh();
-        armWarp();
+        sound.warpPan(zone === "route" ? 1 : 0);
+        armWarp(zone);
       }
       const g = geom.current;
       setView((v) => {
@@ -223,7 +230,8 @@ export default function GalacticChart({
           return { lo: nLo, hi: nLo + ns };
         }
         const d = horizontal ? e.deltaX : e.deltaY;
-        const shift = (d / 600) * sp * 4;
+        const speed = zone === "route" ? 8 : 1.6;
+        const shift = (d / 600) * sp * speed;
         const nLo = Math.min(Math.max(lo + shift, g.bMin), g.bMax - sp);
         return { lo: nLo, hi: nLo + sp };
       });
@@ -430,7 +438,13 @@ export default function GalacticChart({
                         <circle
                           key={i}
                           className={
-                            layer.warp ? (warping ? "star-warp warping" : "star-warp") : undefined
+                            layer.warp
+                              ? warpZone === "route"
+                                ? "star-warp warping-fast"
+                                : warpZone === "local"
+                                  ? "star-warp warping"
+                                  : "star-warp"
+                              : undefined
                           }
                           cx={p.x}
                           cy={p.y}
