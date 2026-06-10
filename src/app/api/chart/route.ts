@@ -98,7 +98,7 @@ function tenantCurve(): Curve | null {
 export async function GET(req: Request) {
   const url = new URL(req.url);
   const w = Math.min(Math.max(Number(url.searchParams.get("w")) || 800, 320), 1600);
-  const h = Math.min(Math.max(Number(url.searchParams.get("h")) || 240, 120), 800);
+  const h = Math.min(Math.max(Number(url.searchParams.get("h")) || 420, 120), 800);
   const themeParam = url.searchParams.get("theme");
   const theme = themeParam === "light" || themeParam === "dark" ? themeParam : null;
   const repoParam = url.searchParams.get("repo");
@@ -208,15 +208,19 @@ export async function GET(req: Request) {
 
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" role="img" aria-label="Cumulative stars of ${esc(repo)}">
 <style>${schemeStyle(theme)}
-/* One looping 12.6s choreography tuned for attention without fatigue:
-   draw-on with bloom (0-2.6s), arrival overshoot + counter pop, a live
-   hold with golden double-ring pings at staggered windows, one shooting
-   star landing on the endpoint (+1) at 57 percent, graceful fade and a
-   0.6s blank gap so the next draw re-captures as a fresh onset. History
-   is cyan, the living present is gold. Strict XML: no angle brackets. */
-.ln{stroke-dasharray:${L};stroke-dashoffset:${L};animation:lc 12.6s cubic-bezier(.25,.6,.3,1) infinite}
-.dl{opacity:0;animation:dc 12.6s ease-out infinite,dlf 1.3s linear infinite}
-.ar{opacity:0;animation:ac 12.6s ease-out infinite}
+/* One looping 12.6s choreography tuned for attention without fatigue.
+   A single reveal FRONT sweeps left to right (line and area together,
+   headed by a scan beam): fast start for the first-seconds hook, gentle
+   deceleration into the arrival. Endpoint lands with overshoot, the
+   counter pops once at the payoff, golden double-ring pings beat at
+   staggered windows, one shooting star lands a +1 at 57 percent, then a
+   graceful fade and a 0.6s blank gap re-arm the next sweep as a fresh
+   onset. History is cyan, the living present is gold. Strict XML: no
+   angle brackets anywhere in this block. */
+.wv{transform-box:fill-box;transform-origin:left center;animation:wv 12.6s linear infinite}
+.wg{animation:wg 12.6s ease-out infinite}
+.bm{opacity:0;animation:bm 12.6s linear infinite}
+.dl{animation:dlf 1.3s linear infinite}
 .dotp{transform-box:fill-box;transform-origin:center;opacity:0;animation:dp 12.6s cubic-bezier(.3,1.4,.4,1) infinite}
 .cp{transform-box:fill-box;transform-origin:center;animation:cp 12.6s ease-out infinite}
 .pga{transform-box:fill-box;transform-origin:center;opacity:0;animation:pg 12.6s cubic-bezier(.2,.6,.4,1) infinite}
@@ -225,24 +229,32 @@ export async function GET(req: Request) {
 .fl{transform-box:fill-box;transform-origin:center;opacity:0;animation:fl 12.6s ease-out infinite}
 .pl{opacity:0;animation:pl 12.6s ease-out infinite}
 .tw{animation:tw 3.4s ease-in-out infinite}
-@keyframes lc{0%{stroke-dashoffset:${L};opacity:1}20.6%{stroke-dashoffset:0;opacity:1}88.9%{stroke-dashoffset:0;opacity:1}94.4%{stroke-dashoffset:0;opacity:0}94.5%{stroke-dashoffset:${L};opacity:0}100%{stroke-dashoffset:${L};opacity:0}}
-@keyframes ac{0%,13%{opacity:0}27%{opacity:1}88.9%{opacity:1}93.7%,100%{opacity:0}}
-@keyframes dc{0%,21%{opacity:0}28%{opacity:.7}88.9%{opacity:.7}93.7%,100%{opacity:0}}
+@keyframes wv{0%{transform:scaleX(0);animation-timing-function:cubic-bezier(.2,.65,.3,1)}17.5%{transform:scaleX(1)}94.4%{transform:scaleX(1)}94.5%,100%{transform:scaleX(0)}}
+@keyframes wg{0%,88.9%{opacity:1}94.4%,100%{opacity:0}}
+@keyframes bm{0%{transform:translateX(0);opacity:.55;animation-timing-function:cubic-bezier(.2,.65,.3,1)}17.5%{transform:translateX(${iw}px);opacity:.55}20%{transform:translateX(${iw}px);opacity:0}94.4%{transform:translateX(${iw}px);opacity:0}94.5%,100%{transform:translateX(0);opacity:0}}
 @keyframes dlf{to{stroke-dashoffset:-8}}
-@keyframes dp{0%,20%{transform:scale(0);opacity:0}20.6%{transform:scale(.2);opacity:1}23.8%{transform:scale(1.35)}26.2%{transform:scale(1)}89.7%{transform:scale(1);opacity:1}94.8%,100%{transform:scale(1);opacity:0}}
-@keyframes cp{0%,21%{transform:scale(1)}23%{transform:scale(1.07)}26%,100%{transform:scale(1)}}
+@keyframes dp{0%,17.4%{transform:scale(0);opacity:0}18%{transform:scale(.2);opacity:1}21%{transform:scale(1.35)}23.5%{transform:scale(1)}89.7%{transform:scale(1);opacity:1}94.8%,100%{transform:scale(1);opacity:0}}
+@keyframes cp{0%,18.5%{transform:scale(1)}20.5%{transform:scale(1.07)}23.5%,100%{transform:scale(1)}}
 @keyframes pg{0%,23%{transform:scale(.3);opacity:0}24.2%{opacity:.85}31%{transform:scale(2.7);opacity:0}45%{transform:scale(.3);opacity:0}46.2%{opacity:.85}53%{transform:scale(2.7);opacity:0}78%{transform:scale(.3);opacity:0}79.2%{opacity:.85}86%{transform:scale(2.7);opacity:0}100%{opacity:0}}
 @keyframes ss{0%,56.5%{transform:translate(-170px,-95px);opacity:0}58%{opacity:.95}63.5%{transform:translate(0px,0px);opacity:.95}64.2%,100%{transform:translate(0px,0px);opacity:0}}
 @keyframes fl{0%,63%{transform:scale(.2);opacity:0}64.2%{opacity:.9}68.5%{transform:scale(2.2);opacity:0}100%{opacity:0}}
 @keyframes pl{0%,63.5%{transform:translateY(0);opacity:0}65.5%{opacity:.95}73%{transform:translateY(-15px);opacity:0}100%{opacity:0}}
 @keyframes tw{0%,100%{opacity:.1}50%{opacity:.6}}
-@media (prefers-reduced-motion:reduce){.ln{animation:none;stroke-dashoffset:0;opacity:1}.ar,.dl{animation:none;opacity:1}.dotp{animation:none;opacity:1;transform:scale(1)}.cp{animation:none}.pga,.ss,.fl,.pl,.tw{animation:none;opacity:0}}
+@media (prefers-reduced-motion:reduce){.wv{animation:none;transform:scaleX(1)}.wg{animation:none;opacity:1}.dl{animation:none}.bm{animation:none;opacity:0}.dotp{animation:none;opacity:1;transform:scale(1)}.cp{animation:none}.pga,.ss,.fl,.pl,.tw{animation:none;opacity:0}}
 </style>
 <defs>
   <linearGradient id="fill" x1="0" y1="0" x2="0" y2="1">
     <stop offset="0%" style="stop-color:var(--ac)" stop-opacity="0.30"/>
     <stop offset="100%" style="stop-color:var(--ac)" stop-opacity="0.02"/>
   </linearGradient>
+  <linearGradient id="beam" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0%" style="stop-color:var(--ac)" stop-opacity="0"/>
+    <stop offset="50%" style="stop-color:var(--ac)" stop-opacity="0.9"/>
+    <stop offset="100%" style="stop-color:var(--ac)" stop-opacity="0"/>
+  </linearGradient>
+  <clipPath id="wipe">
+    <rect class="wv" x="${padL - 1}" y="0" width="${iw + 4}" height="${h}"/>
+  </clipPath>
 </defs>
 <rect x="0.5" y="0.5" width="${w - 1}" height="${h - 1}" style="fill:var(--bg);stroke:var(--bd)"/>
 <path d="M 0.5 8 V 0.5 H 8" style="stroke:var(--ac)" fill="none" opacity="0.5"/>
@@ -255,10 +267,13 @@ ${branding}
 <text class="cp" x="${w - 16}" y="22" text-anchor="end" font-family="${mono}" font-size="12" font-weight="700" style="fill:var(--ac)">${fmt(total)} ★</text>
 ${yMarks}
 <line x1="${padL}" y1="${axisY}" x2="${padL + iw}" y2="${axisY}" style="stroke:var(--bd)"/>
-<path class="ar" d="${area}" fill="url(#fill)"/>
-<g opacity="0.11"><path class="ln" d="${line}" fill="none" style="stroke:var(--ac)" stroke-width="4"/></g>
-<path class="ln" d="${line}" fill="none" style="stroke:var(--ac)" stroke-width="1.5"/>
-${dashedLine ? `<path class="dl" d="${dashedLine}" fill="none" style="stroke:var(--ac)" stroke-width="1.2" stroke-dasharray="3 5" opacity="0.7"/>` : ""}
+<g class="wg" clip-path="url(#wipe)">
+  <path d="${area}" fill="url(#fill)"/>
+  <g opacity="0.11"><path d="${line}" fill="none" style="stroke:var(--ac)" stroke-width="4"/></g>
+  <path d="${line}" fill="none" style="stroke:var(--ac)" stroke-width="1.5"/>
+  ${dashedLine ? `<path class="dl" d="${dashedLine}" fill="none" style="stroke:var(--ac)" stroke-width="1.2" stroke-dasharray="3 5" opacity="0.7"/>` : ""}
+</g>
+<rect class="bm" x="${padL}" y="${padT - 8}" width="2.5" height="${ih + 14}" fill="url(#beam)"/>
 <circle class="pga" cx="${endX}" cy="${endY}" r="5.5" fill="none" style="stroke:var(--wn)" stroke-width="1.1"/>
 <circle class="pga pgb" cx="${endX}" cy="${endY}" r="5.5" fill="none" style="stroke:var(--wn)" stroke-width="1.1"/>
 <circle class="dotp" cx="${endX}" cy="${endY}" r="7" style="fill:var(--ac)" opacity="0.22"/>

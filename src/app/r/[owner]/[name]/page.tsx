@@ -223,6 +223,82 @@ export default async function ExplorerPage({
         </Panel>
       </div>
 
+      <Panel index="04" title="Star history · animated" meta="the same SVG you can embed" delay={320}>
+        <div className="flex flex-col gap-2">
+          {/* same resource as the README embed: rendering it here warms the
+              cache for everyone who embeds this repo afterwards */}
+          <a href={`/explore#embed=${encodeURIComponent(`${owner}/${name}`)}`} className="block min-h-[180px]">
+            <picture>
+              <source
+                media="(prefers-color-scheme: dark)"
+                srcSet={`/api/chart?repo=${encodeURIComponent(`${owner}/${name}`)}&theme=dark`}
+              />
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={`/api/chart?repo=${encodeURIComponent(`${owner}/${name}`)}&theme=light`}
+                alt={`Animated cumulative star history of ${owner}/${name}. First render of a new repo can take a few seconds.`}
+                className="w-full"
+                loading="lazy"
+              />
+            </picture>
+          </a>
+          <span className="numeral text-[9px] text-faint">
+            first scan of a repo can take ~20s · click the chart to grab the README embed
+          </span>
+        </div>
+      </Panel>
+
+      <Panel index="05" title="Full mission telemetry" meta="preview · not live data" delay={400}>
+        <div className="relative">
+          {/* honest skeletons: wireframes, never fake numbers */}
+          <div className="grid grid-cols-2 gap-3 opacity-60 blur-[1.5px] sm:grid-cols-3" aria-hidden>
+            {[
+              { t: "VELOCITY / HOUR", bars: [38, 62, 45, 80, 55, 70, 92, 60] },
+              { t: "DAILY LADDER", bars: [70, 55, 85, 40, 65, 90, 50, 75] },
+              { t: "ACTIVITY HEATMAP", bars: [30, 45, 60, 75, 50, 65, 40, 55] },
+              { t: "RANK OVER TIME", bars: [85, 78, 72, 66, 58, 50, 40, 28] },
+              { t: "REPLAY · DAY ZERO", bars: [10, 18, 30, 38, 52, 64, 78, 95] },
+              { t: "MISSION LOG", bars: [50, 50, 50, 50, 50, 50, 50, 50] },
+            ].map((p) => (
+              <div key={p.t} className="hud px-3 py-2.5">
+                <div className="module-title !text-[8px]">{p.t}</div>
+                <div className="mt-2 flex h-12 items-end gap-1">
+                  {p.bars.map((b, i) => (
+                    <div key={i} className="w-full bg-grid" style={{ height: `${b}%` }} />
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 text-center">
+            <span className="numeral text-[10px] tracking-[0.35em] text-dim">◈ LOCKED</span>
+            <p className="max-w-[460px] text-xs font-light leading-relaxed text-ink">
+              Hourly history, velocity, projections, heatmap, spike forensics, replay and a
+              mission log, continuously tracked for {owner}/{name}.
+            </p>
+            <div className="flex flex-wrap items-center justify-center gap-2">
+              <a
+                href="https://github.com/santifer/warpchart/issues/8"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="numeral border border-accent/50 bg-accent/10 px-4 py-2 text-[11px] tracking-[0.2em] text-accent transition-colors hover:bg-accent/20"
+              >
+                JOIN THE WAITLIST →
+              </a>
+              <a
+                href={`/hq#from=${encodeURIComponent(`${owner}/${name}`)}`}
+                className="numeral border border-grid px-4 py-2 text-[11px] tracking-[0.2em] text-dim transition-colors hover:text-ink"
+              >
+                SEE IT LIVE ON THE DEMO MISSION
+              </a>
+            </div>
+            <span className="numeral text-[9px] text-faint">
+              self-hosting your own is free forever · the demo marks where {name} sits on its map
+            </span>
+          </div>
+        </div>
+      </Panel>
+
       <footer className="rise flex flex-wrap items-center justify-between gap-2 px-1 pb-4 pt-2">
         <span className="numeral text-[9px] tracking-[0.15em] text-faint">
           WARPCHART · open telemetry over public GitHub data
