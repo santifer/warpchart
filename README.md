@@ -1,42 +1,50 @@
 # Mission Control
 
-**[:gb: English](#the-problem)** | **[:es: Español](#es-versión-en-español)**
+**[:gb: English](#what-it-is)** | **[:es: Español](#es-versión-en-español)**
 
-> A self-hosted growth telemetry dashboard for any GitHub repository. Point it at a repo and watch its journey to the top of the worldwide star ranking, like a star chart to the center of the galaxy.
+> Growth telemetry for any GitHub repository. A live star chart of your repo's journey through the worldwide ranking, with sound.
 
-## The Problem
+![Mission Control](assets/hero.png)
 
-If you maintain a fast-growing open source project, you end up asking the same questions every few hours: how fast are we growing right now? How does today compare to yesterday at this exact hour? What worldwide rank are we? Who are the repos right above us, how fast do they move, and when do we pass them?
+**[Live demo](https://mission-control-lovat-delta.vercel.app)** (tracking [career-ops](https://github.com/santifer/career-ops) as example tenant) · **[Scan any repo instantly](https://mission-control-lovat-delta.vercel.app/r/tinygrad/tinygrad)** by changing the URL: `/r/owner/name`
 
-GitHub gives you the raw data but no cockpit. Star-history charts are static. Trending is a black box. And nobody tracks the repos around you in the ranking.
+## What it is
 
-## The Solution
+GitHub gives you raw star data but no cockpit. Star history charts are static, Trending is a black box, and nobody shows you the repos around yours in the worldwide ranking, how fast they move, or when you pass them.
 
 Mission Control turns the public GitHub API into a live flight console:
 
-- **Status bar**: stars, worldwide rank, stars in the last 60 minutes, today vs yesterday at the same hour, gap and ETA to the next rank milestone. Live, polling every minute.
-- **Star chart**: a two-band space map. The local system shows your nearest ranking neighbors with their velocity and overtake ETAs. The route to the core shows every milestone between you and the worldwide #1 repository.
-- **Velocity**: stars per hour for the last 24h with yesterday as a ghost line.
-- **Daily ladder**: stars per day, 7-day average, and the night floor (00-05 UTC baseline) that tells compounding growth apart from a decaying spike.
-- **Cumulative**: the honest chart, y axis from zero to your total.
-- **Projections**: ETA to each milestone accounting for threshold drift (the bar to enter the top N rises every day).
-- **Heatmap**: hour x weekday star activity since launch.
-- **Rank over time**: built from hourly snapshots.
+- **Status bar**: stars, worldwide rank, stars in the last 60 minutes, today vs yesterday at the same hour, gap and ETA to the next rank milestone. Polls every minute.
+- **Star chart**: a two-band space map. The local system is a pannable zoom window (lateral scroll to pan, pinch to zoom) showing your ranking neighbors with overtake ETAs. The route to the core maps every milestone between you and the worldwide #1 repo, where every dot is a real top 1000 repository. A viewport bracket links both bands.
+- **Scan cards**: hover any repo on the chart for a game-style temporal card with its avatar, description, velocity, gap and overtake date. Click to pin it as chase target with a persistent HUD.
+- **Sound**: a fully synthesized Web Audio soundscape, zero audio files. Each new star is a sonar ping, ambient pad brightness follows velocity, milestone crossings play a quiet fanfare. Off by default, one click to enable. Leave the tab open and hear your repo grow.
+- **Velocity, daily ladder, cumulative, heatmap, rank over time**: the full instrument panel, including the night-floor line that tells compounding growth apart from a decaying spike.
+- **Replay**: re-draw the whole journey from day zero in 36 seconds, scrubber included. With sound on, ping density follows each moment's velocity.
+- **Mission log**: auto-detected events from telemetry. Milestone gates, neighbor overtakes, daily records, plus a daily captain's line.
+- **Mission briefing**: come back after 18 hours and get a one-line delta summary since your last visit. Stored client-side, no accounts.
 
-Everything derives from one config value: the repo you track. Branding (name, description, avatar) is fetched dynamically.
+### Shareable everywhere
 
-### How it works
+**Embeddable badge** (SVG, edge-cached, updates hourly):
+
+```markdown
+[![World rank](https://mission-control-lovat-delta.vercel.app/api/badge?repo=OWNER/NAME)](https://mission-control-lovat-delta.vercel.app/r/OWNER/NAME)
+```
+
+**Instant explorer** for any repo, no setup: `/r/owner/name`. **Dynamic Open Graph cards**: every shared link renders a live stats card.
+
+## How it works
 
 ```
 GitHub Actions cron (hourly)              Vercel (Next.js)
-  collector/collect.mjs                     static page built from data/
+  collector/collect.mjs                     static page rebuilt on each snapshot
   snapshot -> data/history.jsonl            + live API routes (edge cached)
-  commit -> push -> auto redeploy           polling from the browser
+  commit -> push -> auto redeploy           + /api/badge + /api/og + /r/ explorer
 ```
 
-A one-time bootstrap walks the entire stargazer history (one timestamp per star), measures your worldwide rank, milestone thresholds and ranking neighbors, and commits the seed to `data/`. From then on an hourly GitHub Action appends snapshots and new timestamps. Every commit redeploys the site, so the static page is never more than an hour behind, and the live API routes cover the last hour from the browser.
+A one-time bootstrap walks your entire stargazer history (one timestamp per star) and measures your worldwide rank, milestone thresholds and ranking neighbors. From then on an hourly GitHub Action appends snapshots; every commit redeploys the site. The live API routes are edge-cached, so visitor traffic never multiplies GitHub API cost.
 
-No database. No paid APIs. No secrets to configure for the collector (it uses the automatic Actions token).
+No database. No paid APIs. No collector secrets (it uses the automatic Actions token).
 
 ## Tech Stack
 
@@ -47,29 +55,18 @@ No database. No paid APIs. No secrets to configure for the collector (it uses th
 ![GitHub Actions](https://img.shields.io/badge/GitHub_Actions-2088FF?style=flat&logo=githubactions&logoColor=white)
 ![Vercel](https://img.shields.io/badge/Vercel-000000?style=flat&logo=vercel&logoColor=white)
 
-## Installation
+## Five minute setup
 
-1. Use this repository as a template (or fork it).
+1. Use this repository as a template.
 2. Edit `mission.config.json`:
 
 ```json
-{
-  "repo": "owner/name",
-  "accent": "cyan"
-}
+{ "repo": "owner/name", "accent": "cyan" }
 ```
 
-3. Run the bootstrap (choose one):
-   - **In GitHub**: Actions tab, run the `bootstrap` workflow, optionally passing the repo as input.
-   - **Locally**: `GH_TOKEN=$(gh auth token) node collector/bootstrap.mjs`
-     then commit `data/` and `mission.config.json`.
-4. Deploy to Vercel: import the repo, add one environment variable:
-   - `GITHUB_TOKEN`: a fine-grained personal access token with read-only access to public repositories (used by the live API routes).
+3. Run the bootstrap: Actions tab, run the `bootstrap` workflow (optionally passing the repo as input). Or locally: `GH_TOKEN=$(gh auth token) node collector/bootstrap.mjs`, then commit `data/`.
+4. Import the repo in Vercel and add one env var: `GITHUB_TOKEN` (a fine-grained PAT with read-only access to public repositories, used by the live routes).
 5. Done. The hourly `collect` workflow keeps history growing and redeploys automatically.
-
-## Usage
-
-Open the page. The header and charts refresh on their own (60s for stars, rank and velocity, 5 min for neighbors). The API routes are edge-cached, so traffic does not consume your GitHub quota.
 
 Local development:
 
@@ -78,14 +75,9 @@ npm install
 GITHUB_TOKEN=$(gh auth token) npm run dev
 ```
 
-## Configuration
+## Contributing
 
-| Key | What it does |
-|---|---|
-| `repo` | The repository to track, `owner/name`. The only required value. |
-| `accent` | Reserved for theming. |
-
-Generated data lives in `data/` and is owned by the collectors. Do not edit it by hand.
+Issues and PRs welcome. See [CONTRIBUTING.md](CONTRIBUTING.md). Some good first issues are listed in [docs/good-first-issues.md](docs/good-first-issues.md).
 
 ## License
 
@@ -95,42 +87,38 @@ MIT
 
 # :es: Versión en Español
 
-> Dashboard auto-alojado de telemetría de crecimiento para cualquier repositorio de GitHub. Apúntalo a un repo y observa su viaje hacia el top del ranking mundial de estrellas, como una carta estelar hacia el centro de la galaxia.
+> Telemetría de crecimiento para cualquier repositorio de GitHub. Una carta estelar en vivo del viaje de tu repo por el ranking mundial, con sonido.
 
-## El Problema
+**[Demo en vivo](https://mission-control-lovat-delta.vercel.app)** (siguiendo a [career-ops](https://github.com/santifer/career-ops) como tenant de ejemplo) · **Escanea cualquier repo al instante** cambiando la URL: `/r/owner/name`
 
-Si mantienes un proyecto open source que crece rápido, acabas haciéndote las mismas preguntas cada pocas horas: ¿a qué velocidad crecemos ahora mismo? ¿Cómo va hoy comparado con ayer a esta misma hora? ¿En qué puesto mundial estamos? ¿Quiénes son los repos justo por encima, a qué velocidad van y cuándo los adelantamos?
+## Qué es
 
-GitHub te da los datos en crudo pero no la cabina de mandos. Las gráficas de star-history son estáticas. Trending es una caja negra. Y nadie vigila a los repos que te rodean en el ranking.
+GitHub te da los datos de stars en crudo pero no la cabina de mandos. Las gráficas de histórico son estáticas, Trending es una caja negra y nadie te enseña los repos que rodean al tuyo en el ranking mundial, a qué velocidad van ni cuándo los adelantas.
 
-## La Solución
+Mission Control convierte la API pública de GitHub en una consola de vuelo:
 
-Mission Control convierte la API pública de GitHub en una consola de vuelo en vivo:
+- **Barra de estado** en vivo: stars, rank mundial, últimos 60 minutos, hoy contra ayer a la misma hora, distancia y ETA al siguiente hito.
+- **Carta estelar** de dos bandas: sistema local paneable (rueda lateral para moverte, pinch para zoom) con tus vecinos de ranking y sus ETAs de adelantamiento, y la ruta al núcleo donde cada puntito es un repo real del top 1000 mundial. Un corchete-viewport conecta ambas bandas.
+- **Scan cards**: hover sobre cualquier repo para una ventanita temporal estilo videojuego con avatar, descripción, velocidad y fecha de adelantamiento. Click para fijarlo como objetivo de caza con HUD persistente.
+- **Sonido** 100% sintetizado con Web Audio, cero ficheros: cada star nueva es un ping de sónar, el pad ambiental sigue la velocidad y cruzar un hito suena a fanfarria serena. Apagado por defecto. Deja la pestaña abierta y escucha crecer tu repo.
+- **Velocidad, escalera diaria, acumulada, heatmap, rank en el tiempo**: el panel de instrumentos completo, incluido el suelo nocturno que distingue crecimiento compuesto de pico que se apaga.
+- **Replay**: el viaje entero desde el día cero en 36 segundos, con scrubber. Con sonido, la densidad de pings sigue la velocidad de cada momento.
+- **Mission log**: eventos auto-detectados (hitos, adelantamientos, récords diarios) más una línea diaria de bitácora.
+- **Briefing diario**: vuelve tras 18 horas y te resume los deltas desde tu última visita. Todo en el cliente, sin cuentas.
 
-- **Barra de estado**: stars, rank mundial, stars en los últimos 60 minutos, hoy contra ayer a la misma hora, distancia y ETA al siguiente hito de ranking. En vivo, refrescando cada minuto.
-- **Carta estelar**: un mapa espacial de dos bandas. El sistema local muestra tus vecinos de ranking con su velocidad y ETA de adelantamiento. La ruta al núcleo muestra cada hito entre tú y el repositorio número 1 del mundo.
-- **Velocidad**: stars por hora de las últimas 24h con ayer como línea fantasma.
-- **Escalera diaria**: stars por día, media de 7 días y el suelo nocturno (baseline 00-05 UTC) que distingue el crecimiento compuesto de un pico que se apaga.
-- **Acumulada**: la gráfica honesta, eje Y desde cero hasta tu total.
-- **Proyecciones**: ETA a cada hito teniendo en cuenta el drift del umbral (el listón para entrar en el top N sube cada día).
-- **Heatmap**: actividad de stars por hora y día de la semana desde el lanzamiento.
-- **Rank en el tiempo**: construido con snapshots horarios.
+### Compartible en todas partes
 
-Todo deriva de un solo valor de configuración: el repo que sigues. El branding (nombre, descripción, avatar) se obtiene dinámicamente.
+**Badge embebible** para READMEs (SVG cacheado, se actualiza cada hora), **explorer instantáneo** `/r/owner/name` para cualquier repo sin instalar nada, y **tarjetas Open Graph dinámicas** con las stats en vivo en cada link compartido.
 
-### Cómo funciona
+## Setup en 5 minutos
 
-Un bootstrap inicial recorre todo el historial de stargazers (un timestamp por estrella), mide tu rank mundial, los umbrales de los hitos y tus vecinos de ranking, y commitea la semilla en `data/`. Desde entonces, una GitHub Action horaria añade snapshots y timestamps nuevos. Cada commit redespliega la web, así que la página estática nunca va más de una hora por detrás, y las rutas live cubren la última hora desde el navegador.
-
-Sin base de datos. Sin APIs de pago. Sin secrets que configurar para el collector (usa el token automático de Actions).
-
-## Instalación
-
-1. Usa este repositorio como plantilla (o haz fork).
+1. Usa este repositorio como plantilla.
 2. Edita `mission.config.json` con tu `owner/name`.
-3. Ejecuta el bootstrap: workflow `bootstrap` en la pestaña Actions, o en local con `GH_TOKEN=$(gh auth token) node collector/bootstrap.mjs` y commitea `data/`.
-4. Despliega en Vercel: importa el repo y añade la variable `GITHUB_TOKEN` (token fine-grained de solo lectura de repos públicos).
+3. Ejecuta el workflow `bootstrap` desde la pestaña Actions (o en local con `GH_TOKEN=$(gh auth token) node collector/bootstrap.mjs` y commitea `data/`).
+4. Importa el repo en Vercel y añade la variable `GITHUB_TOKEN` (PAT fine-grained de solo lectura de repos públicos).
 5. Listo. El workflow horario `collect` mantiene el histórico y redespliega solo.
+
+Sin base de datos, sin APIs de pago, sin secrets para el collector.
 
 ## Licencia
 

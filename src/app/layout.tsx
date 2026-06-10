@@ -19,10 +19,21 @@ const jbMono = JetBrains_Mono({
   subsets: ["latin"],
 });
 
+const siteUrl = process.env.VERCEL_PROJECT_PRODUCTION_URL
+  ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`
+  : "http://localhost:3000";
+
 export const metadata: Metadata = {
+  metadataBase: new URL(siteUrl),
   title: "Mission Control",
   description:
     "Live growth telemetry for an open source repository: star velocity, worldwide rank and the route to the galactic core.",
+  openGraph: {
+    title: "Mission Control",
+    description:
+      "Live growth telemetry: star velocity, worldwide rank and the route to the galactic core.",
+    images: ["/api/og"],
+  },
 };
 
 export default function RootLayout({

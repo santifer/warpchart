@@ -2,6 +2,7 @@
 
 import NumberFlow from "@number-flow/react";
 import { useLive } from "./LiveProvider";
+import SoundToggle from "./SoundToggle";
 import type { DashboardBundle } from "@/lib/bundle";
 import { fmt, fmtEtaDays, timeAgo } from "@/lib/format";
 
@@ -115,10 +116,13 @@ export default function StatusBar({ bundle }: { bundle: DashboardBundle }) {
         </div>
       </div>
 
-      <div className="mt-3 flex items-center justify-between border-t border-grid pt-2">
-        <span className="numeral text-[9px] tracking-[0.15em] text-faint">
-          MISSION CONTROL // GROWTH TELEMETRY
-        </span>
+      <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-grid pt-2">
+        <div className="flex items-center gap-5">
+          <span className="numeral text-[9px] tracking-[0.15em] text-faint">
+            MISSION CONTROL // GROWTH TELEMETRY
+          </span>
+          <SoundToggle />
+        </div>
         <span className="numeral text-[9px] text-faint">
           {live.stale ? "STALE DATA · " : ""}
           sync {timeAgo(live.lastSync, live.nowMs)} · v7d {fmt(Math.round(bundle.v7d))}/day

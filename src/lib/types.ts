@@ -54,6 +54,28 @@ export interface MilestonesFile {
   milestones: Record<string, number>;
 }
 
+export interface MissionEvent {
+  ts: string;
+  kind: "gate" | "overtake" | "record" | "online";
+  text: string;
+}
+
+// Everything GalacticChart needs, decoupled from the bundle + live layer so
+// the explorer (/r/owner/name) can feed it static per-request data.
+export interface ChartInputs {
+  repo: string;
+  stars: number;
+  rank: number | null;
+  v7d: number;
+  neighbors: Neighbor[];
+  milestones: { rank: number; threshold: number; drift: number | null }[];
+  apex: Apex | null;
+  routeDots: RouteRepo[];
+  routeLandmarks: RouteRepo[];
+  routeAll: RouteRepo[];
+  nowMs: number;
+}
+
 export interface HourPoint { t: number; c: number } // t = UTC hour start (ms)
 export interface DayPoint { d: string; c: number } // d = YYYY-MM-DD (UTC)
 export interface CumPoint { t: number; total: number }

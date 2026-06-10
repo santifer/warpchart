@@ -61,8 +61,15 @@ export default function LiveProvider({
   const [stale, setStale] = useState(false);
   const [offline, setOffline] = useState(false);
   const [lastSync, setLastSync] = useState<string | null>(null);
-  const [nowMs, setNowMs] = useState(() => Date.now());
+  // Start from the bundle's build time so the server-rendered HTML and the
+  // first client render agree (no hydration mismatch); jump to real time
+  // right after mount.
+  const [nowMs, setNowMs] = useState(() => Date.parse(bundle.generatedAt));
   const failures = useRef(0);
+
+  useEffect(() => {
+    setNowMs(Date.now());
+  }, []);
 
   useEffect(() => {
     let stop = false;

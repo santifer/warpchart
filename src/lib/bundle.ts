@@ -9,10 +9,14 @@ import {
   rankSeries, thresholdSeries,
 } from "./series";
 import { driftPerDay } from "./projections";
+import { detectEvents, captainsLog } from "./events";
 import type {
   RepoMetaFile, Snapshot, HourPoint, DayPoint, CumPoint, RankPoint,
-  FloorPoint, Neighbor, Apex, RouteRepo,
+  FloorPoint, Neighbor, Apex, RouteRepo, MissionEvent,
 } from "./types";
+
+const HOUR = 3600_000;
+const DAY = 86_400_000;
 
 export interface MilestoneInfo {
   rank: number;
@@ -43,12 +47,15 @@ export interface DashboardBundle {
   routeDots: RouteRepo[];
   routeLandmarks: RouteRepo[];
   routeAll: RouteRepo[]; // full top 1000, for the pannable local-system window
+  hourlyAll: HourPoint[]; // hourly counts over the repo's whole life (replay)
+  events: MissionEvent[];
+  captain: string | null;
 }
 
 // Every dot on the route band is a real repo from the worldwide top 1000.
 // Sampling halves per band away from the core: all repos in the top band,
 // every 2nd in the next, every 4th, every 8th... (generalizes to any depth).
-function buildRouteLayers(
+export function buildRouteLayers(
   stars: number,
   milestones: MilestoneInfo[],
   apex: Apex | null,
@@ -118,6 +125,15 @@ export function buildBundle(): DashboardBundle {
     netStars, milestones, apex, meta?.repo ?? null
   );
 
+  // Whole-life series for replay + event detection.
+  const firstMs = timestamps.length ? Date.parse(timestamps[0]) : nowMs;
+  const lifeHours = Math.min(Math.ceil((nowMs - firstMs) / HOUR) + 1, 24 * 400);
+  const lifeDays = Math.min(Math.ceil((nowMs - firstMs) / DAY) + 1, 400);
+  const hourlyAll = hourlyBuckets(timestamps, lifeHours, nowMs);
+  const dailyAll = dailyCounts(timestamps, lifeDays, nowMs);
+  const events = detectEvents(history, dailyAll);
+  const captain = captainsLog(dailyAll, latest?.rank ?? null);
+
   return {
     meta,
     generatedAt: new Date(nowMs).toISOString(),
@@ -141,5 +157,8 @@ export function buildBundle(): DashboardBundle {
     routeDots,
     routeLandmarks,
     routeAll,
+    hourlyAll,
+    events,
+    captain,
   };
 }

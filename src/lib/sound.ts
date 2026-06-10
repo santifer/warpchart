@@ -1,0 +1,226 @@
+// Synthesized mission soundscape. Zero audio assets: everything is generated
+// with the Web Audio API. Nothing plays until the user enables sound (the
+// toggle click is the required user gesture).
+"use client";
+
+const STORAGE_KEY = "mc_sound";
+
+class AudioEngine {
+  private ctx: AudioContext | null = null;
+  private master: GainNode | null = null;
+  private send: GainNode | null = null; // shared space-echo bus
+  private padGain: GainNode | null = null;
+  private padOscs: OscillatorNode[] = [];
+  private lastBlip = 0;
+  private lastWhoosh = 0;
+  private _enabled = false;
+
+  get enabled(): boolean {
+    return this._enabled;
+  }
+
+  init(): void {
+    if (this.ctx) return;
+    const ctx = new AudioContext();
+    const master = ctx.createGain();
+    master.gain.value = 0.25;
+    const comp = ctx.createDynamicsCompressor();
+    comp.threshold.value = -28;
+    comp.ratio.value = 6;
+    master.connect(comp).connect(ctx.destination);
+
+    // space echo: delay with filtered feedback
+    const send = ctx.createGain();
+    send.gain.value = 0.9;
+    const delay = ctx.createDelay(1.5);
+    delay.delayTime.value = 0.31;
+    const fb = ctx.createGain();
+    fb.gain.value = 0.34;
+    const damp = ctx.createBiquadFilter();
+    damp.type = "lowpass";
+    damp.frequency.value = 1800;
+    send.connect(delay);
+    delay.connect(damp).connect(fb).connect(delay);
+    const wet = ctx.createGain();
+    wet.gain.value = 0.35;
+    delay.connect(wet).connect(master);
+
+    this.ctx = ctx;
+    this.master = master;
+    this.send = send;
+  }
+
+  setEnabled(on: boolean): void {
+    this._enabled = on;
+    try {
+      localStorage.setItem(STORAGE_KEY, on ? "1" : "0");
+    } catch { /* private mode */ }
+    if (on) {
+      this.init();
+      this.ctx?.resume();
+      this.startPad();
+      this.confirmBlip();
+    } else {
+      this.stopPad();
+      this.ctx?.suspend();
+    }
+  }
+
+  restoreFromStorage(): boolean {
+    try {
+      return localStorage.getItem(STORAGE_KEY) === "1";
+    } catch {
+      return false;
+    }
+  }
+
+  // ---- ambient pad: two detuned oscillators through a slowly breathing lowpass
+  private startPad(): void {
+    if (!this.ctx || !this.master || this.padOscs.length) return;
+    const ctx = this.ctx;
+    const gain = ctx.createGain();
+    gain.gain.value = 0.0;
+    gain.gain.linearRampToValueAtTime(0.02, ctx.currentTime + 4);
+    const lp = ctx.createBiquadFilter();
+    lp.type = "lowpass";
+    lp.frequency.value = 320;
+    const lfo = ctx.createOscillator();
+    lfo.frequency.value = 0.05;
+    const lfoGain = ctx.createGain();
+    lfoGain.gain.value = 140;
+    lfo.connect(lfoGain).connect(lp.frequency);
+    const o1 = ctx.createOscillator();
+    o1.type = "sine";
+    o1.frequency.value = 110;
+    const o2 = ctx.createOscillator();
+    o2.type = "triangle";
+    o2.frequency.value = 110.45;
+    o1.connect(lp);
+    o2.connect(lp);
+    lp.connect(gain).connect(this.master);
+    o1.start();
+    o2.start();
+    lfo.start();
+    this.padOscs = [o1, o2, lfo];
+    this.padGain = gain;
+  }
+
+  private stopPad(): void {
+    for (const o of this.padOscs) {
+      try { o.stop(); } catch { /* already stopped */ }
+    }
+    this.padOscs = [];
+    this.padGain = null;
+  }
+
+  // velocity-driven ambient brightness (0..1)
+  setAmbientIntensity(x: number): void {
+    if (!this.ctx || !this.padGain) return;
+    const target = 0.012 + Math.min(Math.max(x, 0), 1) * 0.02;
+    this.padGain.gain.linearRampToValueAtTime(target, this.ctx.currentTime + 2);
+  }
+
+  // ---- one new star = one sonar ping. intensity 0..1 maps to pitch.
+  ping(intensity = 0.5): void {
+    if (!this._enabled || !this.ctx || !this.master || !this.send) return;
+    const ctx = this.ctx;
+    const t = ctx.currentTime;
+    const osc = ctx.createOscillator();
+    osc.type = "sine";
+    const base = 660 + intensity * 520 + (Math.random() - 0.5) * 40;
+    osc.frequency.setValueAtTime(base, t);
+    osc.frequency.exponentialRampToValueAtTime(base * 0.94, t + 0.5);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0, t);
+    g.gain.linearRampToValueAtTime(0.085, t + 0.006);
+    g.gain.exponentialRampToValueAtTime(0.0004, t + 0.55);
+    osc.connect(g);
+    g.connect(this.master);
+    g.connect(this.send);
+    osc.start(t);
+    osc.stop(t + 0.6);
+  }
+
+  hoverBlip(): void {
+    if (!this._enabled || !this.ctx || !this.master) return;
+    const now = performance.now();
+    if (now - this.lastBlip < 90) return;
+    this.lastBlip = now;
+    const ctx = this.ctx;
+    const t = ctx.currentTime;
+    const osc = ctx.createOscillator();
+    osc.type = "square";
+    osc.frequency.value = 1250;
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.022, t);
+    g.gain.exponentialRampToValueAtTime(0.0004, t + 0.05);
+    osc.connect(g).connect(this.master);
+    osc.start(t);
+    osc.stop(t + 0.06);
+  }
+
+  private confirmBlip(): void {
+    // small two-tone confirmation when sound is switched on
+    if (!this.ctx || !this.master) return;
+    const ctx = this.ctx;
+    [880, 1320].forEach((f, i) => {
+      const t = ctx.currentTime + i * 0.09;
+      const osc = ctx.createOscillator();
+      osc.type = "sine";
+      osc.frequency.value = f;
+      const g = ctx.createGain();
+      g.gain.setValueAtTime(0.05, t);
+      g.gain.exponentialRampToValueAtTime(0.0005, t + 0.12);
+      osc.connect(g).connect(this.master!);
+      osc.start(t);
+      osc.stop(t + 0.14);
+    });
+  }
+
+  panWhoosh(): void {
+    if (!this._enabled || !this.ctx || !this.master) return;
+    const now = performance.now();
+    if (now - this.lastWhoosh < 350) return;
+    this.lastWhoosh = now;
+    const ctx = this.ctx;
+    const t = ctx.currentTime;
+    const len = Math.floor(ctx.sampleRate * 0.22);
+    const buf = ctx.createBuffer(1, len, ctx.sampleRate);
+    const data = buf.getChannelData(0);
+    for (let i = 0; i < len; i++) data[i] = (Math.random() * 2 - 1) * (1 - i / len);
+    const src = ctx.createBufferSource();
+    src.buffer = buf;
+    const bp = ctx.createBiquadFilter();
+    bp.type = "bandpass";
+    bp.Q.value = 1.2;
+    bp.frequency.setValueAtTime(420, t);
+    bp.frequency.exponentialRampToValueAtTime(950, t + 0.2);
+    const g = ctx.createGain();
+    g.gain.value = 0.035;
+    src.connect(bp).connect(g).connect(this.master);
+    src.start(t);
+  }
+
+  // serene three-note arpeggio for milestone crossings
+  fanfare(): void {
+    if (!this._enabled || !this.ctx || !this.master || !this.send) return;
+    const ctx = this.ctx;
+    [329.6, 493.9, 659.3].forEach((f, i) => {
+      const t = ctx.currentTime + i * 0.16;
+      const osc = ctx.createOscillator();
+      osc.type = "sine";
+      osc.frequency.value = f;
+      const g = ctx.createGain();
+      g.gain.setValueAtTime(0, t);
+      g.gain.linearRampToValueAtTime(0.07, t + 0.02);
+      g.gain.exponentialRampToValueAtTime(0.0005, t + 1.4);
+      osc.connect(g);
+      g.connect(this.master!);
+      g.connect(this.send!);
+      osc.start(t);
+      osc.stop(t + 1.5);
+    });
+  }
+}
+
+export const sound = new AudioEngine();

@@ -3,25 +3,24 @@
 // The signature panel: a star chart in two bands.
 //   Band A (LOCAL SYSTEM): a pannable zoom window over the route. Horizontal
 //   wheel / trackpad pans it, ctrl+wheel (pinch) zooms, double-click resets.
-//   Neighbors carry full chase telemetry; deeper territory shows real top
-//   1000 repos, milestone gates and eventually the core itself.
-//   Band B (ROUTE TO THE CORE): the full log-scale route from our current
-//   position to the worldwide #1 repo. A [ ] viewport bracket mirrors what
-//   band A is showing, so the zoom relationship is explicit.
-// Hovering a neighbor or a route dot opens a temporal scan card, game style.
+//   Band B (ROUTE TO THE CORE): the full log-scale route from the current
+//   position to the worldwide #1 repo, with a [ ] viewport bracket mirroring
+//   what band A shows.
+// Fully decoupled from the live layer: everything arrives via ChartInputs,
+// so both the tenant dashboard and the /r/ explorer can render it.
+// Clicking a repo pins it as chase target (when onPinTarget is provided).
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useLive } from "./LiveProvider";
-import type { DashboardBundle } from "@/lib/bundle";
-import type { RouteRepo } from "@/lib/types";
+import type { ChartInputs, RouteRepo } from "@/lib/types";
 import { C } from "@/lib/theme";
 import { fmt, fmtCompact, fmtEtaDays, etaDate, shortName } from "@/lib/format";
 import { neighborEtas, type NeighborEta } from "@/lib/projections";
+import { sound } from "@/lib/sound";
 
 const W = 1200;
 const H = 470;
 const BAND_A_Y = 150;
 const BAND_B_Y = 388;
-const CLIP_BOTTOM = 292; // band A clip ends here; viewport connectors start here
+const CLIP_BOTTOM = 292;
 
 type Scan =
   | { kind: "neighbor"; n: NeighborEta; xPct: number; topPct: number }
@@ -31,7 +30,6 @@ type AItem =
   | { kind: "n"; s: number; n: NeighborEta }
   | { kind: "d"; s: number; p: RouteRepo };
 
-// Deterministic PRNG so the decorative dust is stable across server/client.
 function mulberry32(seed: number) {
   return () => {
     seed |= 0;
@@ -50,44 +48,46 @@ function seedFrom(text: string): number {
 
 const log10 = Math.log10;
 
-export default function GalacticChart({ bundle }: { bundle: DashboardBundle }) {
-  const live = useLive();
+export default function GalacticChart({
+  inputs,
+  target = null,
+  onPinTarget,
+}: {
+  inputs: ChartInputs;
+  target?: string | null;
+  onPinTarget?: (r: string | null) => void;
+}) {
   const [scan, setScan] = useState<Scan | null>(null);
-  // Pan/zoom window over the route, as log10(stars) bounds. null = default.
   const [view, setView] = useState<{ lo: number; hi: number } | null>(null);
   const svgRef = useRef<SVGSVGElement | null>(null);
 
-  const stars = live.stars;
-  const vOwn = bundle.v7d;
-  const repoName = bundle.meta ? shortName(bundle.meta.repo) : "this repo";
-  const apex = bundle.apex;
-  const nextMilestone = bundle.milestones[0] ?? null;
+  const { stars, rank, v7d: vOwn, apex, nowMs } = inputs;
+  const repoName = shortName(inputs.repo);
+  const nextMilestone = inputs.milestones[0] ?? null;
 
   const etas = useMemo(
-    () => neighborEtas(live.neighbors, stars, vOwn),
-    [live.neighbors, stars, vOwn]
+    () => neighborEtas(inputs.neighbors, stars, vOwn),
+    [inputs.neighbors, stars, vOwn]
   );
 
   const dust = useMemo(() => {
-    const rand = mulberry32(seedFrom(bundle.meta?.repo ?? "mission-control"));
+    const rand = mulberry32(seedFrom(inputs.repo));
     return Array.from({ length: 90 }, () => ({
       x: rand() * W,
       y: rand() * H,
       r: rand() < 0.85 ? 0.7 : 1.3,
       o: 0.12 + rand() * 0.45,
     }));
-  }, [bundle.meta?.repo]);
+  }, [inputs.repo]);
 
   // ---------- geometry ----------
   const ahead = etas.filter((n) => n.gap > 0).sort((a, b) => a.gap - b.gap).slice(0, 10);
   const behind = etas.filter((n) => n.gap <= 0).sort((a, b) => b.gap - a.gap).slice(0, 3);
   const gateX = nextMilestone?.threshold ?? null;
 
-  // Default window: the immediate neighborhood plus the next gate.
   const aMinDefault = Math.max(1, Math.min(stars, ...behind.map((n) => n.s)) - 80);
   const aMaxDefault = Math.max(gateX ?? 0, ...ahead.map((n) => n.s), stars + 400) + 250;
 
-  // Full route domain (band B): always from our position to the core.
   const coreStars = apex?.s ?? Math.max(stars * 8, 400_000);
   const bMin = log10(Math.min(stars * 0.96, aMinDefault));
   const bMax = log10(coreStars * 1.06);
@@ -105,8 +105,6 @@ export default function GalacticChart({ bundle }: { bundle: DashboardBundle }) {
     return l >= logLo - 0.0005 && l <= logHi + 0.0005;
   };
 
-  // Native wheel listener: React root wheel handlers are passive, so
-  // preventDefault (needed to keep the page still) requires this.
   const geom = useRef({ defLo, defHi, bMin, bMax });
   geom.current = { defLo, defHi, bMin, bMax };
   useEffect(() => {
@@ -114,15 +112,15 @@ export default function GalacticChart({ bundle }: { bundle: DashboardBundle }) {
     if (!el) return;
     const onWheel = (e: WheelEvent) => {
       const horizontal = Math.abs(e.deltaX) > Math.abs(e.deltaY);
-      if (!e.ctrlKey && !horizontal && !e.shiftKey) return; // plain vertical: let the page scroll
+      if (!e.ctrlKey && !horizontal && !e.shiftKey) return;
       e.preventDefault();
+      sound.panWhoosh();
       const g = geom.current;
       setView((v) => {
         const lo = v?.lo ?? g.defLo;
         const hi = v?.hi ?? g.defHi;
         const sp = hi - lo;
         if (e.ctrlKey) {
-          // pinch / ctrl+wheel: zoom around the window center
           const c = (lo + hi) / 2;
           let ns = sp * (1 + e.deltaY / 250);
           ns = Math.min(Math.max(ns, 0.004), g.bMax - g.bMin);
@@ -143,13 +141,10 @@ export default function GalacticChart({ bundle }: { bundle: DashboardBundle }) {
   // ---------- band A content ----------
   const neighborNames = useMemo(() => new Set(etas.map((n) => n.r)), [etas]);
   const visNbrs = [...behind, ...ahead].filter((n) => inWindow(n.s));
-  // Inside the window we show EVERY top 1000 repo (the route band below keeps
-  // the halving-density sample).
-  const visDots = bundle.routeAll.filter(
-    (p) => inWindow(p.s) && !neighborNames.has(p.r) && p.r !== apex?.r && p.r !== bundle.meta?.repo
+  const visDots = inputs.routeAll.filter(
+    (p) => inWindow(p.s) && !neighborNames.has(p.r) && p.r !== apex?.r && p.r !== inputs.repo
   );
 
-  // Label budget: neighbors always labeled; route dots fill what is left.
   const LABEL_MAX = 13;
   const dotBudget = Math.max(0, LABEL_MAX - visNbrs.length);
   const dotStep = dotBudget > 0 ? Math.max(1, Math.ceil(visDots.length / dotBudget)) : Infinity;
@@ -177,14 +172,28 @@ export default function GalacticChart({ bundle }: { bundle: DashboardBundle }) {
     }
   }
 
-  const visGates = bundle.milestones.filter((m) => inWindow(m.threshold));
+  const visGates = inputs.milestones.filter((m) => inWindow(m.threshold));
   const isDefaultView = view === null;
 
-  // viewport bracket on the route band
   const vx0 = bx(Math.pow(10, logLo));
   const vx1 = bx(Math.pow(10, logHi));
 
-  const showScanAt = (s: Scan) => setScan(s);
+  // chase target (pinned repo)
+  const targetEntry = target
+    ? etas.find((n) => n.r === target) ?? inputs.routeAll.find((p) => p.r === target) ?? null
+    : null;
+  const targetS = targetEntry?.s ?? null;
+
+  const togglePin = (r: string) => {
+    if (!onPinTarget) return;
+    onPinTarget(target === r ? null : r);
+    sound.hoverBlip();
+  };
+
+  const openScan = (s: Scan) => {
+    sound.hoverBlip();
+    setScan(s);
+  };
   const bandATop = ((BAND_A_Y - 12) / H) * 100;
   const bandBTop = ((BAND_B_Y - 14) / H) * 100;
 
@@ -219,7 +228,6 @@ export default function GalacticChart({ bundle }: { bundle: DashboardBundle }) {
             </clipPath>
           </defs>
 
-          {/* decorative dust, slowly drifting; a third of it twinkles */}
           <g className="dust-layer">
             {dust.map((d, i) => (
               <circle
@@ -250,7 +258,6 @@ export default function GalacticChart({ bundle }: { bundle: DashboardBundle }) {
           <line x1={40} y1={BAND_A_Y} x2={W - 40} y2={BAND_A_Y} stroke={C.grid} strokeWidth={1} />
 
           <g clipPath="url(#bandAClip)">
-            {/* milestone gates inside the window */}
             {visGates.map((m) => (
               <g key={m.rank}>
                 <line
@@ -258,7 +265,7 @@ export default function GalacticChart({ bundle }: { bundle: DashboardBundle }) {
                   stroke={C.accent} strokeWidth={1} strokeDasharray="2 4" opacity={0.7}
                 />
                 <text
-                  x={ax(m.threshold)} y={BAND_A_Y - 132} fill={C.accent} fontSize={10}
+                  x={Math.min(ax(m.threshold), W - 170)} y={BAND_A_Y - 132} fill={C.accent} fontSize={10}
                   textAnchor="middle" letterSpacing={2}
                 >
                   TOP {m.rank} GATE · {fmt(m.threshold)}
@@ -266,7 +273,6 @@ export default function GalacticChart({ bundle }: { bundle: DashboardBundle }) {
               </g>
             ))}
 
-            {/* unlabeled route repos inside the window */}
             {visDots
               .filter((p) => !labeledDotSet.has(p.r))
               .map((p) => (
@@ -274,9 +280,10 @@ export default function GalacticChart({ bundle }: { bundle: DashboardBundle }) {
                   key={p.r}
                   className="nbr"
                   onMouseEnter={() =>
-                    showScanAt({ kind: "route", p, xPct: clampPct((ax(p.s) / W) * 100), topPct: bandATop })
+                    openScan({ kind: "route", p, xPct: clampPct((ax(p.s) / W) * 100), topPct: bandATop })
                   }
                   onMouseLeave={() => setScan(null)}
+                  onClick={() => togglePin(p.r)}
                 >
                   <circle cx={ax(p.s)} cy={BAND_A_Y} r={8} fill="transparent" />
                   <circle className="nbr-dot" cx={ax(p.s)} cy={BAND_A_Y} r={1.6}
@@ -284,9 +291,9 @@ export default function GalacticChart({ bundle }: { bundle: DashboardBundle }) {
                 </g>
               ))}
 
-            {/* labeled items: neighbors with chase telemetry + sampled route repos */}
             {items.map((it, i) => {
               const x = ax(it.s);
+              const isTarget = target !== null && (it.kind === "n" ? it.n.r : it.p.r) === target;
               if (it.kind === "n") {
                 const n = it.n;
                 const isAhead = n.gap > 0;
@@ -301,11 +308,15 @@ export default function GalacticChart({ bundle }: { bundle: DashboardBundle }) {
                     key={n.r}
                     className="nbr"
                     onMouseEnter={() =>
-                      showScanAt({ kind: "neighbor", n, xPct: clampPct((x / W) * 100), topPct: bandATop })
+                      openScan({ kind: "neighbor", n, xPct: clampPct((x / W) * 100), topPct: bandATop })
                     }
                     onMouseLeave={() => setScan(null)}
+                    onClick={() => togglePin(n.r)}
                   >
                     <line x1={x} y1={lineY1} x2={x} y2={lineY2} stroke={C.grid} strokeWidth={1} />
+                    {isTarget ? (
+                      <circle cx={x} cy={BAND_A_Y} r={8} fill="none" stroke={C.accent} strokeWidth={1.2} />
+                    ) : null}
                     <circle className="nbr-dot" cx={x} cy={BAND_A_Y} r={3.2} fill={color} opacity={isAhead ? 0.95 : 0.55} />
                     <text className="nbr-name" x={x} y={tierY - 12} fill={isAhead ? C.ink : C.faint} fontSize={10}
                       textAnchor="middle">
@@ -328,11 +339,15 @@ export default function GalacticChart({ bundle }: { bundle: DashboardBundle }) {
                   key={p.r}
                   className="nbr"
                   onMouseEnter={() =>
-                    showScanAt({ kind: "route", p, xPct: clampPct((x / W) * 100), topPct: bandATop })
+                    openScan({ kind: "route", p, xPct: clampPct((x / W) * 100), topPct: bandATop })
                   }
                   onMouseLeave={() => setScan(null)}
+                  onClick={() => togglePin(p.r)}
                 >
                   <line x1={x} y1={tierY + 8} x2={x} y2={BAND_A_Y - 5} stroke={C.grid} strokeWidth={1} />
+                  {isTarget ? (
+                    <circle cx={x} cy={BAND_A_Y} r={8} fill="none" stroke={C.accent} strokeWidth={1.2} />
+                  ) : null}
                   <circle className="nbr-dot" cx={x} cy={BAND_A_Y} r={2.4} fill={C.white} opacity={0.8} />
                   <text className="nbr-name" x={x} y={tierY - 2} fill={C.ink} fontSize={10} textAnchor="middle">
                     {shortName(p.r)}
@@ -344,7 +359,6 @@ export default function GalacticChart({ bundle }: { bundle: DashboardBundle }) {
               );
             })}
 
-            {/* the core, if the window reaches it */}
             {apex && inWindow(coreStars) ? (
               <g className="core-glow">
                 <circle cx={ax(coreStars)} cy={BAND_A_Y} r={30} fill="url(#coreGrad)" />
@@ -356,7 +370,6 @@ export default function GalacticChart({ bundle }: { bundle: DashboardBundle }) {
               </g>
             ) : null}
 
-            {/* our ship, while inside the window */}
             {inWindow(stars) ? (
               <g>
                 <circle cx={ax(stars)} cy={BAND_A_Y} r={16} fill="url(#shipGrad)" opacity={0.5} />
@@ -379,7 +392,7 @@ export default function GalacticChart({ bundle }: { bundle: DashboardBundle }) {
             ) : null}
           </g>
 
-          {/* ============ viewport connectors: band A edges -> bracket ============ */}
+          {/* viewport connectors */}
           <line x1={40} y1={CLIP_BOTTOM} x2={vx0} y2={BAND_B_Y - 15}
             stroke={C.grid} strokeWidth={1} strokeDasharray="3 5" opacity={0.8} />
           <line x1={W - 40} y1={CLIP_BOTTOM} x2={vx1} y2={BAND_B_Y - 15}
@@ -393,12 +406,10 @@ export default function GalacticChart({ bundle }: { bundle: DashboardBundle }) {
             log scale · every dot is a worldwide top 1000 repo · [ ] marks the window above
           </text>
 
-          {/* ultra-thin guide + flowing energy */}
           <line x1={40} y1={BAND_B_Y} x2={W - 40} y2={BAND_B_Y} stroke="url(#routeGrad)" strokeWidth={0.5} />
           <line className="route-flow" x1={40} y1={BAND_B_Y} x2={W - 40} y2={BAND_B_Y}
             stroke={C.accent} strokeWidth={1.4} opacity={0.5} />
 
-          {/* viewport bracket [ ] mirroring band A */}
           <g>
             <rect x={vx0} y={BAND_B_Y - 13} width={Math.max(vx1 - vx0, 2)} height={26}
               fill={C.accent} opacity={0.07} />
@@ -408,15 +419,27 @@ export default function GalacticChart({ bundle }: { bundle: DashboardBundle }) {
               stroke={C.accent} fill="none" strokeWidth={1.2} />
           </g>
 
-          {/* every dot is a repo */}
-          {bundle.routeDots.map((p) => (
+          {/* chase trajectory to the pinned target */}
+          {targetS !== null ? (
+            <g>
+              <path
+                d={`M ${bx(stars)} ${BAND_B_Y} Q ${(bx(stars) + bx(targetS)) / 2} ${BAND_B_Y - 36} ${bx(targetS)} ${BAND_B_Y}`}
+                stroke={C.accent} fill="none" strokeWidth={1} strokeDasharray="3 4" opacity={0.65}
+              />
+              <circle className="ship-ping" cx={bx(targetS)} cy={BAND_B_Y} r={7}
+                fill="none" stroke={C.accent} strokeWidth={1.2} />
+            </g>
+          ) : null}
+
+          {inputs.routeDots.map((p) => (
             <g
               key={p.r}
               className="nbr"
               onMouseEnter={() =>
-                showScanAt({ kind: "route", p, xPct: clampPct((bx(p.s) / W) * 100), topPct: bandBTop })
+                openScan({ kind: "route", p, xPct: clampPct((bx(p.s) / W) * 100), topPct: bandBTop })
               }
               onMouseLeave={() => setScan(null)}
+              onClick={() => togglePin(p.r)}
             >
               <circle cx={bx(p.s)} cy={BAND_B_Y} r={9} fill="transparent" />
               <circle className="nbr-dot" cx={bx(p.s)} cy={BAND_B_Y} r={1.4}
@@ -424,8 +447,7 @@ export default function GalacticChart({ bundle }: { bundle: DashboardBundle }) {
             </g>
           ))}
 
-          {/* famous landmarks (skip the ones crowding our ship label) */}
-          {bundle.routeLandmarks
+          {inputs.routeLandmarks
             .filter((p) => Math.abs(bx(p.s) - bx(stars)) > 150)
             .map((p, i) => (
               <g key={p.r}>
@@ -438,8 +460,7 @@ export default function GalacticChart({ bundle }: { bundle: DashboardBundle }) {
               </g>
             ))}
 
-          {/* milestone waypoints */}
-          {[...bundle.milestones].sort((a, b) => b.rank - a.rank).map((m) => (
+          {[...inputs.milestones].sort((a, b) => b.rank - a.rank).map((m) => (
             <g key={m.rank}>
               <circle cx={bx(m.threshold)} cy={BAND_B_Y} r={5} fill="none" stroke={C.accent}
                 strokeWidth={1} opacity={0.85} />
@@ -455,7 +476,6 @@ export default function GalacticChart({ bundle }: { bundle: DashboardBundle }) {
             </g>
           ))}
 
-          {/* the galactic core */}
           {apex ? (
             <g className="core-glow">
               <circle cx={bx(coreStars)} cy={BAND_B_Y} r={26} fill="url(#coreGrad)" />
@@ -471,7 +491,6 @@ export default function GalacticChart({ bundle }: { bundle: DashboardBundle }) {
             </g>
           ) : null}
 
-          {/* our ship on the route */}
           <g>
             <path
               d={`M ${bx(stars) - 5} ${BAND_B_Y - 6} L ${bx(stars) + 7} ${BAND_B_Y} L ${bx(stars) - 5} ${BAND_B_Y + 6} Z`}
@@ -480,12 +499,11 @@ export default function GalacticChart({ bundle }: { bundle: DashboardBundle }) {
             />
             <text x={Math.max(40, bx(stars) - 6)} y={BAND_B_Y + 22} fill={C.white} fontSize={9.5}
               textAnchor="start">
-              you are here{live.rank ? ` · #${live.rank}` : ""}
+              you are here{rank ? ` · #${rank}` : ""}
             </text>
           </g>
         </svg>
 
-        {/* temporal scan card */}
         {scan ? (
           <div
             className="scan-card hud pointer-events-none z-10 w-[250px] px-3 py-2.5"
@@ -499,7 +517,7 @@ export default function GalacticChart({ bundle }: { bundle: DashboardBundle }) {
                   : "rgba(83, 214, 232, 0.45)",
             }}
           >
-            <ScanContent scan={scan} ownV={vOwn} nowMs={live.nowMs} />
+            <ScanContent scan={scan} ownV={vOwn} nowMs={nowMs} />
           </div>
         ) : null}
       </div>
@@ -566,6 +584,9 @@ function ScanContent({ scan, ownV, nowMs }: { scan: Scan; ownV: number; nowMs: n
             <Row k="our v7d" v={`${Math.round(ownV)}/day`} />
           </>
         ) : null}
+      </div>
+      <div className="numeral mt-1.5 text-[8px] tracking-[0.1em] text-faint">
+        click to pin as chase target
       </div>
     </>
   );

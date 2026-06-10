@@ -8,20 +8,34 @@ function token(): string {
   return t;
 }
 
+// GitHub returns transient 502s now and then; retry briefly (the budget is
+// fine: these routes are ISR/edge-cached, not user-blocking).
 async function ghFetch<T>(path: string, init?: { method?: string; body?: unknown }): Promise<T> {
-  const res = await fetch(API + path, {
-    method: init?.method ?? "GET",
-    body: init?.body ? JSON.stringify(init.body) : undefined,
-    headers: {
-      Authorization: `Bearer ${token()}`,
-      Accept: "application/vnd.github+json",
-      "User-Agent": "mission-control",
-      ...(init?.body ? { "Content-Type": "application/json" } : {}),
-    },
-    cache: "no-store",
-  });
-  if (!res.ok) throw new Error(`GitHub ${res.status}: ${(await res.text()).slice(0, 200)}`);
-  return res.json() as Promise<T>;
+  const delays = [400, 900];
+  for (let attempt = 0; ; attempt++) {
+    let res: Response | null = null;
+    try {
+      res = await fetch(API + path, {
+        method: init?.method ?? "GET",
+        body: init?.body ? JSON.stringify(init.body) : undefined,
+        headers: {
+          Authorization: `Bearer ${token()}`,
+          Accept: "application/vnd.github+json",
+          "User-Agent": "mission-control",
+          ...(init?.body ? { "Content-Type": "application/json" } : {}),
+        },
+        cache: "no-store",
+      });
+    } catch (err) {
+      if (attempt >= delays.length) throw err;
+    }
+    if (res?.ok) return res.json() as Promise<T>;
+    const retriable = !res || res.status >= 500;
+    if (!retriable || attempt >= delays.length) {
+      throw new Error(`GitHub ${res?.status ?? "network"}: ${res ? (await res.text()).slice(0, 200) : ""}`);
+    }
+    await new Promise((r) => setTimeout(r, delays[attempt]));
+  }
 }
 
 export async function graphql<T>(query: string, variables?: Record<string, unknown>): Promise<T> {
@@ -40,6 +54,53 @@ export async function currentStars(owner: string, name: string): Promise<number>
   );
   if (!d.repository) throw new Error("repository not found");
   return d.repository.stargazerCount;
+}
+
+export interface RepoLite {
+  nameWithOwner: string;
+  stargazerCount: number;
+  description: string | null;
+  primaryLanguage: { name: string } | null;
+}
+
+export async function repoLite(owner: string, name: string): Promise<RepoLite> {
+  const d = await graphql<{ repository: RepoLite | null }>(
+    `query($owner:String!,$name:String!){
+      repository(owner:$owner,name:$name){
+        nameWithOwner stargazerCount description primaryLanguage{ name }
+      }
+    }`,
+    { owner, name }
+  );
+  if (!d.repository) throw new Error("repository not found");
+  return d.repository;
+}
+
+// Nearest ranking neighbors via the search API (for repos outside the
+// precomputed top 1000). Two search calls.
+export async function searchNeighbors(
+  ownFullName: string,
+  stars: number,
+  { above = 15, below = 5 } = {}
+): Promise<string[]> {
+  const deltaHi = Math.max(Math.ceil(stars * 0.12), 200);
+  const deltaLo = Math.max(Math.ceil(stars * 0.06), 100);
+  const up = await ghFetch<{ items?: { full_name: string }[] }>(
+    `/search/repositories?q=${encodeURIComponent(`stars:${stars + 1}..${stars + deltaHi}`)}&sort=stars&order=asc&per_page=${Math.min(above + 10, 50)}`
+  );
+  const down = await ghFetch<{ items?: { full_name: string }[] }>(
+    `/search/repositories?q=${encodeURIComponent(`stars:${Math.max(1, stars - deltaLo)}..${stars}`)}&sort=stars&order=desc&per_page=${below + 5}`
+  );
+  const own = ownFullName.toLowerCase();
+  const upNames = (up.items ?? [])
+    .filter((i) => i.full_name.toLowerCase() !== own)
+    .slice(0, above)
+    .map((i) => i.full_name);
+  const downNames = (down.items ?? [])
+    .filter((i) => i.full_name.toLowerCase() !== own)
+    .slice(0, below)
+    .map((i) => i.full_name);
+  return [...downNames.reverse(), ...upNames];
 }
 
 export async function worldwideRank(stars: number): Promise<number> {

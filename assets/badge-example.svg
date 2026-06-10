@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="201" height="26" viewBox="0 0 201 26" role="img" aria-label="WORLD RANK rank #409">
+<rect x="0.5" y="0.5" width="200" height="25" fill="#060c12" stroke="#11263b"/>
+<path d="M 0.5 6 V 0.5 H 6" stroke="#53d6e8" fill="none" opacity="0.6"/>
+<path d="M 195 0.5 H 200.5 V 6" stroke="#53d6e8" fill="none" opacity="0.6"/>
+<path d="M 0.5 20 V 25.5 H 6" stroke="#53d6e8" fill="none" opacity="0.6"/>
+<path d="M 195 25.5 H 200.5 V 20" stroke="#53d6e8" fill="none" opacity="0.6"/>
+<text x="12" y="17" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="9" letter-spacing="1.4" fill="#5d7a94">WORLD RANK</text>
+<text x="91" y="17" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="10.5" font-weight="700" fill="#53d6e8">#409<tspan fill="#53d6e8"></tspan></text>
+<text x="135.6" y="17" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="10.5" fill="#d9e8f5">52,270 ★</text>
+</svg>
