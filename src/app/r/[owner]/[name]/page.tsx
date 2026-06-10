@@ -6,7 +6,16 @@ import { notFound } from "next/navigation";
 import GalacticChart from "@/components/GalacticChart";
 import VerticalChart from "@/components/VerticalChart";
 import Panel from "@/components/Panel";
+import { unstable_cache } from "next/cache";
 import { getExplorerData } from "@/lib/explorer";
+
+// Shared data cache: even when the route renders dynamically, the GitHub
+// round-trips are paid at most once per repo per 15 minutes.
+const getCachedExplorerData = unstable_cache(
+  async (owner: string, name: string) => getExplorerData(owner, name),
+  ["explorer-data"],
+  { revalidate: 900 }
+);
 import { fmt, fmtEtaDays, shortName } from "@/lib/format";
 import { neighborEtas } from "@/lib/projections";
 
@@ -42,7 +51,7 @@ export default async function ExplorerPage({
 
   let data;
   try {
-    data = await getExplorerData(owner, name);
+    data = await getCachedExplorerData(owner, name);
   } catch (err) {
     // A real "repository not found" caches as 404; transient GitHub errors
     // must NOT (rethrow -> 500, the next visitor triggers a fresh attempt).

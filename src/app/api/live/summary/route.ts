@@ -1,5 +1,6 @@
 import { OWNER, NAME } from "@/lib/config";
 import { currentStars, worldwideRank } from "@/lib/github";
+import { lastSnapshot } from "@/lib/history";
 
 export const dynamic = "force-dynamic";
 
@@ -14,6 +15,15 @@ export async function GET() {
       { headers: { "Cache-Control": CACHE } }
     );
   } catch (err) {
+    // GitHub turbulence: fall back to the last hourly snapshot so the live
+    // counter never freezes on the client (it keeps polling and recovers).
+    const snap = lastSnapshot();
+    if (snap) {
+      return Response.json(
+        { stars: snap.stars, rank: snap.rank, fetchedAt: snap.ts, stale: true },
+        { headers: { "Cache-Control": "public, s-maxage=30" } }
+      );
+    }
     return Response.json(
       { error: (err as Error).message },
       { status: 502, headers: { "Cache-Control": "no-store" } }
