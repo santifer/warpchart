@@ -1,14 +1,79 @@
-// Chart color constants. Mirror of the CSS custom properties in globals.css:
-// keep both in sync when tuning the palette.
-export const C = {
-  void: "#020509",
-  hull: "#08111c",
-  grid: "#11263b",
-  ink: "#d9e8f5",
-  dim: "#5d7a94",
-  faint: "#33485c",
-  accent: "#53d6e8",
-  accentSoft: "rgba(83, 214, 232, 0.14)",
-  warn: "#f2a33c",
-  white: "#f5fbff",
-} as const;
+// Chart and SVG color palettes, one per scheme. Mirror of the CSS custom
+// properties in globals.css: keep both in sync when tuning.
+// All text colors meet WCAG AA contrast (>= 4.5:1) against hull/void.
+
+export interface HeatStop {
+  t: number;
+  c: [number, number, number];
+}
+
+export interface Palette {
+  void: string;
+  hull: string;
+  grid: string;
+  ink: string;
+  dim: string;
+  faint: string;
+  accent: string;
+  accentSoft: string;
+  warn: string;
+  white: string; // highest-emphasis "star" color
+  speck: string; // decorative dust particles
+  scanBorder: string;
+  scanBorderWarn: string;
+  heat: HeatStop[];
+  heatZero: string;
+}
+
+export const PALETTES: { dark: Palette; light: Palette } = {
+  dark: {
+    void: "#020509",
+    hull: "#08111c",
+    grid: "#11263b",
+    ink: "#d9e8f5",
+    dim: "#8aa3ba",
+    faint: "#62809a",
+    accent: "#53d6e8",
+    accentSoft: "rgba(83, 214, 232, 0.14)",
+    warn: "#f2a33c",
+    white: "#f5fbff",
+    speck: "#f5fbff",
+    scanBorder: "rgba(83, 214, 232, 0.45)",
+    scanBorderWarn: "rgba(242, 163, 60, 0.5)",
+    heat: [
+      { t: 0.0, c: [16, 38, 56] },
+      { t: 0.35, c: [24, 132, 158] },
+      { t: 0.62, c: [83, 214, 232] },
+      { t: 0.85, c: [242, 163, 60] },
+      { t: 1.0, c: [255, 233, 196] },
+    ],
+    heatZero: "rgba(83, 214, 232, 0.04)",
+  },
+  light: {
+    void: "#eef3f8",
+    hull: "#f9fbfd",
+    grid: "#c9d8e4",
+    ink: "#16293c",
+    dim: "#43607a",
+    faint: "#5d7388",
+    accent: "#0c7d92",
+    accentSoft: "rgba(12, 125, 146, 0.10)",
+    warn: "#a05a00",
+    white: "#0a1726",
+    speck: "#3a5268",
+    scanBorder: "rgba(12, 125, 146, 0.5)",
+    scanBorderWarn: "rgba(160, 90, 0, 0.55)",
+    heat: [
+      { t: 0.0, c: [223, 233, 241] },
+      { t: 0.35, c: [156, 198, 212] },
+      { t: 0.62, c: [28, 147, 170] },
+      { t: 0.85, c: [176, 106, 0] },
+      { t: 1.0, c: [92, 47, 0] },
+    ],
+    heatZero: "rgba(12, 125, 146, 0.05)",
+  },
+};
+
+// Dark constants for server-rendered artifacts that cannot react to the
+// client scheme (OG image). Interactive components use usePalette() instead.
+export const C = PALETTES.dark;

@@ -9,7 +9,7 @@ import {
   ResponsiveContainer,
 } from "recharts";
 import { useLive } from "./LiveProvider";
-import { C } from "@/lib/theme";
+import { usePalette } from "@/lib/usePalette";
 
 const HOUR = 3600_000;
 
@@ -22,6 +22,7 @@ interface Row {
 
 export default function VelocityChart() {
   const live = useLive();
+  const C = usePalette();
 
   const data = useMemo<Row[]>(() => {
     const counts = new Map<number, number>();

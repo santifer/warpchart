@@ -11,7 +11,7 @@ import {
 } from "recharts";
 import { useLive } from "./LiveProvider";
 import type { DashboardBundle } from "@/lib/bundle";
-import { C } from "@/lib/theme";
+import { usePalette } from "@/lib/usePalette";
 
 interface Row {
   d: string;
@@ -25,6 +25,7 @@ interface Row {
 
 export default function DailyLadder({ bundle }: { bundle: DashboardBundle }) {
   const live = useLive();
+  const C = usePalette();
 
   const data = useMemo<Row[]>(() => {
     const floorByDay = new Map(bundle.floor.map((f) => [f.d, f.perHour]));

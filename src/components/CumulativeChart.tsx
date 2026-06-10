@@ -10,7 +10,7 @@ import {
 } from "recharts";
 import { useLive } from "./LiveProvider";
 import type { DashboardBundle } from "@/lib/bundle";
-import { C } from "@/lib/theme";
+import { usePalette } from "@/lib/usePalette";
 import { fmtCompact, fmt } from "@/lib/format";
 import { sound } from "@/lib/sound";
 
@@ -27,6 +27,7 @@ function downsample<T>(arr: T[], maxPoints = 700): T[] {
 
 export default function CumulativeChart({ bundle }: { bundle: DashboardBundle }) {
   const live = useLive();
+  const C = usePalette();
   const [replayIdx, setReplayIdx] = useState<number | null>(null);
   const [playing, setPlaying] = useState(false);
   const idxRef = useRef(0);
@@ -179,7 +180,7 @@ export default function CumulativeChart({ bundle }: { bundle: DashboardBundle })
                 idxRef.current = v;
                 setReplayIdx(v);
               }}
-              className="h-[3px] flex-1 cursor-pointer appearance-none bg-grid accent-[#53d6e8]"
+              className="h-[3px] flex-1 cursor-pointer appearance-none bg-grid accent-[var(--accent)]"
             />
             <button
               onClick={exitReplay}

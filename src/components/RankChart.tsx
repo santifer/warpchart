@@ -8,10 +8,11 @@ import {
 } from "recharts";
 import { useLive } from "./LiveProvider";
 import type { DashboardBundle } from "@/lib/bundle";
-import { C } from "@/lib/theme";
+import { usePalette } from "@/lib/usePalette";
 
 export default function RankChart({ bundle }: { bundle: DashboardBundle }) {
   const live = useLive();
+  const C = usePalette();
 
   const data = useMemo(() => {
     const base = bundle.rankHistory.map((p) => ({ t: p.t, rank: p.rank }));

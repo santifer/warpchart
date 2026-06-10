@@ -11,7 +11,7 @@
 // Clicking a repo pins it as chase target (when onPinTarget is provided).
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ChartInputs, RouteRepo } from "@/lib/types";
-import { C } from "@/lib/theme";
+import { usePalette } from "@/lib/usePalette";
 import { fmt, fmtCompact, fmtEtaDays, etaDate, shortName } from "@/lib/format";
 import { neighborEtas, type NeighborEta } from "@/lib/projections";
 import { sound } from "@/lib/sound";
@@ -59,6 +59,7 @@ export default function GalacticChart({
   target?: string | null;
   onPinTarget?: (r: string | null) => void;
 }) {
+  const C = usePalette();
   const [scan, setScan] = useState<Scan | null>(null);
   const [view, setView] = useState<{ lo: number; hi: number } | null>(null);
   const svgRef = useRef<SVGSVGElement | null>(null);
@@ -538,8 +539,8 @@ export default function GalacticChart({
               transform: scan.place === "above" ? "translate(-50%, -100%)" : "translate(-50%, 0)",
               borderColor:
                 scan.kind === "neighbor" && scan.n.receding
-                  ? "rgba(242, 163, 60, 0.5)"
-                  : "rgba(83, 214, 232, 0.45)",
+                  ? C.scanBorderWarn
+                  : C.scanBorder,
             }}
           >
             <ScanContent scan={scan} ownV={vOwn} nowMs={nowMs} />

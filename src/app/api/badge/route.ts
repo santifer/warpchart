@@ -1,20 +1,16 @@
 // Embeddable SVG mission badge.
 //   /api/badge                -> the tracked tenant (zero API calls)
 //   /api/badge?repo=owner/x   -> any repo (free if in the top 1000, else live)
+//   ?theme=light|dark         -> force a scheme (for GitHub <picture> embeds);
+//                                default adapts via prefers-color-scheme.
 import { loadHistory, loadRoute } from "@/lib/history";
 import { currentStars, worldwideRank } from "@/lib/github";
 import { fmt } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
 
-const COLORS = {
-  bg: "#060c12",
-  border: "#11263b",
-  dim: "#5d7a94",
-  ink: "#d9e8f5",
-  accent: "#53d6e8",
-  warn: "#f2a33c",
-};
+const DARK = "--bg:#060c12;--bd:#11263b;--lb:#8aa3ba;--rk:#53d6e8;--st:#d9e8f5;--dn:#f2a33c;";
+const LIGHT = "--bg:#f6f9fc;--bd:#c9d8e4;--lb:#43607a;--rk:#0c7d92;--st:#16293c;--dn:#a05a00;";
 
 type Trend = "up" | "down" | "flat" | null;
 
@@ -22,17 +18,22 @@ function esc(s: string): string {
   return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
-function badgeSvg(label: string, rank: number | null, stars: number, trend: Trend): string {
+function schemeStyle(theme: string | null): string {
+  if (theme === "light") return `:root{${LIGHT}}`;
+  if (theme === "dark") return `:root{${DARK}}`;
+  return `:root{${DARK}}@media (prefers-color-scheme: light){:root{${LIGHT}}}`;
+}
+
+function badgeSvg(label: string, rank: number | null, stars: number, trend: Trend, theme: string | null): string {
   const mono = "ui-monospace,SFMono-Regular,Menlo,Consolas,monospace";
   const rankTxt = rank !== null ? `#${fmt(rank)}` : "unranked";
   const arrow = trend === "up" ? " ▲" : trend === "down" ? " ▼" : trend === "flat" ? " ▬" : "";
-  const arrowColor = trend === "down" ? COLORS.warn : COLORS.accent;
   const starsTxt = `${fmt(stars)} ★`;
 
-  const CH = 6.65; // approx monospace char width at 10.5px
+  const CH = 6.65;
   const pad = 12;
   const gap = 14;
-  const labelW = label.length * 6.1 + 4; // letter-spaced, slightly smaller
+  const labelW = label.length * 6.1 + 4;
   const rankW = (rankTxt.length + (arrow ? 2 : 0)) * CH + 4;
   const starsW = starsTxt.length * CH;
   const width = Math.ceil(pad + labelW + gap + rankW + gap + starsW + pad);
@@ -41,23 +42,28 @@ function badgeSvg(label: string, rank: number | null, stars: number, trend: Tren
   const x1 = pad;
   const x2 = pad + labelW + gap;
   const x3 = x2 + rankW + gap;
-  const c = COLORS;
 
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${h}" viewBox="0 0 ${width} ${h}" role="img" aria-label="${esc(label)} rank ${esc(rankTxt)}">
-<rect x="0.5" y="0.5" width="${width - 1}" height="${h - 1}" fill="${c.bg}" stroke="${c.border}"/>
-<path d="M 0.5 6 V 0.5 H 6" stroke="${c.accent}" fill="none" opacity="0.6"/>
-<path d="M ${width - 6} 0.5 H ${width - 0.5} V 6" stroke="${c.accent}" fill="none" opacity="0.6"/>
-<path d="M 0.5 ${h - 6} V ${h - 0.5} H 6" stroke="${c.accent}" fill="none" opacity="0.6"/>
-<path d="M ${width - 6} ${h - 0.5} H ${width - 0.5} V ${h - 6}" stroke="${c.accent}" fill="none" opacity="0.6"/>
-<text x="${x1}" y="${ty}" font-family="${mono}" font-size="9" letter-spacing="1.4" fill="${c.dim}">${esc(label)}</text>
-<text x="${x2}" y="${ty}" font-family="${mono}" font-size="10.5" font-weight="700" fill="${c.accent}">${esc(rankTxt)}<tspan fill="${arrowColor}">${arrow}</tspan></text>
-<text x="${x3}" y="${ty}" font-family="${mono}" font-size="10.5" fill="${c.ink}">${esc(starsTxt)}</text>
+<style>${schemeStyle(theme)}
+.bg{fill:var(--bg);stroke:var(--bd)}.ck{stroke:var(--rk);fill:none;opacity:.6}
+.lb{fill:var(--lb)}.rk{fill:var(--rk)}.st{fill:var(--st)}.dn{fill:var(--dn)}
+text{font-family:${mono}}</style>
+<rect class="bg" x="0.5" y="0.5" width="${width - 1}" height="${h - 1}"/>
+<path class="ck" d="M 0.5 6 V 0.5 H 6"/>
+<path class="ck" d="M ${width - 6} 0.5 H ${width - 0.5} V 6"/>
+<path class="ck" d="M 0.5 ${h - 6} V ${h - 0.5} H 6"/>
+<path class="ck" d="M ${width - 6} ${h - 0.5} H ${width - 0.5} V ${h - 6}"/>
+<text class="lb" x="${x1}" y="${ty}" font-size="9" letter-spacing="1.4">${esc(label)}</text>
+<text class="rk" x="${x2}" y="${ty}" font-size="10.5" font-weight="700">${esc(rankTxt)}<tspan class="${trend === "down" ? "dn" : "rk"}">${arrow}</tspan></text>
+<text class="st" x="${x3}" y="${ty}" font-size="10.5">${esc(starsTxt)}</text>
 </svg>`;
 }
 
 export async function GET(req: Request) {
   const url = new URL(req.url);
   const repoParam = url.searchParams.get("repo");
+  const themeParam = url.searchParams.get("theme");
+  const theme = themeParam === "light" || themeParam === "dark" ? themeParam : null;
 
   try {
     let rank: number | null = null;
@@ -95,7 +101,7 @@ export async function GET(req: Request) {
       }
     }
 
-    const svg = badgeSvg("WORLD RANK", rank, stars, trend);
+    const svg = badgeSvg("WORLD RANK", rank, stars, trend, theme);
     return new Response(svg, {
       headers: {
         "Content-Type": "image/svg+xml; charset=utf-8",
