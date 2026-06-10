@@ -67,11 +67,15 @@ export default function GalacticChart({
   const [view, setView] = useState<{ lo: number; hi: number } | null>(null);
   const svgRef = useRef<SVGSVGElement | null>(null);
 
-  // Origin marker: when arriving via ?from=owner/name (a jump from another
-  // chart), show where you came from on this system's map.
+  // Origin marker: jumps between charts carry #from=owner/name (a hash, so
+  // it never reaches the server and cannot bust the ISR cache). Falls back
+  // to ?from= for old links.
   const [origin, setOrigin] = useState<{ r: string; s: number } | null>(null);
   useEffect(() => {
-    const from = new URLSearchParams(window.location.search).get("from");
+    const hashFrom = window.location.hash.match(/from=([^&]+)/)?.[1];
+    const from = hashFrom
+      ? decodeURIComponent(hashFrom)
+      : new URLSearchParams(window.location.search).get("from");
     if (!from || from.toLowerCase() === inputs.repo.toLowerCase()) return;
     const hit =
       inputs.routeAll.find((p) => p.r.toLowerCase() === from.toLowerCase()) ??
@@ -261,7 +265,7 @@ export default function GalacticChart({
       onPinTarget(target === r ? null : r);
       sound.hoverBlip();
     } else {
-      router.push(`/r/${r}?from=${encodeURIComponent(inputs.repo)}`);
+      router.push(`/r/${r}#from=${encodeURIComponent(inputs.repo)}`);
     }
   };
 
@@ -709,7 +713,7 @@ export default function GalacticChart({
             <div className="mt-2 flex items-center gap-2 border-t border-grid pt-2">
               <Link
                 prefetch
-                href={`/r/${scan.kind === "neighbor" ? scan.n.r : scan.p.r}?from=${encodeURIComponent(inputs.repo)}`}
+                href={`/r/${scan.kind === "neighbor" ? scan.n.r : scan.p.r}#from=${encodeURIComponent(inputs.repo)}`}
                 className="numeral flex-1 border border-accent/40 px-2 py-1 text-center text-[9px] tracking-[0.18em] text-accent transition-colors hover:bg-accent/10"
               >
                 OPEN SCAN

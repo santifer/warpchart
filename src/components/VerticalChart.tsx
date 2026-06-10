@@ -58,7 +58,7 @@ export default function VerticalChart({
 
   const act = (r: string) => {
     if (onPinTarget) onPinTarget(target === r ? null : r);
-    else router.push(`/r/${r}?from=${encodeURIComponent(inputs.repo)}`);
+    else router.push(`/r/${r}#from=${encodeURIComponent(inputs.repo)}`);
   };
 
   return (
@@ -136,7 +136,7 @@ export default function VerticalChart({
                 </div>
               </button>
               <Link
-                href={`/r/${n.r}?from=${encodeURIComponent(inputs.repo)}`}
+                href={`/r/${n.r}#from=${encodeURIComponent(inputs.repo)}`}
                 className="numeral shrink-0 border border-grid px-2 py-1 text-[10px] text-dim transition-colors hover:text-ink"
                 aria-label={`Open ${n.r}`}
               >
