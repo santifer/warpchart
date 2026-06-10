@@ -14,12 +14,12 @@ Run when the owner decides to publish. Nothing here is automatic.
 ## Flip
 
 ```bash
-gh repo edit santifer/mission-control --visibility public --accept-visibility-change-consequences
-gh repo edit santifer/mission-control --template
-gh repo edit santifer/mission-control \
+gh repo edit santifer/warpchart --visibility public --accept-visibility-change-consequences
+gh repo edit santifer/warpchart --template
+gh repo edit santifer/warpchart \
   --description "Growth telemetry for any GitHub repository. Live star chart, worldwide rank, velocity, sound." \
   --homepage "https://mission-control.career-ops.org"
-gh repo edit santifer/mission-control --add-topic github-stars --add-topic dashboard \
+gh repo edit santifer/warpchart --add-topic github-stars --add-topic dashboard \
   --add-topic telemetry --add-topic nextjs --add-topic analytics --add-topic star-history
 ```
 
@@ -37,3 +37,13 @@ gh repo edit santifer/mission-control --add-topic github-stars --add-topic dashb
 - [ ] Optional: `gh secret set ALERT_WEBHOOK_URL` with a Discord/Slack
       incoming webhook to get gate/overtake alerts from the hourly collector.
 - [ ] Optional custom domain on Vercel.
+
+## Domain cutover to warpchart.dev (when the domain is purchased)
+
+1. Cloudflare: add warpchart.dev zone (auto if bought on CF Registrar).
+2. Vercel: `npx vercel domains add warpchart.dev` and `npx vercel domains add www.warpchart.dev` on this project; add the CNAME/A records CF-side with proxy OFF (grey cloud) as with the current domain.
+3. Set warpchart.dev as the PRIMARY domain in Vercel so mission-control.career-ops.org 308-redirects to it automatically (Vercel redirects all non-primary domains).
+4. Swap every `mission-control.career-ops.org` URL in README.md (EN+ES sections) for `warpchart.dev`.
+5. Update repo variable: `gh variable set WARM_BASE_URL --body "https://warpchart.dev"`.
+6. Ask career-ops-maintainer to keep the README embed URLs as-is (they will redirect) or swap them to warpchart.dev for cleanliness.
+7. Verify: old URL 308 -> new, badge/chart/og render via both, GitHub camo re-resolves.

@@ -1,6 +1,6 @@
 # Contributing
 
-Thanks for wanting to improve Mission Control. The codebase is intentionally small and dependency-light; please keep it that way.
+Thanks for wanting to improve Warpchart. The codebase is intentionally small and dependency-light; please keep it that way.
 
 ## Ground rules
 

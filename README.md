@@ -1,10 +1,10 @@
-# Mission Control
+# Warpchart
 
 **[:gb: English](#what-it-is)** | **[:es: Español](#es-versión-en-español)**
 
 > Growth telemetry for any GitHub repository. A live star chart of your repo's journey through the worldwide ranking, with sound.
 
-![Mission Control](assets/hero.png)
+![Warpchart](assets/hero.png)
 
 **[Live demo](https://mission-control.career-ops.org)** (tracking [career-ops](https://github.com/santifer/career-ops) as example tenant) · **[Scan any repo instantly](https://mission-control.career-ops.org/r/tinygrad/tinygrad)** by changing the URL: `/r/owner/name`
 
@@ -12,7 +12,7 @@
 
 GitHub gives you raw star data but no cockpit. Star history charts are static, Trending is a black box, and nobody shows you the repos around yours in the worldwide ranking, how fast they move, or when you pass them.
 
-Mission Control turns the public GitHub API into a live flight console:
+Warpchart turns the public GitHub API into a live flight console:
 
 - **Status bar**: stars, worldwide rank, stars in the last 60 minutes, today vs yesterday at the same hour, gap and ETA to the next rank milestone. Polls every minute.
 - **Star chart**: a two-band space map. The local system is a pannable zoom window (lateral scroll to pan, pinch to zoom) showing your ranking neighbors with overtake ETAs. The route to the core maps every milestone between you and the worldwide #1 repo, where every dot is a real top 1000 repository. A viewport bracket links both bands.
@@ -120,7 +120,7 @@ MIT
 
 GitHub te da los datos de stars en crudo pero no la cabina de mandos. Las gráficas de histórico son estáticas, Trending es una caja negra y nadie te enseña los repos que rodean al tuyo en el ranking mundial, a qué velocidad van ni cuándo los adelantas.
 
-Mission Control convierte la API pública de GitHub en una consola de vuelo:
+Warpchart convierte la API pública de GitHub en una consola de vuelo:
 
 - **Barra de estado** en vivo: stars, rank mundial, últimos 60 minutos, hoy contra ayer a la misma hora, distancia y ETA al siguiente hito.
 - **Carta estelar** de dos bandas: sistema local paneable (rueda lateral para moverte, pinch para zoom) con tus vecinos de ranking y sus ETAs de adelantamiento, y la ruta al núcleo donde cada puntito es un repo real del top 1000 mundial. Un corchete-viewport conecta ambas bandas.

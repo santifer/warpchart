@@ -33,7 +33,7 @@ export async function generateMetadata({
 }): Promise<Metadata> {
   const { owner, name } = await params;
   return {
-    title: `${owner}/${name} · Mission Control`,
+    title: `${owner}/${name} · Warpchart`,
     description: `Worldwide star rank, velocity and ranking neighbors of ${owner}/${name}.`,
     openGraph: {
       images: [`/api/og?repo=${owner}/${name}`],
@@ -126,7 +126,7 @@ export default async function ExplorerPage({
         </div>
         <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-grid pt-2">
           <span className="numeral text-[9px] tracking-[0.15em] text-faint">
-            MISSION CONTROL // INSTANT SCAN
+            WARPCHART // INSTANT SCAN
           </span>
           <span className="numeral text-[9px] text-faint">
             {data.forkRatio !== null ? (
@@ -199,7 +199,7 @@ export default async function ExplorerPage({
             </p>
             <div className="flex flex-col gap-2">
               <a
-                href="https://github.com/santifer/mission-control"
+                href="https://github.com/santifer/warpchart"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="numeral border border-accent/40 px-3 py-2 text-center text-[11px] tracking-[0.2em] text-accent transition-colors hover:bg-accent/10"
@@ -219,7 +219,7 @@ export default async function ExplorerPage({
 
       <footer className="rise flex flex-wrap items-center justify-between gap-2 px-1 pb-4 pt-2">
         <span className="numeral text-[9px] tracking-[0.15em] text-faint">
-          MISSION CONTROL · open telemetry over public GitHub data
+          WARPCHART · open telemetry over public GitHub data
         </span>
         <a
           href={`https://github.com/${inputs.repo}`}

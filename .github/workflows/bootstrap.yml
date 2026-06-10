@@ -34,8 +34,8 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - name: Commit seed data
         run: |
-          git config user.name "mission-control-bot"
-          git config user.email "mission-control-bot@users.noreply.github.com"
+          git config user.name "warpchart-bot"
+          git config user.email "warpchart-bot@users.noreply.github.com"
           git add data/ mission.config.json
           git diff --cached --quiet || {
             git commit -m "bootstrap $(date -u +%FT%H:%MZ)"

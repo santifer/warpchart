@@ -153,7 +153,7 @@ export async function GET(req: Request) {
       >
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
           <div style={{ display: "flex", fontFamily: display, fontSize: 22, letterSpacing: 10, color: C.dim }}>
-            MISSION CONTROL
+            WARPCHART
           </div>
           <div style={{ display: "flex", fontSize: 18, color: C.dim }}>growth telemetry</div>
         </div>

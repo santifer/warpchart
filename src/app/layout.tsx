@@ -26,11 +26,11 @@ const siteUrl = process.env.VERCEL_PROJECT_PRODUCTION_URL
 
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),
-  title: "Mission Control",
+  title: "Warpchart",
   description:
     "Live growth telemetry for an open source repository: star velocity, worldwide rank and the route to the galactic core.",
   openGraph: {
-    title: "Mission Control",
+    title: "Warpchart",
     description:
       "Live growth telemetry: star velocity, worldwide rank and the route to the galactic core.",
     images: ["/api/og"],

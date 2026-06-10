@@ -205,3 +205,34 @@ try {
 } catch (err) {
   console.error(`[collect] alert failed: ${err.message}`);
 }
+
+// Optional daily cache warm (repo variable WARM_BASE_URL): pre-render the
+// high-probability charts and explorer pages so no visitor ever pays the
+// cold sampling cost for them. The warm list is small on purpose: the
+// landing's featured ranks, our live neighbors and the route landmarks.
+// The long tail stays lazy; the power law makes its cache hit rate high.
+try {
+  const base = (process.env.WARM_BASE_URL ?? "").replace(/\/$/, "");
+  if (base && !dryRun) {
+    const hour = new Date().getUTCHours();
+    if (hour >= 4 && hour < 5) {
+      const targets = new Set();
+      try {
+        const route = JSON.parse(readFileSync(routePath, "utf8")).repos ?? [];
+        for (const i of [0, 7, 24, 79, 199, 499]) if (route[i]) targets.add(route[i].r);
+      } catch { /* no route yet */ }
+      for (const n of neighbors ?? []) targets.add(n.r);
+      let warmed = 0;
+      for (const r of targets) {
+        try {
+          const res = await fetch(`${base}/api/chart?repo=${encodeURIComponent(r)}&w=800&h=240`);
+          if (res.ok) warmed++;
+          await new Promise((ok) => setTimeout(ok, 1500));
+        } catch { /* best effort */ }
+      }
+      console.log(`[collect] cache warmed: ${warmed}/${targets.size} charts`);
+    }
+  }
+} catch (err) {
+  console.error(`[collect] warm failed: ${err.message}`);
+}

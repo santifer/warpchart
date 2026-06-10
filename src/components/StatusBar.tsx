@@ -137,7 +137,7 @@ export default function StatusBar({ bundle }: { bundle: DashboardBundle }) {
       <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-grid pt-2">
         <div className="flex items-center gap-5">
           <span className="numeral text-[9px] tracking-[0.15em] text-faint">
-            MISSION CONTROL // GROWTH TELEMETRY
+            WARPCHART // GROWTH TELEMETRY
           </span>
           <SoundToggle />
           <ThemeToggle />

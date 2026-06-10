@@ -198,7 +198,7 @@ export async function GET(req: Request) {
 
   const branding =
     w >= 560
-      ? `<text x="${w / 2}" y="22" text-anchor="middle" font-family="${mono}" font-size="9" letter-spacing="3" style="fill:var(--dm)" opacity="0.8">MISSION CONTROL</text>`
+      ? `<text x="${w / 2}" y="22" text-anchor="middle" font-family="${mono}" font-size="9" letter-spacing="3" style="fill:var(--dm)" opacity="0.8">WARPCHART</text>`
       : "";
 
   const endX = x(t1).toFixed(1);
@@ -206,17 +206,22 @@ export async function GET(req: Request) {
 
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" role="img" aria-label="Cumulative stars of ${esc(repo)}">
 <style>${schemeStyle(theme)}
-.ln{stroke-dasharray:${L};stroke-dashoffset:${L};animation:dr 2.4s cubic-bezier(.25,.6,.3,1) .25s forwards}
-.dl{opacity:0;animation:fd .8s ease-out 2.5s forwards}
-.ar{opacity:0;animation:fd 1s ease-out 2.1s forwards}
-.dot{opacity:0;animation:fd .4s ease-out 2.5s forwards}
-.pp{transform-origin:${endX}px ${endY}px;animation:pp 2.8s cubic-bezier(.2,.6,.4,1) 2.7s infinite}
+/* The whole chart is ONE looping choreography (14s): draw-on, hold, fade,
+   invisible reset. Viewport-triggered start is impossible inside an <img>
+   (no JS through Camo), so the loop guarantees every reader catches the
+   draw no matter when they scroll to it. */
+.ln{stroke-dasharray:${L};stroke-dashoffset:${L};animation:lc 14s cubic-bezier(.25,.6,.3,1) infinite}
+.dl{opacity:0;animation:dc 14s ease-out infinite}
+.ar{opacity:0;animation:ac 14s ease-out infinite}
+.dot{opacity:0;animation:ac 14s ease-out infinite}
+.pp{transform-origin:${endX}px ${endY}px;animation:pp 2.8s cubic-bezier(.2,.6,.4,1) infinite}
 .tw{animation:tw 3.4s ease-in-out infinite}
-@keyframes dr{to{stroke-dashoffset:0}}
-@keyframes fd{to{opacity:1}}
+@keyframes lc{0%{stroke-dashoffset:${L};opacity:1}18%{stroke-dashoffset:0;opacity:1}85%{stroke-dashoffset:0;opacity:1}90%{stroke-dashoffset:0;opacity:0}90.1%{stroke-dashoffset:${L};opacity:0}100%{stroke-dashoffset:${L};opacity:1}}
+@keyframes ac{0%,16%{opacity:0}23%{opacity:1}85%{opacity:1}90%,100%{opacity:0}}
+@keyframes dc{0%,19%{opacity:0}26%{opacity:.7}85%{opacity:.7}90%,100%{opacity:0}}
 @keyframes pp{0%{transform:scale(.35);opacity:.9}70%{opacity:.12}100%{transform:scale(2.8);opacity:0}}
 @keyframes tw{0%,100%{opacity:.1}50%{opacity:.6}}
-@media (prefers-reduced-motion:reduce){.ln{animation:none;stroke-dashoffset:0}.ar,.dl,.dot{animation:none;opacity:1}.pp,.tw{animation:none;opacity:0}}
+@media (prefers-reduced-motion:reduce){.ln{animation:none;stroke-dashoffset:0;opacity:1}.ar,.dl,.dot{animation:none;opacity:1}.pp,.tw{animation:none;opacity:0}}
 </style>
 <defs>
   <linearGradient id="fill" x1="0" y1="0" x2="0" y2="1">

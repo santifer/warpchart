@@ -11,7 +11,7 @@ import { fmtCompact } from "@/lib/format";
 export const dynamic = "force-static";
 
 export const metadata: Metadata = {
-  title: "Explore any GitHub repository · Mission Control",
+  title: "Explore any GitHub repository · Warpchart",
   description:
     "Growth telemetry for any GitHub repository: live star chart, worldwide rank, ranking neighbors and an embeddable animated star history chart for your README.",
 };
@@ -31,7 +31,7 @@ export default function Explore() {
   return (
     <main className="mx-auto flex min-h-screen max-w-[980px] flex-col gap-10 px-4 py-10 sm:px-6">
       <header className="rise flex items-center justify-between" style={{ animationDelay: "0ms" }}>
-        <span className="font-display text-xs tracking-[0.3em] text-star">MISSION CONTROL</span>
+        <span className="font-display text-xs tracking-[0.3em] text-star">WARPCHART</span>
         {meta ? (
           <Link
             prefetch
@@ -88,7 +88,7 @@ export default function Explore() {
 
       <footer className="rise mt-auto flex flex-wrap items-center justify-between gap-2 border-t border-grid pt-4" style={{ animationDelay: "320ms" }}>
         <span className="numeral text-[9px] tracking-[0.15em] text-faint">
-          MISSION CONTROL · open telemetry over public GitHub data
+          WARPCHART · open telemetry over public GitHub data
         </span>
         <span className="numeral text-[9px] text-faint">
           worldwide registry refreshed daily · live polling every 60s

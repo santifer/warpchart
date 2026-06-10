@@ -28,10 +28,11 @@ jobs:
           # Optional: a Discord or Slack incoming-webhook URL. If set, the
           # collector posts milestone gates and overtakes as they happen.
           ALERT_WEBHOOK_URL: ${{ secrets.ALERT_WEBHOOK_URL }}
+          WARM_BASE_URL: ${{ vars.WARM_BASE_URL }}
       - name: Commit snapshot
         run: |
-          git config user.name "mission-control-bot"
-          git config user.email "mission-control-bot@users.noreply.github.com"
+          git config user.name "warpchart-bot"
+          git config user.email "warpchart-bot@users.noreply.github.com"
           git add data/
           git diff --cached --quiet || {
             git commit -m "snapshot $(date -u +%FT%H:%MZ)"

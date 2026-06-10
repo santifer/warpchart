@@ -193,7 +193,7 @@ export default function Dashboard({ bundle }: { bundle: DashboardBundle }) {
 
         <footer className="rise flex flex-wrap items-center justify-between gap-2 px-1 pb-4 pt-2" style={{ animationDelay: "700ms" }}>
           <span className="numeral text-[9px] tracking-[0.15em] text-faint">
-            MISSION CONTROL · open telemetry over public GitHub data
+            WARPCHART · open telemetry over public GitHub data
           </span>
           <Link
             prefetch={false}
