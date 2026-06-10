@@ -186,13 +186,32 @@ export default function GalacticChart({
     : null;
   const targetS = targetEntry?.s ?? null;
 
+  // Node click: pin as chase target on the dashboard; on the explorer
+  // (no pin handler) it warps to that repo's own system instead.
   const togglePin = (r: string) => {
-    if (!onPinTarget) return;
-    onPinTarget(target === r ? null : r);
-    sound.hoverBlip();
+    if (onPinTarget) {
+      onPinTarget(target === r ? null : r);
+      sound.hoverBlip();
+    } else {
+      window.location.href = `/r/${r}`;
+    }
   };
 
+  // The scan card stays open while the pointer is inside it (grace delay),
+  // so its actions are clickable.
+  const closeTimer = useRef<number | null>(null);
+  const cancelClose = () => {
+    if (closeTimer.current !== null) {
+      clearTimeout(closeTimer.current);
+      closeTimer.current = null;
+    }
+  };
+  const scheduleClose = () => {
+    cancelClose();
+    closeTimer.current = window.setTimeout(() => setScan(null), 160);
+  };
   const openScan = (s: Scan) => {
+    cancelClose();
     sound.hoverBlip();
     setScan(s);
   };
@@ -286,7 +305,7 @@ export default function GalacticChart({
                   onMouseEnter={() =>
                     openScan({ kind: "route", p, xPct: clampPct((ax(p.s) / W) * 100), topPct: bandATop, place: "below" })
                   }
-                  onMouseLeave={() => setScan(null)}
+                  onMouseLeave={scheduleClose}
                   onClick={() => togglePin(p.r)}
                 >
                   <circle cx={ax(p.s)} cy={BAND_A_Y} r={8} fill="transparent" />
@@ -314,7 +333,7 @@ export default function GalacticChart({
                     onMouseEnter={() =>
                       openScan({ kind: "neighbor", n, xPct: clampPct((x / W) * 100), topPct: bandATop, place: "below" })
                     }
-                    onMouseLeave={() => setScan(null)}
+                    onMouseLeave={scheduleClose}
                     onClick={() => togglePin(n.r)}
                   >
                     <line x1={x} y1={lineY1} x2={x} y2={lineY2} stroke={C.grid} strokeWidth={1} />
@@ -345,7 +364,7 @@ export default function GalacticChart({
                   onMouseEnter={() =>
                     openScan({ kind: "route", p, xPct: clampPct((x / W) * 100), topPct: bandATop, place: "below" })
                   }
-                  onMouseLeave={() => setScan(null)}
+                  onMouseLeave={scheduleClose}
                   onClick={() => togglePin(p.r)}
                 >
                   <line x1={x} y1={tierY + 8} x2={x} y2={BAND_A_Y - 5} stroke={C.grid} strokeWidth={1} />
@@ -442,7 +461,7 @@ export default function GalacticChart({
               onMouseEnter={() =>
                 openScan({ kind: "route", p, xPct: clampPct((bx(p.s) / W) * 100), topPct: bandBTop, place: "above" })
               }
-              onMouseLeave={() => setScan(null)}
+              onMouseLeave={scheduleClose}
               onClick={() => togglePin(p.r)}
             >
               <circle cx={bx(p.s)} cy={BAND_B_Y} r={9} fill="transparent" />
@@ -510,7 +529,9 @@ export default function GalacticChart({
 
         {scan ? (
           <div
-            className="scan-card hud pointer-events-none z-10 w-[250px] px-3 py-2.5"
+            className="scan-card hud z-10 w-[250px] px-3 py-2.5"
+            onMouseEnter={cancelClose}
+            onMouseLeave={scheduleClose}
             style={{
               left: `${scan.xPct}%`,
               top: `${scan.topPct}%`,
@@ -522,6 +543,22 @@ export default function GalacticChart({
             }}
           >
             <ScanContent scan={scan} ownV={vOwn} nowMs={nowMs} />
+            <div className="mt-2 flex items-center gap-2 border-t border-grid pt-2">
+              <a
+                href={`/r/${scan.kind === "neighbor" ? scan.n.r : scan.p.r}`}
+                className="numeral flex-1 border border-accent/40 px-2 py-1 text-center text-[9px] tracking-[0.18em] text-accent transition-colors hover:bg-accent/10"
+              >
+                OPEN SCAN
+              </a>
+              {onPinTarget ? (
+                <button
+                  onClick={() => togglePin(scan.kind === "neighbor" ? scan.n.r : scan.p.r)}
+                  className="numeral flex-1 border border-grid px-2 py-1 text-[9px] tracking-[0.18em] text-dim transition-colors hover:text-ink"
+                >
+                  {target === (scan.kind === "neighbor" ? scan.n.r : scan.p.r) ? "UNPIN" : "PIN TARGET"}
+                </button>
+              ) : null}
+            </div>
           </div>
         ) : null}
       </div>
@@ -588,9 +625,6 @@ function ScanContent({ scan, ownV, nowMs }: { scan: Scan; ownV: number; nowMs: n
             <Row k="our v7d" v={`${Math.round(ownV)}/day`} />
           </>
         ) : null}
-      </div>
-      <div className="numeral mt-1.5 text-[8px] tracking-[0.1em] text-faint">
-        click to pin as chase target
       </div>
     </>
   );
