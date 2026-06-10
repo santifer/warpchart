@@ -77,9 +77,11 @@ export default function GalacticChart({
       ? decodeURIComponent(hashFrom)
       : new URLSearchParams(window.location.search).get("from");
     if (!from || from.toLowerCase() === inputs.repo.toLowerCase()) return;
+    // prefer the LIVE neighbor entry (exact current stars) over the daily
+    // route registry, so the marker lands on the right pixel
     const hit =
-      inputs.routeAll.find((p) => p.r.toLowerCase() === from.toLowerCase()) ??
-      inputs.neighbors.find((n) => n.r.toLowerCase() === from.toLowerCase());
+      inputs.neighbors.find((n) => n.r.toLowerCase() === from.toLowerCase()) ??
+      inputs.routeAll.find((p) => p.r.toLowerCase() === from.toLowerCase());
     if (hit) setOrigin({ r: hit.r, s: hit.s });
   }, [inputs.repo, inputs.routeAll, inputs.neighbors]);
 
@@ -612,16 +614,25 @@ export default function GalacticChart({
             })}
 
             {origin && inWindow(origin.s) ? (
-              <g>
+              neighborNames.has(origin.r) ? (
+                // the origin is an already-labeled neighbor: ring its own
+                // node instead of duplicating a label next to someone else
                 <path
-                  d={`M ${ax(origin.s)} ${BAND_A_Y - 7} L ${ax(origin.s) + 5} ${BAND_A_Y} L ${ax(origin.s)} ${BAND_A_Y + 7} L ${ax(origin.s) - 5} ${BAND_A_Y} Z`}
+                  d={`M ${ax(origin.s)} ${BAND_A_Y - 9} L ${ax(origin.s) + 7} ${BAND_A_Y} L ${ax(origin.s)} ${BAND_A_Y + 9} L ${ax(origin.s) - 7} ${BAND_A_Y} Z`}
                   fill="none" stroke={C.accent} strokeWidth={1.3}
                 />
-                <text x={ax(origin.s) + 9} y={BAND_A_Y + 3.5} fill={C.accent} fontSize={9.5}
-                  textAnchor="start" opacity={0.9}>
-                  {trunc(shortName(origin.r))} · origin
-                </text>
-              </g>
+              ) : (
+                <g>
+                  <path
+                    d={`M ${ax(origin.s)} ${BAND_A_Y - 7} L ${ax(origin.s) + 5} ${BAND_A_Y} L ${ax(origin.s)} ${BAND_A_Y + 7} L ${ax(origin.s) - 5} ${BAND_A_Y} Z`}
+                    fill="none" stroke={C.accent} strokeWidth={1.3}
+                  />
+                  <text x={ax(origin.s) + 9} y={BAND_A_Y + 3.5} fill={C.accent} fontSize={9.5}
+                    textAnchor="start" opacity={0.9}>
+                    {trunc(shortName(origin.r))} · origin
+                  </text>
+                </g>
+              )
             ) : null}
 
             {apex && inWindow(coreStars) ? (
