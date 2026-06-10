@@ -40,9 +40,9 @@ export async function GET(req: Request) {
   pts.push({ t: Date.parse(timestamps[n - 1]), v: n });
 
   const padL = 16;
-  const padR = 58;
+  const padR = 64;
   const padT = 40;
-  const padB = 26;
+  const padB = 30;
   const iw = w - padL - padR;
   const ih = h - padT - padB;
   const t0 = pts[0].t;
@@ -57,12 +57,33 @@ export async function GET(req: Request) {
     new Date(t).toLocaleDateString("en-US", { month: "short", day: "numeric" });
   const mono = "ui-monospace,SFMono-Regular,Menlo,Consolas,monospace";
 
-  const gridLines = [0.25, 0.5, 0.75]
+  // Y: labeled gridlines at 25/50/75/100% of the current total, on the right.
+  const yMarks = [0.25, 0.5, 0.75, 1.0]
     .map((f) => {
-      const gy = (padT + ih - f * ih).toFixed(1);
-      return `<line x1="${padL}" y1="${gy}" x2="${padL + iw}" y2="${gy}" stroke="${C.grid}" stroke-dasharray="2 6"/>`;
+      const gy = padT + ih - f * ih;
+      return `<line x1="${padL}" y1="${gy.toFixed(1)}" x2="${padL + iw}" y2="${gy.toFixed(1)}" stroke="${C.grid}" stroke-dasharray="2 6"/>
+<text x="${padL + iw + 8}" y="${(gy + 3).toFixed(1)}" font-family="${mono}" font-size="9" fill="${C.dim}">${fmtCompact(Math.round(n * f))}</text>`;
     })
     .join("\n");
+
+  // X: five date ticks along the axis.
+  const axisY = padT + ih;
+  const xMarks = [0, 0.25, 0.5, 0.75, 1.0]
+    .map((f) => {
+      const t = t0 + f * (t1 - t0);
+      const tx = padL + f * iw;
+      const anchor = f === 0 ? "start" : f === 1 ? "end" : "middle";
+      const ax = f === 0 ? padL : f === 1 ? padL + iw : tx;
+      return `<line x1="${tx.toFixed(1)}" y1="${axisY}" x2="${tx.toFixed(1)}" y2="${axisY + 4}" stroke="${C.dim}" opacity="0.6"/>
+<text x="${ax.toFixed(1)}" y="${h - 9}" text-anchor="${anchor}" font-family="${mono}" font-size="9" fill="${C.dim}">${dateFmt(t)}</text>`;
+    })
+    .join("\n");
+
+  // Branding sits centered in the header, where nothing can collide with it.
+  const branding =
+    w >= 560
+      ? `<text x="${w / 2}" y="22" text-anchor="middle" font-family="${mono}" font-size="9" letter-spacing="3" fill="${C.dim}" opacity="0.8">MISSION CONTROL</text>`
+      : "";
 
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" role="img" aria-label="Cumulative stars of ${esc(meta.repo)}">
 <defs>
@@ -77,15 +98,14 @@ export async function GET(req: Request) {
 <path d="M 0.5 ${h - 8} V ${h - 0.5} H 8" stroke="${C.accent}" fill="none" opacity="0.5"/>
 <path d="M ${w - 8} ${h - 0.5} H ${w - 0.5} V ${h - 8}" stroke="${C.accent}" fill="none" opacity="0.5"/>
 <text x="${padL}" y="22" font-family="${mono}" font-size="11" letter-spacing="2" fill="${C.dim}">${esc(meta.repo.toUpperCase())}</text>
-<text x="${w - padR + 42}" y="22" text-anchor="end" font-family="${mono}" font-size="12" font-weight="700" fill="${C.accent}">${fmt(total)} ★</text>
-${gridLines}
+${branding}
+<text x="${w - 16}" y="22" text-anchor="end" font-family="${mono}" font-size="12" font-weight="700" fill="${C.accent}">${fmt(total)} ★</text>
+${yMarks}
+<line x1="${padL}" y1="${axisY}" x2="${padL + iw}" y2="${axisY}" stroke="${C.border}"/>
 <path d="${area}" fill="url(#fill)"/>
 <path d="${line}" fill="none" stroke="${C.accent}" stroke-width="1.5"/>
 <circle cx="${x(t1).toFixed(1)}" cy="${y(n).toFixed(1)}" r="2.6" fill="${C.accent}"/>
-<text x="${padL}" y="${h - 9}" font-family="${mono}" font-size="9" fill="${C.dim}">${dateFmt(t0)}</text>
-<text x="${padL + iw}" y="${h - 9}" text-anchor="end" font-family="${mono}" font-size="9" fill="${C.dim}">${dateFmt(t1)}</text>
-<text x="${w - padR + 42}" y="${(padT + 8).toFixed(0)}" text-anchor="end" font-family="${mono}" font-size="8" fill="${C.dim}">${fmtCompact(n)}</text>
-<text x="${w - padR + 42}" y="${h - 9}" text-anchor="end" font-family="${mono}" font-size="8" letter-spacing="1" fill="${C.dim}">MISSION CONTROL</text>
+${xMarks}
 </svg>`;
 
   return new Response(svg, {
