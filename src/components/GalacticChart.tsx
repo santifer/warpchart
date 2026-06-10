@@ -121,16 +121,34 @@ export default function GalacticChart({
     }));
   }, [inputs.repo]);
 
-  // Directional star stream for the local system: conveys our own speed.
-  const stream = useMemo(() => {
-    const rand = mulberry32(seedFrom(inputs.repo + "::stream"));
-    return Array.from({ length: 70 }, () => ({
-      x: rand() * W,
-      y: 56 + rand() * (CLIP_BOTTOM - 110),
-      r: 0.5 + rand() * 0.9,
-      o: 0.1 + rand() * 0.35,
-    }));
+  // Multi-depth star layers for the local system. Each layer drifts on its
+  // own clock (slow time parallax) AND shifts with the pan position at its
+  // depth factor, so panning reads as actually travelling through space.
+  const starLayers = useMemo(() => {
+    const mk = (seed: string, n: number, rA: number, rB: number, oA: number, oB: number) => {
+      const rand = mulberry32(seedFrom(inputs.repo + seed));
+      return Array.from({ length: n }, () => ({
+        x: rand() * W,
+        y: 54 + rand() * (CLIP_BOTTOM - 106),
+        r: rA + rand() * (rB - rA),
+        o: oA + rand() * (oB - oA),
+      }));
+    };
+    return [
+      { id: 1, f: 0.15, dur: 150, warp: false, stars: mk("::far", 40, 0.4, 0.8, 0.08, 0.2) },
+      { id: 2, f: 0.45, dur: 80, warp: false, stars: mk("::mid", 55, 0.5, 1.0, 0.12, 0.3) },
+      { id: 3, f: 0.9, dur: 0, warp: true, stars: mk("::near", 45, 0.7, 1.5, 0.18, 0.45) },
+    ];
   }, [inputs.repo]);
+
+  // FTL stretch while panning: armed by wheel events, relaxes shortly after.
+  const [warping, setWarping] = useState(false);
+  const warpTimer = useRef<number | null>(null);
+  const armWarp = () => {
+    setWarping(true);
+    if (warpTimer.current !== null) clearTimeout(warpTimer.current);
+    warpTimer.current = window.setTimeout(() => setWarping(false), 280);
+  };
 
   // ---------- geometry ----------
   const ahead = etas.filter((n) => n.gap > 0).sort((a, b) => a.gap - b.gap).slice(0, 10);
@@ -172,6 +190,11 @@ export default function GalacticChart({
     return l >= logLo - 0.0005 && l <= logHi + 0.0005;
   };
 
+  // Parallax: pan position projected onto a fixed-scale world, per layer depth.
+  const WORLD_PX = 6000;
+  const worldX = ((logLo - bMin) / Math.max(bMax - bMin, 1e-6)) * WORLD_PX;
+  const layerOffset = (f: number) => -((((worldX * f) % W) + W) % W);
+
   const geom = useRef({ defLo, defHi, bMin, bMax });
   geom.current = { defLo, defHi, bMin, bMax };
   useEffect(() => {
@@ -182,7 +205,10 @@ export default function GalacticChart({
       if (!e.ctrlKey && !horizontal && !e.shiftKey) return;
       e.preventDefault();
       if (e.ctrlKey) sound.zoomTick(e.deltaY < 0);
-      else sound.panWhoosh();
+      else {
+        sound.panWhoosh();
+        armWarp();
+      }
       const g = geom.current;
       setView((v) => {
         const lo = v?.lo ?? g.defLo;
@@ -263,6 +289,15 @@ export default function GalacticChart({
 
   const visGates = inputs.milestones.filter((m) => inWindow(m.threshold));
   const isDefaultView = view === null;
+
+  // High-route waypoints beyond the projection milestones (top 50/25/10),
+  // read straight from the worldwide registry.
+  const extraGates = useMemo(() => {
+    if (!rank) return [] as { rank: number; threshold: number }[];
+    return [50, 25, 10]
+      .filter((rk) => rk < rank && inputs.routeAll.length >= rk)
+      .map((rk) => ({ rank: rk, threshold: inputs.routeAll[rk - 1].s }));
+  }, [rank, inputs.routeAll]);
 
   const vx0 = bx(Math.pow(10, logLo));
   const vx1 = bx(Math.pow(10, logHi));
@@ -372,19 +407,43 @@ export default function GalacticChart({
           <line x1={40} y1={BAND_A_Y} x2={W - 40} y2={BAND_A_Y} stroke={C.grid} strokeWidth={1} />
 
           <g clipPath="url(#bandAClip)">
-            {/* seamless directional star stream, speed follows our v7d */}
-            <g
-              className="dust-stream"
-              style={{ animationDuration: `${Math.max(10, 280 / Math.sqrt(Math.max(vOwn, 4))).toFixed(1)}s` }}
-            >
-              {[0, W].map((dx) => (
-                <g key={dx} transform={`translate(${dx} 0)`}>
-                  {stream.map((p, i) => (
-                    <circle key={i} cx={p.x} cy={p.y} r={p.r} fill={C.speck} opacity={p.o} />
+            {/* multi-depth parallax: each layer shifts with the pan at its
+                depth factor (travel) and drifts on its own clock (time).
+                The near layer stretches into FTL streaks while panning. */}
+            {starLayers.map((layer) => (
+              <g
+                key={layer.id}
+                style={{
+                  transform: `translateX(${layerOffset(layer.f).toFixed(1)}px)`,
+                  transition: "transform 90ms linear",
+                }}
+              >
+                <g
+                  className="dust-stream"
+                  style={{
+                    animationDuration: `${(layer.dur || Math.max(10, 280 / Math.sqrt(Math.max(vOwn, 4)))).toFixed(1)}s`,
+                  }}
+                >
+                  {[0, W, 2 * W].map((dx) => (
+                    <g key={dx} transform={`translate(${dx} 0)`}>
+                      {layer.stars.map((p, i) => (
+                        <circle
+                          key={i}
+                          className={
+                            layer.warp ? (warping ? "star-warp warping" : "star-warp") : undefined
+                          }
+                          cx={p.x}
+                          cy={p.y}
+                          r={p.r}
+                          fill={C.speck}
+                          opacity={p.o}
+                        />
+                      ))}
+                    </g>
                   ))}
                 </g>
-              ))}
-            </g>
+              </g>
+            ))}
             {visGates.map((m) => (
               <g key={m.rank}>
                 <line
@@ -651,6 +710,36 @@ export default function GalacticChart({
                 </text>
               </g>
             ))}
+
+          {/* high-route waypoints (top 50/25/10), dimmer than projections */}
+          {extraGates.map((m) => (
+            <g key={`x${m.rank}`} opacity={0.6}>
+              <circle cx={bx(m.threshold)} cy={BAND_B_Y} r={4} fill="none" stroke={C.accent}
+                strokeWidth={1} opacity={0.7} />
+              <text x={bx(m.threshold)} y={BAND_B_Y - 20} fill={C.dim} fontSize={9}
+                textAnchor="middle">
+                TOP {m.rank}
+              </text>
+              <text x={bx(m.threshold)} y={BAND_B_Y - 32} fill={C.faint} fontSize={8.5}
+                textAnchor="middle">
+                {fmtCompact(m.threshold)}
+              </text>
+            </g>
+          ))}
+
+          {/* HOME: this instance's tracked repo, always on the map */}
+          {inputs.home ? (
+            <g>
+              <path
+                d={`M ${bx(inputs.home.s)} ${BAND_B_Y - 7} L ${bx(inputs.home.s) + 5} ${BAND_B_Y + 5} L ${bx(inputs.home.s) - 5} ${BAND_B_Y + 5} Z`}
+                fill="none" stroke={C.accent} strokeWidth={1.2}
+              />
+              <text x={bx(inputs.home.s)} y={BAND_B_Y + 64} fill={C.accent} fontSize={9}
+                textAnchor="middle" opacity={0.9}>
+                ⌂ {trunc(shortName(inputs.home.r))}
+              </text>
+            </g>
+          ) : null}
 
           {[...inputs.milestones].sort((a, b) => b.rank - a.rank).map((m) => (
             <g key={m.rank}>

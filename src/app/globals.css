@@ -344,6 +344,21 @@ svg text {
   to { transform: translateX(-1200px); }
 }
 
+/* FTL warp: near-layer stars stretch into streaks while panning. */
+.star-warp {
+  transform-box: fill-box;
+  transform-origin: center;
+  transition: transform 0.18s ease-out;
+}
+
+.star-warp.warping {
+  transform: scaleX(9);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .star-warp.warping { transform: none; }
+}
+
 /* Relative-velocity streaks: a particle drifts from each neighbor toward us
    (closing) or away (receding); speed and direction come via CSS vars. */
 .vel-streak {

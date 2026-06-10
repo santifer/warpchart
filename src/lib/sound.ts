@@ -204,6 +204,29 @@ class AudioEngine {
     g.gain.exponentialRampToValueAtTime(0.0008, t + 0.2);
     src.connect(lp).connect(g).connect(this.master);
     src.start(t);
+
+    // FTL shimmer on top: two soft rising partials feeding the space echo,
+    // so chained pans blur into a continuous superluminal glide.
+    if (this.send) {
+      [
+        { f0: 880, f1: 1480, gain: 0.014 },
+        { f0: 1320, f1: 2220, gain: 0.007 },
+      ].forEach((p) => {
+        const osc = ctx.createOscillator();
+        osc.type = "sine";
+        osc.frequency.setValueAtTime(p.f0, t);
+        osc.frequency.exponentialRampToValueAtTime(p.f1, t + 0.22);
+        const og = ctx.createGain();
+        og.gain.setValueAtTime(0, t);
+        og.gain.linearRampToValueAtTime(p.gain, t + 0.05);
+        og.gain.exponentialRampToValueAtTime(0.0004, t + 0.26);
+        osc.connect(og);
+        og.connect(this.master!);
+        og.connect(this.send!);
+        osc.start(t);
+        osc.stop(t + 0.3);
+      });
+    }
   }
 
   // Tiny directional gliss for zooming: pitch up when zooming in, down when

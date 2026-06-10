@@ -3,7 +3,7 @@
 //   - repo in the precomputed top 1000 -> 1 GraphQL call (velocities only)
 //   - deep space -> ~5 calls (meta, rank, 2 searches, velocities)
 // Pages are ISR-cached, so cost stays flat regardless of traffic.
-import { loadRoute } from "./history";
+import { loadRoute, loadMeta, lastSnapshot } from "./history";
 import { repoLite, worldwideRank, searchNeighbors, neighborsVelocity } from "./github";
 import { nextMilestones } from "./milestones";
 import { buildRouteLayers, forkRatioPercentile } from "./bundle";
@@ -98,6 +98,14 @@ export async function getExplorerData(owner: string, name: string): Promise<Expl
   const apex = { r: ranked[0].r, s: ranked[0].s };
   const layers = buildRouteLayers(stars, milestones, apex, repoName);
 
+  // The tenant is always a landmark of this instance's galaxy.
+  const tenantMeta = loadMeta();
+  const tenantSnap = lastSnapshot();
+  const home =
+    tenantMeta && tenantSnap && tenantMeta.repo.toLowerCase() !== repoName.toLowerCase()
+      ? { r: tenantMeta.repo, s: tenantSnap.stars }
+      : null;
+
   const inputs: ChartInputs = {
     repo: repoName,
     stars,
@@ -110,6 +118,7 @@ export async function getExplorerData(owner: string, name: string): Promise<Expl
     routeLandmarks: layers.landmarks,
     routeAll: layers.all,
     nowMs: Date.now(),
+    home,
   };
 
   const forkRatio = forks !== null && stars > 0 ? forks / stars : null;

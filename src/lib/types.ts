@@ -94,6 +94,9 @@ export interface ChartInputs {
   routeLandmarks: RouteRepo[];
   routeAll: RouteRepo[];
   nowMs: number;
+  // The instance's own tracked repo, shown as a HOME marker when this chart
+  // renders some other repo (explorer pages). Null when you ARE home.
+  home?: { r: string; s: number } | null;
 }
 
 export interface HourPoint { t: number; c: number } // t = UTC hour start (ms)
