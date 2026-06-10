@@ -24,7 +24,9 @@ async function ghFetch<T>(path: string, init?: { method?: string; body?: unknown
           "User-Agent": "mission-control",
           ...(init?.body ? { "Content-Type": "application/json" } : {}),
         },
-        cache: "no-store",
+        // No explicit cache mode: fetch is uncached by default in Next 15+,
+        // and an explicit "no-store" would force the ISR explorer page into
+        // fully dynamic rendering (killing its cache).
       });
     } catch (err) {
       if (attempt >= delays.length) throw err;
