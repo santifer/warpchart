@@ -1,0 +1,241 @@
+// Shared GitHub API helpers for the mission-control collectors.
+// Zero dependencies: native fetch + node:fs only.
+
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import { dirname, join } from "node:path";
+
+export const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
+export const DATA_DIR = join(ROOT, "data");
+
+const API = "https://api.github.com";
+
+export function token() {
+  const t = process.env.GH_TOKEN || process.env.GITHUB_TOKEN;
+  if (!t) {
+    console.error("Missing GH_TOKEN / GITHUB_TOKEN env var");
+    process.exit(1);
+  }
+  return t;
+}
+
+export function readConfig() {
+  const cfg = JSON.parse(readFileSync(join(ROOT, "mission.config.json"), "utf8"));
+  if (!cfg.repo || !/^[\w.-]+\/[\w.-]+$/.test(cfg.repo)) {
+    throw new Error(`mission.config.json: "repo" must be "owner/name", got: ${cfg.repo}`);
+  }
+  return cfg;
+}
+
+export const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+// Fetch with retries and rate-limit awareness.
+export async function ghFetch(path, { method = "GET", body } = {}) {
+  const url = path.startsWith("http") ? path : API + path;
+  const delays = [2000, 8000, 30000];
+  for (let attempt = 0; ; attempt++) {
+    let res;
+    try {
+      res = await fetch(url, {
+        method,
+        body: body ? JSON.stringify(body) : undefined,
+        headers: {
+          Authorization: `Bearer ${token()}`,
+          Accept: "application/vnd.github+json",
+          "User-Agent": "mission-control",
+          ...(body ? { "Content-Type": "application/json" } : {}),
+        },
+      });
+    } catch (err) {
+      if (attempt >= delays.length) throw err;
+      await sleep(delays[attempt]);
+      continue;
+    }
+    if (res.ok) return res.json();
+    if (attempt >= delays.length) {
+      const text = (await res.text()).slice(0, 300);
+      throw new Error(`GitHub ${res.status} on ${url}: ${text}`);
+    }
+    let wait = delays[attempt];
+    if (res.status === 403 || res.status === 429) {
+      const retryAfter = res.headers.get("retry-after");
+      const reset = res.headers.get("x-ratelimit-reset");
+      if (retryAfter) wait = Math.max(wait, (parseInt(retryAfter, 10) + 1) * 1000);
+      else if (reset) wait = Math.max(wait, parseInt(reset, 10) * 1000 - Date.now() + 1000);
+      wait = Math.min(wait, 120_000);
+    }
+    await sleep(wait);
+  }
+}
+
+export async function graphql(query, variables) {
+  const data = await ghFetch("/graphql", { method: "POST", body: { query, variables } });
+  if (data.errors) throw new Error("GraphQL: " + JSON.stringify(data.errors).slice(0, 400));
+  return data.data;
+}
+
+// Search API is limited to 30 req/min: enforce a global gap between calls.
+let lastSearchAt = 0;
+export async function search(params) {
+  const wait = lastSearchAt + 2100 - Date.now();
+  if (wait > 0) await sleep(wait);
+  lastSearchAt = Date.now();
+  return ghFetch("/search/repositories?" + new URLSearchParams(params));
+}
+
+// How many repos have strictly more stars than `stars`. Worldwide rank = countAbove + 1.
+export async function countAbove(stars) {
+  const r = await search({ q: `stars:>${stars}`, per_page: "1" });
+  return r.total_count;
+}
+
+export async function repoMeta(owner, name) {
+  const data = await graphql(
+    `query($owner:String!,$name:String!){
+      repository(owner:$owner,name:$name){
+        nameWithOwner description stargazerCount forkCount createdAt homepageUrl
+        owner{ login avatarUrl }
+        primaryLanguage{ name }
+      }
+    }`,
+    { owner, name }
+  );
+  if (!data.repository) throw new Error(`Repository not found: ${owner}/${name}`);
+  return data.repository;
+}
+
+const STARGAZERS_QUERY = `query($owner:String!,$name:String!,$before:String){
+  repository(owner:$owner,name:$name){
+    stargazerCount
+    stargazers(last:100, before:$before){
+      pageInfo{ startCursor hasPreviousPage }
+      edges{ starredAt }
+    }
+  }
+}`;
+
+// Walk stargazers backwards from the most recent. Edges within a page come
+// ordered ascending by starredAt. Returns ascending ISO timestamps.
+// stopAfter: keep only timestamps strictly newer than this ISO string and
+// stop paging once we cross it. maxPages caps the walk (Infinity = full).
+export async function backwalk(owner, name, { stopAfter = null, maxPages = Infinity, onProgress = null, pageDelayMs = 120 } = {}) {
+  let before = null;
+  let pages = 0;
+  let stars = null;
+  let complete = false;
+  const chunks = [];
+  while (pages < maxPages) {
+    const data = await graphql(STARGAZERS_QUERY, { owner, name, before });
+    const repo = data.repository;
+    if (!repo) throw new Error(`Repository not found: ${owner}/${name}`);
+    stars = repo.stargazerCount;
+    const { pageInfo, edges } = repo.stargazers;
+    pages++;
+    const ts = edges.map((e) => e.starredAt);
+    chunks.push(ts);
+    if (onProgress) onProgress(pages, ts[0] ?? null);
+    if (stopAfter && ts.length && ts[0] <= stopAfter) { complete = true; break; }
+    if (!pageInfo.hasPreviousPage) { complete = true; break; }
+    before = pageInfo.startCursor;
+    if (pageDelayMs) await sleep(pageDelayMs);
+  }
+  const all = chunks.reverse().flat();
+  const timestamps = stopAfter ? all.filter((t) => t > stopAfter) : all;
+  timestamps.sort();
+  return { timestamps, stars, complete, pages };
+}
+
+// Next round-number rank milestones below the current rank.
+// rank 409 -> [400, 300, 200, 100]; rank 101 -> [100, 90, 80, 70]; rank 4870 -> [4000, 3000, 2000, 1000].
+export function nextMilestones(rank, count = 4) {
+  if (!Number.isFinite(rank) || rank <= 1) return [];
+  const out = [];
+  let unit = Math.pow(10, Math.floor(Math.log10(rank - 1)));
+  let m = Math.floor((rank - 1) / unit) * unit;
+  while (out.length < count && m >= 1) {
+    out.push(m);
+    if (m - unit < 1 && unit > 1) unit = unit / 10;
+    m -= unit;
+  }
+  return out;
+}
+
+// The galactic core: the #1 most-starred repo in the world.
+export async function apexRepo() {
+  const r = await search({ q: "stars:>100000", sort: "stars", order: "desc", per_page: "1" });
+  const item = r.items?.[0];
+  return item ? { r: item.full_name, s: item.stargazers_count } : null;
+}
+
+// Star count of the repo at worldwide rank `rank`.
+// Ranks <= 1000 are read directly from search pages (exact). Deeper ranks use
+// a binary search over countAbove (total_count is not capped).
+export async function thresholdForRank(rank, ownStars) {
+  if (rank <= 1000) {
+    const page = Math.ceil(rank / 100);
+    const idx = (rank - 1) % 100;
+    const r = await search({ q: "stars:>10000", sort: "stars", order: "desc", per_page: "100", page: String(page) });
+    const item = r.items?.[idx];
+    if (item) return item.stargazers_count;
+  }
+  let lo = 1;
+  let hi = Math.max(ownStars * 2, 2000);
+  while ((await countAbove(hi)) >= rank) hi *= 2;
+  let best = lo;
+  while (lo <= hi) {
+    const mid = Math.floor((lo + hi) / 2);
+    const c = await countAbove(mid);
+    if (c >= rank) { best = mid; lo = mid + 1; } else { hi = mid - 1; }
+  }
+  return best;
+}
+
+// Nearest ranking neighbors: ~`above` repos just above our star count and
+// ~`below` just below. Returns full names ordered by stars ascending.
+export async function findNeighbors(ownFullName, stars, { above = 15, below = 5 } = {}) {
+  const deltaHi = Math.max(Math.ceil(stars * 0.12), 200);
+  const deltaLo = Math.max(Math.ceil(stars * 0.06), 100);
+  const up = await search({
+    q: `stars:${stars + 1}..${stars + deltaHi}`,
+    sort: "stars", order: "asc", per_page: String(Math.min(above + 10, 50)),
+  });
+  const down = await search({
+    q: `stars:${Math.max(1, stars - deltaLo)}..${stars}`,
+    sort: "stars", order: "desc", per_page: String(below + 5),
+  });
+  const upNames = (up.items ?? [])
+    .filter((i) => i.full_name !== ownFullName)
+    .slice(0, above)
+    .map((i) => i.full_name);
+  const downNames = (down.items ?? [])
+    .filter((i) => i.full_name !== ownFullName)
+    .slice(0, below)
+    .map((i) => i.full_name);
+  return [...downNames.reverse(), ...upNames];
+}
+
+// Recent velocity (stars/day over the last 100 stars) for up to ~25 repos in
+// ONE GraphQL request using aliases.
+export async function reposVelocity(fullNames, now = new Date()) {
+  if (!fullNames.length) return [];
+  const parts = fullNames.map((fn, i) => {
+    const [o, n] = fn.split("/");
+    return `r${i}: repository(owner:${JSON.stringify(o)}, name:${JSON.stringify(n)}){
+      nameWithOwner stargazerCount stargazers(last:100){ edges{ starredAt } } }`;
+  });
+  const data = await graphql(`{ ${parts.join("\n")} }`);
+  const out = [];
+  for (let i = 0; i < fullNames.length; i++) {
+    const d = data[`r${i}`];
+    if (!d) continue;
+    const edges = d.stargazers.edges;
+    let v = 0;
+    if (edges.length >= 2) {
+      const oldest = new Date(edges[0].starredAt);
+      const days = Math.max((now - oldest) / 864e5, 0.01);
+      v = edges.length / days;
+    }
+    out.push({ r: d.nameWithOwner, s: d.stargazerCount, v: Math.round(v * 10) / 10 });
+  }
+  return out;
+}

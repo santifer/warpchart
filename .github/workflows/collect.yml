@@ -1,0 +1,37 @@
+name: collect
+on:
+  schedule:
+    - cron: "7 * * * *" # :07 avoids the :00 congestion on Actions
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: collect
+  cancel-in-progress: false
+
+jobs:
+  snapshot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: node collector/collect.mjs
+        env:
+          # The automatic Actions token covers public-data reads (1,000 req/h,
+          # the collector uses ~12). No PAT or secret setup needed.
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Commit snapshot
+        run: |
+          git config user.name "mission-control-bot"
+          git config user.email "mission-control-bot@users.noreply.github.com"
+          git add data/
+          git diff --cached --quiet || {
+            git commit -m "snapshot $(date -u +%FT%H:%MZ)"
+            git pull --rebase
+            git push
+          }

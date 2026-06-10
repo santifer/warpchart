@@ -1,0 +1,44 @@
+name: bootstrap
+on:
+  workflow_dispatch:
+    inputs:
+      repo:
+        description: "Repo to track (owner/name). Leave empty to use mission.config.json"
+        required: false
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: collect
+  cancel-in-progress: false
+
+jobs:
+  bootstrap:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Run bootstrap
+        run: |
+          if [ -n "${{ inputs.repo }}" ]; then
+            node collector/bootstrap.mjs --repo "${{ inputs.repo }}"
+          else
+            node collector/bootstrap.mjs
+          fi
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Commit seed data
+        run: |
+          git config user.name "mission-control-bot"
+          git config user.email "mission-control-bot@users.noreply.github.com"
+          git add data/ mission.config.json
+          git diff --cached --quiet || {
+            git commit -m "bootstrap $(date -u +%FT%H:%MZ)"
+            git pull --rebase
+            git push
+          }

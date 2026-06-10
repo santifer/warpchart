@@ -1,0 +1,131 @@
+#!/usr/bin/env node
+// Hourly snapshot collector. Incremental and cheap:
+//   1. Current stars + worldwide rank (essential: failure -> exit 1, no write)
+//   2. Milestone thresholds (best effort)
+//   3. Incremental stargazer backwalk since last known timestamp (best effort)
+//   4. Neighbors + velocities (best effort)
+//   5. Append one JSONL line to data/history.jsonl, refresh data/meta.json
+//
+// Usage: GH_TOKEN=... node collector/collect.mjs [--dry-run]
+
+import { readFileSync, writeFileSync, appendFileSync, existsSync } from "node:fs";
+import { join } from "node:path";
+import {
+  DATA_DIR, readConfig, repoMeta, backwalk, countAbove,
+  nextMilestones, thresholdForRank, findNeighbors, reposVelocity, apexRepo, token,
+} from "./lib.mjs";
+
+token(); // fail fast
+
+const dryRun = process.argv.includes("--dry-run");
+const config = readConfig();
+const [owner, name] = config.repo.split("/");
+const now = new Date();
+const nowISO = now.toISOString().replace(/\.\d+Z$/, "Z");
+
+const tsPath = join(DATA_DIR, "stargazer_timestamps.txt");
+const historyPath = join(DATA_DIR, "history.jsonl");
+if (!existsSync(tsPath)) {
+  console.error("data/stargazer_timestamps.txt not found. Run collector/bootstrap.mjs first.");
+  process.exit(1);
+}
+
+let partial = false;
+
+// 1. Essential: stars + rank
+const meta = await repoMeta(owner, name);
+const stars = meta.stargazerCount;
+const rank = (await countAbove(stars)) + 1;
+console.log(`[collect] ${meta.nameWithOwner}: ${stars} stars, rank #${rank}`);
+
+// 2. Milestones (best effort)
+let milestones = null;
+try {
+  milestones = {};
+  for (const m of nextMilestones(rank, 4)) {
+    milestones[m] = await thresholdForRank(m, stars);
+  }
+} catch (err) {
+  console.error(`[collect] milestones failed: ${err.message}`);
+  milestones = null;
+  partial = true;
+}
+
+// 3. Incremental backwalk (best effort)
+let newTimestamps = [];
+let pages = 0;
+let walkComplete = true;
+try {
+  const lines = readFileSync(tsPath, "utf8").trimEnd().split("\n");
+  const lastKnown = lines[lines.length - 1];
+  const walk = await backwalk(owner, name, { stopAfter: lastKnown, maxPages: 30 });
+  newTimestamps = walk.timestamps;
+  pages = walk.pages;
+  walkComplete = walk.complete;
+  if (!walkComplete) partial = true;
+  console.log(`[collect] +${newTimestamps.length} new star timestamps (${pages} pages, complete=${walkComplete})`);
+} catch (err) {
+  console.error(`[collect] backwalk failed: ${err.message}`);
+  partial = true;
+}
+
+// 4. Neighbors (best effort)
+let neighbors = null;
+try {
+  const names = await findNeighbors(meta.nameWithOwner, stars);
+  neighbors = await reposVelocity(names, now);
+  console.log(`[collect] ${neighbors.length} neighbors measured`);
+} catch (err) {
+  console.error(`[collect] neighbors failed: ${err.message}`);
+  neighbors = null;
+  partial = true;
+}
+
+// 5. Galactic core: current worldwide #1 (best effort)
+let apex = null;
+try {
+  apex = await apexRepo();
+} catch (err) {
+  console.error(`[collect] apex failed: ${err.message}`);
+}
+
+const snapshot = {
+  ts: nowISO,
+  stars,
+  rank,
+  milestones,
+  neighbors,
+  apex,
+  meta: { new_ts: newTimestamps.length, pages, partial },
+};
+
+if (dryRun) {
+  console.log("[collect] DRY RUN, nothing written. Snapshot:");
+  console.log(JSON.stringify(snapshot));
+  process.exit(0);
+}
+
+if (newTimestamps.length) appendFileSync(tsPath, newTimestamps.join("\n") + "\n");
+appendFileSync(historyPath, JSON.stringify(snapshot) + "\n");
+
+// Refresh public-facing metadata (description/homepage may change).
+const metaOutPath = join(DATA_DIR, "meta.json");
+try {
+  const prev = existsSync(metaOutPath) ? JSON.parse(readFileSync(metaOutPath, "utf8")) : {};
+  writeFileSync(metaOutPath, JSON.stringify({
+    ...prev,
+    repo: meta.nameWithOwner,
+    owner: meta.owner.login,
+    name,
+    description: meta.description,
+    avatar_url: meta.owner.avatarUrl,
+    homepage: meta.homepageUrl,
+    language: meta.primaryLanguage?.name ?? null,
+    forks: meta.forkCount,
+    created_at: meta.createdAt,
+  }, null, 2) + "\n");
+} catch (err) {
+  console.error(`[collect] meta.json refresh failed: ${err.message}`);
+}
+
+console.log(`[collect] snapshot appended (partial=${partial}).`);

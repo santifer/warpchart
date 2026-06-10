@@ -1,0 +1,222 @@
+@import "tailwindcss";
+
+/* Palette mirror: src/lib/theme.ts must stay in sync. */
+:root {
+  --void: #020509;
+  --hull: #08111c;
+  --grid: #11263b;
+  --ink: #d9e8f5;
+  --dim: #5d7a94;
+  --faint: #33485c;
+  --accent: #53d6e8;
+  --accent-soft: rgba(83, 214, 232, 0.14);
+  --warn: #f2a33c;
+  --star-white: #f5fbff;
+}
+
+@theme inline {
+  --color-void: var(--void);
+  --color-hull: var(--hull);
+  --color-grid: var(--grid);
+  --color-ink: var(--ink);
+  --color-dim: var(--dim);
+  --color-faint: var(--faint);
+  --color-accent: var(--accent);
+  --color-warn: var(--warn);
+  --color-star: var(--star-white);
+  --font-display: var(--font-michroma);
+  --font-sans: var(--font-chakra);
+  --font-mono: var(--font-jbmono);
+}
+
+html {
+  background: var(--void);
+}
+
+body {
+  background: var(--void);
+  color: var(--ink);
+  font-family: var(--font-chakra), sans-serif;
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+/* ---- Deep space backdrop: nebula glows + blueprint grid + starfield ---- */
+
+.space-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: -2;
+  pointer-events: none;
+  background:
+    radial-gradient(1100px 520px at 85% -10%, rgba(83, 214, 232, 0.07), transparent 70%),
+    radial-gradient(900px 480px at 8% 108%, rgba(242, 163, 60, 0.045), transparent 70%),
+    radial-gradient(1400px 900px at 50% 50%, rgba(10, 24, 40, 0.55), transparent 75%),
+    var(--void);
+}
+
+.space-grid {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background-image:
+    linear-gradient(rgba(83, 214, 232, 0.035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(83, 214, 232, 0.035) 1px, transparent 1px);
+  background-size: 56px 56px;
+  mask-image: radial-gradient(ellipse 90% 80% at 50% 35%, black 35%, transparent 100%);
+}
+
+/* Two static star layers (multi box-shadow), one with a slow twinkle. */
+.starfield,
+.starfield::after {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+}
+
+.starfield {
+  background-image:
+    radial-gradient(1px 1px at 12% 22%, rgba(245, 251, 255, 0.8), transparent 100%),
+    radial-gradient(1px 1px at 28% 64%, rgba(245, 251, 255, 0.5), transparent 100%),
+    radial-gradient(1.5px 1.5px at 41% 12%, rgba(83, 214, 232, 0.7), transparent 100%),
+    radial-gradient(1px 1px at 55% 44%, rgba(245, 251, 255, 0.45), transparent 100%),
+    radial-gradient(1px 1px at 63% 81%, rgba(245, 251, 255, 0.6), transparent 100%),
+    radial-gradient(1.5px 1.5px at 72% 28%, rgba(245, 251, 255, 0.75), transparent 100%),
+    radial-gradient(1px 1px at 83% 58%, rgba(83, 214, 232, 0.55), transparent 100%),
+    radial-gradient(1px 1px at 91% 14%, rgba(245, 251, 255, 0.65), transparent 100%),
+    radial-gradient(1px 1px at 7% 86%, rgba(245, 251, 255, 0.5), transparent 100%),
+    radial-gradient(1.5px 1.5px at 19% 41%, rgba(245, 251, 255, 0.4), transparent 100%),
+    radial-gradient(1px 1px at 35% 91%, rgba(245, 251, 255, 0.55), transparent 100%),
+    radial-gradient(1px 1px at 49% 68%, rgba(83, 214, 232, 0.4), transparent 100%),
+    radial-gradient(1px 1px at 66% 6%, rgba(245, 251, 255, 0.5), transparent 100%),
+    radial-gradient(1px 1px at 77% 73%, rgba(245, 251, 255, 0.45), transparent 100%),
+    radial-gradient(1.5px 1.5px at 95% 38%, rgba(245, 251, 255, 0.6), transparent 100%),
+    radial-gradient(1px 1px at 3% 52%, rgba(245, 251, 255, 0.35), transparent 100%);
+}
+
+.starfield::after {
+  content: "";
+  background-image:
+    radial-gradient(1px 1px at 16% 9%, rgba(245, 251, 255, 0.7), transparent 100%),
+    radial-gradient(1px 1px at 31% 33%, rgba(245, 251, 255, 0.5), transparent 100%),
+    radial-gradient(1.5px 1.5px at 46% 56%, rgba(245, 251, 255, 0.65), transparent 100%),
+    radial-gradient(1px 1px at 59% 19%, rgba(83, 214, 232, 0.5), transparent 100%),
+    radial-gradient(1px 1px at 69% 47%, rgba(245, 251, 255, 0.4), transparent 100%),
+    radial-gradient(1px 1px at 81% 88%, rgba(245, 251, 255, 0.55), transparent 100%),
+    radial-gradient(1.5px 1.5px at 88% 67%, rgba(245, 251, 255, 0.5), transparent 100%),
+    radial-gradient(1px 1px at 24% 78%, rgba(83, 214, 232, 0.45), transparent 100%),
+    radial-gradient(1px 1px at 52% 96%, rgba(245, 251, 255, 0.4), transparent 100%),
+    radial-gradient(1px 1px at 11% 63%, rgba(245, 251, 255, 0.45), transparent 100%);
+  animation: twinkle 9s ease-in-out infinite alternate;
+}
+
+@keyframes twinkle {
+  from { opacity: 0.35; }
+  to { opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .starfield::after { animation: none; }
+}
+
+/* ---- HUD panel frame: thin border + bracket corners ---- */
+
+.hud {
+  position: relative;
+  border: 1px solid var(--grid);
+  background: linear-gradient(180deg, rgba(12, 24, 38, 0.72), rgba(5, 11, 19, 0.55));
+  backdrop-filter: blur(2px);
+}
+
+.hud::before {
+  content: "";
+  position: absolute;
+  inset: -1px;
+  pointer-events: none;
+  background:
+    linear-gradient(var(--accent), var(--accent)) left 0 top 0 / 16px 1px,
+    linear-gradient(var(--accent), var(--accent)) left 0 top 0 / 1px 16px,
+    linear-gradient(var(--accent), var(--accent)) right 0 top 0 / 16px 1px,
+    linear-gradient(var(--accent), var(--accent)) right 0 top 0 / 1px 16px,
+    linear-gradient(var(--accent), var(--accent)) left 0 bottom 0 / 16px 1px,
+    linear-gradient(var(--accent), var(--accent)) left 0 bottom 0 / 1px 16px,
+    linear-gradient(var(--accent), var(--accent)) right 0 bottom 0 / 16px 1px,
+    linear-gradient(var(--accent), var(--accent)) right 0 bottom 0 / 1px 16px;
+  background-repeat: no-repeat;
+  opacity: 0.5;
+}
+
+/* ---- Module header ---- */
+
+.module-title {
+  font-family: var(--font-michroma), sans-serif;
+  font-size: 0.625rem;
+  letter-spacing: 0.32em;
+  text-transform: uppercase;
+  color: var(--dim);
+}
+
+.module-index {
+  font-family: var(--font-jbmono), monospace;
+  font-size: 0.625rem;
+  letter-spacing: 0.1em;
+  color: var(--faint);
+}
+
+/* ---- Numerals ---- */
+
+.numeral {
+  font-family: var(--font-jbmono), monospace;
+  font-variant-numeric: tabular-nums;
+}
+
+.glow-accent {
+  text-shadow: 0 0 18px rgba(83, 214, 232, 0.45);
+}
+
+/* ---- Live pulse dot ---- */
+
+.pulse-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 9999px;
+  background: var(--accent);
+  animation: pulse 2.2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(83, 214, 232, 0.55); }
+  50% { box-shadow: 0 0 0 6px rgba(83, 214, 232, 0); }
+}
+
+/* ---- Staggered panel entrance ---- */
+
+.rise {
+  opacity: 0;
+  animation: rise 0.8s cubic-bezier(0.16, 0.84, 0.32, 1) forwards;
+}
+
+@keyframes rise {
+  from { opacity: 0; transform: translateY(14px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rise { animation: none; opacity: 1; }
+}
+
+/* ---- Galactic core glow (SVG container) ---- */
+
+.core-glow {
+  filter: drop-shadow(0 0 14px rgba(245, 251, 255, 0.55)) drop-shadow(0 0 34px rgba(83, 214, 232, 0.35));
+}
+
+svg text {
+  font-family: var(--font-jbmono), monospace;
+}
+
+::selection {
+  background: rgba(83, 214, 232, 0.28);
+}
