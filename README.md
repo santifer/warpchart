@@ -54,7 +54,7 @@ Both the badge and the chart accept `?theme=light|dark` to pin a scheme, for Git
 </a>
 ```
 
-For the instance's own tracked repo, drop `?repo=` (exact archived history instead of sampled) and point the link at the dashboard root. A copy-paste generator for any repo lives at `/explore`.
+For the instance's own tracked repo, drop `?repo=` (exact archived history instead of sampled) and point the link at your repo's /r/owner/name route. A copy-paste generator for any repo lives at `/explore`.
 
 **Instant explorer** for any repo, no setup: `/r/owner/name`. **Dynamic Open Graph cards**: every shared link renders a live stats card.
 

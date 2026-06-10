@@ -48,9 +48,13 @@ async function getJson<T>(url: string): Promise<T | null> {
 
 export default function LiveProvider({
   bundle,
+  polling = true,
   children,
 }: {
   bundle: DashboardBundle;
+  // false renders the bundle as-is (frozen previews, e.g. locked demo
+  // panels on explorer pages) without spending any live polls
+  polling?: boolean;
   children: React.ReactNode;
 }) {
   const [stars, setStars] = useState(bundle.netStars);
@@ -72,10 +76,11 @@ export default function LiveProvider({
   const failures = useRef(0);
 
   useEffect(() => {
-    setNowMs(Date.now());
-  }, []);
+    if (polling) setNowMs(Date.now());
+  }, [polling]);
 
   useEffect(() => {
+    if (!polling) return;
     let stop = false;
 
     async function pollFast() {
@@ -122,7 +127,8 @@ export default function LiveProvider({
       clearInterval(slow);
       clearInterval(tick);
     };
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [polling]);
 
   const value = useMemo<LiveState>(() => {
     // newTs are all strictly newer than the bundle boundary: plain concat.

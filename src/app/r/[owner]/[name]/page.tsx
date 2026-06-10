@@ -6,6 +6,16 @@ import { notFound } from "next/navigation";
 import GalacticChart from "@/components/GalacticChart";
 import VerticalChart from "@/components/VerticalChart";
 import Panel from "@/components/Panel";
+import LiveProvider from "@/components/LiveProvider";
+import VelocityChart from "@/components/VelocityChart";
+import Projections from "@/components/Projections";
+import DailyLadder from "@/components/DailyLadder";
+import Heatmap from "@/components/Heatmap";
+import RankChart from "@/components/RankChart";
+import MissionLog from "@/components/MissionLog";
+import Dashboard from "@/components/Dashboard";
+import { buildBundle } from "@/lib/bundle";
+import { loadMeta } from "@/lib/history";
 import { unstable_cache } from "next/cache";
 import { getExplorerData } from "@/lib/explorer";
 
@@ -16,8 +26,34 @@ const getCachedExplorerData = unstable_cache(
   ["explorer-data"],
   { revalidate: 900 }
 );
-import { fmt, fmtEtaDays, shortName } from "@/lib/format";
-import { neighborEtas } from "@/lib/projections";
+import { fmt } from "@/lib/format";
+
+// Same template as the unlocked mission console: identical panels in identical
+// order. The only difference between repos is what is unlocked. Locked
+// panels render the REAL components fed with the live demo mission's data,
+// dimmed and labeled, so visitors see exactly the telemetry they unlock.
+function Locked({ unlockFor, children }: { unlockFor: string; children: React.ReactNode }) {
+  return (
+    <div className="relative">
+      <div className="pointer-events-none select-none opacity-40 blur-[1.5px]" aria-hidden>
+        {children}
+      </div>
+      <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-2 text-center">
+        <span className="numeral bg-void/75 px-3 py-1 text-[9px] tracking-[0.3em] text-dim">
+          ◈ LOCKED · PREVIEW SHOWS THE LIVE DEMO MISSION
+        </span>
+        <a
+          href="https://github.com/santifer/warpchart/issues/8"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="numeral border border-accent/50 bg-void/85 px-3 py-1.5 text-[10px] tracking-[0.2em] text-accent transition-colors hover:bg-accent/10"
+        >
+          UNLOCK FOR {unlockFor} →
+        </a>
+      </div>
+    </div>
+  );
+}
 
 export const revalidate = 900;
 // First scans make several GitHub round-trips; on flaky days the retries can
@@ -49,6 +85,15 @@ export default async function ExplorerPage({
   const { owner, name } = await params;
   if (!VALID.test(owner) || !VALID.test(name)) notFound();
 
+  // The tracked (unlocked) repo gets the FULL mission console on its own
+  // /r/ route: same template as everyone, nothing locked. With paid
+  // multi-tenant tracking this branch becomes "is tracking active for
+  // this route" instead of "is it the tenant".
+  const tenant = loadMeta();
+  if (tenant && `${owner}/${name}`.toLowerCase() === tenant.repo.toLowerCase()) {
+    return <Dashboard bundle={buildBundle()} />;
+  }
+
   let data;
   try {
     data = await getCachedExplorerData(owner, name);
@@ -64,11 +109,19 @@ export default async function ExplorerPage({
   if (!data) notFound();
 
   const { inputs } = data;
-  const etas = neighborEtas(data.neighbors, inputs.stars, inputs.v7d)
-    .filter((n) => n.gap > 0)
-    .sort((a, b) => a.gap - b.gap)
-    .slice(0, 10);
   const next = inputs.milestones[0] ?? null;
+  const repoLabel = `${owner}/${name}`;
+
+  // Demo data for the locked panels: the live mission's bundle, slimmed
+  // (no route layers, sparser replay buckets) to keep the page light.
+  const demo = buildBundle();
+  const demoBundle = {
+    ...demo,
+    routeAll: [],
+    routeDots: [],
+    routeLandmarks: [],
+    hourlyAll: demo.hourlyAll.filter((_, i) => i % 4 === 0),
+  };
 
   return (
     <main className="mx-auto flex max-w-[1440px] flex-col gap-4 px-3 py-4 sm:px-6 sm:py-6">
@@ -158,146 +211,101 @@ export default async function ExplorerPage({
         </div>
       </Panel>
 
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-12">
-        <Panel index="02" title="Nearest ships ahead" meta="closing speed vs their velocity" className="lg:col-span-8" delay={160}>
-          {etas.length ? (
-            <table className="numeral w-full text-[11px]">
-              <thead>
-                <tr className="text-left text-[9px] tracking-[0.2em] text-faint">
-                  <th className="pb-2 font-normal">REPO</th>
-                  <th className="pb-2 font-normal text-right">STARS</th>
-                  <th className="pb-2 font-normal text-right">GAP</th>
-                  <th className="pb-2 font-normal text-right">VELOCITY</th>
-                  <th className="pb-2 font-normal text-right">OVERTAKE</th>
-                </tr>
-              </thead>
-              <tbody>
-                {etas.map((n) => (
-                  <tr key={n.r} className="border-t border-grid/60">
-                    <td className="py-1.5 text-ink">{shortName(n.r)}</td>
-                    <td className="py-1.5 text-right text-dim">{fmt(n.s)}</td>
-                    <td className="py-1.5 text-right text-dim">+{fmt(n.gap)}</td>
-                    <td className="py-1.5 text-right text-dim">{Math.round(n.v)}/d</td>
-                    <td className={`py-1.5 text-right ${n.receding ? "text-warn" : "text-accent"}`}>
-                      {n.receding ? "receding" : fmtEtaDays(n.etaDays)}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          ) : (
-            <p className="numeral text-[10px] text-faint">no ships ahead in telemetry range.</p>
-          )}
-        </Panel>
+      <LiveProvider bundle={demoBundle} polling={false}>
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-12">
+          <Panel index="02" title="Velocity, stars per hour" meta="24h vs previous 24h" className="lg:col-span-8" delay={160}>
+            <Locked unlockFor={repoLabel}>
+              <VelocityChart />
+            </Locked>
+          </Panel>
+          <Panel index="03" title="Milestone projections" meta="unlocks with tracking" className="lg:col-span-4" delay={240}>
+            <Locked unlockFor={repoLabel}>
+              <Projections bundle={demoBundle} />
+            </Locked>
+          </Panel>
+        </div>
 
-        <Panel index="03" title="Track it properly" className="lg:col-span-4" delay={240}>
-          <div className="flex h-full flex-col justify-between gap-4">
-            <p className="text-xs font-light leading-relaxed text-dim">
-              This is a live snapshot. A full mission control adds hourly history,
-              velocity charts, milestone projections, activity heatmap, replay and
-              a mission log for your own repo.
-            </p>
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+          <Panel index="04" title="Daily ladder" meta="unlocks with tracking" delay={320}>
+            <Locked unlockFor={repoLabel}>
+              <DailyLadder bundle={demoBundle} />
+            </Locked>
+          </Panel>
+          <Panel index="05" title="Cumulative stars" meta="real data · the same SVG you can embed" delay={400}>
             <div className="flex flex-col gap-2">
-              <a
-                href={`/explore#embed=${encodeURIComponent(`${owner}/${name}`)}`}
-                className="numeral border border-accent/40 px-3 py-2 text-center text-[11px] tracking-[0.2em] text-accent transition-colors hover:bg-accent/10"
-              >
-                EMBED THIS ANIMATED CHART →
+              {/* same resource as the README embed: rendering it here warms
+                  the cache for everyone who embeds this repo afterwards */}
+              <a href={`/explore#embed=${encodeURIComponent(repoLabel)}`} className="block min-h-[160px]">
+                <picture>
+                  <source
+                    media="(prefers-color-scheme: dark)"
+                    srcSet={`/api/chart?repo=${encodeURIComponent(repoLabel)}&theme=dark`}
+                  />
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={`/api/chart?repo=${encodeURIComponent(repoLabel)}&theme=light`}
+                    alt={`Animated cumulative star history of ${repoLabel}. First render of a new repo can take a few seconds.`}
+                    className="w-full"
+                    loading="lazy"
+                  />
+                </picture>
               </a>
-              <a
-                href="https://github.com/santifer/warpchart"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="numeral border border-grid px-3 py-2 text-center text-[11px] tracking-[0.2em] text-dim transition-colors hover:text-ink"
-              >
-                DEPLOY YOUR OWN · 5 MIN
-              </a>
-              <a
-                href="/hq"
-                className="numeral border border-grid px-3 py-2 text-center text-[11px] tracking-[0.2em] text-dim transition-colors hover:text-ink"
-              >
-                SEE A FULL MISSION LIVE
-              </a>
+              <span className="numeral text-[9px] text-faint">
+                first scan of a repo can take ~20s · click the chart to grab the README embed
+              </span>
             </div>
-          </div>
+          </Panel>
+        </div>
+
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-12">
+          <Panel index="06" title="Activity heatmap" meta="unlocks with tracking" className="lg:col-span-7" delay={480}>
+            <Locked unlockFor={repoLabel}>
+              <Heatmap bundle={demoBundle} />
+            </Locked>
+          </Panel>
+          <Panel index="07" title="World rank over time" meta="unlocks with tracking" className="lg:col-span-5" delay={560}>
+            <Locked unlockFor={repoLabel}>
+              <RankChart bundle={demoBundle} />
+            </Locked>
+          </Panel>
+        </div>
+
+        <Panel index="08" title="Mission log" meta="unlocks with tracking" delay={640}>
+          <Locked unlockFor={repoLabel}>
+            <MissionLog events={demoBundle.events.slice(0, 8)} captain={demoBundle.captain} />
+          </Locked>
         </Panel>
-      </div>
+      </LiveProvider>
 
-      <Panel index="04" title="Star history · animated" meta="the same SVG you can embed" delay={320}>
-        <div className="flex flex-col gap-2">
-          {/* same resource as the README embed: rendering it here warms the
-              cache for everyone who embeds this repo afterwards */}
-          <a href={`/explore#embed=${encodeURIComponent(`${owner}/${name}`)}`} className="block min-h-[180px]">
-            <picture>
-              <source
-                media="(prefers-color-scheme: dark)"
-                srcSet={`/api/chart?repo=${encodeURIComponent(`${owner}/${name}`)}&theme=dark`}
-              />
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={`/api/chart?repo=${encodeURIComponent(`${owner}/${name}`)}&theme=light`}
-                alt={`Animated cumulative star history of ${owner}/${name}. First render of a new repo can take a few seconds.`}
-                className="w-full"
-                loading="lazy"
-              />
-            </picture>
+      <div className="hud flex flex-wrap items-center justify-between gap-3 px-4 py-3">
+        <span className="numeral text-[10px] text-dim">
+          Full mission telemetry for {repoLabel}: hourly history, forensics, replay and projections.
+        </span>
+        <div className="flex flex-wrap gap-2">
+          <a
+            href="https://github.com/santifer/warpchart/issues/8"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="numeral border border-accent/50 bg-accent/10 px-3 py-1.5 text-[10px] tracking-[0.2em] text-accent transition-colors hover:bg-accent/20"
+          >
+            JOIN THE WAITLIST →
           </a>
-          <span className="numeral text-[9px] text-faint">
-            first scan of a repo can take ~20s · click the chart to grab the README embed
-          </span>
+          <a
+            href={`/r/${demo.meta?.repo ?? ""}#from=${encodeURIComponent(repoLabel)}`}
+            className="numeral border border-grid px-3 py-1.5 text-[10px] tracking-[0.2em] text-dim transition-colors hover:text-ink"
+          >
+            SEE THE LIVE DEMO MISSION
+          </a>
+          <a
+            href="https://github.com/santifer/warpchart"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="numeral border border-grid px-3 py-1.5 text-[10px] tracking-[0.2em] text-dim transition-colors hover:text-ink"
+          >
+            SELF-HOST FREE · 5 MIN
+          </a>
         </div>
-      </Panel>
-
-      <Panel index="05" title="Full mission telemetry" meta="preview · not live data" delay={400}>
-        <div className="relative">
-          {/* honest skeletons: wireframes, never fake numbers */}
-          <div className="grid grid-cols-2 gap-3 opacity-60 blur-[1.5px] sm:grid-cols-3" aria-hidden>
-            {[
-              { t: "VELOCITY / HOUR", bars: [38, 62, 45, 80, 55, 70, 92, 60] },
-              { t: "DAILY LADDER", bars: [70, 55, 85, 40, 65, 90, 50, 75] },
-              { t: "ACTIVITY HEATMAP", bars: [30, 45, 60, 75, 50, 65, 40, 55] },
-              { t: "RANK OVER TIME", bars: [85, 78, 72, 66, 58, 50, 40, 28] },
-              { t: "REPLAY · DAY ZERO", bars: [10, 18, 30, 38, 52, 64, 78, 95] },
-              { t: "MISSION LOG", bars: [50, 50, 50, 50, 50, 50, 50, 50] },
-            ].map((p) => (
-              <div key={p.t} className="hud px-3 py-2.5">
-                <div className="module-title !text-[8px]">{p.t}</div>
-                <div className="mt-2 flex h-12 items-end gap-1">
-                  {p.bars.map((b, i) => (
-                    <div key={i} className="w-full bg-grid" style={{ height: `${b}%` }} />
-                  ))}
-                </div>
-              </div>
-            ))}
-          </div>
-          <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 text-center">
-            <span className="numeral text-[10px] tracking-[0.35em] text-dim">◈ LOCKED</span>
-            <p className="max-w-[460px] text-xs font-light leading-relaxed text-ink">
-              Hourly history, velocity, projections, heatmap, spike forensics, replay and a
-              mission log, continuously tracked for {owner}/{name}.
-            </p>
-            <div className="flex flex-wrap items-center justify-center gap-2">
-              <a
-                href="https://github.com/santifer/warpchart/issues/8"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="numeral border border-accent/50 bg-accent/10 px-4 py-2 text-[11px] tracking-[0.2em] text-accent transition-colors hover:bg-accent/20"
-              >
-                JOIN THE WAITLIST →
-              </a>
-              <a
-                href={`/hq#from=${encodeURIComponent(`${owner}/${name}`)}`}
-                className="numeral border border-grid px-4 py-2 text-[11px] tracking-[0.2em] text-dim transition-colors hover:text-ink"
-              >
-                SEE IT LIVE ON THE DEMO MISSION
-              </a>
-            </div>
-            <span className="numeral text-[9px] text-faint">
-              self-hosting your own is free forever · the demo marks where {name} sits on its map
-            </span>
-          </div>
-        </div>
-      </Panel>
+      </div>
 
       <footer className="rise flex flex-wrap items-center justify-between gap-2 px-1 pb-4 pt-2">
         <span className="numeral text-[9px] tracking-[0.15em] text-faint">

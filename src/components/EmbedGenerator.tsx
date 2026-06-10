@@ -42,10 +42,9 @@ export default function EmbedGenerator({ defaultRepo }: { defaultRepo: string })
     return `${origin}/api/chart${qs ? `?${qs}` : ""}`;
   };
 
-  // The embed links to the full live telemetry: the tenant's chart goes to
-  // its mission dashboard (/hq works on the product domain and on any
-  // self-hosted instance), any other repo to its explorer system.
-  const targetUrl = isTenant ? `${origin}/hq` : `${origin}/r/${applied}`;
+  // Every repo's full telemetry lives on its own /r/ route: the tracked
+  // repo simply renders unlocked there. One link pattern for everything.
+  const targetUrl = `${origin}/r/${applied}`;
 
   const snippet = useMemo(() => {
     if (!origin) return "";
