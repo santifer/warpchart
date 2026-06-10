@@ -22,9 +22,11 @@ const BAND_A_Y = 150;
 const BAND_B_Y = 388;
 const CLIP_BOTTOM = 292;
 
+type ScanPlace = "above" | "below";
+
 type Scan =
-  | { kind: "neighbor"; n: NeighborEta; xPct: number; topPct: number }
-  | { kind: "route"; p: RouteRepo; xPct: number; topPct: number };
+  | { kind: "neighbor"; n: NeighborEta; xPct: number; topPct: number; place: ScanPlace }
+  | { kind: "route"; p: RouteRepo; xPct: number; topPct: number; place: ScanPlace };
 
 type AItem =
   | { kind: "n"; s: number; n: NeighborEta }
@@ -194,7 +196,9 @@ export default function GalacticChart({
     sound.hoverBlip();
     setScan(s);
   };
-  const bandATop = ((BAND_A_Y - 12) / H) * 100;
+  // Band A cards open DOWNWARD (the gap between bands has room and the
+  // wrapper clips anything above its top edge); band B cards open upward.
+  const bandATop = ((BAND_A_Y + 18) / H) * 100;
   const bandBTop = ((BAND_B_Y - 14) / H) * 100;
 
   return (
@@ -280,7 +284,7 @@ export default function GalacticChart({
                   key={p.r}
                   className="nbr"
                   onMouseEnter={() =>
-                    openScan({ kind: "route", p, xPct: clampPct((ax(p.s) / W) * 100), topPct: bandATop })
+                    openScan({ kind: "route", p, xPct: clampPct((ax(p.s) / W) * 100), topPct: bandATop, place: "below" })
                   }
                   onMouseLeave={() => setScan(null)}
                   onClick={() => togglePin(p.r)}
@@ -308,7 +312,7 @@ export default function GalacticChart({
                     key={n.r}
                     className="nbr"
                     onMouseEnter={() =>
-                      openScan({ kind: "neighbor", n, xPct: clampPct((x / W) * 100), topPct: bandATop })
+                      openScan({ kind: "neighbor", n, xPct: clampPct((x / W) * 100), topPct: bandATop, place: "below" })
                     }
                     onMouseLeave={() => setScan(null)}
                     onClick={() => togglePin(n.r)}
@@ -339,7 +343,7 @@ export default function GalacticChart({
                   key={p.r}
                   className="nbr"
                   onMouseEnter={() =>
-                    openScan({ kind: "route", p, xPct: clampPct((x / W) * 100), topPct: bandATop })
+                    openScan({ kind: "route", p, xPct: clampPct((x / W) * 100), topPct: bandATop, place: "below" })
                   }
                   onMouseLeave={() => setScan(null)}
                   onClick={() => togglePin(p.r)}
@@ -436,7 +440,7 @@ export default function GalacticChart({
               key={p.r}
               className="nbr"
               onMouseEnter={() =>
-                openScan({ kind: "route", p, xPct: clampPct((bx(p.s) / W) * 100), topPct: bandBTop })
+                openScan({ kind: "route", p, xPct: clampPct((bx(p.s) / W) * 100), topPct: bandBTop, place: "above" })
               }
               onMouseLeave={() => setScan(null)}
               onClick={() => togglePin(p.r)}
@@ -510,7 +514,7 @@ export default function GalacticChart({
             style={{
               left: `${scan.xPct}%`,
               top: `${scan.topPct}%`,
-              transform: "translate(-50%, -100%)",
+              transform: scan.place === "above" ? "translate(-50%, -100%)" : "translate(-50%, 0)",
               borderColor:
                 scan.kind === "neighbor" && scan.n.receding
                   ? "rgba(242, 163, 60, 0.5)"
