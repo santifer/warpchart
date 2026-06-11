@@ -105,6 +105,7 @@ try {
 
 // 6. Route landmarks (top 1000): refresh at most once a day (best effort).
 const routePath = join(DATA_DIR, "route.json");
+let routeRefreshed = false;
 try {
   let staleRoute = true;
   if (existsSync(routePath)) {
@@ -114,6 +115,7 @@ try {
   if (staleRoute) {
     const route = await topRepos();
     if (!dryRun) writeFileSync(routePath, JSON.stringify({ generated_at: nowISO, repos: route }) + "\n");
+    routeRefreshed = true;
     console.log(`[collect] route landmarks refreshed: ${route.length} repos`);
   }
 } catch (err) {
@@ -248,4 +250,34 @@ try {
   }
 } catch (err) {
   console.error(`[collect] warm failed: ${err.message}`);
+}
+
+// Daily spotlight warm: the landing's protagonist changes with the route
+// registry's date, so right after a route refresh we pre-build its whole
+// surface (explorer page, curve, embed, OG card). Sequential with pauses
+// and gated on routeRefreshed: it never overlaps the 04 UTC warm above.
+try {
+  const base = (process.env.WARM_BASE_URL ?? "").replace(/\/$/, "");
+  if (base && !dryRun && routeRefreshed) {
+    const route = JSON.parse(readFileSync(routePath, "utf8"));
+    const day = (route.generated_at ?? "").slice(0, 10) || "fallback";
+    // selection must MATCH src/lib/demo.ts (seedFrom + band 80..680)
+    const text = "spotlight::" + day;
+    let h = 2166136261;
+    for (let i = 0; i < text.length; i++) h = Math.imul(h ^ text.charCodeAt(i), 16777619);
+    const idx = 80 + ((h >>> 0) % 600);
+    const hero = route.repos?.[idx]?.r;
+    if (hero) {
+      const q = encodeURIComponent(hero);
+      for (const path of [`/r/${hero}`, `/api/curve?repo=${q}`, `/api/chart?repo=${q}`, `/api/og?repo=${q}`]) {
+        try {
+          await fetch(`${base}${path}`);
+        } catch { /* best effort */ }
+        await new Promise((ok) => setTimeout(ok, 2000));
+      }
+      console.log(`[collect] spotlight warmed: ${hero} (#${idx + 1})`);
+    }
+  }
+} catch (err) {
+  console.error(`[collect] spotlight warm failed: ${err.message}`);
 }

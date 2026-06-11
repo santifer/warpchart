@@ -12,6 +12,7 @@ import { useRouter } from "next/navigation";
 import type { ChartInputs } from "@/lib/types";
 import type { Palette } from "@/lib/theme";
 import { usePalette } from "@/lib/usePalette";
+import { dopplerTilt } from "@/lib/doppler";
 import { fmt, fmtCompact, fmtEtaDays, shortName } from "@/lib/format";
 import { neighborEtas, type NeighborEta } from "@/lib/projections";
 
@@ -42,23 +43,23 @@ function seedFrom(text: string): number {
   return h >>> 0;
 }
 
-function dopplerFor(rel: number, P: Palette) {
+// Same trail physics as the galactic chart: length proportional to the
+// relative speed in OUR frame, passed ships at half scale unless they hunt
+// us from behind (full length + thicker), siren pulse (closing = faster).
+function dopplerFor(rel: number, isAhead: boolean, P: Palette) {
   const mag = Math.abs(1 - rel);
   const paced = mag <= 0.15;
-  const color = paced
-    ? P.doppler.neutral
-    : rel < 1
-      ? rel < 0.1
-        ? P.doppler.cold
-        : P.doppler.cool
-      : rel > 2.5
-        ? P.doppler.hot
-        : P.doppler.warm;
-  const tailLen = paced ? 0 : Math.min(20, 6 + Math.min(mag, 1.3) * 11);
+  const closing = isAhead ? rel < 1 : rel > 1;
+  const threat = !isAhead && rel > 1 && !paced;
+  const color = dopplerTilt(rel, P);
+  const base = paced ? 0 : 5 + Math.min(mag, 2.2) * 12;
+  const tailLen = base * (!isAhead && !threat ? 0.5 : 1);
   // our frame, vertical: ships we gain on fall DOWN, their trail points UP
   const tailDir = rel < 1 ? -1 : 1;
-  const dur = Math.max(0.9, 2.8 - Math.min(mag, 2) * 0.95);
-  return { color, tailLen, tailDir, dur };
+  const durBase = Math.max(0.8, 2.6 - Math.min(mag, 2) * 0.8);
+  const dur = closing ? durBase * 0.6 : durBase * 1.4;
+  const girth = threat ? 2.4 : 1.6;
+  return { color, tailLen, tailDir, dur, girth, threat };
 }
 
 export default function VerticalChart({
@@ -220,7 +221,7 @@ export default function VerticalChart({
         {/* ships */}
         {rows.map(({ n, y, labelY }) => {
           const isAhead = n.gap > 0;
-          const dop = dopplerFor(n.v / Math.max(vOwn, 1), C);
+          const dop = dopplerFor(n.v / Math.max(vOwn, 1), isAhead, C);
           const isTarget = target === n.r;
           const shifted = Math.abs(labelY - y) > 6;
           return (
@@ -229,9 +230,9 @@ export default function VerticalChart({
               {dop.tailLen > 0 ? (
                 <>
                   <path
-                    d={`M ${AXIS_X - 1.6} ${y} L ${AXIS_X} ${y + dop.tailDir * dop.tailLen} L ${AXIS_X + 1.6} ${y} Z`}
+                    d={`M ${AXIS_X - dop.girth} ${y} L ${AXIS_X} ${y + dop.tailDir * dop.tailLen} L ${AXIS_X + dop.girth} ${y} Z`}
                     fill={dop.color}
-                    opacity={isAhead ? 0.32 : 0.2}
+                    opacity={dop.threat ? 0.5 : isAhead ? 0.32 : 0.2}
                   />
                   <circle
                     className="vel-streak-y"

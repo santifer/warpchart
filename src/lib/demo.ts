@@ -31,9 +31,10 @@ export async function buildDemoSpotlight(): Promise<DemoSpotlight | null> {
   const hero = route.repos[idx];
   if (!hero) return null;
 
-  // neighborhood: a few ships behind, more ahead (the chase reads forward)
-  const lo = Math.max(0, idx - 4);
-  const hi = Math.min(route.repos.length, idx + 14);
+  // neighborhood: balanced behind/ahead so the protagonist reads roughly
+  // centered in the spotlight band, escorts and targets both visible
+  const lo = Math.max(0, idx - 8);
+  const hi = Math.min(route.repos.length, idx + 11);
   const names = route.repos.slice(lo, hi).map((p) => p.r);
 
   let neighbors: Neighbor[] = [];

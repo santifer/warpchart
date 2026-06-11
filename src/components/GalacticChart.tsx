@@ -15,6 +15,7 @@ import { useRouter } from "next/navigation";
 import type { ChartInputs, RouteRepo } from "@/lib/types";
 import type { Palette } from "@/lib/theme";
 import { usePalette } from "@/lib/usePalette";
+import { dopplerTilt } from "@/lib/doppler";
 import { fmt, fmtCompact, fmtEtaDays, etaDate, shortName } from "@/lib/format";
 import { neighborEtas, type NeighborEta } from "@/lib/projections";
 import { sound } from "@/lib/sound";
@@ -54,31 +55,30 @@ function seedFrom(text: string): number {
 const log10 = Math.log10;
 
 // Doppler reading of a repo's growth velocity RELATIVE to ours (rel = v/vOwn).
-// Hue carries the side (blueshift = we gain on it, redshift = it outruns us),
-// the comet tail carries the magnitude. Within ±15% it flies in formation.
-// The tail is its motion trail in OUR reference frame, so it points toward
-// the core when we are reeling the repo in (it falls behind us) and toward
-// us when it escapes: tail toward you = you are watching its lights leave.
-function dopplerFor(rel: number, P: Palette) {
+// Hue carries the side (blueshift = we gain on it, redshift = it outruns us);
+// the comet tail is its motion trail in OUR reference frame: length is
+// PROPORTIONAL to the relative speed (sweeping past a near-stalled repo
+// leaves a long trail; flying in formation leaves none). Ships already
+// passed render at half scale: attention follows the chase ahead, EXCEPT a
+// hunter closing from behind, which keeps full length plus a thicker tail.
+// Particle pulse is the siren: closing = higher frequency, receding = lower.
+function dopplerFor(rel: number, isAhead: boolean, P: Palette) {
   const mag = Math.abs(1 - rel);
   const paced = mag <= 0.15;
-  const color = paced
-    ? P.doppler.neutral
-    : rel < 1
-      ? rel < 0.1
-        ? P.doppler.cold
-        : P.doppler.cool
-      : rel > 2.5
-        ? P.doppler.hot
-        : P.doppler.warm;
-  const tailLen = paced ? 0 : Math.min(24, 7 + Math.min(mag, 1.3) * 13);
+  const closing = isAhead ? rel < 1 : rel > 1; // the gap is shrinking
+  const threat = !isAhead && rel > 1 && !paced; // hunted from behind
+  const color = dopplerTilt(rel, P);
+  const base = paced ? 0 : 6 + Math.min(mag, 2.2) * 14;
+  const tailLen = base * (!isAhead && !threat ? 0.5 : 1);
   const tailDir = rel < 1 ? 1 : -1;
-  const dur = Math.max(0.9, 2.8 - Math.min(mag, 2) * 0.95);
-  return { color, tailLen, tailDir, dur };
+  const durBase = Math.max(0.8, 2.6 - Math.min(mag, 2) * 0.8);
+  const dur = closing ? durBase * 0.6 : durBase * 1.4;
+  const girth = threat ? 2.6 : 1.7;
+  return { color, tailLen, tailDir, dur, girth, threat };
 }
 
-function tailPath(x: number, y: number, len: number, dir: number): string {
-  return `M ${x} ${y - 1.7} L ${x + dir * len} ${y} L ${x} ${y + 1.7} Z`;
+function tailPath(x: number, y: number, len: number, dir: number, girth = 1.7): string {
+  return `M ${x} ${y - girth} L ${x + dir * len} ${y} L ${x} ${y + girth} Z`;
 }
 
 export default function GalacticChart({
@@ -523,7 +523,7 @@ export default function GalacticChart({
             LOCAL SYSTEM
           </text>
           <text x={40} y={47} fill={C.faint} fontSize={10.5}>
-            scroll sideways to pan · pinch to zoom · doppler tails: toward the core = you gain, toward you = it escapes
+            scroll sideways to pan · pinch to zoom · doppler tails: length = speed gap · blue = you gain the duel, red = it outruns you
           </text>
           {!isDefaultView ? (
             <text x={W - 40} y={30} fill={C.accent} fontSize={11} textAnchor="end" opacity={0.8}>
@@ -666,7 +666,7 @@ export default function GalacticChart({
               if (it.kind === "n") {
                 const n = it.n;
                 const isAhead = n.gap > 0;
-                const dop = dopplerFor(n.v / Math.max(vOwn, 1), C);
+                const dop = dopplerFor(n.v / Math.max(vOwn, 1), isAhead, C);
                 const color = dop.color;
                 if (tiers[i] === -1) {
                   // label shed: bare interactive dot, data stays on hover
@@ -685,8 +685,8 @@ export default function GalacticChart({
                         <circle cx={x} cy={BAND_A_Y} r={8} fill="none" stroke={C.accent} strokeWidth={1.2} />
                       ) : null}
                       {dop.tailLen > 0 ? (
-                        <path d={tailPath(x, BAND_A_Y, dop.tailLen, dop.tailDir)}
-                          fill={color} opacity={isAhead ? 0.3 : 0.18} />
+                        <path d={tailPath(x, BAND_A_Y, dop.tailLen, dop.tailDir, dop.girth)}
+                          fill={color} opacity={dop.threat ? 0.45 : isAhead ? 0.3 : 0.18} />
                       ) : null}
                       <circle className="nbr-dot" cx={x} cy={BAND_A_Y} r={3.2} fill={color} opacity={isAhead ? 0.95 : 0.55} />
                     </g>
@@ -713,8 +713,8 @@ export default function GalacticChart({
                     ) : null}
                     {dop.tailLen > 0 ? (
                       <>
-                        <path d={tailPath(x, BAND_A_Y, dop.tailLen, dop.tailDir)}
-                          fill={color} opacity={isAhead ? 0.32 : 0.2} />
+                        <path d={tailPath(x, BAND_A_Y, dop.tailLen, dop.tailDir, dop.girth)}
+                          fill={color} opacity={dop.threat ? 0.5 : isAhead ? 0.32 : 0.2} />
                         {[0, 1].map((k) => (
                           <circle
                             key={k}

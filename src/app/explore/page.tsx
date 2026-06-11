@@ -76,20 +76,22 @@ export default async function Explore() {
         // full-bleed: the showpiece breaks out of the text column and uses
         // the whole viewport; the SVG scales up and gets MORE legible
         <section
-          className="rise relative left-1/2 w-screen -translate-x-1/2 px-4 sm:px-10 2xl:px-16"
+          className="rise relative left-1/2 w-screen -translate-x-1/2"
           style={{ animationDelay: "120ms" }}
         >
-          <div className="mx-auto flex max-w-[1840px] flex-col gap-3">
-            <div className="flex flex-wrap items-baseline justify-between gap-2">
-              <h2 className="font-display text-title tracking-[0.14em] text-ink">
-                TODAY&apos;S SPOTLIGHT <span className="text-accent">· {spotlight.inputs.repo}</span>{" "}
-                <span className="text-dim">· #{spotlight.rank} worldwide</span>
-              </h2>
-              <span className="numeral text-micro text-faint">
-                a real top 1000 system, rotating daily · pan it, hover the ships
-              </span>
-            </div>
-            <div className="hud p-2 sm:p-3">
+          <div className="mx-auto mb-3 flex max-w-[1840px] flex-wrap items-baseline justify-between gap-2 px-4 sm:px-10 2xl:px-16">
+            <h2 className="font-display text-title tracking-[0.14em] text-ink">
+              TODAY&apos;S SPOTLIGHT <span className="text-accent">· {spotlight.inputs.repo}</span>{" "}
+              <span className="text-dim">· #{spotlight.rank} worldwide</span>
+            </h2>
+            <span className="numeral text-micro text-faint">
+              random pick from the top 1000 · rotates daily · pan it, hover the ships
+            </span>
+          </div>
+          {/* the space itself runs edge to edge (the page backdrop's stars
+              shine through the tinted band); only the text stays in column */}
+          <div className="border-y border-grid bg-hull/30 py-2 sm:py-3">
+            <div className="mx-auto max-w-[2200px] px-2 sm:px-6">
               <div className="hidden lg:block">
                 <GalacticChart inputs={spotlight.inputs} />
               </div>
@@ -97,15 +99,15 @@ export default async function Explore() {
                 <VerticalChart inputs={spotlight.inputs} />
               </div>
             </div>
-            <div className="flex justify-center">
-              <Link
-                prefetch={false}
-                href={`/r/${spotlight.inputs.repo}`}
-                className="numeral border border-accent/50 bg-accent/10 px-5 py-2.5 text-label tracking-[0.2em] text-accent transition-colors hover:bg-accent/20"
-              >
-                OPEN THIS SYSTEM →
-              </Link>
-            </div>
+          </div>
+          <div className="mt-4 flex justify-center">
+            <Link
+              prefetch={false}
+              href={`/r/${spotlight.inputs.repo}`}
+              className="numeral border border-accent/50 bg-accent/10 px-5 py-2.5 text-label tracking-[0.2em] text-accent transition-colors hover:bg-accent/20"
+            >
+              OPEN THIS SYSTEM →
+            </Link>
           </div>
         </section>
       ) : null}
