@@ -451,6 +451,14 @@ svg text {
   }
 }
 
+.glow-star {
+  text-shadow: 0 0 24px rgba(83, 214, 232, 0.25), 0 0 60px rgba(83, 214, 232, 0.12);
+}
+
+.scheme-light .glow-star {
+  text-shadow: none;
+}
+
 ::selection {
   background: var(--accent-soft);
 }

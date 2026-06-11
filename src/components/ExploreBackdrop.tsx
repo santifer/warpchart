@@ -29,16 +29,16 @@ export default function ExploreBackdrop() {
       tw: rand() < 0.3,
     }));
   const layers = [
-    { stars: layer(56, 0.4, 0.9, 0.1, 0.3), dur: 420 },
-    { stars: layer(38, 0.6, 1.2, 0.15, 0.4), dur: 240 },
-    { stars: layer(22, 0.8, 1.7, 0.2, 0.55), dur: 130 },
+    { stars: layer(90, 0.4, 0.9, 0.1, 0.3), dur: 420 },
+    { stars: layer(60, 0.6, 1.2, 0.15, 0.4), dur: 240 },
+    { stars: layer(36, 0.8, 1.8, 0.2, 0.55), dur: 130 },
   ];
-  const streaks = Array.from({ length: 4 }, (_, i) => ({
-    x: rand() * (W * 0.5),
+  const streaks = Array.from({ length: 6 }, (_, i) => ({
+    x: rand() * (W * 0.55),
     y: 60 + rand() * (H - 160),
-    len: 90 + rand() * 130,
-    dur: 9 + rand() * 6,
-    delay: i * 4.2 + rand() * 2,
+    len: 90 + rand() * 140,
+    dur: 10 + rand() * 7,
+    delay: i * 3.1 + rand() * 2,
   }));
 
   return (
@@ -64,6 +64,10 @@ export default function ExploreBackdrop() {
           <stop offset="100%" stopColor="var(--star-white)" stopOpacity="0.9" />
         </linearGradient>
       </defs>
+
+      {/* a faint milky way band crossing the field diagonally */}
+      <ellipse cx={W * 0.5} cy={H * 0.42} rx={W * 0.72} ry={120}
+        transform={`rotate(-16 ${W * 0.5} ${H * 0.42})`} fill="url(#lg-cool)" opacity={0.16} />
 
       {/* distant galaxies, pinned: infinite distance, zero parallax */}
       <ellipse cx={W * 0.82} cy={H * 0.18} rx={70} ry={18}

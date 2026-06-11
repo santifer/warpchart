@@ -88,7 +88,7 @@ export default function ExploreSearch({ catalog }: { catalog: CatalogEntry[] }) 
 
   return (
     <div className="relative w-full">
-      <div className="hud flex items-center gap-3 px-4 py-3">
+      <div className="hud flex items-center gap-3 px-5 py-4 transition-colors focus-within:border-accent/60">
         <span className="numeral text-label tracking-[0.25em] text-accent">SCAN</span>
         <input
           autoFocus
@@ -108,8 +108,8 @@ export default function ExploreSearch({ catalog }: { catalog: CatalogEntry[] }) 
               open(rows[clampedSel].r);
             }
           }}
-          placeholder="search any repository · react, kubernetes, owner/name…"
-          className="numeral w-full bg-transparent text-sm text-ink outline-none placeholder:text-faint"
+          placeholder="search any repository…"
+          className="numeral w-full bg-transparent text-lg text-ink outline-none placeholder:text-faint"
           aria-label="Search any GitHub repository"
         />
         {busy ? <span className="numeral shrink-0 text-micro text-faint">SCANNING…</span> : null}
