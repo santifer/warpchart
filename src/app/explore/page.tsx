@@ -34,7 +34,7 @@ export default async function Explore() {
     .map((i) => catalog[i]);
 
   return (
-    <main className="mx-auto flex min-h-screen max-w-[1020px] flex-col gap-14 px-4 py-12 sm:px-6">
+    <main className="mx-auto flex min-h-screen max-w-[1120px] flex-col gap-14 px-4 py-12 sm:px-6">
       <ExploreBackdrop />
       <header className="rise flex items-center justify-between" style={{ animationDelay: "0ms" }}>
         <span className="font-display text-sm tracking-[0.3em] text-star">WARPCHART</span>
@@ -73,22 +73,38 @@ export default async function Explore() {
       </section>
 
       {spotlight ? (
-        <section className="rise flex flex-col gap-3" style={{ animationDelay: "120ms" }}>
-          <div className="flex flex-wrap items-baseline justify-between gap-2">
-            <h2 className="font-display text-title tracking-[0.14em] text-ink">
-              TODAY&apos;S SPOTLIGHT <span className="text-accent">· {spotlight.inputs.repo}</span>{" "}
-              <span className="text-dim">· #{spotlight.rank} worldwide</span>
-            </h2>
-            <span className="numeral text-micro text-faint">
-              a real top 1000 system, rotating daily · pan it, hover the ships
-            </span>
-          </div>
-          <div className="hud p-2">
-            <div className="hidden lg:block">
-              <GalacticChart inputs={spotlight.inputs} />
+        // full-bleed: the showpiece breaks out of the text column and uses
+        // the whole viewport; the SVG scales up and gets MORE legible
+        <section
+          className="rise relative left-1/2 w-screen -translate-x-1/2 px-4 sm:px-10 2xl:px-16"
+          style={{ animationDelay: "120ms" }}
+        >
+          <div className="mx-auto flex max-w-[1840px] flex-col gap-3">
+            <div className="flex flex-wrap items-baseline justify-between gap-2">
+              <h2 className="font-display text-title tracking-[0.14em] text-ink">
+                TODAY&apos;S SPOTLIGHT <span className="text-accent">· {spotlight.inputs.repo}</span>{" "}
+                <span className="text-dim">· #{spotlight.rank} worldwide</span>
+              </h2>
+              <span className="numeral text-micro text-faint">
+                a real top 1000 system, rotating daily · pan it, hover the ships
+              </span>
             </div>
-            <div className="lg:hidden">
-              <VerticalChart inputs={spotlight.inputs} />
+            <div className="hud p-2 sm:p-3">
+              <div className="hidden lg:block">
+                <GalacticChart inputs={spotlight.inputs} />
+              </div>
+              <div className="lg:hidden">
+                <VerticalChart inputs={spotlight.inputs} />
+              </div>
+            </div>
+            <div className="flex justify-center">
+              <Link
+                prefetch={false}
+                href={`/r/${spotlight.inputs.repo}`}
+                className="numeral border border-accent/50 bg-accent/10 px-5 py-2.5 text-label tracking-[0.2em] text-accent transition-colors hover:bg-accent/20"
+              >
+                OPEN THIS SYSTEM →
+              </Link>
             </div>
           </div>
         </section>

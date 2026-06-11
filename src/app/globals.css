@@ -66,6 +66,9 @@
 
 html {
   background: var(--void);
+  /* clip, not hidden: full-bleed breakouts (w-screen) must never create a
+     phantom horizontal scroll container */
+  overflow-x: clip;
 }
 
 body {
