@@ -8,7 +8,7 @@
 //
 // Usage: GH_TOKEN=... node collector/collect.mjs [--dry-run]
 
-import { readFileSync, writeFileSync, appendFileSync, existsSync } from "node:fs";
+import { readFileSync, writeFileSync, appendFileSync, existsSync, copyFileSync } from "node:fs";
 import { join } from "node:path";
 import {
   DATA_DIR, readConfig, repoMeta, backwalk, countAbove,
@@ -114,12 +114,29 @@ try {
   }
   if (staleRoute) {
     const route = await topRepos();
-    if (!dryRun) writeFileSync(routePath, JSON.stringify({ generated_at: nowISO, repos: route }) + "\n");
+    if (!dryRun) {
+      // keep the outgoing registry: today vs yesterday is the collision
+      // scanner's zero-cost velocity source for all 1000 repos
+      if (existsSync(routePath)) copyFileSync(routePath, join(DATA_DIR, "route-prev.json"));
+      writeFileSync(routePath, JSON.stringify({ generated_at: nowISO, repos: route }) + "\n");
+    }
     routeRefreshed = true;
     console.log(`[collect] route landmarks refreshed: ${route.length} repos`);
   }
 } catch (err) {
   console.error(`[collect] route refresh failed: ${err.message}`);
+}
+
+// 6b. Collision scan (best effort, only on the daily route refresh):
+// today vs yesterday gives every top-1000 repo a velocity for free, and
+// imminent overtakes ranked by tweetability land in data/collisions.json.
+if (routeRefreshed && !dryRun) {
+  try {
+    const { runCollisionScan } = await import("./collisions.mjs");
+    await runCollisionScan();
+  } catch (err) {
+    console.error(`[collect] collision scan failed: ${err.message}`);
+  }
 }
 
 // 7. Spike forensics: refresh at most once a day (best effort).
