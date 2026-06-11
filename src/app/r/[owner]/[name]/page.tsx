@@ -14,6 +14,7 @@ import Heatmap from "@/components/Heatmap";
 import RankChart from "@/components/RankChart";
 import MissionLog from "@/components/MissionLog";
 import Dashboard from "@/components/Dashboard";
+import ThemedChart from "@/components/ThemedChart";
 import { buildBundle } from "@/lib/bundle";
 import { loadMeta } from "@/lib/history";
 import { unstable_cache } from "next/cache";
@@ -245,19 +246,10 @@ export default async function ExplorerPage({
               {/* same resource as the README embed: rendering it here warms
                   the cache for everyone who embeds this repo afterwards */}
               <a href={`/explore#embed=${encodeURIComponent(repoLabel)}`} className="block min-h-[160px]">
-                <picture>
-                  <source
-                    media="(prefers-color-scheme: dark)"
-                    srcSet={`/api/chart?repo=${encodeURIComponent(repoLabel)}&theme=dark`}
-                  />
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={`/api/chart?repo=${encodeURIComponent(repoLabel)}&theme=light`}
-                    alt={`Animated cumulative star history of ${repoLabel}. First render of a new repo can take a few seconds.`}
-                    className="w-full"
-                    loading="lazy"
-                  />
-                </picture>
+                <ThemedChart
+                  repo={repoLabel}
+                  alt={`Animated cumulative star history of ${repoLabel}. First render of a new repo can take a few seconds.`}
+                />
               </a>
               <span className="numeral text-[9px] text-faint">
                 first scan of a repo can take ~20s · click the chart to grab the README embed

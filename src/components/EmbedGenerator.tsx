@@ -4,10 +4,12 @@
 // copy the README snippet. The snippet uses the <picture> pattern so the
 // embed follows GitHub's color scheme.
 import { useEffect, useMemo, useState } from "react";
+import { useThemeMode } from "@/lib/usePalette";
 
 const REPO_RE = /^[\w.-]+\/[\w.-]+$/;
 
 export default function EmbedGenerator({ defaultRepo }: { defaultRepo: string }) {
+  const { resolved } = useThemeMode();
   const [repo, setRepo] = useState(defaultRepo);
   const [applied, setApplied] = useState(defaultRepo);
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
@@ -108,8 +110,8 @@ export default function EmbedGenerator({ defaultRepo }: { defaultRepo: string })
           <a href={targetUrl} title={`Open the full telemetry of ${applied}`}>
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
-              key={`${applied}:${retry}`}
-              src={chartUrl()}
+              key={`${applied}:${retry}:${resolved}`}
+              src={chartUrl(resolved)}
               alt={`Animated cumulative star chart of ${applied}`}
               className="w-full"
               style={{ opacity: status === "ready" ? 1 : 0 }}
