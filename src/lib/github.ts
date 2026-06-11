@@ -213,19 +213,31 @@ export async function neighborsVelocity(
   const chunks: string[][] = [];
   for (let i = 0; i < names.length; i += CHUNK) chunks.push(names.slice(i, i + CHUNK));
 
+  const runChunk = async (chunk: string[]) => {
+    const parts = chunk.map((fn, i) => {
+      const [o, n] = fn.split("/");
+      return `r${i}: repository(owner:${JSON.stringify(o)}, name:${JSON.stringify(n)}){
+        nameWithOwner stargazerCount description primaryLanguage{ name }
+        stargazers(last:50){ edges{ starredAt } } }`;
+    });
+    return graphql<Record<string, VelocityRepoNode | null>>(`{ ${parts.join("\n")} }`);
+  };
+
   const results = await Promise.all(
     chunks.map(async (chunk) => {
-      const parts = chunk.map((fn, i) => {
-        const [o, n] = fn.split("/");
-        return `r${i}: repository(owner:${JSON.stringify(o)}, name:${JSON.stringify(n)}){
-          nameWithOwner stargazerCount description primaryLanguage{ name }
-          stargazers(last:50){ edges{ starredAt } } }`;
-      });
       try {
-        return await graphql<Record<string, VelocityRepoNode | null>>(`{ ${parts.join("\n")} }`);
-      } catch (err) {
-        ghlog.warn("velocity.chunk-failed", { size: chunk.length, ...serializeError(err) });
-        return null;
+        return await runChunk(chunk);
+      } catch {
+        // one quiet beat and a single retry: a stressed GraphQL executor
+        // usually recovers within a second, and this turns the rare
+        // all-chunks-down render into a non-event
+        await new Promise((r) => setTimeout(r, 900));
+        try {
+          return await runChunk(chunk);
+        } catch (err) {
+          ghlog.warn("velocity.chunk-failed", { size: chunk.length, ...serializeError(err) });
+          return null;
+        }
       }
     })
   );

@@ -213,6 +213,15 @@ export default async function ExplorerPage({
         meta={inputs.apex ? `destination: ${inputs.apex.r} · ${fmt(inputs.apex.s)} stars` : undefined}
         delay={80}
       >
+        <div className="mb-2 hidden items-center justify-end gap-2 lg:flex">
+          <a
+            href={`/r/${demo.meta?.repo ?? ""}#deck`}
+            title="Fullscreen flight console. Unlocks with tracking; click to see it live on the demo mission."
+            className="numeral border border-grid px-2.5 py-1 text-micro tracking-[0.2em] text-faint transition-colors hover:border-accent/50 hover:text-accent"
+          >
+            ⛶ COMMAND DECK · ◈ LOCKED — SEE IT ON THE DEMO →
+          </a>
+        </div>
         <div className="hidden lg:block">
           <GalacticChart inputs={inputs} />
         </div>

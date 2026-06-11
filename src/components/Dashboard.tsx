@@ -72,6 +72,8 @@ export default function Dashboard({ bundle }: { bundle: DashboardBundle }) {
     try {
       setTarget(localStorage.getItem(TARGET_KEY));
     } catch { /* private mode */ }
+    // deep link from locked explorer pages: see the deck live on the demo
+    if (window.location.hash.includes("deck")) setDeck(true);
   }, []);
 
   const pinTarget = (r: string | null) => {
