@@ -136,9 +136,13 @@ export default function StatusBar({ bundle }: { bundle: DashboardBundle }) {
 
       <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-grid pt-2">
         <div className="flex items-center gap-5">
-          <span className="numeral text-micro tracking-[0.15em] text-faint">
+          <a
+            href="/"
+            className="numeral text-micro tracking-[0.15em] text-faint transition-colors hover:text-accent"
+            title="Back to warpchart.dev"
+          >
             WARPCHART // GROWTH TELEMETRY
-          </span>
+          </a>
           <SoundToggle />
           <ThemeToggle />
         </div>

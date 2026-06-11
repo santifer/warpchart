@@ -7,6 +7,7 @@
 // loading seal, the same visual language as the locked previews. Content
 // then resolves in place with no layout shift.
 import { useEffect, useMemo, useState } from "react";
+import Masthead from "@/components/Masthead";
 
 const STEPS = [
   "establishing telemetry link",
@@ -263,6 +264,9 @@ function LogSilhouette() {
 export default function ExplorerLoading() {
   return (
     <main className="mx-auto flex max-w-[1440px] flex-col gap-4 px-3 py-4 sm:px-6 sm:py-6">
+      <div className="rise px-1">
+        <Masthead />
+      </div>
       {/* header: identity placeholders left, the scan log right (the real
           metrics only appear when they are real numbers) */}
       <header className="hud rise px-4 py-4 sm:px-6 sm:py-5">
