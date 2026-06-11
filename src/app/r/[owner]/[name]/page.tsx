@@ -59,7 +59,17 @@ function Locked({ unlockFor, children }: { unlockFor: string; children: React.Re
       <div className="pointer-events-none select-none opacity-40 blur-[1.5px]" aria-hidden>
         {children}
       </div>
-      <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-2 text-center">
+      {/* the whole overlay surface resolves to the unlock CTA: blurred demo
+          content underneath contains link-looking text, and a dead click
+          there reads as "the links are broken" */}
+      <a
+        href="https://github.com/santifer/warpchart/issues/8"
+        target="_blank"
+        rel="noopener noreferrer"
+        className="absolute inset-0 z-[9]"
+        aria-label={`Unlock for ${unlockFor}`}
+      />
+      <div className="pointer-events-none absolute inset-0 z-10 flex flex-col items-center justify-center gap-2 text-center [&_a]:pointer-events-auto">
         <span className="numeral bg-void/75 px-3 py-1 text-micro tracking-[0.3em] text-dim">
           ◈ LOCKED · PREVIEW SHOWS THE LIVE DEMO MISSION
         </span>

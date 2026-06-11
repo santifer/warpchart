@@ -262,20 +262,20 @@ export default function VerticalChart({
                   {!isAhead ? "passed" : n.receding ? "receding" : `eta ${fmtEtaDays(n.etaDays)}`}
                 </tspan>
               </text>
-              <text
-                x={W - 16}
-                y={labelY + 5}
-                textAnchor="end"
-                fontSize={13}
-                fill={C.dim}
-                className="numeral"
+              {/* 44px finger-sized hit area: the bare glyph was 15x14px and
+                  thumb taps landed on the row (pin) instead of navigating */}
+              <g
                 onClick={(e) => {
                   e.stopPropagation();
                   open(n.r);
                 }}
+                style={{ cursor: "pointer" }}
               >
-                →
-              </text>
+                <rect x={W - 48} y={labelY - 17} width={44} height={44} fill="transparent" />
+                <text x={W - 16} y={labelY + 5} textAnchor="end" fontSize={13} fill={C.dim} className="numeral">
+                  →
+                </text>
+              </g>
             </g>
           );
         })}
