@@ -22,8 +22,21 @@ import { getExplorerData } from "@/lib/explorer";
 
 // Shared data cache: even when the route renders dynamically, the GitHub
 // round-trips are paid at most once per repo per 15 minutes.
+// Degraded results (velocity unavailable) must NOT be cached: throwing
+// skips unstable_cache storage, so the next visitor gets a fresh attempt
+// instead of 15 poisoned minutes. The thrown error carries the data so
+// THIS visitor still sees the degraded-but-usable page.
+class DegradedResult extends Error {
+  constructor(public data: Awaited<ReturnType<typeof getExplorerData>>) {
+    super("__degraded__");
+  }
+}
 const getCachedExplorerData = unstable_cache(
-  async (owner: string, name: string) => getExplorerData(owner, name),
+  async (owner: string, name: string) => {
+    const data = await getExplorerData(owner, name);
+    if (data?.degraded) throw new DegradedResult(data);
+    return data;
+  },
   ["explorer-data"],
   { revalidate: 900 }
 );
@@ -108,13 +121,16 @@ export default async function ExplorerPage({
   try {
     data = await getCachedExplorerData(owner, name);
   } catch (err) {
-    // A real "repository not found" caches as 404; transient GitHub errors
-    // must NOT (rethrow -> 500, the next visitor triggers a fresh attempt).
-    if (err instanceof Error && /not[ _]?found|could not resolve/i.test(err.message)) {
+    if (err instanceof DegradedResult) {
+      data = err.data; // serve it, but leave no cache behind
+    } else if (err instanceof Error && /not[ _]?found|could not resolve/i.test(err.message)) {
+      // a real "repository not found" caches as 404; transient GitHub
+      // errors must NOT (rethrow -> 500, next visitor retries fresh)
       notFound();
+    } else {
+      console.error(`[explorer] ${owner}/${name} failed:`, err);
+      throw err;
     }
-    console.error(`[explorer] ${owner}/${name} failed:`, err);
-    throw err;
   }
   if (!data) notFound();
 
