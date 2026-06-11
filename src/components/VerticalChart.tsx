@@ -1,25 +1,64 @@
 "use client";
 
-// Mobile star chart: a vertical ascent (subway-map pattern). The galactic
-// core sits at the top, our ship below the ships we still have to pass,
-// milestone gates as separators. Full-width rows never collide; tapping a
-// row pins it (dashboard) or warps to it (explorer); the chevron always
-// opens that repo's scan page.
-import Link from "next/link";
+// Mobile star chart: a true spatial ASCENT. The vertical axis is the real
+// (log) star distance, so dense neighborhoods cluster and far ships float
+// away, exactly like the horizontal chart. Star specks twinkle behind,
+// FTL streaks climb past, every ship carries its Doppler color and a
+// vertical comet tail (toward the core when we gain on it, toward us when
+// it escapes), and labels shed to leader lines when space runs out: the
+// dot always sits at its REAL position. Tap a ship to pin it (dashboard)
+// or warp to it (explorer); the chevron opens its scan page.
 import { useRouter } from "next/navigation";
 import type { ChartInputs } from "@/lib/types";
+import type { Palette } from "@/lib/theme";
+import { usePalette } from "@/lib/usePalette";
 import { fmt, fmtCompact, fmtEtaDays, shortName } from "@/lib/format";
 import { neighborEtas, type NeighborEta } from "@/lib/projections";
 
-type Row =
-  | { kind: "core" }
-  | { kind: "void"; count: number }
-  | { kind: "gate"; rank: number; threshold: number }
-  | { kind: "ship"; n: NeighborEta }
-  | { kind: "me" };
+const W = 390;
+const AXIS_X = 30;
+const LABEL_X = 46;
+const PAD_TOP = 46;
+const PAD_BOT = 40;
+const MIN_GAP = 48; // label block spacing
 
 function trunc(s: string): string {
-  return s.length > 22 ? s.slice(0, 21) + "…" : s;
+  return s.length > 24 ? s.slice(0, 23) + "…" : s;
+}
+
+function mulberry32(seed: number) {
+  return () => {
+    seed |= 0;
+    seed = (seed + 0x6d2b79f5) | 0;
+    let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+function seedFrom(text: string): number {
+  let h = 2166136261;
+  for (let i = 0; i < text.length; i++) h = Math.imul(h ^ text.charCodeAt(i), 16777619);
+  return h >>> 0;
+}
+
+function dopplerFor(rel: number, P: Palette) {
+  const mag = Math.abs(1 - rel);
+  const paced = mag <= 0.15;
+  const color = paced
+    ? P.doppler.neutral
+    : rel < 1
+      ? rel < 0.1
+        ? P.doppler.cold
+        : P.doppler.cool
+      : rel > 2.5
+        ? P.doppler.hot
+        : P.doppler.warm;
+  const tailLen = paced ? 0 : Math.min(20, 6 + Math.min(mag, 1.3) * 11);
+  // our frame, vertical: ships we gain on fall DOWN, their trail points UP
+  const tailDir = rel < 1 ? -1 : 1;
+  const dur = Math.max(0.9, 2.8 - Math.min(mag, 2) * 0.95);
+  return { color, tailLen, tailDir, dur };
 }
 
 export default function VerticalChart({
@@ -32,125 +71,243 @@ export default function VerticalChart({
   onPinTarget?: (r: string | null) => void;
 }) {
   const router = useRouter();
+  const C = usePalette();
   const { stars, rank, v7d: vOwn, apex } = inputs;
   const etas = neighborEtas(inputs.neighbors, stars, vOwn);
-  const ahead = etas.filter((n) => n.gap > 0).sort((a, b) => a.gap - b.gap).slice(0, 10);
+  const ahead = etas.filter((n) => n.gap > 0).sort((a, b) => a.gap - b.gap).slice(0, 9);
   const behind = etas.filter((n) => n.gap <= 0).sort((a, b) => b.gap - a.gap).slice(0, 3);
 
-  // Everything above us, ordered by stars descending (top = closer to #1).
-  const above: Row[] = [
-    ...inputs.milestones.map((m) => ({ kind: "gate" as const, rank: m.rank, threshold: m.threshold })),
-    ...ahead.map((n) => ({ kind: "ship" as const, n })),
-  ].sort((a, b) => {
-    const sa = a.kind === "gate" ? a.threshold : a.n.s;
-    const sb = b.kind === "gate" ? b.threshold : b.n.s;
-    return sb - sa;
+  // density-adaptive vertical window, same spirit as the horizontal chart
+  const aheadSpread = ahead.length
+    ? Math.max(ahead[ahead.length - 1].s - stars, stars * 0.004)
+    : stars * 0.05;
+  const gate = inputs.milestones[0]?.threshold ?? null;
+  let hiS = stars + aheadSpread * 1.25;
+  if (gate !== null && gate <= stars + aheadSpread * 2.6) hiS = Math.max(hiS, gate * 1.012);
+  const loS = behind.length
+    ? Math.min(...behind.map((n) => n.s)) * 0.997
+    : stars * 0.988;
+
+  const ships: NeighborEta[] = [...ahead, ...behind];
+  const H = PAD_TOP + PAD_BOT + Math.max(420, (ships.length + 2) * MIN_GAP);
+  const log10 = Math.log10;
+  const yFor = (s: number) => {
+    const t = (log10(Math.max(s, 1)) - log10(loS)) / Math.max(log10(hiS) - log10(loS), 1e-6);
+    return H - PAD_BOT - t * (H - PAD_TOP - PAD_BOT);
+  };
+
+  // labels keep MIN_GAP via leader lines; dots stay at their real y. Our
+  // own ship's block is reserved space: neighbor labels flow around it
+  // (above when there is room, otherwise below).
+  const meY = yFor(stars);
+  const ME_TOP = meY - 32;
+  const ME_BOT = meY + 36;
+  const placed = ships
+    .map((n) => ({ n, y: yFor(n.s) }))
+    .sort((a, b) => a.y - b.y);
+  let cursor = PAD_TOP + 8;
+  const rows = placed.map((p) => {
+    let labelY = Math.max(p.y, cursor);
+    if (labelY > ME_TOP - 16 && labelY < ME_BOT) {
+      labelY = cursor <= ME_TOP - 16 ? ME_TOP - 16 : ME_BOT;
+    }
+    cursor = labelY + MIN_GAP;
+    return { ...p, labelY };
   });
 
-  const hiddenAbove = apex && rank ? Math.max(0, rank - inputs.milestones.length - ahead.length - 2) : 0;
-  const rows: Row[] = [
-    { kind: "core" },
-    ...(hiddenAbove > 0 ? [{ kind: "void" as const, count: hiddenAbove }] : []),
-    ...above,
-    { kind: "me" },
-    ...behind.map((n) => ({ kind: "ship" as const, n })),
-  ];
+  // backdrop: twinkling specks + climbing FTL streaks, seeded per repo
+  const rand = mulberry32(seedFrom(inputs.repo + "::ascent"));
+  const specks = Array.from({ length: 34 }, () => ({
+    x: rand() * W,
+    y: PAD_TOP + rand() * (H - PAD_TOP - PAD_BOT),
+    r: rand() < 0.8 ? 0.7 : 1.2,
+    o: 0.12 + rand() * 0.4,
+    d: (rand() * 4).toFixed(2),
+    dur: (2.8 + rand() * 2).toFixed(2),
+  }));
+  const streaks = Array.from({ length: 3 }, (_, i) => ({
+    x: 60 + rand() * (W - 110),
+    y: H - 60 - rand() * 80,
+    len: 60 + rand() * 70,
+    dur: (11 + rand() * 6).toFixed(1),
+    delay: (i * 4.5 + rand() * 2).toFixed(1),
+  }));
 
   const act = (r: string) => {
     if (onPinTarget) onPinTarget(target === r ? null : r);
     else router.push(`/r/${r}#from=${encodeURIComponent(inputs.repo)}`);
   };
+  const open = (r: string) => router.push(`/r/${r}#from=${encodeURIComponent(inputs.repo)}`);
+
+  const hiddenAbove = apex && rank ? Math.max(0, rank - ahead.length - 1) : 0;
 
   return (
-    <ol className="relative ml-2 flex flex-col border-l border-grid">
-      {rows.map((row, i) => {
-        if (row.kind === "core") {
+    <div className="flex flex-col gap-1">
+      {/* the core is light-years up: a compact heading instead of dead space */}
+      <div className="flex items-baseline justify-between gap-2 px-1 pb-1">
+        <span className="numeral text-label font-semibold text-star">
+          ▲ GALACTIC CORE{apex ? ` · #1 ${trunc(shortName(apex.r))}` : ""}
+        </span>
+        <span className="numeral text-micro text-faint">
+          {apex ? `${fmtCompact(apex.s)} ★ · ` : ""}
+          {hiddenAbove > 0 ? `${fmt(hiddenAbove)} systems above` : "in range"}
+        </span>
+      </div>
+
+      <svg
+        viewBox={`0 0 ${W} ${H}`}
+        className="h-auto w-full"
+        role="img"
+        aria-label="Vertical ascent chart: your repository and its ranking neighbors at their real star distance"
+      >
+        {/* backdrop */}
+        {specks.map((sp, i) => (
+          <circle
+            key={i}
+            className="dust-tw"
+            cx={sp.x}
+            cy={sp.y}
+            r={sp.r}
+            fill={C.speck}
+            opacity={sp.o}
+            style={{ animationDelay: `${sp.d}s`, animationDuration: `${sp.dur}s` }}
+          />
+        ))}
+        {streaks.map((st, i) => (
+          <rect
+            key={`st${i}`}
+            className="asc-streak"
+            x={st.x}
+            y={st.y}
+            width={1.3}
+            height={st.len}
+            rx={0.6}
+            fill={C.accent}
+            style={{ animationDuration: `${st.dur}s`, animationDelay: `${st.delay}s` }}
+          />
+        ))}
+
+        {/* ascent axis */}
+        <line x1={AXIS_X} y1={PAD_TOP - 18} x2={AXIS_X} y2={H - 14} stroke={C.grid} strokeWidth={1} />
+        <path
+          d={`M ${AXIS_X} ${PAD_TOP - 26} l -4.5 9 h 9 Z`}
+          fill={C.accent}
+          opacity={0.8}
+        />
+
+        {/* gates at their real altitude */}
+        {inputs.milestones
+          .filter((m) => m.threshold > loS && m.threshold < hiS)
+          .map((m) => (
+            <g key={m.rank}>
+              <line
+                x1={14}
+                y1={yFor(m.threshold)}
+                x2={W - 14}
+                y2={yFor(m.threshold)}
+                stroke={C.accent}
+                strokeWidth={1}
+                strokeDasharray="2 5"
+                opacity={0.55}
+              />
+              <text x={W - 14} y={yFor(m.threshold) - 5} textAnchor="end" fontSize={11}
+                fill={C.accent} letterSpacing={1.5} className="numeral">
+                TOP {m.rank} · {fmtCompact(m.threshold)} ★
+              </text>
+            </g>
+          ))}
+
+        {/* ships */}
+        {rows.map(({ n, y, labelY }) => {
+          const isAhead = n.gap > 0;
+          const dop = dopplerFor(n.v / Math.max(vOwn, 1), C);
+          const isTarget = target === n.r;
+          const shifted = Math.abs(labelY - y) > 6;
           return (
-            <li key="core" className="relative py-3 pl-5">
-              <span className="core-glow absolute -left-[7px] top-1/2 block h-[13px] w-[13px] -translate-y-1/2 rounded-full bg-star" />
-              <div className="numeral text-data font-semibold text-star">
-                GALACTIC CORE {apex ? `· #1 ${trunc(shortName(apex.r))}` : ""}
-              </div>
-              {apex ? (
-                <div className="numeral text-label text-dim">{fmt(apex.s)} ★</div>
+            <g key={n.r} onClick={() => act(n.r)} style={{ cursor: "pointer" }}>
+              <rect x={0} y={labelY - 20} width={W - 40} height={44} fill="transparent" />
+              {dop.tailLen > 0 ? (
+                <>
+                  <path
+                    d={`M ${AXIS_X - 1.6} ${y} L ${AXIS_X} ${y + dop.tailDir * dop.tailLen} L ${AXIS_X + 1.6} ${y} Z`}
+                    fill={dop.color}
+                    opacity={isAhead ? 0.32 : 0.2}
+                  />
+                  <circle
+                    className="vel-streak-y"
+                    cx={AXIS_X}
+                    cy={y}
+                    r={1.2}
+                    fill={dop.color}
+                    style={{
+                      "--drift": `${dop.tailDir * (dop.tailLen + 5)}px`,
+                      "--dur": `${dop.dur.toFixed(2)}s`,
+                    } as React.CSSProperties}
+                  />
+                </>
               ) : null}
-            </li>
-          );
-        }
-        if (row.kind === "void") {
-          return (
-            <li key={`void-${i}`} className="relative py-2 pl-5">
-              <span className="absolute -left-[3px] top-1/2 block h-[5px] w-[5px] -translate-y-1/2 rounded-full bg-faint opacity-50" />
-              <div className="numeral text-micro tracking-[0.15em] text-faint">
-                ··· {fmt(row.count)} systems between ···
-              </div>
-            </li>
-          );
-        }
-        if (row.kind === "gate") {
-          return (
-            <li key={`gate-${row.rank}`} className="relative py-2.5 pl-5">
-              <span className="absolute -left-[6px] top-1/2 block h-[11px] w-[11px] -translate-y-1/2 rounded-full border border-accent bg-void" />
-              <div className="flex items-baseline justify-between gap-2 border-b border-dashed border-accent/30 pb-1">
-                <span className="numeral text-label tracking-[0.2em] text-accent">
-                  TOP {row.rank} GATE
-                </span>
-                <span className="numeral text-label text-dim">{fmt(row.threshold)} ★</span>
-              </div>
-            </li>
-          );
-        }
-        if (row.kind === "me") {
-          return (
-            <li key="me" className="relative py-3 pl-5">
-              <span className="absolute -left-[7px] top-1/2 -translate-y-1/2 text-accent" aria-hidden>
-                ▲
-              </span>
-              <div className="numeral text-data font-bold text-star">{shortName(inputs.repo)}</div>
-              <div className="numeral text-label text-accent">
-                {fmt(stars)} ★{rank ? ` · #${fmt(rank)}` : ""} · {fmt(Math.round(vOwn))}/day
-              </div>
-            </li>
-          );
-        }
-        const n = row.n;
-        const isAhead = n.gap > 0;
-        const statusColor = !isAhead ? "text-faint" : n.receding ? "text-warn" : "text-accent";
-        const isTarget = target === n.r;
-        return (
-          <li key={n.r} className="relative py-2 pl-5">
-            <span
-              className={`absolute -left-[5px] top-1/2 block h-[9px] w-[9px] -translate-y-1/2 rounded-full ${
-                isTarget ? "ring-1 ring-accent ring-offset-2 ring-offset-void" : ""
-              } ${!isAhead ? "bg-faint" : n.receding ? "bg-warn" : "bg-accent"}`}
-            />
-            <div className="flex items-center justify-between gap-2">
-              <button onClick={() => act(n.r)} className="min-w-0 flex-1 text-left">
-                <div className="numeral truncate text-data text-ink">{trunc(shortName(n.r))}</div>
-                <div className="numeral text-label text-dim">
-                  {fmt(n.s)} ★ · {isAhead ? `+${fmt(n.gap)}` : `${fmt(n.gap)}`} · {Math.round(n.v)}/d
-                  {" · "}
-                  <span className={statusColor}>
-                    {!isAhead ? "passed" : n.receding ? "receding" : `eta ${fmtEtaDays(n.etaDays)}`}
-                  </span>
-                </div>
-              </button>
-              <Link
-                href={`/r/${n.r}#from=${encodeURIComponent(inputs.repo)}`}
-                className="numeral shrink-0 border border-grid px-2 py-1 text-label text-dim transition-colors hover:text-ink"
-                aria-label={`Open ${n.r}`}
+              {isTarget ? (
+                <circle cx={AXIS_X} cy={y} r={8} fill="none" stroke={C.accent} strokeWidth={1.2} />
+              ) : null}
+              <circle cx={AXIS_X} cy={y} r={3.4} fill={dop.color} opacity={isAhead ? 0.95 : 0.55} />
+              {shifted ? (
+                <line x1={AXIS_X + 5} y1={y} x2={LABEL_X - 3} y2={labelY - 4} stroke={C.grid} strokeWidth={1} />
+              ) : null}
+              <text x={LABEL_X} y={labelY - 2} fontSize={13} fill={isAhead ? C.ink : C.faint} className="numeral">
+                {trunc(shortName(n.r))}
+              </text>
+              <text x={LABEL_X} y={labelY + 13} fontSize={11} fill={C.dim} className="numeral">
+                {isAhead ? `+${fmtCompact(n.gap)}` : fmtCompact(n.gap)} · {Math.round(n.v)}/d ·{" "}
+                <tspan fill={!isAhead ? C.faint : n.receding ? C.warn : C.accent}>
+                  {!isAhead ? "passed" : n.receding ? "receding" : `eta ${fmtEtaDays(n.etaDays)}`}
+                </tspan>
+              </text>
+              <text
+                x={W - 16}
+                y={labelY + 5}
+                textAnchor="end"
+                fontSize={13}
+                fill={C.dim}
+                className="numeral"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  open(n.r);
+                }}
               >
                 →
-              </Link>
-            </div>
-          </li>
-        );
-      })}
-      <li className="relative pl-5 pt-2">
-        <span className="numeral text-micro text-faint">
-          ascent view · {fmtCompact(stars)} of {apex ? fmtCompact(apex.s) : "?"} ★ to the core
-        </span>
-      </li>
-    </ol>
+              </text>
+            </g>
+          );
+        })}
+
+        {/* our ship */}
+        <g>
+          <circle cx={AXIS_X} cy={meY} r={15} fill="url(#vShip)" opacity={0.55} />
+          <circle className="ship-ping" cx={AXIS_X} cy={meY} r={12} fill="none" stroke={C.accent} strokeWidth={1} />
+          <path
+            d={`M ${AXIS_X} ${meY - 7} l 5.5 11 h -11 Z`}
+            fill={C.accent}
+            className="core-glow"
+          />
+          <text x={LABEL_X} y={meY - 1} fontSize={14} fontWeight={700} fill={C.white} className="numeral">
+            {trunc(shortName(inputs.repo))}
+          </text>
+          <text x={LABEL_X} y={meY + 15} fontSize={11.5} fill={C.accent} className="numeral">
+            {fmt(stars)} ★{rank ? ` · #${fmt(rank)}` : ""} · {fmt(Math.round(vOwn))}/day
+          </text>
+        </g>
+
+        <defs>
+          <radialGradient id="vShip">
+            <stop offset="0%" stopColor={C.accent} stopOpacity="0.9" />
+            <stop offset="100%" stopColor={C.accent} stopOpacity="0" />
+          </radialGradient>
+        </defs>
+      </svg>
+
+      <span className="numeral px-1 text-micro text-faint">
+        ascent view · real log distance · doppler tails: up = you gain, down = it escapes
+      </span>
+    </div>
   );
 }

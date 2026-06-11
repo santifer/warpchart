@@ -442,6 +442,32 @@ svg text {
   animation: vel-drift var(--dur, 3s) linear infinite;
 }
 
+/* vertical ascent (mobile chart): doppler particles and FTL streaks */
+.vel-streak-y {
+  transform-box: fill-box;
+  animation: vel-drift-y var(--dur, 3s) linear infinite;
+}
+
+@keyframes vel-drift-y {
+  0% { transform: translateY(0); opacity: 0; }
+  18% { opacity: 0.75; }
+  100% { transform: translateY(var(--drift, -16px)); opacity: 0; }
+}
+
+.asc-streak {
+  opacity: 0;
+  transform-box: fill-box;
+  transform-origin: center bottom;
+  animation: asc-streak linear infinite;
+}
+
+@keyframes asc-streak {
+  0% { opacity: 0; transform: translateY(0) scaleY(0.2); }
+  2% { opacity: 0.55; }
+  5.5% { opacity: 0; transform: translateY(-360px) scaleY(1); }
+  100% { opacity: 0; transform: translateY(-360px); }
+}
+
 @keyframes vel-drift {
   0% { transform: translateX(0); opacity: 0; }
   18% { opacity: 0.75; }
@@ -449,7 +475,7 @@ svg text {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .dust-layer, .dust-tw, .dust-stream, .route-flow, .ship-ping, .scan-card, .scan-card::after, .vel-streak, .star-pulse {
+  .dust-layer, .dust-tw, .dust-stream, .route-flow, .ship-ping, .scan-card, .scan-card::after, .vel-streak, .star-pulse, .vel-streak-y, .asc-streak {
     animation: none;
   }
 }
