@@ -75,6 +75,13 @@ export default function VerticalChart({
   const C = usePalette();
   const { stars, rank, v7d: vOwn, apex } = inputs;
   const etas = neighborEtas(inputs.neighbors, stars, vOwn);
+
+  // Own trail vs the local traffic's median pace (same scale as neighbors).
+  const vsSorted = inputs.neighbors.map((n) => n.v).filter((v) => v > 0).sort((a, b) => a - b);
+  const medianV = vsSorted.length ? vsSorted[Math.floor(vsSorted.length / 2)] : 0;
+  const shipExcess = vOwn / Math.max(medianV, 0.5) - 1;
+  const shipTail = shipExcess <= 0.15 ? 0 : 5 + Math.min(shipExcess, 2.2) * 12;
+  const shipDur = Math.max(0.8, 2.6 - Math.min(shipExcess, 2) * 0.8) * 0.7;
   const ahead = etas.filter((n) => n.gap > 0).sort((a, b) => a.gap - b.gap).slice(0, 9);
   const behind = etas.filter((n) => n.gap <= 0).sort((a, b) => b.gap - a.gap).slice(0, 3);
 
@@ -305,11 +312,37 @@ export default function VerticalChart({
 
         {/* our ship */}
         <g>
+          {/* own trail: velocity vs the local traffic's median, pointing
+              down the climb; same scale as every neighbor tail */}
+          {shipTail > 0 ? (
+            <>
+              <path
+                d={`M ${AXIS_X - 2.2} ${meY} L ${AXIS_X} ${meY + shipTail} L ${AXIS_X + 2.2} ${meY} Z`}
+                fill={C.white}
+                opacity={0.5}
+              />
+              {[0, 1].map((k) => (
+                <circle
+                  key={k}
+                  className="vel-streak-y"
+                  cx={AXIS_X}
+                  cy={meY}
+                  r={1.3}
+                  fill={C.white}
+                  style={{
+                    "--drift": `${shipTail + 6}px`,
+                    "--dur": `${shipDur.toFixed(2)}s`,
+                    animationDelay: k === 1 ? `${(shipDur / 2).toFixed(2)}s` : undefined,
+                  } as React.CSSProperties}
+                />
+              ))}
+            </>
+          ) : null}
           <circle cx={AXIS_X} cy={meY} r={15} fill="url(#vShip)" opacity={0.55} />
           <circle className="ship-ping" cx={AXIS_X} cy={meY} r={12} fill="none" stroke={C.accent} strokeWidth={1} />
           <path
             d={`M ${AXIS_X} ${meY - 7} l 5.5 11 h -11 Z`}
-            fill={C.accent}
+            fill={C.white}
             className="core-glow"
           />
           <text x={LABEL_X} y={meY - 1} fontSize={14} fontWeight={700} fill={C.white} className="numeral">

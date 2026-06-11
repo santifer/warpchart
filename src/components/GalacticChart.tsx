@@ -142,6 +142,19 @@ export default function GalacticChart({
     [inputs.neighbors, stars, vOwn]
   );
 
+  // Our own trail: real velocity measured against the local traffic's
+  // median pace, on the SAME length scale as every neighbor tail. Flying
+  // in formation (or slower) leaves no trail; outrunning the band streaks.
+  const { shipTail, shipDur } = useMemo(() => {
+    const vs = inputs.neighbors.map((n) => n.v).filter((v) => v > 0).sort((a, b) => a - b);
+    const median = vs.length ? vs[Math.floor(vs.length / 2)] : 0;
+    const rel = vOwn / Math.max(median, 0.5);
+    const excess = rel - 1;
+    const tail = excess <= 0.15 ? 0 : 6 + Math.min(excess, 2.2) * 14;
+    const dur = Math.max(0.8, 2.6 - Math.min(excess, 2) * 0.8) * 0.7;
+    return { shipTail: tail, shipDur: dur };
+  }, [inputs.neighbors, vOwn]);
+
   // Golden pulsar: every REAL star (post-sync increments of the live count)
   // fires an expanding ring on our ship. The first jump after load is the
   // backlog catching up with the bundle, so it stays quiet.
@@ -844,6 +857,30 @@ export default function GalacticChart({
 
             {inWindow(stars) ? (
               <g>
+                {/* our own trail: real velocity against the local traffic's
+                    median pace, same length scale as every other tail. In
+                    formation or slower = no trail; outrunning the band =
+                    long white streak behind us. */}
+                {shipTail > 0 ? (
+                  <>
+                    <path d={tailPath(ax(stars), BAND_A_Y, shipTail, -1, 2.2)} fill={C.white} opacity={0.5} />
+                    {[0, 1].map((k) => (
+                      <circle
+                        key={k}
+                        className="vel-streak"
+                        cx={ax(stars)}
+                        cy={BAND_A_Y}
+                        r={1.3}
+                        fill={C.white}
+                        style={{
+                          "--drift": `${-(shipTail + 6)}px`,
+                          "--dur": `${shipDur.toFixed(2)}s`,
+                          animationDelay: k === 1 ? `${(shipDur / 2).toFixed(2)}s` : undefined,
+                        } as React.CSSProperties}
+                      />
+                    ))}
+                  </>
+                ) : null}
                 <circle cx={ax(stars)} cy={BAND_A_Y} r={16} fill="url(#shipGrad)" opacity={0.5} />
                 <circle className="ship-ping" cx={ax(stars)} cy={BAND_A_Y} r={13}
                   fill="none" stroke={C.accent} strokeWidth={1} />
@@ -853,7 +890,7 @@ export default function GalacticChart({
                 ) : null}
                 <path
                   d={`M ${ax(stars)} ${BAND_A_Y - 7} L ${ax(stars) + 6} ${BAND_A_Y + 5} L ${ax(stars) - 6} ${BAND_A_Y + 5} Z`}
-                  fill={C.accent}
+                  fill={C.white}
                   className="core-glow"
                 />
                 <text x={ax(stars)} y={BAND_A_Y + 26} fill={C.white} fontSize={12.5}
