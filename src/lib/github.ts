@@ -1,6 +1,6 @@
 // Live GitHub helpers for the API routes. Single-attempt (serverless time
 // budget); the client treats failures as transient and keeps polling.
-import { reqLog } from "@/lib/log";
+import { reqLog, serializeError } from "@/lib/log";
 
 const API = "https://api.github.com";
 const ghlog = reqLog("github");
@@ -188,44 +188,70 @@ export async function backwalkSince(
   return { timestamps, stars, complete };
 }
 
-// One aliased GraphQL query: recent velocity for up to ~25 repos, plus
-// description and language for the hover scan cards.
+// Velocity for up to ~25 repos. CHUNKED into small aliased queries: a
+// single 25-alias query with stargazer edges is heavy enough that GitHub's
+// GraphQL executor times it out under load (intermittent 502s after
+// retries, observed in production via fetch.failed traces) and every page
+// degraded to 0/day. Seven aliases with last:50 resolve fast and reliably,
+// chunks run in parallel and individual chunk failures only cost their own
+// repos, never the whole page.
+interface VelocityRepoNode {
+  nameWithOwner: string;
+  stargazerCount: number;
+  description: string | null;
+  primaryLanguage: { name: string } | null;
+  stargazers: { edges: { starredAt: string }[] };
+}
+
 export async function neighborsVelocity(
   fullNames: string[],
   now = Date.now()
 ): Promise<{ r: string; s: number; v: number; d: string | null; l: string | null }[]> {
   if (!fullNames.length) return [];
-  const parts = fullNames.slice(0, 25).map((fn, i) => {
-    const [o, n] = fn.split("/");
-    return `r${i}: repository(owner:${JSON.stringify(o)}, name:${JSON.stringify(n)}){
-      nameWithOwner stargazerCount description primaryLanguage{ name }
-      stargazers(last:100){ edges{ starredAt } } }`;
-  });
-  const data = await graphql<Record<string, {
-    nameWithOwner: string;
-    stargazerCount: number;
-    description: string | null;
-    primaryLanguage: { name: string } | null;
-    stargazers: { edges: { starredAt: string }[] };
-  } | null>>(`{ ${parts.join("\n")} }`);
+  const names = fullNames.slice(0, 25);
+  const CHUNK = 7;
+  const chunks: string[][] = [];
+  for (let i = 0; i < names.length; i += CHUNK) chunks.push(names.slice(i, i + CHUNK));
+
+  const results = await Promise.all(
+    chunks.map(async (chunk) => {
+      const parts = chunk.map((fn, i) => {
+        const [o, n] = fn.split("/");
+        return `r${i}: repository(owner:${JSON.stringify(o)}, name:${JSON.stringify(n)}){
+          nameWithOwner stargazerCount description primaryLanguage{ name }
+          stargazers(last:50){ edges{ starredAt } } }`;
+      });
+      try {
+        return await graphql<Record<string, VelocityRepoNode | null>>(`{ ${parts.join("\n")} }`);
+      } catch (err) {
+        ghlog.warn("velocity.chunk-failed", { size: chunk.length, ...serializeError(err) });
+        return null;
+      }
+    })
+  );
+
   const out: { r: string; s: number; v: number; d: string | null; l: string | null }[] = [];
-  for (let i = 0; i < Math.min(fullNames.length, 25); i++) {
-    const d = data[`r${i}`];
-    if (!d) continue;
-    const edges = d.stargazers.edges;
-    let v = 0;
-    if (edges.length >= 2) {
-      const days = Math.max((now - Date.parse(edges[0].starredAt)) / 864e5, 0.01);
-      v = edges.length / days;
+  for (const data of results) {
+    if (!data) continue;
+    for (const d of Object.values(data)) {
+      if (!d) continue;
+      const edges = d.stargazers.edges;
+      let v = 0;
+      if (edges.length >= 2) {
+        const days = Math.max((now - Date.parse(edges[0].starredAt)) / 864e5, 0.01);
+        v = edges.length / days;
+      }
+      out.push({
+        r: d.nameWithOwner,
+        s: d.stargazerCount,
+        v: Math.round(v * 10) / 10,
+        d: d.description ? d.description.slice(0, 90) : null,
+        l: d.primaryLanguage?.name ?? null,
+      });
     }
-    out.push({
-      r: d.nameWithOwner,
-      s: d.stargazerCount,
-      v: Math.round(v * 10) / 10,
-      d: d.description ? d.description.slice(0, 90) : null,
-      l: d.primaryLanguage?.name ?? null,
-    });
   }
+  // every chunk failed: let callers run their degraded path
+  if (!out.length && names.length) throw new Error("neighborsVelocity: all chunks failed");
   return out;
 }
 
