@@ -219,13 +219,18 @@ export default function VerticalChart({
           ))}
 
         {/* ships */}
-        {rows.map(({ n, y, labelY }) => {
+        {rows.map(({ n, y, labelY }, i) => {
           const isAhead = n.gap > 0;
           const dop = dopplerFor(n.v / Math.max(vOwn, 1), isAhead, C);
           const isTarget = target === n.r;
           const shifted = Math.abs(labelY - y) > 6;
           return (
-            <g key={n.r} onClick={() => act(n.r)} style={{ cursor: "pointer" }}>
+            <g
+              key={n.r}
+              className="asc-row"
+              onClick={() => act(n.r)}
+              style={{ cursor: "pointer", animation: `ship-in 0.5s ease-out ${Math.min(i, 14) * 50}ms both` }}
+            >
               <rect x={0} y={labelY - 20} width={W - 40} height={44} fill="transparent" />
               {dop.tailLen > 0 ? (
                 <>

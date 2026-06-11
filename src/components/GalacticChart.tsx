@@ -674,6 +674,7 @@ export default function GalacticChart({
                     <g
                       key={n.r}
                       className="nbr"
+                      style={{ animation: `ship-in 0.5s ease-out ${Math.min(i, 16) * 45}ms both` }}
                       onMouseEnter={() =>
                         openScan({ kind: "neighbor", n, xPct: clampPct((x / W) * 100), topPct: bandATop, place: "below" })
                       }
@@ -701,6 +702,7 @@ export default function GalacticChart({
                   <g
                     key={n.r}
                     className="nbr"
+                    style={{ animation: `ship-in 0.5s ease-out ${Math.min(i, 16) * 45}ms both` }}
                     onMouseEnter={() =>
                       openScan({ kind: "neighbor", n, xPct: clampPct((x / W) * 100), topPct: bandATop, place: "below" })
                     }

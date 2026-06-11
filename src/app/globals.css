@@ -422,6 +422,17 @@ svg text {
   .lnd-streak { opacity: 0; }
 }
 
+/* Ships fade softly into the sky when the chart replaces its skeleton
+   (staggered per node via inline animation-delay). */
+@keyframes ship-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .nbr, .asc-row { animation: none !important; }
+}
+
 /* Golden pulsar: one expanding ring on our ship per REAL star landed. */
 .star-pulse {
   transform-box: fill-box;
