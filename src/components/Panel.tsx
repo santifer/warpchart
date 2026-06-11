@@ -25,7 +25,7 @@ export default function Panel({
           <span className="module-index shrink-0">{index} /</span>
           <h2 className="module-title truncate">{title}</h2>
         </div>
-        {meta ? <div className="numeral hidden shrink-0 text-[10px] text-dim sm:block">{meta}</div> : null}
+        {meta ? <div className="numeral hidden shrink-0 text-label text-dim sm:block">{meta}</div> : null}
       </header>
       <div className="flex-1 px-4 py-4 sm:px-5">{children}</div>
     </section>

@@ -36,11 +36,11 @@ export default function ExplorerLoading() {
       <div className="hud px-6 py-6">
         <div className="mb-4 flex items-center gap-3">
           <span className="pulse-dot" />
-          <span className="font-display text-[11px] tracking-[0.3em] text-dim">
+          <span className="font-display text-data tracking-[0.3em] text-dim">
             ESTABLISHING TELEMETRY LINK
           </span>
         </div>
-        <div className="numeral flex flex-col gap-1.5 text-[11px]">
+        <div className="numeral flex flex-col gap-1.5 text-data">
           {STEPS.slice(0, visible).map((s, i) => {
             const done = i < visible - 1;
             return (

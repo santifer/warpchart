@@ -14,7 +14,7 @@ import Heatmap from "@/components/Heatmap";
 import RankChart from "@/components/RankChart";
 import MissionLog from "@/components/MissionLog";
 import Dashboard from "@/components/Dashboard";
-import ThemedChart from "@/components/ThemedChart";
+import CurveChart from "@/components/CurveChart";
 import { buildBundle } from "@/lib/bundle";
 import { loadMeta } from "@/lib/history";
 import { unstable_cache } from "next/cache";
@@ -40,14 +40,14 @@ function Locked({ unlockFor, children }: { unlockFor: string; children: React.Re
         {children}
       </div>
       <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-2 text-center">
-        <span className="numeral bg-void/75 px-3 py-1 text-[9px] tracking-[0.3em] text-dim">
+        <span className="numeral bg-void/75 px-3 py-1 text-micro tracking-[0.3em] text-dim">
           ◈ LOCKED · PREVIEW SHOWS THE LIVE DEMO MISSION
         </span>
         <a
           href="https://github.com/santifer/warpchart/issues/8"
           target="_blank"
           rel="noopener noreferrer"
-          className="numeral border border-accent/50 bg-void/85 px-3 py-1.5 text-[10px] tracking-[0.2em] text-accent transition-colors hover:bg-accent/10"
+          className="numeral border border-accent/50 bg-void/85 px-3 py-1.5 text-label tracking-[0.2em] text-accent transition-colors hover:bg-accent/10"
         >
           UNLOCK FOR {unlockFor} →
         </a>
@@ -56,7 +56,7 @@ function Locked({ unlockFor, children }: { unlockFor: string; children: React.Re
           href="https://github.com/santifer/warpchart"
           target="_blank"
           rel="noopener noreferrer"
-          className="numeral bg-void/75 px-2 py-0.5 text-[9px] tracking-[0.15em] text-faint underline-offset-2 transition-colors hover:text-dim hover:underline"
+          className="numeral bg-void/75 px-2 py-0.5 text-micro tracking-[0.15em] text-faint underline-offset-2 transition-colors hover:text-dim hover:underline"
         >
           or fork the repo and self-host it free
         </a>
@@ -151,7 +151,7 @@ export default async function ExplorerPage({
               <h1 className="font-display text-sm tracking-[0.18em] text-star uppercase truncate">
                 {inputs.repo}
               </h1>
-              <p className="mt-0.5 truncate text-xs font-light text-dim">
+              <p className="mt-0.5 truncate text-sm font-light text-dim">
                 {data.desc ?? "public repository"}
                 {data.lang ? ` · ${data.lang}` : ""}
               </p>
@@ -159,28 +159,28 @@ export default async function ExplorerPage({
           </div>
           <div className="flex flex-wrap items-start gap-x-6 gap-y-3">
             <div className="flex flex-col gap-1">
-              <span className="module-title !text-[9px]">Stars</span>
-              <span className="numeral glow-accent text-2xl leading-none text-accent">
+              <span className="module-title !text-micro">Stars</span>
+              <span className="numeral glow-accent text-metric leading-none text-accent">
                 {fmt(inputs.stars)}
               </span>
             </div>
             <div className="flex flex-col gap-1 border-l border-grid pl-5">
-              <span className="module-title !text-[9px]">World rank</span>
-              <span className="numeral text-2xl leading-none text-ink">
+              <span className="module-title !text-micro">World rank</span>
+              <span className="numeral text-metric leading-none text-ink">
                 <span className="text-faint">#</span>
                 {inputs.rank !== null ? fmt(inputs.rank) : "n/a"}
               </span>
             </div>
             <div className="flex flex-col gap-1 border-l border-grid pl-5">
-              <span className="module-title !text-[9px]">Velocity</span>
-              <span className="numeral text-2xl leading-none text-ink">
-                {fmt(Math.round(inputs.v7d))}<span className="text-xs text-dim">/day</span>
+              <span className="module-title !text-micro">Velocity</span>
+              <span className="numeral text-metric leading-none text-ink">
+                {fmt(Math.round(inputs.v7d))}<span className="text-sm text-dim">/day</span>
               </span>
             </div>
             {next ? (
               <div className="flex flex-col gap-1 border-l border-grid pl-5">
-                <span className="module-title !text-[9px]">Gap to top {next.rank}</span>
-                <span className="numeral text-2xl leading-none text-ink">
+                <span className="module-title !text-micro">Gap to top {next.rank}</span>
+                <span className="numeral text-metric leading-none text-ink">
                   {fmt(Math.max(0, next.threshold - inputs.stars))}
                 </span>
               </div>
@@ -188,10 +188,10 @@ export default async function ExplorerPage({
           </div>
         </div>
         <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-grid pt-2">
-          <span className="numeral text-[9px] tracking-[0.15em] text-faint">
+          <span className="numeral text-micro tracking-[0.15em] text-faint">
             WARPCHART // INSTANT SCAN
           </span>
-          <span className="numeral text-[9px] text-faint">
+          <span className="numeral text-micro text-faint">
             {data.forkRatio !== null ? (
               <>
                 fork ratio {(data.forkRatio * 100).toFixed(1)}%
@@ -241,19 +241,17 @@ export default async function ExplorerPage({
               <DailyLadder bundle={demoBundle} />
             </Locked>
           </Panel>
-          <Panel index="05" title="Cumulative stars" meta="real data · the same SVG you can embed" delay={400}>
+          <Panel index="05" title="Cumulative stars" meta="real data · interactive" delay={400}>
             <div className="flex flex-col gap-2">
-              {/* same resource as the README embed: rendering it here warms
-                  the cache for everyone who embeds this repo afterwards */}
-              <a href={`/explore#embed=${encodeURIComponent(repoLabel)}`} className="block min-h-[160px]">
-                <ThemedChart
-                  repo={repoLabel}
-                  alt={`Animated cumulative star history of ${repoLabel}. First render of a new repo can take a few seconds.`}
-                />
+              {/* /api/curve shares the cached reconstruction with the SVG
+                  embed, so a page visit warms the embed for everyone */}
+              <CurveChart repo={repoLabel} />
+              <a
+                href={`/explore#embed=${encodeURIComponent(repoLabel)}`}
+                className="numeral self-start border border-accent/40 px-3 py-2 text-label tracking-[0.18em] text-accent transition-colors hover:bg-accent/10"
+              >
+                GET THE ANIMATED README EMBED →
               </a>
-              <span className="numeral text-[9px] text-faint">
-                first scan of a repo can take ~20s · click the chart to grab the README embed
-              </span>
             </div>
           </Panel>
         </div>
@@ -279,7 +277,7 @@ export default async function ExplorerPage({
       </LiveProvider>
 
       <div className="hud flex flex-wrap items-center justify-between gap-3 px-4 py-3">
-        <span className="numeral text-[10px] text-dim">
+        <span className="numeral text-label text-dim">
           Full mission telemetry for {repoLabel}: hourly history, forensics, replay and projections.
         </span>
         <div className="flex flex-wrap gap-2">
@@ -287,13 +285,13 @@ export default async function ExplorerPage({
             href="https://github.com/santifer/warpchart/issues/8"
             target="_blank"
             rel="noopener noreferrer"
-            className="numeral border border-accent/50 bg-accent/10 px-3 py-1.5 text-[10px] tracking-[0.2em] text-accent transition-colors hover:bg-accent/20"
+            className="numeral border border-accent/50 bg-accent/10 px-3 py-1.5 text-label tracking-[0.2em] text-accent transition-colors hover:bg-accent/20"
           >
             JOIN THE WAITLIST →
           </a>
           <a
             href={`/r/${demo.meta?.repo ?? ""}#from=${encodeURIComponent(repoLabel)}`}
-            className="numeral border border-grid px-3 py-1.5 text-[10px] tracking-[0.2em] text-dim transition-colors hover:text-ink"
+            className="numeral border border-grid px-3 py-1.5 text-label tracking-[0.2em] text-dim transition-colors hover:text-ink"
           >
             SEE THE LIVE DEMO MISSION
           </a>
@@ -301,7 +299,7 @@ export default async function ExplorerPage({
             href="https://github.com/santifer/warpchart"
             target="_blank"
             rel="noopener noreferrer"
-            className="numeral border border-grid px-3 py-1.5 text-[10px] tracking-[0.2em] text-dim transition-colors hover:text-ink"
+            className="numeral border border-grid px-3 py-1.5 text-label tracking-[0.2em] text-dim transition-colors hover:text-ink"
           >
             SELF-HOST FREE · 5 MIN
           </a>
@@ -309,14 +307,14 @@ export default async function ExplorerPage({
       </div>
 
       <footer className="rise flex flex-wrap items-center justify-between gap-2 px-1 pb-4 pt-2">
-        <span className="numeral text-[9px] tracking-[0.15em] text-faint">
+        <span className="numeral text-micro tracking-[0.15em] text-faint">
           WARPCHART · open telemetry over public GitHub data
         </span>
         <a
           href={`https://github.com/${inputs.repo}`}
           target="_blank"
           rel="noopener noreferrer"
-          className="numeral text-[9px] text-faint hover:text-dim"
+          className="numeral text-micro text-faint hover:text-dim"
         >
           github.com/{inputs.repo}
         </a>

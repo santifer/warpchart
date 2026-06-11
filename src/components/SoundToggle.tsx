@@ -35,7 +35,7 @@ export default function SoundToggle() {
     <button
       ref={btnRef}
       onClick={toggle}
-      className="numeral flex items-center gap-1.5 text-[9px] tracking-[0.2em] text-dim transition-colors hover:text-ink"
+      className="numeral flex items-center gap-1.5 text-micro tracking-[0.2em] text-dim transition-colors hover:text-ink min-h-[44px] items-center"
       aria-pressed={on}
       title="Toggle mission soundscape"
     >

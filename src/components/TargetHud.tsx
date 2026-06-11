@@ -23,7 +23,7 @@ export default function TargetHud({
 
   if (s === null) {
     return (
-      <div className="hud rise numeral flex items-center justify-between gap-3 border-warn/40 px-4 py-2 text-[11px]">
+      <div className="hud rise numeral flex items-center justify-between gap-3 border-warn/40 px-4 py-2 text-data">
         <span className="text-warn">target {shortName(target)} out of telemetry range</span>
         <button onClick={onClear} className="text-faint hover:text-ink" aria-label="Clear target">✕</button>
       </div>
@@ -35,9 +35,9 @@ export default function TargetHud({
   const eta = gap > 0 && closing !== null && closing > 0 ? fmtEtaDays(gap / closing) : null;
 
   return (
-    <div className="hud rise numeral flex flex-wrap items-center justify-between gap-x-4 gap-y-1 border-accent/30 px-4 py-2 text-[11px]">
+    <div className="hud rise numeral flex flex-wrap items-center justify-between gap-x-4 gap-y-1 border-accent/30 px-4 py-2 text-data">
       <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1">
-        <span className="font-display text-[9px] tracking-[0.3em] text-accent">CHASE TARGET</span>
+        <span className="font-display text-micro tracking-[0.3em] text-accent">CHASE TARGET</span>
         <span className="text-star">{target}</span>
         <span className="text-dim">{fmt(s)} ★</span>
         <span className={gap > 0 ? "text-ink" : "text-accent"}>

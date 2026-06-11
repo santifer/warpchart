@@ -50,6 +50,18 @@
   --font-display: var(--font-michroma);
   --font-sans: var(--font-chakra);
   --font-mono: var(--font-jbmono);
+  /* Semantic type scale (rem so browser text zoom works). Floor is 12px:
+     the HUD look comes from tracking/uppercase/color, never from tiny. */
+  --text-micro: 0.75rem;
+  --text-micro--line-height: 1.4;
+  --text-label: 0.8125rem;
+  --text-label--line-height: 1.45;
+  --text-data: 0.9375rem;
+  --text-data--line-height: 1.5;
+  --text-title: 1.125rem;
+  --text-title--line-height: 1.4;
+  --text-metric: 2rem;
+  --text-metric--line-height: 1.1;
 }
 
 html {
@@ -175,7 +187,7 @@ body {
 
 .module-title {
   font-family: var(--font-michroma), sans-serif;
-  font-size: 0.625rem;
+  font-size: 0.8125rem;
   letter-spacing: 0.32em;
   text-transform: uppercase;
   color: var(--dim);

@@ -36,7 +36,7 @@ export default function Heatmap({ bundle }: { bundle: DashboardBundle }) {
     <div className="flex flex-col gap-1.5">
       {matrix.map((row, d) => (
         <div key={d} className="flex items-center gap-1.5">
-          <span className="numeral w-8 shrink-0 text-right text-[9px] text-faint">
+          <span className="numeral w-8 shrink-0 text-right text-micro text-faint">
             {DAYS[d]}
           </span>
           <div className="grid flex-1 grid-cols-24 gap-[3px]">
@@ -58,18 +58,18 @@ export default function Heatmap({ bundle }: { bundle: DashboardBundle }) {
         <span className="w-8 shrink-0" />
         <div className="grid flex-1 grid-cols-24 gap-[3px]">
           {Array.from({ length: 24 }, (_, h) => (
-            <span key={h} className="numeral text-center text-[8px] text-faint">
+            <span key={h} className="numeral text-center text-micro text-faint">
               {h % 3 === 0 ? h : ""}
             </span>
           ))}
         </div>
       </div>
       <div className="mt-2 flex items-center justify-between">
-        <span className="numeral text-[9px] text-faint">hour of day, UTC</span>
+        <span className="numeral text-micro text-faint">hour of day, UTC</span>
         <div className="flex items-center gap-2">
-          <span className="numeral text-[9px] text-faint">cold</span>
+          <span className="numeral text-micro text-faint">cold</span>
           <div className="h-[6px] w-28" style={{ background: legend }} />
-          <span className="numeral text-[9px] text-faint">hot · {fmt(max)}/h max</span>
+          <span className="numeral text-micro text-faint">hot · {fmt(max)}/h max</span>
         </div>
       </div>
     </div>

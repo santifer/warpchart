@@ -27,9 +27,9 @@ function Metric({
 }) {
   return (
     <div className="flex flex-col gap-0.5">
-      <span className="module-title !text-[8px]">{label}</span>
+      <span className="module-title !text-micro">{label}</span>
       <span
-        className={`numeral leading-none ${big ? "text-xl" : "text-base"} ${
+        className={`numeral leading-none ${big ? "text-2xl" : "text-data"} ${
           accent ? "glow-accent text-accent" : "text-ink"
         }`}
       >
@@ -52,7 +52,7 @@ function DeckCard({
 }) {
   return (
     <div className="hud px-4 py-2.5">
-      <div className="module-title !text-[9px]">{label}</div>
+      <div className="module-title !text-micro">{label}</div>
       <div
         className={`numeral mt-1 truncate text-base leading-tight ${
           accent ? "text-accent" : "text-ink"
@@ -60,7 +60,7 @@ function DeckCard({
       >
         {main}
       </div>
-      {hint ? <div className="numeral mt-0.5 truncate text-[10px] text-dim">{hint}</div> : null}
+      {hint ? <div className="numeral mt-0.5 truncate text-label text-dim">{hint}</div> : null}
     </div>
   );
 }
@@ -169,7 +169,7 @@ export default function CommandDeck({
               className="h-[30px] w-[30px] border border-grid"
             />
           ) : null}
-          <span className="font-display truncate text-xs uppercase tracking-[0.2em] text-star">
+          <span className="font-display truncate text-sm uppercase tracking-[0.2em] text-star">
             {repo}
           </span>
           <span className="flex shrink-0 items-center gap-1.5">
@@ -182,7 +182,7 @@ export default function CommandDeck({
                     : "pulse-dot"
               }
             />
-            <span className="numeral text-[9px] tracking-[0.2em] text-dim">
+            <span className="numeral text-micro tracking-[0.2em] text-dim">
               {live.offline ? "SYNC LOST" : live.lastSync === null ? "SYNCING" : "LIVE"}
             </span>
           </span>
@@ -215,7 +215,7 @@ export default function CommandDeck({
           </span>
           <button
             onClick={exit}
-            className="numeral border border-grid px-2.5 py-1 text-[9px] tracking-[0.2em] text-dim transition-colors hover:border-accent/50 hover:text-accent"
+            className="numeral border border-grid px-2.5 py-1 text-micro tracking-[0.2em] text-dim transition-colors hover:border-accent/50 hover:text-accent"
           >
             ✕ EXIT DECK
           </button>

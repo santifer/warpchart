@@ -105,7 +105,7 @@ export default function Dashboard({ bundle }: { bundle: DashboardBundle }) {
           <div className="mb-2 hidden justify-end lg:flex">
             <button
               onClick={() => setDeck(true)}
-              className="numeral border border-grid px-2.5 py-1 text-[9px] tracking-[0.2em] text-dim transition-colors hover:border-accent/50 hover:text-accent"
+              className="numeral border border-grid px-2.5 py-1 text-micro tracking-[0.2em] text-dim transition-colors hover:border-accent/50 hover:text-accent"
             >
               ⛶ COMMAND DECK
             </button>
@@ -192,17 +192,17 @@ export default function Dashboard({ bundle }: { bundle: DashboardBundle }) {
         </Panel>
 
         <footer className="rise flex flex-wrap items-center justify-between gap-2 px-1 pb-4 pt-2" style={{ animationDelay: "700ms" }}>
-          <span className="numeral text-[9px] tracking-[0.15em] text-faint">
+          <span className="numeral text-micro tracking-[0.15em] text-faint">
             WARPCHART · open telemetry over public GitHub data
           </span>
           <Link
             prefetch={false}
             href="/explore"
-            className="numeral text-[9px] tracking-[0.15em] text-accent/80 transition-colors hover:text-accent"
+            className="numeral text-micro tracking-[0.15em] text-accent/80 transition-colors hover:text-accent"
           >
             EXPLORE ANY REPO →
           </Link>
-          <span className="numeral text-[9px] text-faint">
+          <span className="numeral text-micro text-faint">
             {repo ? (
               <a
                 href={`https://github.com/${repo}`}

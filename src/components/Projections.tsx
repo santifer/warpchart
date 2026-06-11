@@ -20,7 +20,7 @@ export default function Projections({ bundle }: { bundle: DashboardBundle }) {
         return (
           <div key={m.rank} className="border border-grid bg-hull/40 px-4 py-3">
             <div className="flex items-baseline justify-between gap-2">
-              <span className="font-display text-[11px] tracking-[0.25em] text-ink">
+              <span className="font-display text-data tracking-[0.25em] text-ink">
                 TOP {m.rank}
               </span>
               <span className="numeral text-sm text-accent glow-accent">
@@ -34,7 +34,7 @@ export default function Projections({ bundle }: { bundle: DashboardBundle }) {
                 style={{ width: `${pct}%`, opacity: 0.85 }}
               />
             </div>
-            <div className="numeral mt-2 flex flex-wrap items-center justify-between gap-x-3 text-[10px] text-dim">
+            <div className="numeral mt-2 flex flex-wrap items-center justify-between gap-x-3 text-label text-dim">
               <span>
                 threshold {fmt(m.threshold)} · gap {fmt(e.gap)}
               </span>
@@ -47,7 +47,7 @@ export default function Projections({ bundle }: { bundle: DashboardBundle }) {
           </div>
         );
       })}
-      <p className="numeral text-[9px] leading-relaxed text-faint">
+      <p className="numeral text-micro leading-relaxed text-faint">
         eta = gap / (own v7d - threshold drift). Thresholds are the star count
         of the repo holding each rank; they move up daily. Drift is measured
         from hourly history.

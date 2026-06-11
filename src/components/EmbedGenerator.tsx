@@ -75,7 +75,7 @@ export default function EmbedGenerator({ defaultRepo }: { defaultRepo: string })
   return (
     <div className="flex flex-col gap-3">
       <div className="hud flex items-center gap-3 px-4 py-2.5">
-        <span className="numeral shrink-0 text-[10px] tracking-[0.25em] text-accent">EMBED</span>
+        <span className="numeral shrink-0 text-label tracking-[0.25em] text-accent">EMBED</span>
         <input
           value={repo}
           onChange={(e) => setRepo(e.target.value)}
@@ -89,7 +89,7 @@ export default function EmbedGenerator({ defaultRepo }: { defaultRepo: string })
         <button
           onClick={scan}
           disabled={!valid}
-          className="numeral shrink-0 border border-accent/40 px-3 py-1 text-[9px] tracking-[0.18em] text-accent transition-colors hover:bg-accent/10 disabled:opacity-40"
+          className="numeral shrink-0 border border-accent/40 px-3 py-1 text-micro tracking-[0.18em] text-accent transition-colors hover:bg-accent/10 disabled:opacity-40"
         >
           RENDER
         </button>
@@ -97,12 +97,12 @@ export default function EmbedGenerator({ defaultRepo }: { defaultRepo: string })
 
       <div className="hud relative min-h-[120px] p-3">
         {status === "loading" ? (
-          <div className="numeral absolute inset-0 flex items-center justify-center text-[10px] tracking-[0.2em] text-dim">
+          <div className="numeral absolute inset-0 flex items-center justify-center text-label tracking-[0.2em] text-dim">
             RECONSTRUCTING TRAJECTORY… first scan of a repo can take ~20s
           </div>
         ) : null}
         {status === "error" ? (
-          <div className="numeral absolute inset-0 flex items-center justify-center text-[10px] tracking-[0.2em] text-warn">
+          <div className="numeral absolute inset-0 flex items-center justify-center text-label tracking-[0.2em] text-warn">
             SCAN FAILED · check the repository name
           </div>
         ) : null}
@@ -129,7 +129,7 @@ export default function EmbedGenerator({ defaultRepo }: { defaultRepo: string })
 
       <div className="hud p-3">
         <div className="flex items-center justify-between gap-3">
-          <span className="module-title !text-[9px]">README snippet · theme-aware</span>
+          <span className="module-title !text-micro">README snippet · theme-aware</span>
           <button
             onClick={async () => {
               try {
@@ -140,12 +140,12 @@ export default function EmbedGenerator({ defaultRepo }: { defaultRepo: string })
                 /* clipboard unavailable */
               }
             }}
-            className="numeral border border-grid px-3 py-1 text-[9px] tracking-[0.18em] text-dim transition-colors hover:border-accent/50 hover:text-accent"
+            className="numeral border border-grid px-3 py-1 text-micro tracking-[0.18em] text-dim transition-colors hover:border-accent/50 hover:text-accent"
           >
             {copied ? "COPIED ✓" : "COPY"}
           </button>
         </div>
-        <pre className="numeral mt-2 overflow-x-auto whitespace-pre text-[10px] leading-relaxed text-dim">
+        <pre className="numeral mt-2 overflow-x-auto whitespace-pre text-label leading-relaxed text-dim">
           {snippet || "…"}
         </pre>
       </div>

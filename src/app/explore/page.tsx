@@ -37,12 +37,12 @@ export default async function Explore() {
     <main className="mx-auto flex min-h-screen max-w-[980px] flex-col gap-10 px-4 py-10 sm:px-6">
       <ExploreBackdrop />
       <header className="rise flex items-center justify-between" style={{ animationDelay: "0ms" }}>
-        <span className="font-display text-xs tracking-[0.3em] text-star">WARPCHART</span>
+        <span className="font-display text-sm tracking-[0.3em] text-star">WARPCHART</span>
         {meta ? (
           <Link
             prefetch={false}
             href={`/r/${meta.repo}`}
-            className="numeral border border-grid px-3 py-1.5 text-[9px] tracking-[0.18em] text-dim transition-colors hover:border-accent/50 hover:text-accent"
+            className="numeral border border-grid px-3 py-1.5 text-micro tracking-[0.18em] text-dim transition-colors hover:border-accent/50 hover:text-accent"
           >
             LIVE DEMO MISSION: {meta.repo} →
           </Link>
@@ -68,7 +68,7 @@ export default async function Explore() {
             <h2 className="module-title">
               TODAY&apos;S SPOTLIGHT · {spotlight.inputs.repo} · #{spotlight.rank} worldwide
             </h2>
-            <span className="numeral text-[9px] text-faint">
+            <span className="numeral text-micro text-faint">
               a real top 1000 system, rotating daily · pan it, hover the ships
             </span>
           </div>
@@ -93,10 +93,10 @@ export default async function Explore() {
               href={`/r/${f.r}`}
               className="hud group flex items-baseline justify-between gap-2 px-3 py-2.5 transition-colors hover:border-accent/40"
             >
-              <span className="numeral min-w-0 truncate text-[11px] text-ink group-hover:text-accent">
+              <span className="numeral min-w-0 truncate text-data text-ink group-hover:text-accent">
                 {f.r.split("/")[1]}
               </span>
-              <span className="numeral shrink-0 text-[9px] text-dim">
+              <span className="numeral shrink-0 text-micro text-dim">
                 #{f.k} · {fmtCompact(f.s)} ★
               </span>
             </Link>
@@ -106,7 +106,7 @@ export default async function Explore() {
 
       <section className="rise flex flex-col gap-3" style={{ animationDelay: "240ms" }}>
         <h2 className="module-title">EMBED THE ANIMATED CHART · any repo, any README</h2>
-        <p className="max-w-[640px] text-xs font-light text-dim">
+        <p className="max-w-[640px] text-sm font-light text-dim">
           The chart draws itself on every view: pure SVG animation, no JavaScript, works
           through GitHub&apos;s image proxy and follows the reader&apos;s color scheme.
         </p>
@@ -114,13 +114,13 @@ export default async function Explore() {
       </section>
 
       <footer className="rise mt-auto flex flex-wrap items-center justify-between gap-2 border-t border-grid pt-4" style={{ animationDelay: "320ms" }}>
-        <span className="numeral text-[9px] tracking-[0.15em] text-faint">
+        <span className="numeral text-micro tracking-[0.15em] text-faint">
           WARPCHART · open telemetry over public GitHub data
         </span>
-        <Link href="/sponsors" className="numeral text-[9px] tracking-[0.15em] text-accent/80 transition-colors hover:text-accent">
+        <Link href="/sponsors" className="numeral text-micro tracking-[0.15em] text-accent/80 transition-colors hover:text-accent">
           MISSION PATRONS →
         </Link>
-        <span className="numeral text-[9px] text-faint">
+        <span className="numeral text-micro text-faint">
           worldwide registry refreshed daily · live polling every 60s
         </span>
       </footer>

@@ -68,11 +68,11 @@ export default function VerticalChart({
           return (
             <li key="core" className="relative py-3 pl-5">
               <span className="core-glow absolute -left-[7px] top-1/2 block h-[13px] w-[13px] -translate-y-1/2 rounded-full bg-star" />
-              <div className="numeral text-[11px] font-semibold text-star">
+              <div className="numeral text-data font-semibold text-star">
                 GALACTIC CORE {apex ? `· #1 ${trunc(shortName(apex.r))}` : ""}
               </div>
               {apex ? (
-                <div className="numeral text-[10px] text-dim">{fmt(apex.s)} ★</div>
+                <div className="numeral text-label text-dim">{fmt(apex.s)} ★</div>
               ) : null}
             </li>
           );
@@ -81,7 +81,7 @@ export default function VerticalChart({
           return (
             <li key={`void-${i}`} className="relative py-2 pl-5">
               <span className="absolute -left-[3px] top-1/2 block h-[5px] w-[5px] -translate-y-1/2 rounded-full bg-faint opacity-50" />
-              <div className="numeral text-[9px] tracking-[0.15em] text-faint">
+              <div className="numeral text-micro tracking-[0.15em] text-faint">
                 ··· {fmt(row.count)} systems between ···
               </div>
             </li>
@@ -92,10 +92,10 @@ export default function VerticalChart({
             <li key={`gate-${row.rank}`} className="relative py-2.5 pl-5">
               <span className="absolute -left-[6px] top-1/2 block h-[11px] w-[11px] -translate-y-1/2 rounded-full border border-accent bg-void" />
               <div className="flex items-baseline justify-between gap-2 border-b border-dashed border-accent/30 pb-1">
-                <span className="numeral text-[10px] tracking-[0.2em] text-accent">
+                <span className="numeral text-label tracking-[0.2em] text-accent">
                   TOP {row.rank} GATE
                 </span>
-                <span className="numeral text-[10px] text-dim">{fmt(row.threshold)} ★</span>
+                <span className="numeral text-label text-dim">{fmt(row.threshold)} ★</span>
               </div>
             </li>
           );
@@ -106,8 +106,8 @@ export default function VerticalChart({
               <span className="absolute -left-[7px] top-1/2 -translate-y-1/2 text-accent" aria-hidden>
                 ▲
               </span>
-              <div className="numeral text-[12px] font-bold text-star">{shortName(inputs.repo)}</div>
-              <div className="numeral text-[10px] text-accent">
+              <div className="numeral text-data font-bold text-star">{shortName(inputs.repo)}</div>
+              <div className="numeral text-label text-accent">
                 {fmt(stars)} ★{rank ? ` · #${fmt(rank)}` : ""} · {fmt(Math.round(vOwn))}/day
               </div>
             </li>
@@ -126,8 +126,8 @@ export default function VerticalChart({
             />
             <div className="flex items-center justify-between gap-2">
               <button onClick={() => act(n.r)} className="min-w-0 flex-1 text-left">
-                <div className="numeral truncate text-[11px] text-ink">{trunc(shortName(n.r))}</div>
-                <div className="numeral text-[10px] text-dim">
+                <div className="numeral truncate text-data text-ink">{trunc(shortName(n.r))}</div>
+                <div className="numeral text-label text-dim">
                   {fmt(n.s)} ★ · {isAhead ? `+${fmt(n.gap)}` : `${fmt(n.gap)}`} · {Math.round(n.v)}/d
                   {" · "}
                   <span className={statusColor}>
@@ -137,7 +137,7 @@ export default function VerticalChart({
               </button>
               <Link
                 href={`/r/${n.r}#from=${encodeURIComponent(inputs.repo)}`}
-                className="numeral shrink-0 border border-grid px-2 py-1 text-[10px] text-dim transition-colors hover:text-ink"
+                className="numeral shrink-0 border border-grid px-2 py-1 text-label text-dim transition-colors hover:text-ink"
                 aria-label={`Open ${n.r}`}
               >
                 →
@@ -147,7 +147,7 @@ export default function VerticalChart({
         );
       })}
       <li className="relative pl-5 pt-2">
-        <span className="numeral text-[9px] text-faint">
+        <span className="numeral text-micro text-faint">
           ascent view · {fmtCompact(stars)} of {apex ? fmtCompact(apex.s) : "?"} ★ to the core
         </span>
       </li>

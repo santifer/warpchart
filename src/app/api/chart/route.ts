@@ -5,9 +5,7 @@
 //   /api/chart                         -> the tracked repo (exact history)
 //   /api/chart?repo=owner/name         -> ANY repository (sampled history)
 //   /api/chart?w=600&h=200&theme=dark  -> size and scheme overrides
-import { unstable_cache } from "next/cache";
-import { loadTimestamps, loadMeta, lastSnapshot } from "@/lib/history";
-import { repoBasic, stargazerPageFirst } from "@/lib/github";
+import { cachedSampleCurve, tenantCurve, type Curve } from "@/lib/curve";
 import { fmt, fmtCompact } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
@@ -37,62 +35,6 @@ function seeded(text: string) {
     t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
     return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
   };
-}
-
-interface Curve {
-  repo: string;
-  total: number;
-  pts: { t: number; v: number }[];
-  // points from this index on are extrapolated (REST caps stargazer
-  // pagination at 40K stars), drawn as a dashed tail
-  dashedFrom: number | null;
-}
-
-// Sampled curve for arbitrary repos: ~12 spaced stargazer pages, the same
-// reconstruction star-history uses. Cached 6h per repo.
-async function sampleCurve(owner: string, name: string): Promise<Curve> {
-  const basic = await repoBasic(owner, name);
-  const reachable = Math.min(basic.s, 40_000);
-  const totalPages = Math.max(1, Math.ceil(reachable / 100));
-  const SAMPLES = Math.min(12, totalPages);
-  const pages = new Set<number>();
-  for (let i = 0; i < SAMPLES; i++)
-    pages.add(Math.max(1, Math.round(1 + (i * (totalPages - 1)) / Math.max(SAMPLES - 1, 1))));
-  const sorted = [...pages].sort((a, b) => a - b);
-  const samples = await Promise.all(
-    sorted.map(async (p) => ({
-      p,
-      at: await stargazerPageFirst(owner, name, p).catch(() => null),
-    }))
-  );
-  const pts = samples
-    .filter((s) => s.at)
-    .map((s) => ({ t: Date.parse(s.at as string), v: (s.p - 1) * 100 + 1 }))
-    .sort((a, b) => a.t - b.t);
-  if (!pts.length) throw new Error("no stargazer data");
-  let dashedFrom: number | null = null;
-  if (basic.s > pts[pts.length - 1].v) {
-    dashedFrom = pts.length - 1;
-    pts.push({ t: Date.now(), v: basic.s });
-  }
-  return { repo: basic.r, total: basic.s, pts, dashedFrom };
-}
-
-const cachedSampleCurve = unstable_cache(sampleCurve, ["embed-chart-curve"], {
-  revalidate: 21_600,
-});
-
-// Exact curve for the tracked tenant, straight from the local archive.
-function tenantCurve(): Curve | null {
-  const timestamps = loadTimestamps();
-  const meta = loadMeta();
-  if (!timestamps.length || !meta) return null;
-  const n = timestamps.length;
-  const step = Math.max(1, Math.floor(n / 140));
-  const pts: { t: number; v: number }[] = [];
-  for (let i = 0; i < n; i += step) pts.push({ t: Date.parse(timestamps[i]), v: i + 1 });
-  pts.push({ t: Date.parse(timestamps[n - 1]), v: n });
-  return { repo: meta.repo, total: lastSnapshot()?.stars ?? n, pts, dashedFrom: null };
 }
 
 export async function GET(req: Request) {
@@ -130,9 +72,9 @@ export async function GET(req: Request) {
 
   const { repo, total, pts, dashedFrom } = curve;
   const padL = 16;
-  const padR = 64;
+  const padR = 78;
   const padT = 40;
-  const padB = 30;
+  const padB = 34;
   const iw = w - padL - padR;
   const ih = h - padT - padB;
   const t0 = pts[0].t;
@@ -182,7 +124,7 @@ export async function GET(req: Request) {
     .map((f) => {
       const gy = padT + ih - f * ih;
       return `<line x1="${padL}" y1="${gy.toFixed(1)}" x2="${padL + iw}" y2="${gy.toFixed(1)}" style="stroke:var(--gr)" stroke-dasharray="2 6"/>
-<text x="${padL + iw + 8}" y="${(gy + 3).toFixed(1)}" font-family="${mono}" font-size="9" style="fill:var(--dm)">${fmtCompact(Math.round(vMax * f))}</text>`;
+<text x="${padL + iw + 8}" y="${(gy + 3).toFixed(1)}" font-family="${mono}" font-size="11" style="fill:var(--dm)">${fmtCompact(Math.round(vMax * f))}</text>`;
     })
     .join("\n");
 
@@ -194,17 +136,29 @@ export async function GET(req: Request) {
       const anchor = f === 0 ? "start" : f === 1 ? "end" : "middle";
       const ax = f === 0 ? padL : f === 1 ? padL + iw : tx;
       return `<line x1="${tx.toFixed(1)}" y1="${axisY}" x2="${tx.toFixed(1)}" y2="${axisY + 4}" style="stroke:var(--dm)" opacity="0.6"/>
-<text x="${ax.toFixed(1)}" y="${h - 9}" text-anchor="${anchor}" font-family="${mono}" font-size="9" style="fill:var(--dm)">${dateFmt(t)}</text>`;
+<text x="${ax.toFixed(1)}" y="${h - 10}" text-anchor="${anchor}" font-family="${mono}" font-size="11" style="fill:var(--dm)">${dateFmt(t)}</text>`;
     })
     .join("\n");
 
   const branding =
     w >= 560
-      ? `<text x="${w / 2}" y="22" text-anchor="middle" font-family="${mono}" font-size="9" letter-spacing="3" style="fill:var(--dm)" opacity="0.8">WARPCHART</text>`
+      ? `<text x="${w / 2}" y="22" text-anchor="middle" font-family="${mono}" font-size="11" letter-spacing="3" style="fill:var(--dm)" opacity="0.8">WARPCHART</text>`
       : "";
 
   const endX = x(t1).toFixed(1);
   const endY = y(pts[pts.length - 1].v).toFixed(1);
+
+  // Honest-cap marker: GitHub's REST API stops paginating stargazers at
+  // 40K, so the dashed stretch is an estimate. Say so on the chart itself
+  // (the market leader hides this; honesty is the brand).
+  let capMark = "";
+  if (dashedFrom !== null) {
+    const bp = pts[dashedFrom];
+    const bx2 = x(bp.t).toFixed(1);
+    const by2 = y(bp.v).toFixed(1);
+    capMark = `<g class="ar"><line x1="${bx2}" y1="${(Number(by2) - 6).toFixed(1)}" x2="${bx2}" y2="${(Number(by2) + 6).toFixed(1)}" style="stroke:var(--dm)" stroke-width="1" opacity="0.7"/>
+<text x="${bx2}" y="${(Number(by2) - 11).toFixed(1)}" text-anchor="middle" font-family="${mono}" font-size="10" style="fill:var(--dm)" opacity="0.85">api cap 40K · dashed = estimated</text></g>`;
+  }
 
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" role="img" aria-label="Cumulative stars of ${esc(repo)}">
 <style>${schemeStyle(theme)}
@@ -220,7 +174,7 @@ export async function GET(req: Request) {
 .wv{transform-box:fill-box;transform-origin:left center;animation:wv 12.6s linear infinite}
 .wg{animation:wg 12.6s ease-out infinite}
 .bm{opacity:0;animation:bm 12.6s linear infinite}
-.dl{animation:dlf 1.3s linear infinite}
+.dl{opacity:.45;animation:dlf 1.3s linear infinite}
 .dotp{transform-box:fill-box;transform-origin:center;opacity:0;animation:dp 12.6s cubic-bezier(.3,1.4,.4,1) infinite}
 .cp{transform-box:fill-box;transform-origin:center;animation:cp 12.6s ease-out infinite}
 .pga{transform-box:fill-box;transform-origin:center;opacity:0;animation:pg 12.6s cubic-bezier(.2,.6,.4,1) infinite}
@@ -262,17 +216,18 @@ export async function GET(req: Request) {
 <path d="M 0.5 ${h - 8} V ${h - 0.5} H 8" style="stroke:var(--ac)" fill="none" opacity="0.5"/>
 <path d="M ${w - 8} ${h - 0.5} H ${w - 0.5} V ${h - 8}" style="stroke:var(--ac)" fill="none" opacity="0.5"/>
 ${specks}
-<text x="${padL}" y="22" font-family="${mono}" font-size="11" letter-spacing="2" style="fill:var(--dm)">${esc(repo.toUpperCase())}</text>
+<text x="${padL}" y="22" font-family="${mono}" font-size="13" letter-spacing="2" style="fill:var(--dm)">${esc(repo.toUpperCase())}</text>
 ${branding}
-<text class="cp" x="${w - 16}" y="22" text-anchor="end" font-family="${mono}" font-size="12" font-weight="700" style="fill:var(--ac)">${fmt(total)} ★</text>
+<text class="cp" x="${w - 16}" y="22" text-anchor="end" font-family="${mono}" font-size="15" font-weight="700" style="fill:var(--ac)">${fmt(total)} ★</text>
 ${yMarks}
 <line x1="${padL}" y1="${axisY}" x2="${padL + iw}" y2="${axisY}" style="stroke:var(--bd)"/>
 <g class="wg" clip-path="url(#wipe)">
   <path d="${area}" fill="url(#fill)"/>
   <g opacity="0.11"><path d="${line}" fill="none" style="stroke:var(--ac)" stroke-width="4"/></g>
   <path d="${line}" fill="none" style="stroke:var(--ac)" stroke-width="1.5"/>
-  ${dashedLine ? `<path class="dl" d="${dashedLine}" fill="none" style="stroke:var(--ac)" stroke-width="1.2" stroke-dasharray="3 5" opacity="0.7"/>` : ""}
+  ${dashedLine ? `<path class="dl" d="${dashedLine}" fill="none" style="stroke:var(--ac)" stroke-width="1.1" stroke-dasharray="2 4"/>` : ""}
 </g>
+${capMark}
 <rect class="bm" x="${padL}" y="${padT - 8}" width="2.5" height="${ih + 14}" fill="url(#beam)"/>
 <circle class="pga" cx="${endX}" cy="${endY}" r="5.5" fill="none" style="stroke:var(--wn)" stroke-width="1.1"/>
 <circle class="pga pgb" cx="${endX}" cy="${endY}" r="5.5" fill="none" style="stroke:var(--wn)" stroke-width="1.1"/>

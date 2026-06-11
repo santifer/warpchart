@@ -51,8 +51,8 @@ export default function DailyBriefing({ bundle }: { bundle: DashboardBundle }) {
 
   return (
     <div className="hud rise flex flex-wrap items-center justify-between gap-2 border-accent/30 px-4 py-2.5">
-      <div className="numeral flex flex-wrap items-baseline gap-x-4 gap-y-1 text-[11px]">
-        <span className="font-display text-[9px] tracking-[0.3em] text-accent">
+      <div className="numeral flex flex-wrap items-baseline gap-x-4 gap-y-1 text-data">
+        <span className="font-display text-micro tracking-[0.3em] text-accent">
           MISSION BRIEFING
         </span>
         <span className="text-dim">
@@ -74,7 +74,7 @@ export default function DailyBriefing({ bundle }: { bundle: DashboardBundle }) {
       </div>
       <button
         onClick={() => setDismissed(true)}
-        className="numeral text-[10px] text-faint transition-colors hover:text-ink"
+        className="numeral text-label text-faint transition-colors hover:text-ink"
         aria-label="Dismiss briefing"
       >
         ✕

@@ -30,15 +30,15 @@ function badgeSvg(label: string, rank: number | null, stars: number, trend: Tren
   const arrow = trend === "up" ? " ▲" : trend === "down" ? " ▼" : trend === "flat" ? " ▬" : "";
   const starsTxt = `${fmt(stars)} ★`;
 
-  const CH = 6.65;
+  const CH = 7.9;
   const pad = 12;
   const gap = 14;
-  const labelW = label.length * 6.1 + 4;
+  const labelW = label.length * 7.3 + 4;
   const rankW = (rankTxt.length + (arrow ? 2 : 0)) * CH + 4;
   const starsW = starsTxt.length * CH;
   const width = Math.ceil(pad + labelW + gap + rankW + gap + starsW + pad);
-  const h = 26;
-  const ty = 17;
+  const h = 30;
+  const ty = 20;
   const x1 = pad;
   const x2 = pad + labelW + gap;
   const x3 = x2 + rankW + gap;
@@ -53,9 +53,9 @@ text{font-family:${mono}}</style>
 <path class="ck" d="M ${width - 6} 0.5 H ${width - 0.5} V 6"/>
 <path class="ck" d="M 0.5 ${h - 6} V ${h - 0.5} H 6"/>
 <path class="ck" d="M ${width - 6} ${h - 0.5} H ${width - 0.5} V ${h - 6}"/>
-<text class="lb" x="${x1}" y="${ty}" font-size="9" letter-spacing="1.4">${esc(label)}</text>
-<text class="rk" x="${x2}" y="${ty}" font-size="10.5" font-weight="700">${esc(rankTxt)}<tspan class="${trend === "down" ? "dn" : "rk"}">${arrow}</tspan></text>
-<text class="st" x="${x3}" y="${ty}" font-size="10.5">${esc(starsTxt)}</text>
+<text class="lb" x="${x1}" y="${ty}" font-size="11" letter-spacing="1.4">${esc(label)}</text>
+<text class="rk" x="${x2}" y="${ty}" font-size="12.5" font-weight="700">${esc(rankTxt)}<tspan class="${trend === "down" ? "dn" : "rk"}">${arrow}</tspan></text>
+<text class="st" x="${x3}" y="${ty}" font-size="12.5">${esc(starsTxt)}</text>
 </svg>`;
 }
 

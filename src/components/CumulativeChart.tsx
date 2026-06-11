@@ -145,7 +145,7 @@ export default function CumulativeChart({ bundle }: { bundle: DashboardBundle })
         </ResponsiveContainer>
         {cursor ? (
           <div className="numeral pointer-events-none absolute right-3 top-2 border border-grid bg-hull/80 px-3 py-1.5 text-right">
-            <div className="text-[10px] text-dim">
+            <div className="text-label text-dim">
               {new Date(cursor.t).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
             </div>
             <div className="glow-accent text-base text-accent">{fmt(cursor.total)} ★</div>
@@ -154,7 +154,7 @@ export default function CumulativeChart({ bundle }: { bundle: DashboardBundle })
       </div>
 
       {/* replay controls */}
-      <div className="numeral flex items-center gap-3 text-[10px]">
+      <div className="numeral flex items-center gap-3 text-label">
         {!replaying ? (
           <button
             onClick={startReplay}

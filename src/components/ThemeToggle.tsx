@@ -11,7 +11,7 @@ export default function ThemeToggle() {
   return (
     <button
       onClick={() => setMode(NEXT[mode])}
-      className="numeral flex items-center gap-1.5 text-[9px] tracking-[0.2em] text-dim transition-colors hover:text-ink"
+      className="numeral flex items-center gap-1.5 text-micro tracking-[0.2em] text-dim transition-colors hover:text-ink min-h-[44px] items-center"
       title="Theme: auto follows your OS scheme"
     >
       <span className={mode === "auto" ? "text-faint" : "text-accent"}>{GLYPH[mode]}</span>

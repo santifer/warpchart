@@ -23,10 +23,10 @@ export default function RankChart({ bundle }: { bundle: DashboardBundle }) {
   if (data.length < 5) {
     return (
       <div className="flex h-[230px] flex-col items-center justify-center gap-2">
-        <span className="font-display text-[10px] tracking-[0.3em] text-dim">
+        <span className="font-display text-label tracking-[0.3em] text-dim">
           ACCUMULATING HISTORY
         </span>
-        <span className="numeral text-[10px] text-faint">
+        <span className="numeral text-label text-faint">
           {data.length} snapshot{data.length === 1 ? "" : "s"} · one per hour from now on
         </span>
       </div>

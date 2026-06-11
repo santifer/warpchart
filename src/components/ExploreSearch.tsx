@@ -89,7 +89,7 @@ export default function ExploreSearch({ catalog }: { catalog: CatalogEntry[] }) 
   return (
     <div className="relative w-full">
       <div className="hud flex items-center gap-3 px-4 py-3">
-        <span className="numeral text-[10px] tracking-[0.25em] text-accent">SCAN</span>
+        <span className="numeral text-label tracking-[0.25em] text-accent">SCAN</span>
         <input
           autoFocus
           value={q}
@@ -112,7 +112,7 @@ export default function ExploreSearch({ catalog }: { catalog: CatalogEntry[] }) 
           className="numeral w-full bg-transparent text-sm text-ink outline-none placeholder:text-faint"
           aria-label="Search any GitHub repository"
         />
-        {busy ? <span className="numeral shrink-0 text-[9px] text-faint">SCANNING…</span> : null}
+        {busy ? <span className="numeral shrink-0 text-micro text-faint">SCANNING…</span> : null}
       </div>
 
       {rows.length ? (
@@ -124,7 +124,7 @@ export default function ExploreSearch({ catalog }: { catalog: CatalogEntry[] }) 
             return (
               <div key={hit.r}>
                 {firstDeep ? (
-                  <div className="numeral border-t border-grid px-4 pb-1 pt-2 text-[8px] tracking-[0.3em] text-faint">
+                  <div className="numeral border-t border-grid px-4 pb-1 pt-2 text-micro tracking-[0.3em] text-faint">
                     DEEP SPACE
                   </div>
                 ) : null}
@@ -149,19 +149,19 @@ export default function ExploreSearch({ catalog }: { catalog: CatalogEntry[] }) 
                         className="h-[22px] w-[22px] shrink-0 border border-grid"
                       />
                     ) : (
-                      <span className="numeral flex h-[22px] w-[22px] shrink-0 items-center justify-center border border-dashed border-grid text-[10px] text-faint">
+                      <span className="numeral flex h-[22px] w-[22px] shrink-0 items-center justify-center border border-dashed border-grid text-label text-faint">
                         ?
                       </span>
                     )}
-                    <span className="numeral min-w-0 truncate text-[12px]">
+                    <span className="numeral min-w-0 truncate text-data">
                       <span className="text-dim">{ownerName}/</span>
                       <span className="text-ink">{repoName}</span>
                       {hit.d ? (
-                        <span className="ml-2 hidden text-[10px] text-faint sm:inline">{hit.d}</span>
+                        <span className="ml-2 hidden text-label text-faint sm:inline">{hit.d}</span>
                       ) : null}
                     </span>
                   </span>
-                  <span className={`numeral shrink-0 text-[10px] ${i === clampedSel ? "text-accent" : "text-dim"}`}>
+                  <span className={`numeral shrink-0 text-label ${i === clampedSel ? "text-accent" : "text-dim"}`}>
                     {hit.k !== null
                       ? `#${hit.k} · ${fmtCompact(hit.s)} ★`
                       : hit.s > 0

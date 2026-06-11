@@ -18,9 +18,9 @@ function Metric({
 }) {
   return (
     <div className="flex flex-col gap-1 border-l border-grid pl-4 first:border-l-0 first:pl-0">
-      <span className="module-title !text-[9px]">{label}</span>
-      <span className="numeral text-xl leading-none text-ink sm:text-2xl">{children}</span>
-      {hint ? <span className="numeral text-[10px] text-dim">{hint}</span> : null}
+      <span className="module-title !text-micro">{label}</span>
+      <span className="numeral text-2xl leading-none text-ink sm:text-metric">{children}</span>
+      {hint ? <span className="numeral text-label text-dim">{hint}</span> : null}
     </div>
   );
 }
@@ -77,12 +77,12 @@ export default function StatusBar({ bundle }: { bundle: DashboardBundle }) {
                         : "pulse-dot"
                   }
                 />
-                <span className="numeral text-[9px] tracking-[0.2em] text-dim">
+                <span className="numeral text-micro tracking-[0.2em] text-dim">
                   {live.offline ? "SYNC LOST" : live.lastSync === null ? "SYNCING" : "LIVE"}
                 </span>
               </span>
             </div>
-            <p className="mt-0.5 truncate text-xs font-light text-dim">
+            <p className="mt-0.5 truncate text-sm font-light text-dim">
               {bundle.meta?.description ?? "growth telemetry"}
             </p>
           </div>
@@ -115,7 +115,7 @@ export default function StatusBar({ bundle }: { bundle: DashboardBundle }) {
             <NumberFlow value={live.todayCount} locales="en-US" />
             {live.deltaPct !== null ? (
               <span
-                className={`ml-2 text-xs ${live.deltaPct >= 0 ? "text-accent" : "text-warn"}`}
+                className={`ml-2 text-sm ${live.deltaPct >= 0 ? "text-accent" : "text-warn"}`}
               >
                 {live.deltaPct >= 0 ? "+" : ""}
                 {live.deltaPct}%
@@ -136,13 +136,13 @@ export default function StatusBar({ bundle }: { bundle: DashboardBundle }) {
 
       <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-grid pt-2">
         <div className="flex items-center gap-5">
-          <span className="numeral text-[9px] tracking-[0.15em] text-faint">
+          <span className="numeral text-micro tracking-[0.15em] text-faint">
             WARPCHART // GROWTH TELEMETRY
           </span>
           <SoundToggle />
           <ThemeToggle />
         </div>
-        <span className="numeral text-[9px] text-faint">
+        <span className="numeral text-micro text-faint">
           {live.stale ? "STALE DATA · " : ""}
           {bundle.forkRatio !== null ? (
             <>
