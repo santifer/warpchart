@@ -31,6 +31,13 @@ class DegradedResult extends Error {
     super("__degraded__");
   }
 }
+// Short per-instance memory of degraded results: during an upstream storm
+// every visitor would otherwise pay the full retry budget for the same
+// degraded outcome (Fluid reuses instances, so most hits land here).
+const degradedCache = new Map<
+  string,
+  { data: NonNullable<Awaited<ReturnType<typeof getExplorerData>>>; until: number }
+>();
 const getCachedExplorerData = unstable_cache(
   async (owner: string, name: string) => {
     const data = await getExplorerData(owner, name);
@@ -118,11 +125,20 @@ export default async function ExplorerPage({
   }
 
   let data;
+  const degradedKey = `${owner}/${name}`.toLowerCase();
+  const recentDegraded = degradedCache.get(degradedKey);
   try {
-    data = await getCachedExplorerData(owner, name);
+    // During a GitHub 502 storm every fresh attempt costs the full retry
+    // budget and degrades anyway: serve the recent degraded copy instantly
+    // and only re-attempt when it expires (per instance, 3 min).
+    data =
+      recentDegraded && recentDegraded.until > Date.now()
+        ? recentDegraded.data
+        : await getCachedExplorerData(owner, name);
   } catch (err) {
     if (err instanceof DegradedResult) {
-      data = err.data; // serve it, but leave no cache behind
+      data = err.data; // serve it, but never enters the durable cache
+      if (data) degradedCache.set(degradedKey, { data, until: Date.now() + 180_000 });
     } else if (err instanceof Error && /not[ _]?found|could not resolve/i.test(err.message)) {
       // a real "repository not found" caches as 404; transient GitHub
       // errors must NOT (rethrow -> 500, next visitor retries fresh)

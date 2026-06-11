@@ -12,18 +12,22 @@ function token(): string {
 }
 
 // GitHub returns transient 502s now and then; retry briefly (the budget is
-// fine: these routes are ISR/edge-cached, not user-blocking).
+// fine: these routes are ISR/edge-cached, not user-blocking). Every attempt
+// is time-boxed: a sick upstream socket must cost seconds, not the page's
+// whole maxDuration (observed 11-jun: 60s renders during a 502 storm).
 async function ghFetch<T>(
   path: string,
-  init?: { method?: string; body?: unknown; accept?: string }
+  init?: { method?: string; body?: unknown; accept?: string; delays?: number[]; timeoutMs?: number }
 ): Promise<T> {
-  const delays = [400, 900, 2000];
+  const delays = init?.delays ?? [400, 900, 2000];
+  const timeoutMs = init?.timeoutMs ?? 12_000;
   for (let attempt = 0; ; attempt++) {
     let res: Response | null = null;
     try {
       res = await fetch(API + path, {
         method: init?.method ?? "GET",
         body: init?.body ? JSON.stringify(init.body) : undefined,
+        signal: AbortSignal.timeout(timeoutMs),
         headers: {
           Authorization: `Bearer ${token()}`,
           Accept: init?.accept ?? "application/vnd.github+json",
@@ -57,9 +61,12 @@ async function ghFetch<T>(
 }
 
 export async function graphql<T>(query: string, variables?: Record<string, unknown>): Promise<T> {
+  // Single short retry: heavy stargazer queries already retry at the chunk
+  // level, and stacking both retry ladders is what turned GitHub's bad days
+  // into 60-second page renders.
   const data = await ghFetch<{ data: T | null; errors?: { type?: string; message?: string }[] }>(
     "/graphql",
-    { method: "POST", body: { query, variables } }
+    { method: "POST", body: { query, variables }, delays: [700], timeoutMs: 9_000 }
   );
   if (data.errors?.length) {
     // GitHub returns PARTIAL errors (e.g. NOT_FOUND for one renamed repo in
@@ -209,7 +216,9 @@ export async function neighborsVelocity(
 ): Promise<{ r: string; s: number; v: number; d: string | null; l: string | null }[]> {
   if (!fullNames.length) return [];
   const names = fullNames.slice(0, 25);
-  const CHUNK = 7;
+  // 5 aliases with last:30 keep each query cheap enough to survive the
+  // executor's bad days (7x last:50 still 502d under the 11-jun storm)
+  const CHUNK = 5;
   const chunks: string[][] = [];
   for (let i = 0; i < names.length; i += CHUNK) chunks.push(names.slice(i, i + CHUNK));
 
@@ -218,7 +227,7 @@ export async function neighborsVelocity(
       const [o, n] = fn.split("/");
       return `r${i}: repository(owner:${JSON.stringify(o)}, name:${JSON.stringify(n)}){
         nameWithOwner stargazerCount description primaryLanguage{ name }
-        stargazers(last:50){ edges{ starredAt } } }`;
+        stargazers(last:30){ edges{ starredAt } } }`;
     });
     return graphql<Record<string, VelocityRepoNode | null>>(`{ ${parts.join("\n")} }`);
   };

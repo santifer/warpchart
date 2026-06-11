@@ -80,6 +80,19 @@ try {
   console.error(`[collect] neighbors failed: ${err.message}`);
   neighbors = null;
   partial = true;
+  // Carry the last surviving membership forward: the live API refreshes the
+  // counts anyway, but a null list freezes the whole local band in the UI.
+  try {
+    const lines = readFileSync(historyPath, "utf8").trimEnd().split("\n");
+    for (let i = lines.length - 1; i >= 0 && i >= lines.length - 48; i--) {
+      const prev = JSON.parse(lines[i]);
+      if (prev.neighbors?.length) {
+        neighbors = prev.neighbors;
+        console.log(`[collect] neighbors carried forward from ${prev.ts}`);
+        break;
+      }
+    }
+  } catch { /* keep null */ }
 }
 
 // 5. Galactic core: current worldwide #1 (best effort)

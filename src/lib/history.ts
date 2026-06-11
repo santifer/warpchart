@@ -36,6 +36,18 @@ export function lastSnapshot(): Snapshot | null {
   return h.length ? h[h.length - 1] : null;
 }
 
+// Most recent snapshot whose neighbor list survived. A GitHub outage during
+// one collector run writes neighbors:null, and serving that as an empty band
+// silently freezes the chart on day-old bundle data (seen 11-jun: agent-skills
+// shown behind after it had already overtaken).
+export function lastNeighborsSnapshot(): Snapshot | null {
+  const h = loadHistory();
+  for (let i = h.length - 1; i >= 0; i--) {
+    if (h[i].neighbors?.length) return h[i];
+  }
+  return null;
+}
+
 export function loadMeta(): RepoMetaFile | null {
   const p = path.join(DATA, "meta.json");
   if (!existsSync(p)) return null;

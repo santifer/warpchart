@@ -1,21 +1,25 @@
-// Dynamic Open Graph card (1200x630), mission-control terminal style.
-//   /api/og               -> the tracked tenant (with 7-day sparkline)
-//   /api/og?repo=owner/x  -> any repo (live stats, no sparkline)
+// Dynamic Open Graph card (1200x630): the real cumulative curve as the hero.
+//   /api/og               -> the tracked tenant (exact local history)
+//   /api/og?repo=owner/x  -> any repo (shared cached reconstruction)
+// Generated on demand the first time a scraper asks for it (sharing a URL on
+// X/Discord/LinkedIn triggers the fetch), then edge-cached.
 import { ImageResponse } from "next/og";
 import { loadMeta, loadHistory, loadRoute, loadTimestamps } from "@/lib/history";
-import { dailyCounts, velocity7d } from "@/lib/series";
-import { currentStars, worldwideRank, repoLite } from "@/lib/github";
+import { velocity7d } from "@/lib/series";
+import { worldwideRank, repoLite } from "@/lib/github";
+import { cachedSampleCurve, tenantCurve, isTenantRepo, withLiveTotal, type Curve } from "@/lib/curve";
 import { fmt } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
+export const maxDuration = 60;
 
 const C = {
   void: "#02050a",
-  hull: "#08111c",
   grid: "#11263b",
   ink: "#d9e8f5",
   dim: "#5d7a94",
   accent: "#53d6e8",
+  gold: "#ffd34d",
 };
 
 // Fetch a Google Font as TTF once per lambda instance.
@@ -48,7 +52,6 @@ interface CardData {
   rank: number | null;
   stars: number;
   vPerDay: number | null;
-  spark: number[] | null; // last 14 daily counts
 }
 
 async function tenantData(): Promise<CardData | null> {
@@ -56,16 +59,12 @@ async function tenantData(): Promise<CardData | null> {
   const history = loadHistory();
   const last = history.length ? history[history.length - 1] : null;
   if (!meta || !last) return null;
-  const ts = loadTimestamps();
-  const nowMs = Date.now();
-  const daily = dailyCounts(ts, 14, nowMs);
   return {
     repo: meta.repo,
     desc: meta.description,
     rank: last.rank,
     stars: last.stars,
-    vPerDay: Math.round(velocity7d(ts, nowMs)),
-    spark: daily.map((d) => d.c),
+    vPerDay: Math.round(velocity7d(loadTimestamps(), Date.now())),
   };
 }
 
@@ -77,7 +76,7 @@ async function repoData(repoParam: string): Promise<CardData | null> {
     : -1;
   if (idx >= 0) {
     const e = route!.repos[idx];
-    return { repo: e.r, desc: e.d ?? null, rank: idx + 1, stars: e.s, vPerDay: null, spark: null };
+    return { repo: e.r, desc: e.d ?? null, rank: idx + 1, stars: e.s, vPerDay: null };
   }
   const [owner, name] = repoParam.split("/");
   const lite = await repoLite(owner, name);
@@ -88,7 +87,6 @@ async function repoData(repoParam: string): Promise<CardData | null> {
     rank,
     stars: lite.stargazerCount,
     vPerDay: null,
-    spark: null,
   };
 }
 
@@ -99,18 +97,43 @@ function trimWords(s: string, max: number): string {
   return (sp > 40 ? cut.slice(0, sp) : cut) + "…";
 }
 
-function Spark({ values }: { values: number[] }) {
-  const w = 360;
-  const h = 90;
-  const max = Math.max(1, ...values);
-  const pts = values
-    .map((v, i) => `${(i / (values.length - 1)) * w},${h - (v / max) * (h - 6) - 3}`)
-    .join(" ");
-  return (
-    <svg width={w} height={h} viewBox={`0 0 ${w} ${h}`}>
-      <polyline points={pts} fill="none" stroke={C.accent} strokeWidth={2.5} />
-    </svg>
-  );
+// Same mapping as the embed SVG, sized for the card's hero band.
+function curvePaths(curve: Curve, w: number, h: number) {
+  const pts = curve.pts;
+  const t0 = pts[0].t;
+  const t1 = pts[pts.length - 1].t;
+  const vMax = Math.max(pts[pts.length - 1].v, curve.total);
+  // 16px of right headroom so the endpoint marker never clips
+  const x = (t: number) => ((t - t0) / Math.max(t1 - t0, 1)) * (w - 16);
+  const y = (v: number) => h - 6 - (v / vMax) * (h - 18);
+  const df = curve.dashedFrom;
+  const solid = df === null ? pts : pts.slice(0, df + 1);
+  const seg = (list: { t: number; v: number }[]) =>
+    list.map((p, i) => `${i ? "L" : "M"} ${x(p.t).toFixed(1)} ${y(p.v).toFixed(1)}`).join(" ");
+  return {
+    line: seg(solid),
+    dashed: df !== null ? seg(pts.slice(df)) : null,
+    area: `${seg(pts)} L ${w} ${h} L 0 ${h} Z`,
+    endX: x(pts[pts.length - 1].t),
+    endY: y(pts[pts.length - 1].v),
+    startYear: new Date(t0).getFullYear(),
+  };
+}
+
+// Deterministic star specks per repo name.
+function specks(repo: string, n: number) {
+  let s = 0;
+  for (const ch of repo) s = (s * 31 + ch.charCodeAt(0)) % 100000;
+  const rand = () => {
+    s = (s * 1103515245 + 12345) % 2147483648;
+    return s / 2147483648;
+  };
+  return Array.from({ length: n }, () => ({
+    left: Math.round(rand() * 1140 + 20),
+    top: Math.round(rand() * 560 + 20),
+    size: rand() < 0.75 ? 2 : 3,
+    opacity: 0.18 + rand() * 0.4,
+  }));
 }
 
 export async function GET(req: Request) {
@@ -127,6 +150,22 @@ export async function GET(req: Request) {
     return new Response("not found", { status: 404, headers: { "Cache-Control": "no-store" } });
   }
 
+  // The hero curve shares the embed's cached reconstruction: rendering the
+  // OG card warms the embed and vice versa. Card degrades to stats-only if
+  // the curve is unavailable.
+  let curve: Curve | null = null;
+  try {
+    if (!repoParam || isTenantRepo(repoParam)) {
+      curve = tenantCurve(160);
+    } else {
+      const [owner, name] = repoParam.split("/");
+      curve = await withLiveTotal(await cachedSampleCurve(owner, name), owner, name);
+    }
+    if (curve) data.stars = Math.max(data.stars, curve.total);
+  } catch {
+    curve = null;
+  }
+
   const [michroma, jbmono] = await Promise.all([googleFont("Michroma"), googleFont("JetBrains Mono")]);
   const fonts: { name: string; data: ArrayBuffer; style: "normal" }[] = [];
   if (michroma) fonts.push({ name: "Michroma", data: michroma, style: "normal" });
@@ -135,6 +174,10 @@ export async function GET(req: Request) {
   const owner = data.repo.split("/")[0];
   const mono = jbmono ? "JetBrains Mono" : "monospace";
   const display = michroma ? "Michroma" : mono;
+  const CW = 1104;
+  const CH = 250;
+  const p = curve ? curvePaths(curve, CW, CH) : null;
+  const dots = specks(data.repo, 14);
 
   return new ImageResponse(
     (
@@ -144,77 +187,116 @@ export async function GET(req: Request) {
           height: "100%",
           display: "flex",
           flexDirection: "column",
+          position: "relative",
           background: C.void,
-          padding: 56,
+          padding: 48,
           fontFamily: mono,
           color: C.ink,
           border: `2px solid ${C.grid}`,
         }}
       >
+        {dots.map((d, i) => (
+          <div
+            key={i}
+            style={{
+              display: "flex",
+              position: "absolute",
+              left: d.left,
+              top: d.top,
+              width: d.size,
+              height: d.size,
+              borderRadius: 9999,
+              background: "#bfe9ff",
+              opacity: d.opacity,
+            }}
+          />
+        ))}
+
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-          <div style={{ display: "flex", fontFamily: display, fontSize: 22, letterSpacing: 10, color: C.dim }}>
+          <div style={{ display: "flex", fontFamily: display, fontSize: 20, letterSpacing: 10, color: C.dim }}>
             WARPCHART
           </div>
-          <div style={{ display: "flex", fontSize: 18, color: C.dim }}>growth telemetry</div>
+          <div style={{ display: "flex", fontSize: 17, color: C.dim }}>warpchart.dev</div>
         </div>
 
-        <div style={{ display: "flex", alignItems: "center", gap: 28, marginTop: 48 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 22, marginTop: 26 }}>
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src={`https://github.com/${owner}.png?size=128`}
-            width={96}
-            height={96}
+            width={68}
+            height={68}
             style={{ border: `2px solid ${C.grid}` }}
             alt=""
           />
-          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-            <div style={{ display: "flex", fontSize: 44, fontWeight: 700, color: "#f5fbff" }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+            <div style={{ display: "flex", fontSize: 40, fontWeight: 700, color: "#f5fbff" }}>
               {data.repo}
             </div>
             {data.desc ? (
-              <div style={{ display: "flex", fontSize: 20, color: C.dim, maxWidth: 900 }}>
-                {trimWords(data.desc, 88)}
+              <div style={{ display: "flex", fontSize: 18, color: C.dim, maxWidth: 980 }}>
+                {trimWords(data.desc, 96)}
               </div>
             ) : null}
           </div>
         </div>
 
-        <div style={{ display: "flex", gap: 64, marginTop: 56, alignItems: "flex-end" }}>
-          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-            <div style={{ display: "flex", fontSize: 16, letterSpacing: 6, color: C.dim }}>WORLD RANK</div>
-            <div style={{ display: "flex", fontSize: 72, fontWeight: 700, color: C.accent }}>
-              {data.rank !== null ? `#${fmt(data.rank)}` : "n/a"}
+        <div style={{ display: "flex", gap: 56, marginTop: 22, alignItems: "flex-end" }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+            <div style={{ display: "flex", fontSize: 14, letterSpacing: 5, color: C.dim }}>STARS</div>
+            {/* no ★ glyph: the Google Fonts subset lacks U+2605 (renders tofu) */}
+            <div style={{ display: "flex", fontSize: 56, fontWeight: 700, color: C.accent }}>
+              {fmt(data.stars)}
             </div>
           </div>
-          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-            <div style={{ display: "flex", fontSize: 16, letterSpacing: 6, color: C.dim }}>STARS</div>
-            <div style={{ display: "flex", fontSize: 72, fontWeight: 700 }}>{fmt(data.stars)}</div>
-          </div>
-          {data.vPerDay !== null ? (
-            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-              <div style={{ display: "flex", fontSize: 16, letterSpacing: 6, color: C.dim }}>VELOCITY</div>
-              <div style={{ display: "flex", fontSize: 72, fontWeight: 700 }}>{fmt(data.vPerDay)}/d</div>
+          {data.rank !== null ? (
+            <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+              <div style={{ display: "flex", fontSize: 14, letterSpacing: 5, color: C.dim }}>WORLD RANK</div>
+              <div style={{ display: "flex", fontSize: 56, fontWeight: 700 }}>#{fmt(data.rank)}</div>
             </div>
           ) : null}
-          {data.spark ? (
-            <div style={{ display: "flex", marginLeft: "auto" }}>
-              <Spark values={data.spark} />
+          {data.vPerDay !== null ? (
+            <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+              <div style={{ display: "flex", fontSize: 14, letterSpacing: 5, color: C.dim }}>VELOCITY</div>
+              <div style={{ display: "flex", fontSize: 56, fontWeight: 700 }}>{fmt(data.vPerDay)}/d</div>
             </div>
           ) : null}
         </div>
+
+        {p ? (
+          <div style={{ display: "flex", marginTop: "auto" }}>
+            <svg width={CW} height={CH} viewBox={`0 0 ${CW} ${CH}`}>
+              <path d={p.area} fill="rgba(83,214,232,0.10)" />
+              <path d={p.line} fill="none" stroke={C.accent} strokeWidth={3} />
+              {p.dashed ? (
+                <path
+                  d={p.dashed}
+                  fill="none"
+                  stroke={C.accent}
+                  strokeWidth={2}
+                  strokeDasharray="4 7"
+                  opacity={0.6}
+                />
+              ) : null}
+              <circle cx={p.endX} cy={p.endY} r={7} fill={C.gold} />
+              <circle cx={p.endX} cy={p.endY} r={13} fill="none" stroke={C.gold} strokeWidth={1.5} opacity={0.5} />
+            </svg>
+          </div>
+        ) : null}
 
         <div
           style={{
             display: "flex",
             justifyContent: "space-between",
-            marginTop: "auto",
-            paddingTop: 32,
+            marginTop: 10,
+            paddingTop: 14,
             borderTop: `1px solid ${C.grid}`,
-            fontSize: 17,
+            fontSize: 16,
             color: C.dim,
           }}
         >
-          <div style={{ display: "flex" }}>the route to worldwide rank 1, measured hourly</div>
+          <div style={{ display: "flex" }}>
+            {p ? `${p.startYear} → now · cumulative stars` : "the route to worldwide rank 1, measured hourly"}
+          </div>
           <div style={{ display: "flex", color: C.accent }}>open source</div>
         </div>
       </div>
@@ -224,7 +306,7 @@ export async function GET(req: Request) {
       height: 630,
       fonts: fonts.length ? fonts : undefined,
       headers: {
-        "Cache-Control": "public, s-maxage=3600, stale-while-revalidate=86400",
+        "Cache-Control": "public, s-maxage=1800, stale-while-revalidate=86400",
       },
     }
   );

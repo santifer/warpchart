@@ -5,7 +5,7 @@
 //   /api/chart                         -> the tracked repo (exact history)
 //   /api/chart?repo=owner/name         -> ANY repository (sampled history)
 //   /api/chart?w=600&h=200&theme=dark  -> size and scheme overrides
-import { cachedSampleCurve, tenantCurve, isTenantRepo, type Curve } from "@/lib/curve";
+import { cachedSampleCurve, tenantCurve, isTenantRepo, withLiveTotal, type Curve } from "@/lib/curve";
 import { reqLog } from "@/lib/log";
 import { fmt, fmtCompact } from "@/lib/format";
 
@@ -61,7 +61,10 @@ export async function GET(req: Request) {
     if (!curve) {
       try {
         curve = await log.time("sample", () => cachedSampleCurve(owner, name));
-        cacheControl = "public, s-maxage=21600, stale-while-revalidate=172800";
+        curve = await withLiveTotal(curve, owner, name);
+        // short edge TTL + long SWR: the embed tracks the live counter at
+        // star-history cadence while the curve shape stays cached for 6h
+        cacheControl = "public, s-maxage=1800, stale-while-revalidate=86400";
       } catch (err) {
         const msg = (err as Error).message;
         const notFound = /404|not found/i.test(msg);

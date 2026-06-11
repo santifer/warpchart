@@ -125,10 +125,45 @@ async function sampleCurve(owner: string, name: string): Promise<Curve> {
   return { repo: basic.r, total: basic.s, pts, dashedFrom, archiveFrom };
 }
 
-// key v2: seam-anchored archive normalization (old entries carry a kink)
-export const cachedSampleCurve = unstable_cache(sampleCurve, ["embed-chart-curve-v2"], {
-  revalidate: 21_600,
-});
+// Version of the curve reconstruction. Bump on ANY change to the data shape
+// (sampling, normalization, stitching): the bump purges every cached curve
+// on its next request, so pre-fix curves never linger out their TTL.
+// v2: seam-anchored archive normalization. v3: per-repo tags + live total.
+const CURVE_VERSION = 3;
+
+export function curveTag(owner: string, name: string): string {
+  return `curve:${owner.toLowerCase()}/${name.toLowerCase()}`;
+}
+
+export function cachedSampleCurve(owner: string, name: string): Promise<Curve> {
+  return unstable_cache(sampleCurve, [`embed-chart-curve-v${CURVE_VERSION}`], {
+    revalidate: 21_600,
+    tags: [curveTag(owner, name)],
+  })(owner, name);
+}
+
+// Overlay the LIVE star total on a cached curve: the SHAPE can be hours old
+// (expensive to rebuild), but the header counter and the endpoint always
+// match GitHub right now, at the cost of one REST call per edge-cache miss.
+export async function withLiveTotal(curve: Curve, owner: string, name: string): Promise<Curve> {
+  try {
+    const basic = await repoBasic(owner, name);
+    const pts = [...curve.pts];
+    const last = pts[pts.length - 1];
+    const syntheticTail = curve.dashedFrom !== null || (curve.archiveFrom ?? null) !== null;
+    if (syntheticTail && basic.s >= last.v) {
+      pts[pts.length - 1] = { t: Date.now(), v: basic.s };
+      return { ...curve, total: basic.s, pts };
+    }
+    if (!syntheticTail && basic.s > last.v) {
+      pts.push({ t: Date.now(), v: basic.s });
+      return { ...curve, total: basic.s, pts };
+    }
+  } catch {
+    // cached totals are an acceptable fallback
+  }
+  return curve;
+}
 
 // Exact curve for the tracked tenant, straight from the local archive.
 export function tenantCurve(maxPts = 140): Curve | null {

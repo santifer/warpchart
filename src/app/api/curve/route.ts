@@ -1,6 +1,6 @@
 // JSON cumulative curve for the interactive page chart. Shares the cached
 // reconstruction with the SVG embed, so neither pays twice.
-import { cachedSampleCurve, tenantCurve, isTenantRepo } from "@/lib/curve";
+import { cachedSampleCurve, tenantCurve, isTenantRepo, withLiveTotal } from "@/lib/curve";
 import { reqLog } from "@/lib/log";
 
 export const dynamic = "force-dynamic";
@@ -21,9 +21,10 @@ export async function GET(req: Request) {
       return Response.json({ error: "invalid repo" }, { status: 400 });
     }
     const [owner, name] = repo.split("/");
-    const curve = await log.time("sample", () => cachedSampleCurve(owner, name));
+    let curve = await log.time("sample", () => cachedSampleCurve(owner, name));
+    curve = await withLiveTotal(curve, owner, name);
     return Response.json(curve, {
-      headers: { "Cache-Control": "public, s-maxage=21600, stale-while-revalidate=172800", "x-warp-request": log.reqId },
+      headers: { "Cache-Control": "public, s-maxage=1800, stale-while-revalidate=86400", "x-warp-request": log.reqId },
     });
   } catch (err) {
     log.error("failed", err);
