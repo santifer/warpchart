@@ -52,7 +52,10 @@ export async function getExplorerData(owner: string, name: string): Promise<Expl
     lang = e.l ?? null;
     forks = e.f ?? null;
     neighborNames = [
-      ...ranked.slice(idx + 1, idx + 6).map((p) => p.r).reverse(), // just behind us
+      // 10 behind (not 5): the fastest hunter is often several positions
+      // back in dense ranking zones, and it is the chart's most urgent
+      // object (15 ahead + 10 behind = the velocity call's 25-name cap)
+      ...ranked.slice(idx + 1, idx + 11).map((p) => p.r).reverse(),
       ...ranked.slice(Math.max(0, idx - 15), idx).map((p) => p.r).reverse(), // ahead, nearest first
     ];
   } else {
