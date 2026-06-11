@@ -15,6 +15,8 @@ import RankChart from "@/components/RankChart";
 import MissionLog from "@/components/MissionLog";
 import Dashboard from "@/components/Dashboard";
 import CurveChart from "@/components/CurveChart";
+import SoundToggle from "@/components/SoundToggle";
+import ThemeToggle from "@/components/ThemeToggle";
 import { buildBundle } from "@/lib/bundle";
 import { loadMeta } from "@/lib/history";
 import { unstable_cache } from "next/cache";
@@ -233,19 +235,23 @@ export default async function ExplorerPage({
           <span className="numeral text-micro tracking-[0.15em] text-faint">
             WARPCHART // INSTANT SCAN
           </span>
-          <span className="numeral text-micro text-faint">
-            {data.forkRatio !== null ? (
-              <>
-                fork ratio {(data.forkRatio * 100).toFixed(1)}%
-                {data.forkPercentile !== null
-                  ? ` (higher than ${data.forkPercentile}% of the top 1000)`
-                  : ""}
-                {" · "}
-              </>
-            ) : null}
-            {data.degraded ? "velocity telemetry degraded, next refresh retries · " : ""}
-            live snapshot · refreshes every 15 min
-          </span>
+          <div className="flex flex-wrap items-center gap-x-4">
+            <span className="numeral text-micro text-faint">
+              {data.forkRatio !== null ? (
+                <>
+                  fork ratio {(data.forkRatio * 100).toFixed(1)}%
+                  {data.forkPercentile !== null
+                    ? ` (higher than ${data.forkPercentile}% of the top 1000)`
+                    : ""}
+                  {" · "}
+                </>
+              ) : null}
+              {data.degraded ? "velocity telemetry degraded, next refresh retries · " : ""}
+              live snapshot · refreshes every 15 min
+            </span>
+            <SoundToggle />
+            <ThemeToggle />
+          </div>
         </div>
       </header>
 

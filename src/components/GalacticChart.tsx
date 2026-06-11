@@ -369,7 +369,10 @@ export default function GalacticChart({
       const x = ax(it.s);
       const name = trunc(shortName(it.kind === "n" ? it.n.r : it.p.r));
       const halfW = (Math.max(name.length, 12) * 7.6) / 2 + 10;
-      const rows = it.kind === "n" && it.n.gap <= 0 ? rowsBelow : rowsAbove;
+      // hunters (behind us but closing) label ABOVE the line with the
+      // chase: their catch eta is the most urgent number on the chart
+      const hunts = it.kind === "n" && it.n.gap <= 0 && it.n.catchDays !== null;
+      const rows = it.kind === "n" && it.n.gap <= 0 && !hunts ? rowsBelow : rowsAbove;
       let tier = 0;
       let fits = true;
       while (x - halfW < rows[tier] + 8) {
@@ -693,11 +696,13 @@ export default function GalacticChart({
                     </g>
                   );
                 }
-                const tierY = isAhead
+                const hunts = !isAhead && n.catchDays !== null;
+                const labelAbove = isAhead || hunts;
+                const tierY = labelAbove
                   ? BAND_A_Y - 44 - tiers[i] * 40
                   : BAND_A_Y + 64 + tiers[i] * 34;
-                const lineY1 = isAhead ? tierY + 8 : BAND_A_Y + 6;
-                const lineY2 = isAhead ? BAND_A_Y - 5 : tierY - 24;
+                const lineY1 = labelAbove ? tierY + 8 : BAND_A_Y + 6;
+                const lineY2 = labelAbove ? BAND_A_Y - 5 : tierY - 24;
                 return (
                   <g
                     key={n.r}
@@ -735,7 +740,7 @@ export default function GalacticChart({
                       </>
                     ) : null}
                     <circle className="nbr-dot" cx={x} cy={BAND_A_Y} r={3.2} fill={color} opacity={isAhead ? 0.95 : 0.55} />
-                    <text className="nbr-name" x={x} y={tierY - 13} fill={isAhead ? C.ink : C.faint} fontSize={12.5}
+                    <text className="nbr-name" x={x} y={tierY - 13} fill={labelAbove ? C.ink : C.faint} fontSize={12.5}
                       textAnchor="middle">
                       {trunc(shortName(n.r))}
                     </text>
@@ -743,12 +748,16 @@ export default function GalacticChart({
                         never outgrows its tier spacing or the clip */}
                     <text x={x} y={tierY + 1} fill={C.dim} fontSize={11} textAnchor="middle">
                       {fmtSignedGap(n.gap)} · {Math.round(n.v)}/d
-                      {!isAhead ? " · passed" : ""}
+                      {!labelAbove ? " · passed" : ""}
                     </text>
-                    {isAhead ? (
+                    {labelAbove ? (
                       <text x={x} y={tierY + 14} fontSize={11} textAnchor="middle"
-                        fill={n.receding ? C.warn : C.accent}>
-                        {n.receding ? "receding" : `eta ${fmtEtaDays(n.etaDays)}`}
+                        fill={hunts ? color : n.receding ? C.warn : C.accent}>
+                        {hunts
+                          ? `catches you in ${fmtEtaDays(n.catchDays)}`
+                          : n.receding
+                            ? "pulling away"
+                            : `eta ${fmtEtaDays(n.etaDays)}`}
                       </text>
                     ) : null}
                   </g>

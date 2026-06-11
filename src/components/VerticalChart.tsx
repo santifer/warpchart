@@ -259,13 +259,30 @@ export default function VerticalChart({
               {shifted ? (
                 <line x1={AXIS_X + 5} y1={y} x2={LABEL_X - 3} y2={labelY - 4} stroke={C.grid} strokeWidth={1} />
               ) : null}
-              <text x={LABEL_X} y={labelY - 2} fontSize={13} fill={isAhead ? C.ink : C.faint} className="numeral">
+              <text x={LABEL_X} y={labelY - 2} fontSize={13}
+                fill={isAhead || n.catchDays !== null ? C.ink : C.faint} className="numeral">
                 {trunc(shortName(n.r))}
               </text>
               <text x={LABEL_X} y={labelY + 13} fontSize={11} fill={C.dim} className="numeral">
                 {isAhead ? `+${fmtCompact(n.gap)}` : fmtCompact(n.gap)} · {Math.round(n.v)}/d ·{" "}
-                <tspan fill={!isAhead ? C.faint : n.receding ? C.warn : C.accent}>
-                  {!isAhead ? "passed" : n.receding ? "receding" : `eta ${fmtEtaDays(n.etaDays)}`}
+                <tspan
+                  fill={
+                    n.catchDays !== null && !isAhead
+                      ? dop.color
+                      : !isAhead
+                        ? C.faint
+                        : n.receding
+                          ? C.warn
+                          : C.accent
+                  }
+                >
+                  {n.catchDays !== null && !isAhead
+                    ? `catches you in ${fmtEtaDays(n.catchDays)}`
+                    : !isAhead
+                      ? "passed"
+                      : n.receding
+                        ? "pulling away"
+                        : `eta ${fmtEtaDays(n.etaDays)}`}
                 </tspan>
               </text>
               {/* 44px finger-sized hit area: the bare glyph was 15x14px and

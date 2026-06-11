@@ -50,6 +50,9 @@ export interface NeighborEta extends Neighbor {
   gap: number; // positive = ahead of us
   closing: number; // our v minus theirs; positive = we are catching up
   etaDays: number | null; // null = receding or behind us
+  // a hunter: behind us AND faster; days until it catches us. The most
+  // urgent number on the chart, it must never hide inside "passed".
+  catchDays: number | null;
   receding: boolean;
 }
 
@@ -59,6 +62,7 @@ export function neighborEtas(neighbors: Neighbor[], stars: number, vOwn: number)
     const closing = Math.round((vOwn - n.v) * 10) / 10;
     const ahead = gap > 0;
     const etaDays = ahead && closing > 0 ? Math.round((gap / closing) * 10) / 10 : null;
-    return { ...n, gap, closing, etaDays, receding: ahead && closing <= 0 };
+    const catchDays = !ahead && closing < 0 ? Math.round((gap / closing) * 10) / 10 : null;
+    return { ...n, gap, closing, etaDays, catchDays, receding: ahead && closing <= 0 };
   });
 }

@@ -6,6 +6,8 @@ import Link from "next/link";
 import ExploreSearch, { type CatalogEntry } from "@/components/ExploreSearch";
 import EmbedGenerator from "@/components/EmbedGenerator";
 import ExploreBackdrop from "@/components/ExploreBackdrop";
+import SoundToggle from "@/components/SoundToggle";
+import ThemeToggle from "@/components/ThemeToggle";
 import GalacticChart from "@/components/GalacticChart";
 import VerticalChart from "@/components/VerticalChart";
 import { buildDemoSpotlight } from "@/lib/demo";
@@ -36,17 +38,21 @@ export default async function Explore() {
   return (
     <main className="mx-auto flex min-h-screen max-w-[1120px] flex-col gap-14 px-4 py-12 sm:px-6">
       <ExploreBackdrop />
-      <header className="rise flex items-center justify-between" style={{ animationDelay: "0ms" }}>
+      <header className="rise flex flex-wrap items-center justify-between gap-3" style={{ animationDelay: "0ms" }}>
         <span className="font-display text-sm tracking-[0.3em] text-star">WARPCHART</span>
-        {meta ? (
-          <Link
-            prefetch={false}
-            href={`/r/${meta.repo}`}
-            className="numeral border border-grid px-3 py-1.5 text-micro tracking-[0.18em] text-dim transition-colors hover:border-accent/50 hover:text-accent"
-          >
-            LIVE DEMO MISSION: {meta.repo} →
-          </Link>
-        ) : null}
+        <div className="flex flex-wrap items-center gap-x-4">
+          <SoundToggle />
+          <ThemeToggle />
+          {meta ? (
+            <Link
+              prefetch={false}
+              href={`/r/${meta.repo}`}
+              className="numeral border border-grid px-3 py-1.5 text-micro tracking-[0.18em] text-dim transition-colors hover:border-accent/50 hover:text-accent"
+            >
+              LIVE DEMO MISSION: {meta.repo} →
+            </Link>
+          ) : null}
+        </div>
       </header>
 
       <section className="rise relative flex flex-col items-center gap-7 pb-4 pt-12 text-center sm:pt-16" style={{ animationDelay: "80ms" }}>
