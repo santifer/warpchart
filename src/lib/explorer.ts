@@ -5,6 +5,7 @@
 // Pages are ISR-cached, so cost stays flat regardless of traffic.
 import { loadRoute, loadMeta, lastSnapshot } from "./history";
 import { repoLite, worldwideRank, searchNeighbors, neighborsVelocity } from "./github";
+import { reqLog } from "./log";
 import { nextMilestones } from "./milestones";
 import { buildRouteLayers, forkRatioPercentile } from "./bundle";
 import type { ChartInputs, Neighbor, RouteRepo } from "./types";
@@ -39,6 +40,8 @@ export async function getExplorerData(owner: string, name: string): Promise<Expl
   let lang: string | null = null;
   let forks: number | null = null;
   let neighborNames: string[];
+  const log = reqLog("explorer", { repo: `${owner}/${name}` });
+  const t0 = Date.now();
 
   if (inTop1000) {
     const e = ranked[idx];
@@ -77,10 +80,13 @@ export async function getExplorerData(owner: string, name: string): Promise<Expl
     if (self) {
       repoName = self.r;
       stars = self.s;
+    } else {
+      log.warn("velocity.self-missing", { asked: repoName, got: vel.length });
     }
   } catch (err) {
     if (!inTop1000) throw err;
     degraded = true;
+    log.error("velocity.degraded", err, { neighbors: neighborNames.length, inTop1000 });
     const byName = new Map(ranked.map((p) => [p.r, p]));
     neighbors = neighborNames
       .map((nm) => byName.get(nm))
@@ -105,6 +111,8 @@ export async function getExplorerData(owner: string, name: string): Promise<Expl
     tenantMeta && tenantSnap && tenantMeta.repo.toLowerCase() !== repoName.toLowerCase()
       ? { r: tenantMeta.repo, s: tenantSnap.stars }
       : null;
+
+  log.info("resolved", { inTop1000, rank, v7d: Math.round(v7d * 10) / 10, neighbors: neighbors.length, degraded, ms: Date.now() - t0 });
 
   const inputs: ChartInputs = {
     repo: repoName,

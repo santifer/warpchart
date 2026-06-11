@@ -1,6 +1,9 @@
 // Live GitHub helpers for the API routes. Single-attempt (serverless time
 // budget); the client treats failures as transient and keeps polling.
+import { reqLog } from "@/lib/log";
+
 const API = "https://api.github.com";
+const ghlog = reqLog("github");
 
 function token(): string {
   const t = process.env.GITHUB_TOKEN || process.env.GH_TOKEN;
@@ -34,21 +37,43 @@ async function ghFetch<T>(
     } catch (err) {
       if (attempt >= delays.length) throw err;
     }
-    if (res?.ok) return res.json() as Promise<T>;
+    if (res?.ok) {
+      const remaining = Number(res.headers.get("x-ratelimit-remaining") ?? NaN);
+      if (remaining < 300) {
+        ghlog.warn("ratelimit.low", { path: path.slice(0, 80), remaining,
+          reset: res.headers.get("x-ratelimit-reset") });
+      }
+      return res.json() as Promise<T>;
+    }
     const retriable = !res || res.status >= 500;
     if (!retriable || attempt >= delays.length) {
+      ghlog.error("fetch.failed", undefined, { path: path.slice(0, 120),
+        status: res?.status ?? "network", attempts: attempt + 1 });
       throw new Error(`GitHub ${res?.status ?? "network"}: ${res ? (await res.text()).slice(0, 200) : ""}`);
     }
+    ghlog.warn("fetch.retry", { path: path.slice(0, 80), status: res?.status ?? "network", attempt: attempt + 1 });
     await new Promise((r) => setTimeout(r, delays[attempt]));
   }
 }
 
 export async function graphql<T>(query: string, variables?: Record<string, unknown>): Promise<T> {
-  const data = await ghFetch<{ data: T; errors?: unknown[] }>("/graphql", {
-    method: "POST",
-    body: { query, variables },
-  });
-  if (data.errors) throw new Error("GraphQL: " + JSON.stringify(data.errors).slice(0, 300));
+  const data = await ghFetch<{ data: T | null; errors?: { type?: string; message?: string }[] }>(
+    "/graphql",
+    { method: "POST", body: { query, variables } }
+  );
+  if (data.errors?.length) {
+    // GitHub returns PARTIAL errors (e.g. NOT_FOUND for one renamed repo in
+    // an aliased batch) alongside perfectly good data for the rest. Throwing
+    // here used to poison whole pages into degraded 0/day velocity. Only
+    // throw when there is no usable data at all.
+    const kinds = [...new Set(data.errors.map((e) => e.type ?? "UNKNOWN"))];
+    if (data.data == null) {
+      ghlog.error("graphql.failed", undefined, { kinds, sample: data.errors[0]?.message?.slice(0, 160) });
+      throw new Error("GraphQL: " + JSON.stringify(data.errors).slice(0, 300));
+    }
+    ghlog.warn("graphql.partial", { errors: data.errors.length, kinds });
+  }
+  if (data.data == null) throw new Error("GraphQL: empty data");
   return data.data;
 }
 

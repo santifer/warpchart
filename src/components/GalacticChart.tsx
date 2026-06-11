@@ -232,8 +232,22 @@ export default function GalacticChart({
   const behind = etas.filter((n) => n.gap <= 0).sort((a, b) => b.gap - a.gap).slice(0, 3);
   const gateX = nextMilestone?.threshold ?? null;
 
-  const aMinDefault = Math.max(1, Math.min(stars, ...behind.map((n) => n.s)) - 80);
-  const aMaxDefault = Math.max(gateX ?? 0, ...ahead.map((n) => n.s), stars + 400) + 250;
+  // Density-adaptive default window: the opening bracket frames the local
+  // traffic comfortably (about 8 ships ahead plus the trailing escorts)
+  // instead of stretching to a fixed span. Dense neighborhoods open tight,
+  // sparse ones open wide; the next gate only joins the frame when it is
+  // genuinely nearby. Everything else is one pan away.
+  const aheadSpread = ahead.length
+    ? Math.max(ahead[Math.min(7, ahead.length - 1)].s - stars, stars * 0.004)
+    : Math.max((gateX ?? stars * 1.6) - stars, stars * 0.05);
+  let aMaxDefault = stars + aheadSpread * 1.3;
+  if (gateX !== null && gateX <= stars + aheadSpread * 2.6) {
+    aMaxDefault = Math.max(aMaxDefault, gateX + aheadSpread * 0.18);
+  }
+  const behindSpread = behind.length
+    ? Math.max(stars - Math.min(...behind.map((n) => n.s)), stars * 0.002)
+    : stars * 0.012;
+  const aMinDefault = Math.max(1, stars - behindSpread * 1.25);
 
   const coreStars = apex?.s ?? Math.max(stars * 8, 400_000);
   const bMin = log10(Math.min(stars * 0.96, aMinDefault));

@@ -4,6 +4,7 @@
 import { unstable_cache } from "next/cache";
 import { loadTimestamps, loadMeta, lastSnapshot } from "@/lib/history";
 import { repoBasic, stargazerPageFirst } from "@/lib/github";
+import { reqLog } from "@/lib/log";
 
 export interface Curve {
   repo: string;
@@ -32,6 +33,10 @@ async function sampleCurve(owner: string, name: string): Promise<Curve> {
       at: await stargazerPageFirst(owner, name, p).catch(() => null),
     }))
   );
+  const failed = samples.filter((s) => !s.at).length;
+  if (failed > 0) {
+    reqLog("curve", { repo: basic.r }).warn("sample.pages-failed", { failed, asked: sorted.length });
+  }
   const pts = samples
     .filter((s) => s.at)
     .map((s) => ({ t: Date.parse(s.at as string), v: (s.p - 1) * 100 + 1 }))

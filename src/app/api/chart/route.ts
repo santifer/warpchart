@@ -6,6 +6,7 @@
 //   /api/chart?repo=owner/name         -> ANY repository (sampled history)
 //   /api/chart?w=600&h=200&theme=dark  -> size and scheme overrides
 import { cachedSampleCurve, tenantCurve, type Curve } from "@/lib/curve";
+import { reqLog } from "@/lib/log";
 import { fmt, fmtCompact } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
@@ -44,6 +45,7 @@ export async function GET(req: Request) {
   const themeParam = url.searchParams.get("theme");
   const theme = themeParam === "light" || themeParam === "dark" ? themeParam : null;
   const repoParam = url.searchParams.get("repo");
+  const log = reqLog("chart", { repo: repoParam ?? "tenant", w, h });
 
   let curve: Curve | null = null;
   let cacheControl = "public, s-maxage=3600, stale-while-revalidate=86400";
@@ -53,7 +55,7 @@ export async function GET(req: Request) {
     }
     const [owner, name] = repoParam.split("/");
     try {
-      curve = await cachedSampleCurve(owner, name);
+      curve = await log.time("sample", () => cachedSampleCurve(owner, name));
       cacheControl = "public, s-maxage=21600, stale-while-revalidate=172800";
     } catch (err) {
       const msg = (err as Error).message;
@@ -246,6 +248,7 @@ ${xMarks}
     headers: {
       "Content-Type": "image/svg+xml; charset=utf-8",
       "Cache-Control": cacheControl,
+      "x-warp-request": log.reqId,
     },
   });
 }
