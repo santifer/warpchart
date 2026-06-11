@@ -287,11 +287,14 @@ export async function searchRepos(
 export async function repoBasic(
   owner: string,
   name: string
-): Promise<{ r: string; s: number; created: string }> {
-  const d = await ghFetch<{ full_name: string; stargazers_count: number; created_at: string }>(
-    `/repos/${owner}/${name}`
-  );
-  return { r: d.full_name, s: d.stargazers_count, created: d.created_at };
+): Promise<{ r: string; s: number; created: string; id: number }> {
+  const d = await ghFetch<{
+    id: number;
+    full_name: string;
+    stargazers_count: number;
+    created_at: string;
+  }>(`/repos/${owner}/${name}`);
+  return { r: d.full_name, s: d.stargazers_count, created: d.created_at, id: d.id };
 }
 
 // First starred_at of a given stargazer page (100/page, ascending order).

@@ -73,6 +73,7 @@ export async function GET(req: Request) {
   }
 
   const { repo, total, pts, dashedFrom } = curve;
+  const archiveFrom = curve.archiveFrom ?? null;
   const padL = 16;
   const padR = 78;
   const padT = 40;
@@ -154,7 +155,13 @@ export async function GET(req: Request) {
   // 40K, so the dashed stretch is an estimate. Say so on the chart itself
   // (the market leader hides this; honesty is the brand).
   let capMark = "";
-  if (dashedFrom !== null) {
+  if (archiveFrom !== null) {
+    const bp = pts[archiveFrom];
+    const bx2 = x(bp.t).toFixed(1);
+    const by2 = y(bp.v).toFixed(1);
+    capMark = `<g class="ar"><line x1="${bx2}" y1="${(Number(by2) - 6).toFixed(1)}" x2="${bx2}" y2="${(Number(by2) + 6).toFixed(1)}" style="stroke:var(--dm)" stroke-width="1" opacity="0.7"/>
+<text x="${bx2}" y="${(Number(by2) - 11).toFixed(1)}" text-anchor="middle" font-family="${mono}" font-size="10" style="fill:var(--dm)" opacity="0.85">api exact | gh archive (real, normalized)</text></g>`;
+  } else if (dashedFrom !== null) {
     const bp = pts[dashedFrom];
     const bx2 = x(bp.t).toFixed(1);
     const by2 = y(bp.v).toFixed(1);

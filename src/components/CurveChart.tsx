@@ -18,11 +18,13 @@ interface CurveDto {
   total: number;
   pts: { t: number; v: number }[];
   dashedFrom: number | null;
+  archiveFrom?: number | null;
 }
 
 interface Row {
   t: number;
   real: number | null;
+  arch: number | null;
   est: number | null;
 }
 
@@ -86,9 +88,11 @@ export default function CurveChart({ repo }: { repo: string }) {
   }
 
   const boundary = curve.dashedFrom;
+  const seam = curve.archiveFrom ?? null;
   const rows: Row[] = curve.pts.map((p, i) => ({
     t: p.t,
-    real: boundary === null || i <= boundary ? p.v : null,
+    real: (boundary === null && seam === null) || (boundary !== null && i <= boundary) || (seam !== null && i <= seam) ? p.v : null,
+    arch: seam !== null && i >= seam ? p.v : null,
     est: boundary !== null && i >= boundary ? p.v : null,
   }));
 
@@ -126,7 +130,7 @@ export default function CurveChart({ repo }: { repo: string }) {
               labelStyle={{ color: C.dim }}
               formatter={(value, name) => [
                 `${fmt(Number(value))} ★`,
-                name === "est" ? "estimated (api cap)" : "stars",
+                name === "est" ? "estimated (api cap)" : name === "arch" ? "gh archive (real, normalized)" : "stars",
               ]}
               labelFormatter={(t) => new Date(Number(t)).toLocaleDateString("en-US", { dateStyle: "medium" })}
             />
@@ -138,6 +142,18 @@ export default function CurveChart({ repo }: { repo: string }) {
               fill={C.accentSoft}
               isAnimationActive
               animationDuration={1900}
+              dot={false}
+              connectNulls={false}
+            />
+            <Line
+              type="monotone"
+              dataKey="arch"
+              stroke={C.accent}
+              strokeWidth={1.5}
+              strokeOpacity={0.85}
+              isAnimationActive
+              animationBegin={1500}
+              animationDuration={900}
               dot={false}
               connectNulls={false}
             />
@@ -159,9 +175,11 @@ export default function CurveChart({ repo }: { repo: string }) {
       </div>
       <div className="flex flex-wrap items-center justify-between gap-2">
         <span className="numeral text-micro text-faint">
-          {boundary !== null
-            ? "solid = real stargazer timestamps · dashed = estimated beyond GitHub's 40K api cap"
-            : "every point is a real stargazer timestamp"}
+          {seam !== null
+            ? "full real history: exact api timestamps + gh archive beyond the 40K cap (normalized to the live total)"
+            : boundary !== null
+              ? "solid = real stargazer timestamps · dashed = estimated beyond GitHub's 40K api cap"
+              : "every point is a real stargazer timestamp"}
         </span>
         <button
           onClick={() => setRun((r) => r + 1)}

@@ -303,7 +303,8 @@ export default async function ExplorerPage({
 
       <div className="hud flex flex-wrap items-center justify-between gap-3 px-4 py-3">
         <span className="numeral text-label text-dim">
-          Full mission telemetry for {repoLabel}: hourly history, forensics, replay and projections.
+          Full mission telemetry for {repoLabel}: hourly history, forensics, replay and
+          projections. Start tracking today, own your real history forever.
         </span>
         <div className="flex flex-wrap gap-2">
           <a
