@@ -370,13 +370,18 @@ export default function GalacticChart({
   {
     const rowsAbove: number[] = [-1e9, -1e9, -1e9]; // rightmost occupied edge per tier
     const rowsBelow: number[] = [-1e9, -1e9, -1e9];
+    // label priority: hunters first (the chart's most urgent object must
+    // never be shed in dense zones), then chase targets with an eta, then
+    // the rest of the neighbors, route dots last
+    const prio = (it: AItem) => {
+      if (it.kind !== "n") return 3;
+      if (it.n.gap <= 0 && it.n.catchDays !== null) return 0;
+      if (it.n.gap > 0 && it.n.etaDays !== null) return 1;
+      return 2;
+    };
     const order = items
       .map((_, i) => i)
-      .sort((a, b) => {
-        const pa = items[a].kind === "n" ? 0 : 1;
-        const pb = items[b].kind === "n" ? 0 : 1;
-        return pa - pb || ax(items[a].s) - ax(items[b].s);
-      });
+      .sort((a, b) => prio(items[a]) - prio(items[b]) || ax(items[a].s) - ax(items[b].s));
     for (const i of order) {
       const it = items[i];
       const x = ax(it.s);

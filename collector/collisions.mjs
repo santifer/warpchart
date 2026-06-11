@@ -31,6 +31,7 @@ const BRANDS = new Set([
   "pytorch", "openai", "anthropics", "docker", "git", "mozilla", "redis",
   "elastic", "grafana", "prometheus", "ansible", "hashicorp", "stripe",
   "supabase", "denoland", "oven-sh", "astral-sh", "jquery", "expressjs",
+  "swiftlang", "ziglang", "ohmyzsh", "neovim", "helix-editor", "ansible",
 ]);
 
 function loadPrevRoute(current) {
@@ -211,17 +212,31 @@ export async function runCollisionScan({ enrich = true } = {}) {
   };
   writeFileSync(OUT, JSON.stringify(out, null, 1) + "\n");
 
-  // human briefing
-  console.log(`\n[collisions] ${collisions.length} crossings <= ${MAX_ETA_DAYS}d · baseline ${out.baseline.days}d · ${entrants.length} new top-1000 entrants\n`);
-  for (const c of collisions.slice(0, 10)) {
+  // human briefing: top stories by score, then EVERYTHING imminent. A
+  // same-day crossing between two famous neighbors can carry a mid score
+  // (fame x momentum) and still be the best story of the day; the imminent
+  // section guarantees it is never silently dropped (lesson: swift vs
+  // paperclip, 11 stars apart, invisible in the score top 10).
+  const line = (c) => {
     const hx = c.hunter.x ? ` @${c.hunter.x}` : "";
     const vx = c.victim.x ? ` @${c.victim.x}` : "";
-    console.log(
+    return (
       `  ${c.score.toFixed(1).padStart(5)} · ${c.hunter.r}${hx} (${c.hunter.v}/d${c.hunter.age ? ", " + c.hunter.age : ""})` +
       ` overtakes ${c.victim.r}${vx} (#${c.victim.rank}${c.victim.age ? ", " + c.victim.age : ""}) in ${c.eta}` +
       (c.angles.length ? ` · ${c.angles.join(" · ")}` : "") +
       `\n         watch: warpchart.dev/r/${c.victim.r}`
     );
+  };
+  console.log(`\n[collisions] ${collisions.length} crossings <= ${MAX_ETA_DAYS}d · baseline ${out.baseline.days}d · ${entrants.length} new top-1000 entrants\n`);
+  const top = collisions.slice(0, 10);
+  for (const c of top) console.log(line(c));
+  const imminent = collisions
+    .filter((c) => c.etaDays <= 1 && !top.includes(c))
+    .sort((a, b) => a.etaDays - b.etaDays)
+    .slice(0, 8);
+  if (imminent.length) {
+    console.log(`\n  IMMINENT (<24h, beyond the score top 10):`);
+    for (const c of imminent) console.log(line(c));
   }
   return out;
 }
