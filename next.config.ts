@@ -10,6 +10,7 @@ const nextConfig: NextConfig = {
     "/api/badge": ["./data/**"],
     "/api/og": ["./data/**"],
     "/api/chart": ["./data/**"],
+    "/api/curve": ["./data/**"],
     "/feed.xml": ["./data/**"],
     "/hq": ["./data/**"],
     "/r/*": ["./data/**"],
