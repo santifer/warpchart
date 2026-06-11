@@ -5,7 +5,7 @@
 //   /api/chart                         -> the tracked repo (exact history)
 //   /api/chart?repo=owner/name         -> ANY repository (sampled history)
 //   /api/chart?w=600&h=200&theme=dark  -> size and scheme overrides
-import { cachedSampleCurve, tenantCurve, type Curve } from "@/lib/curve";
+import { cachedSampleCurve, tenantCurve, isTenantRepo, type Curve } from "@/lib/curve";
 import { reqLog } from "@/lib/log";
 import { fmt, fmtCompact } from "@/lib/format";
 
@@ -54,16 +54,22 @@ export async function GET(req: Request) {
       return new Response("invalid repo", { status: 400, headers: { "Cache-Control": "no-store" } });
     }
     const [owner, name] = repoParam.split("/");
-    try {
-      curve = await log.time("sample", () => cachedSampleCurve(owner, name));
-      cacheControl = "public, s-maxage=21600, stale-while-revalidate=172800";
-    } catch (err) {
-      const msg = (err as Error).message;
-      const notFound = /404|not found/i.test(msg);
-      return new Response(notFound ? "repository not found" : "upstream error", {
-        status: notFound ? 404 : 502,
-        headers: { "Cache-Control": "no-store" },
-      });
+    // ?repo= pointing at the tracked tenant must serve the SAME exact local
+    // curve as the no-param branch (the sampled path showed a dashed
+    // "estimated" tail for a repo whose full history we hold)
+    if (isTenantRepo(repoParam)) curve = tenantCurve();
+    if (!curve) {
+      try {
+        curve = await log.time("sample", () => cachedSampleCurve(owner, name));
+        cacheControl = "public, s-maxage=21600, stale-while-revalidate=172800";
+      } catch (err) {
+        const msg = (err as Error).message;
+        const notFound = /404|not found/i.test(msg);
+        return new Response(notFound ? "repository not found" : "upstream error", {
+          status: notFound ? 404 : 502,
+          headers: { "Cache-Control": "no-store" },
+        });
+      }
     }
   } else {
     curve = tenantCurve();

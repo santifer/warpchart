@@ -85,18 +85,38 @@ async function sampleCurve(owner: string, name: string): Promise<Curve> {
     // coverage check: the archive misses suppressed viral bursts; require
     // it to account for at least 85% of live stars before trusting it
     const reliable = archive !== null && archiveTotal >= basic.s * 0.85;
+    let stitched = false;
     if (reliable && archive) {
-      // normalize re-star inflation / minor gaps to the live total, then
-      // keep only the stretch past the last exact point
-      const scale = basic.s / archiveTotal;
+      // Anchor the archive stretch at BOTH ends: it must start exactly at
+      // the last exact api point and end exactly at the live total. A
+      // uniform end-only scale left a velocity step at the seam (observed:
+      // tensorflow +9K in 16 days right after the 40K cap) that read as a
+      // kink in the chart and in the draw animation.
       const lastExact = pts[pts.length - 1];
-      const middle = archive
-        .map((m) => ({ t: m.t, v: Math.round(m.total * scale) }))
-        .filter((m) => m.t > lastExact.t && m.v > lastExact.v && m.v < basic.s);
-      archiveFrom = pts.length - 1;
-      pts.push(...middle, { t: Date.now(), v: basic.s });
-      log.info("archive.used", { months: middle.length, archiveTotal, scale: Math.round(scale * 100) / 100 });
-    } else {
+      const after = archive.findIndex((m) => m.t > lastExact.t);
+      let archAtSeam = archiveTotal;
+      if (after === 0) archAtSeam = 0;
+      else if (after > 0) {
+        const a = archive[after - 1];
+        const b = archive[after];
+        archAtSeam = a.total + ((b.total - a.total) * (lastExact.t - a.t)) / Math.max(1, b.t - a.t);
+      }
+      const remainArch = archiveTotal - archAtSeam;
+      const remainLive = basic.s - lastExact.v;
+      if (remainArch > 0 && remainLive > 0) {
+        const k = remainLive / remainArch;
+        const middle = archive
+          .filter((m) => m.t > lastExact.t)
+          .map((m) => ({ t: m.t, v: Math.round(lastExact.v + (m.total - archAtSeam) * k) }))
+          .filter((m) => m.v > lastExact.v && m.v < basic.s);
+        archiveFrom = pts.length - 1;
+        pts.push(...middle, { t: Date.now(), v: basic.s });
+        stitched = true;
+        log.info("archive.used", { months: middle.length, archiveTotal,
+          anchor: Math.round(archAtSeam), k: Math.round(k * 100) / 100 });
+      }
+    }
+    if (!stitched) {
       dashedFrom = pts.length - 1;
       pts.push({ t: Date.now(), v: basic.s });
       log.info("archive.skipped", { archiveTotal, live: basic.s, reliable });
@@ -105,7 +125,8 @@ async function sampleCurve(owner: string, name: string): Promise<Curve> {
   return { repo: basic.r, total: basic.s, pts, dashedFrom, archiveFrom };
 }
 
-export const cachedSampleCurve = unstable_cache(sampleCurve, ["embed-chart-curve"], {
+// key v2: seam-anchored archive normalization (old entries carry a kink)
+export const cachedSampleCurve = unstable_cache(sampleCurve, ["embed-chart-curve-v2"], {
   revalidate: 21_600,
 });
 

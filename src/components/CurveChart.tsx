@@ -8,7 +8,7 @@
 // 40K pagination cap renders dashed and labeled, never disguised.
 import { useEffect, useRef, useState } from "react";
 import {
-  ComposedChart, Area, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
+  ComposedChart, Area, Line, XAxis, YAxis, CartesianGrid, Tooltip, ReferenceLine, ResponsiveContainer,
 } from "recharts";
 import { usePalette } from "@/lib/usePalette";
 import { fmt, fmtCompact } from "@/lib/format";
@@ -23,8 +23,7 @@ interface CurveDto {
 
 interface Row {
   t: number;
-  real: number | null;
-  arch: number | null;
+  solid: number | null;
   est: number | null;
 }
 
@@ -89,10 +88,13 @@ export default function CurveChart({ repo }: { repo: string }) {
 
   const boundary = curve.dashedFrom;
   const seam = curve.archiveFrom ?? null;
+  const seamT = seam !== null ? (curve.pts[seam]?.t ?? null) : null;
+  // The whole REAL stretch (exact api samples + normalized archive) is ONE
+  // continuous filled series: splitting it in two left the archive tail
+  // without area fill and made REPLAY draw with two mismatched pens.
   const rows: Row[] = curve.pts.map((p, i) => ({
     t: p.t,
-    real: (boundary === null && seam === null) || (boundary !== null && i <= boundary) || (seam !== null && i <= seam) ? p.v : null,
-    arch: seam !== null && i >= seam ? p.v : null,
+    solid: boundary === null || i <= boundary ? p.v : null,
     est: boundary !== null && i >= boundary ? p.v : null,
   }));
 
@@ -128,32 +130,41 @@ export default function CurveChart({ repo }: { repo: string }) {
                 fontSize: 13,
               }}
               labelStyle={{ color: C.dim }}
-              formatter={(value, name) => [
-                `${fmt(Number(value))} ★`,
-                name === "est" ? "estimated (api cap)" : name === "arch" ? "gh archive (real, normalized)" : "stars",
-              ]}
+              formatter={(value, name, item) => {
+                const at = (item as { payload?: { t?: number } }).payload?.t ?? 0;
+                return [
+                  `${fmt(Number(value))} ★`,
+                  name === "est"
+                    ? "estimated (api cap)"
+                    : seamT !== null && at > seamT
+                      ? "gh archive (real, normalized)"
+                      : "stars",
+                ];
+              }}
               labelFormatter={(t) => new Date(Number(t)).toLocaleDateString("en-US", { dateStyle: "medium" })}
             />
+            {seamT !== null && (
+              <ReferenceLine
+                x={seamT}
+                stroke={C.grid}
+                strokeDasharray="2 5"
+                label={{
+                  value: "api | archive",
+                  position: "insideTop",
+                  fill: C.dim,
+                  fontSize: 11,
+                  fontFamily: "var(--font-jbmono)",
+                }}
+              />
+            )}
             <Area
               type="monotone"
-              dataKey="real"
+              dataKey="solid"
               stroke={C.accent}
               strokeWidth={1.6}
               fill={C.accentSoft}
               isAnimationActive
               animationDuration={1900}
-              dot={false}
-              connectNulls={false}
-            />
-            <Line
-              type="monotone"
-              dataKey="arch"
-              stroke={C.accent}
-              strokeWidth={1.5}
-              strokeOpacity={0.85}
-              isAnimationActive
-              animationBegin={1500}
-              animationDuration={900}
               dot={false}
               connectNulls={false}
             />
@@ -165,8 +176,8 @@ export default function CurveChart({ repo }: { repo: string }) {
               strokeDasharray="3 5"
               strokeOpacity={0.55}
               isAnimationActive
-              animationBegin={1500}
-              animationDuration={900}
+              animationBegin={1900}
+              animationDuration={700}
               dot={false}
               connectNulls={false}
             />
