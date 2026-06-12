@@ -86,7 +86,7 @@ export default async function Explore() {
               </h1>
               <p className="max-w-[600px] text-lg font-light leading-relaxed text-dim">
                 Live star chart, worldwide rank, neighbors with relative velocity, and the
-                route to the number one repository on Earth. Pick a system.
+                route to the number one repository in the galaxy. Pick a system.
               </p>
               <div className="w-full max-w-[640px]">
                 <ExploreSearch catalog={catalog} />
