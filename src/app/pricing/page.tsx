@@ -14,11 +14,10 @@ export const metadata: Metadata = {
     "Self-host Warpchart free, or get your repository tracked with exact hourly history, alerts and zero ops. The public explorer stays free forever; the data is never for sale.",
 };
 
-// Polar checkout links land here the moment the account is live; until
-// then the claim CTA routes to email with a 24h provisioning promise.
+// Polar checkout links (merchant of record: taxes and invoices handled).
 const CHECKOUT = {
-  hosted: null as string | null,
-  fleet: null as string | null,
+  hosted: "https://buy.polar.sh/polar_cl_8CDF8qOQrPcZbpqOc8RPnCH9QF18kiKrIPUyh3cPbnU" as string | null,
+  fleet: "https://buy.polar.sh/polar_cl_6CaoF5JYYrFq3Jnwypr8BNqLhDKJfr7vz53Ti2Te5Si" as string | null,
 };
 const CLAIM_MAIL = (plan: string) =>
   `mailto:hola@santifer.io?subject=${encodeURIComponent(`warpchart ${plan}: track my repo`)}&body=${encodeURIComponent(
