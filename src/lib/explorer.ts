@@ -4,11 +4,24 @@
 //   - deep space -> ~5 calls (meta, rank, 2 searches, velocities)
 // Pages are ISR-cached, so cost stays flat regardless of traffic.
 import { loadRoute, loadMeta, lastSnapshot } from "./history";
-import { repoLite, worldwideRank, searchNeighbors, neighborsVelocity, lowFuel } from "./github";
+import {
+  repoLite,
+  worldwideRank,
+  searchNeighbors,
+  neighborsVelocity,
+  lowFuel,
+  repoDossier,
+  npmDownloads,
+  type DossierRaw,
+} from "./github";
 import { reqLog } from "./log";
 import { nextMilestones } from "./milestones";
 import { buildRouteLayers, forkRatioPercentile } from "./bundle";
 import type { ChartInputs, Neighbor, RouteRepo } from "./types";
+
+export interface Dossier extends DossierRaw {
+  npmLast30: number | null;
+}
 
 export interface ExplorerData {
   inputs: ChartInputs;
@@ -18,6 +31,9 @@ export interface ExplorerData {
   inTop1000: boolean;
   forkRatio: number | null;
   forkPercentile: number | null;
+  // public maintenance pulse + real usage; null when the extra call failed
+  // (the page renders fine without it)
+  dossier: Dossier | null;
   degraded: boolean; // velocity telemetry unavailable this refresh
   generatedAt: string;
 }
@@ -148,6 +164,18 @@ export async function getExplorerData(owner: string, name: string): Promise<Expl
   const forkPercentile =
     forkRatio !== null ? forkRatioPercentile(forkRatio, route?.repos ?? []) : null;
 
+  // the dossier (maintenance pulse + real usage) is best-effort: one extra
+  // GraphQL call plus an unauthenticated npm lookup, never page-fatal
+  let dossier: Dossier | null = null;
+  try {
+    const [o, n] = repoName.split("/");
+    const raw = await repoDossier(o, n);
+    const npmLast30 = raw.npmPkg ? await npmDownloads(raw.npmPkg) : null;
+    dossier = { ...raw, npmLast30 };
+  } catch (err) {
+    log.warn("dossier.failed", { err: err instanceof Error ? err.message.slice(0, 120) : String(err) });
+  }
+
   return {
     inputs,
     desc,
@@ -156,6 +184,7 @@ export async function getExplorerData(owner: string, name: string): Promise<Expl
     inTop1000,
     forkRatio,
     forkPercentile,
+    dossier,
     degraded,
     generatedAt: new Date().toISOString(),
   };

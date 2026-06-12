@@ -343,3 +343,108 @@ export async function stargazerPageFirst(
   );
   return items.length ? items[0].starred_at : null;
 }
+
+// ---- Public dossier (maintenance pulse + real usage) -----------------------
+// One aliased GraphQL call gathers everything the /r/ dossier panels need:
+// 30-day issue/PR flow, open backlog, commit count, latest releases with
+// their asset downloads, and the root package.json (npm detection).
+
+export interface DossierRaw {
+  issuesOpened30: number;
+  issuesClosed30: number;
+  prsMerged30: number;
+  openIssues: number;
+  commits30: number | null;
+  releases: { tag: string; at: string; downloads: number }[];
+  npmPkg: string | null;
+}
+
+export async function repoDossier(owner: string, name: string): Promise<DossierRaw> {
+  const repo = `${owner}/${name}`;
+  const since = new Date(Date.now() - 30 * 864e5);
+  const day = since.toISOString().slice(0, 10);
+  const d = await graphql<{
+    opened: { issueCount: number };
+    closed: { issueCount: number };
+    merged: { issueCount: number };
+    repository: {
+      issues: { totalCount: number };
+      defaultBranchRef: {
+        target: { history?: { totalCount: number } } | null;
+      } | null;
+      releases: {
+        nodes: {
+          tagName: string;
+          publishedAt: string | null;
+          isPrerelease: boolean;
+          releaseAssets: { nodes: { downloadCount: number }[] };
+        }[];
+      };
+      object: { text: string } | null;
+    } | null;
+  }>(
+    `query($owner: String!, $name: String!, $qOpened: String!, $qClosed: String!, $qMerged: String!, $since: GitTimestamp!) {
+      opened: search(query: $qOpened, type: ISSUE) { issueCount }
+      closed: search(query: $qClosed, type: ISSUE) { issueCount }
+      merged: search(query: $qMerged, type: ISSUE) { issueCount }
+      repository(owner: $owner, name: $name) {
+        issues(states: OPEN) { totalCount }
+        defaultBranchRef { target { ... on Commit { history(since: $since) { totalCount } } } }
+        releases(first: 10, orderBy: { field: CREATED_AT, direction: DESC }) {
+          nodes {
+            tagName
+            publishedAt
+            isPrerelease
+            releaseAssets(first: 50) { nodes { downloadCount } }
+          }
+        }
+        object(expression: "HEAD:package.json") { ... on Blob { text } }
+      }
+    }`,
+    {
+      owner,
+      name,
+      qOpened: `repo:${repo} type:issue created:>${day}`,
+      qClosed: `repo:${repo} type:issue closed:>${day}`,
+      qMerged: `repo:${repo} type:pr merged:>${day}`,
+      since: since.toISOString(),
+    }
+  );
+  let npmPkg: string | null = null;
+  try {
+    const pkg = d.repository?.object?.text ? JSON.parse(d.repository.object.text) : null;
+    if (pkg?.name && !pkg.private) npmPkg = String(pkg.name);
+  } catch {
+    /* malformed package.json: not an npm package */
+  }
+  return {
+    issuesOpened30: d.opened?.issueCount ?? 0,
+    issuesClosed30: d.closed?.issueCount ?? 0,
+    prsMerged30: d.merged?.issueCount ?? 0,
+    openIssues: d.repository?.issues.totalCount ?? 0,
+    commits30: d.repository?.defaultBranchRef?.target?.history?.totalCount ?? null,
+    releases: (d.repository?.releases.nodes ?? [])
+      .filter((r) => r.publishedAt && !r.isPrerelease)
+      .map((r) => ({
+        tag: r.tagName,
+        at: r.publishedAt as string,
+        downloads: r.releaseAssets.nodes.reduce((a, b) => a + b.downloadCount, 0),
+      })),
+    npmPkg,
+  };
+}
+
+// npm registry downloads (no auth, generous limits); null when not a package
+export async function npmDownloads(pkg: string): Promise<number | null> {
+  try {
+    const res = await fetch(
+      `https://api.npmjs.org/downloads/point/last-month/${encodeURIComponent(pkg)}`,
+      { signal: AbortSignal.timeout(4000) }
+    );
+    if (!res.ok) return null;
+    const j = (await res.json()) as { downloads?: number };
+    return typeof j.downloads === "number" ? j.downloads : null;
+  } catch {
+    return null;
+  }
+}

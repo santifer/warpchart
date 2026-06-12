@@ -3,6 +3,7 @@
 // GitHub API cost.
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
+import { PulsePanel, UsagePanel } from "@/components/DossierPanels";
 import GalacticChart from "@/components/GalacticChart";
 import VerticalChart from "@/components/VerticalChart";
 import Panel from "@/components/Panel";
@@ -319,13 +320,20 @@ export default async function ExplorerPage({
           </Panel>
         </div>
 
+        {/* the public dossier: is this system alive, and is the hype backed
+            by real installs (both audiences: the owner and the curious) */}
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-12">
+          <PulsePanel dossier={data.dossier} />
+          <UsagePanel dossier={data.dossier} />
+        </div>
+
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-          <Panel index="04" title="Daily ladder" meta="unlocks with tracking" delay={320}>
+          <Panel index="06" title="Daily ladder" meta="unlocks with tracking" delay={320}>
             <Locked unlockFor={repoLabel}>
               <DailyLadder bundle={demoBundle} />
             </Locked>
           </Panel>
-          <Panel index="05" title="Cumulative stars" meta="real data · interactive" delay={400}>
+          <Panel index="07" title="Cumulative stars" meta="real data · interactive" delay={400}>
             <div className="flex flex-col gap-2">
               {/* /api/curve shares the cached reconstruction with the SVG
                   embed, so a page visit warms the embed for everyone */}
@@ -341,19 +349,19 @@ export default async function ExplorerPage({
         </div>
 
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-12">
-          <Panel index="06" title="Activity heatmap" meta="unlocks with tracking" className="lg:col-span-7" delay={480}>
+          <Panel index="08" title="Activity heatmap" meta="unlocks with tracking" className="lg:col-span-7" delay={480}>
             <Locked unlockFor={repoLabel}>
               <Heatmap bundle={demoBundle} />
             </Locked>
           </Panel>
-          <Panel index="07" title="World rank over time" meta="unlocks with tracking" className="lg:col-span-5" delay={560}>
+          <Panel index="09" title="World rank over time" meta="unlocks with tracking" className="lg:col-span-5" delay={560}>
             <Locked unlockFor={repoLabel}>
               <RankChart bundle={demoBundle} />
             </Locked>
           </Panel>
         </div>
 
-        <Panel index="08" title="Mission log" meta="unlocks with tracking" delay={640}>
+        <Panel index="10" title="Mission log" meta="unlocks with tracking" delay={640}>
           <Locked unlockFor={repoLabel}>
             <MissionLog events={demoBundle.events.slice(0, 8)} captain={demoBundle.captain} />
           </Locked>
