@@ -394,6 +394,22 @@ svg text {
    anchors right so they stretch the other way. */
 .warp-tint-back .star-warp { transform-origin: right center; }
 
+/* Pan discovery hint: accent chevrons drifting toward the core until the
+   pilot's first real pan dismisses them. */
+.pan-hint-arrows {
+  transform-box: fill-box;
+  animation: pan-drift 1.7s ease-in-out infinite;
+}
+
+@keyframes pan-drift {
+  0%, 100% { transform: translateX(0); opacity: 0.55; }
+  50% { transform: translateX(7px); opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pan-hint-arrows { animation: none; }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .star-warp.warping, .star-warp.warping-fast { transform: none; }
 }

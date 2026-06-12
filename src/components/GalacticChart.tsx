@@ -253,6 +253,15 @@ export default function GalacticChart({
   // more exaggerated stretch and a hotter sound bed.
   const [warpZone, setWarpZone] = useState<"local" | "route" | null>(null);
   const [warpDir, setWarpDir] = useState<1 | -1>(1); // 1 = toward the core (blueshift)
+
+  // Discovery hint: a drifting accent chevron tells first-time pilots the
+  // chart pans; the first real pan dismisses it for good (localStorage).
+  const [panHint, setPanHint] = useState(false);
+  useEffect(() => {
+    try {
+      if (localStorage.getItem("mc_pan_hint") !== "done") setPanHint(true);
+    } catch { /* private mode */ }
+  }, []);
   const warpTimer = useRef<number | null>(null);
   const armWarp = (zone: "local" | "route") => {
     setWarpZone(zone);
@@ -328,6 +337,11 @@ export default function GalacticChart({
       const horizontal = Math.abs(e.deltaX) > Math.abs(e.deltaY);
       if (!e.ctrlKey && !horizontal && !e.shiftKey) return;
       e.preventDefault();
+      // first real pan dismisses the discovery hint forever
+      setPanHint(false);
+      try {
+        localStorage.setItem("mc_pan_hint", "done");
+      } catch { /* private mode */ }
       // panning regime by pointer zone: fine over the local system, fast
       // over the route band (it is a faster ship down there)
       const rect = el.getBoundingClientRect();
@@ -379,7 +393,24 @@ export default function GalacticChart({
 
   const items: AItem[] = [
     ...visNbrs.map((n): AItem => ({ kind: "n", s: n.s, n })),
-    ...visDots.filter((p) => labeledDotSet.has(p.r)).map((p): AItem => ({ kind: "d", s: p.s, p })),
+    ...visDots
+      .filter((p) => labeledDotSet.has(p.r))
+      .map((p): AItem => {
+        // a routed dot with a registry velocity is PROMOTED to a full
+        // synthetic neighbor: same label grammar (gap, v, eta/catches),
+        // same tails and the same scan card as the live band. Its velocity
+        // is the daily registry diff instead of a live measurement, which
+        // is indistinguishable at route distances.
+        if (p.v != null) {
+          const n = neighborEtas(
+            [{ r: p.r, s: p.s, v: p.v, d: p.d ?? null, l: p.l ?? null }],
+            stars,
+            vOwn
+          )[0];
+          return { kind: "n", s: p.s, n };
+        }
+        return { kind: "d", s: p.s, p };
+      }),
   ].sort((a, b) => a.s - b.s);
 
   // Tier assignment is aware of each label's real width, so long names like
@@ -682,6 +713,20 @@ export default function GalacticChart({
                 </text>
               </g>
             ))}
+
+            {panHint ? (
+              <g className="pan-hint">
+                <text x={W - 64} y={BAND_A_Y + 4} textAnchor="end" fontSize={11.5}
+                  fill={C.accent} letterSpacing={2} className="numeral" opacity={0.9}>
+                  PAN
+                </text>
+                <g className="pan-hint-arrows">
+                  <text x={W - 56} y={BAND_A_Y + 4.5} fontSize={14} fill={C.accent}>
+                    ›››
+                  </text>
+                </g>
+              </g>
+            ) : null}
 
             {visDots
               .filter((p) => !labeledDotSet.has(p.r))
