@@ -12,14 +12,25 @@ import {
   GX_H,
   GX_CORE_X,
   GX_CORE_Y,
+  projectGalaxy,
   ringPath,
   ringPoint,
   type GalaxyData,
 } from "@/lib/galaxy";
 
+declare global {
+  interface Window {
+    // search box -> galaxy bridge: warp to a repo's real position
+    __gxWarpTo?: (repo: string, stars?: number) => boolean;
+  }
+}
+
+const WARP_MS = 640;
+
 export default function GalaxyHero({ data }: { data: GalaxyData }) {
   const router = useRouter();
   const planeRef = useRef<HTMLDivElement>(null);
+  const warping = useRef(false);
 
   useEffect(() => {
     const el = planeRef.current;
@@ -53,10 +64,57 @@ export default function GalaxyHero({ data }: { data: GalaxyData }) {
     };
   }, []);
 
-  const go = (e: React.MouseEvent, repo: string) => {
+  // the jump: dive toward the star (css zoom on the plane, the headline
+  // column fades), then navigate with the "warp" transition type so the
+  // route change itself plays the warp-out/warp-in view transition. the
+  // calculation time of /r/ hides inside the travel.
+  const warpTo = (repo: string, point: { x: number; y: number } | null) => {
+    if (warping.current) return;
+    const el = planeRef.current;
+    const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (!el || !point || reduced) {
+      router.push(`/r/${repo}`, { transitionTypes: ["warp"] });
+      return;
+    }
+    warping.current = true;
+    el.style.setProperty("--gx-ox", `${((point.x / GX_W) * 100).toFixed(2)}%`);
+    el.style.setProperty("--gx-oy", `${((point.y / GX_H) * 100).toFixed(2)}%`);
+    document.body.classList.add("gx-warping");
+    window.setTimeout(() => {
+      router.push(`/r/${repo}`, { transitionTypes: ["warp"] });
+    }, WARP_MS);
+  };
+
+  // landing search picks ride the same jump: project the repo's REAL
+  // position from its stars (works for any catalog repo, node or dust);
+  // deep-space repos aren't on the map, so they dive toward the core
+  useEffect(() => {
+    window.__gxWarpTo = (repo: string, stars?: number) => {
+      const point = stars
+        ? projectGalaxy(repo, stars, data.scale.coreStars, data.scale.floorStars)
+        : { x: GX_CORE_X, y: GX_CORE_Y };
+      warpTo(repo, point);
+      return true;
+    };
+    // returning to the landing (back button / bfcache) must undo the dive
+    document.body.classList.remove("gx-warping");
+    const onShow = () => {
+      warping.current = false;
+      document.body.classList.remove("gx-warping");
+    };
+    window.addEventListener("pageshow", onShow);
+    return () => {
+      delete window.__gxWarpTo;
+      window.removeEventListener("pageshow", onShow);
+      document.body.classList.remove("gx-warping");
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data.scale.coreStars, data.scale.floorStars]);
+
+  const go = (e: React.MouseEvent, repo: string, point: { x: number; y: number } | null) => {
     if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) return;
     e.preventDefault();
-    router.push(`/r/${repo}`);
+    warpTo(repo, point);
   };
 
   return (
@@ -114,7 +172,7 @@ export default function GalaxyHero({ data }: { data: GalaxyData }) {
               className="ghx-node"
               data-repo={n.r}
               aria-label={`${n.r}, ${n.tip.replaceAll("·", ",")}`}
-              onClick={(e) => go(e, n.r)}
+              onClick={(e) => go(e, n.r, { x: n.x, y: n.y })}
               onPointerEnter={(e) => {
                 // svg paints in dom order: bring the hovered system to the
                 // front so its tip is never crossed by sibling dots (the
@@ -168,7 +226,7 @@ export default function GalaxyHero({ data }: { data: GalaxyData }) {
         <a
           href={`/r/${data.core.r}`}
           className="ghx-core"
-          onClick={(e) => go(e, data.core.r)}
+          onClick={(e) => go(e, data.core.r, { x: GX_CORE_X, y: GX_CORE_Y })}
           aria-label={`The core: ${data.core.r}, rank 1`}
           style={{
             left: `${((GX_CORE_X / GX_W) * 100).toFixed(2)}%`,

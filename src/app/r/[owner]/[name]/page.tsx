@@ -1,6 +1,7 @@
 // Instant explorer: a live snapshot of any GitHub repo's position on the
 // route to worldwide rank 1. ISR-cached per repo, so traffic never multiplies
 // GitHub API cost.
+import { ViewTransition } from "react";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import GalacticChart from "@/components/GalacticChart";
@@ -153,10 +154,12 @@ export default async function ExplorerPage({
         forks: 0,
       };
       return (
-        <Dashboard
-          bundle={buildBundle({ timestamps: tTimestamps, history: tHistory, meta: tMeta })}
-          polling={false}
-        />
+        <ViewTransition enter={{ warp: "gx-warp-in", default: "none" }} default="none">
+          <Dashboard
+            bundle={buildBundle({ timestamps: tTimestamps, history: tHistory, meta: tMeta })}
+            polling={false}
+          />
+        </ViewTransition>
       );
     }
   }
@@ -203,6 +206,10 @@ export default async function ExplorerPage({
   };
 
   return (
+    // arriving via the galaxy's warp jump: the explorer resolves out of the
+    // warp blur (the loading skeleton plays the same entrance when it goes
+    // first); regular navigations stay plain
+    <ViewTransition enter={{ warp: "gx-warp-in", default: "none" }} default="none">
     <main className="mx-auto flex max-w-[1440px] flex-col gap-4 px-3 py-4 sm:px-6 sm:py-6">
       <div className="rise px-1">
         <Masthead />
@@ -402,5 +409,6 @@ export default async function ExplorerPage({
         </a>
       </footer>
     </main>
+    </ViewTransition>
   );
 }

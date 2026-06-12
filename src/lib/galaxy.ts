@@ -41,6 +41,9 @@ export type GalaxyData = {
   nodes: GalaxyNode[];
   dust: GalaxyDust[];
   rings: GalaxyRing[];
+  // log-scale endpoints so the client can project ANY catalog repo (the
+  // search box warps to systems that aren't interactive nodes)
+  scale: { coreStars: number; floorStars: number };
 };
 
 function mulberry32(seed: number) {
@@ -226,5 +229,6 @@ export function buildGalaxy(
     nodes,
     dust,
     rings,
+    scale: { coreStars: core.s, floorStars: floor.s },
   };
 }

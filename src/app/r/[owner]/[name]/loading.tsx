@@ -6,7 +6,7 @@
 // every other panel shows a blurred silhouette of its real content with a
 // loading seal, the same visual language as the locked previews. Content
 // then resolves in place with no layout shift.
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, ViewTransition } from "react";
 import Masthead from "@/components/Masthead";
 
 const STEPS = [
@@ -263,6 +263,9 @@ function LogSilhouette() {
 
 export default function ExplorerLoading() {
   return (
+    // arriving via the galaxy's warp jump resolves this skeleton out of the
+    // warp blur; the scan log then narrates the rest of the journey
+    <ViewTransition enter={{ warp: "gx-warp-in", default: "none" }} default="none">
     <main className="mx-auto flex max-w-[1440px] flex-col gap-4 px-3 py-4 sm:px-6 sm:py-6">
       <div className="rise px-1">
         <Masthead />
@@ -348,5 +351,6 @@ export default function ExplorerLoading() {
         <LogSilhouette />
       </PanelSkeleton>
     </main>
+    </ViewTransition>
   );
 }

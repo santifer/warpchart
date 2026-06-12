@@ -1,6 +1,11 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  // galaxy hero -> /r/ warp jump (React <ViewTransition> over the browser's
+  // View Transitions API; browsers without support just don't animate)
+  experimental: {
+    viewTransition: true,
+  },
   // data/ files are read with fs by the live API routes, the badge, the OG
   // card and the explorer; force-include them in the function bundles.
   outputFileTracingIncludes: {

@@ -1,6 +1,7 @@
 // Public landing: search any repository, jump into its system, grab the
 // embeddable animated chart. Fully static; the top-1000 catalog ships with
 // the page so autocomplete costs zero API calls.
+import { ViewTransition } from "react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import ExploreSearch, { type CatalogEntry } from "@/components/ExploreSearch";
@@ -49,6 +50,9 @@ export default async function Explore() {
     .slice(0, 3);
 
   return (
+    // the warp jump: leaving through the galaxy plays warp-out (blur flash);
+    // any other navigation changes pages normally
+    <ViewTransition exit={{ warp: "gx-warp-out", default: "none" }} default="none">
     <main className="mx-auto flex min-h-screen max-w-[1120px] flex-col gap-14 px-4 py-12 sm:px-6">
       <SpaceBackdrop mode="scan" />
       <header className="rise" style={{ animationDelay: "0ms" }}>
@@ -63,7 +67,7 @@ export default async function Explore() {
       >
         <div className="relative h-[560px] sm:h-[640px]">
           {galaxy ? <GalaxyHero data={galaxy} /> : null}
-          <div className="pointer-events-none relative z-10 mx-auto flex h-full max-w-[1840px] flex-col items-center justify-center gap-7 px-4 text-center sm:px-10 lg:items-start lg:text-left 2xl:px-16">
+          <div className="gx-hero-copy pointer-events-none relative z-10 mx-auto flex h-full max-w-[1840px] flex-col items-center justify-center gap-7 px-4 text-center sm:px-10 lg:items-start lg:text-left 2xl:px-16">
             <h1 className="glow-star font-display pointer-events-auto max-w-[900px] text-[clamp(1.9rem,3.5vw,3rem)] leading-[1.14] tracking-[0.05em] text-star">
               GROWTH TELEMETRY
               <br className="hidden sm:block" /> FOR ANY GITHUB REPO
@@ -191,5 +195,6 @@ export default async function Explore() {
         </span>
       </footer>
     </main>
+    </ViewTransition>
   );
 }

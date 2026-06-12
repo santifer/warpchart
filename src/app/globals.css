@@ -805,3 +805,54 @@ svg text {
     0 0 110px 50px rgba(12, 125, 146, 0.12);
   background: #2b1a05;
 }
+
+/* ---- Phase C: the warp jump (galaxy -> /r/) ---- */
+/* The dive: zooming the plane INTO the chosen star while the page is still
+   here. Slow ignition, brutal arrival (warp never eases out politely). */
+body.gx-warping .ghx-plane {
+  transform-origin: var(--gx-ox, 95%) var(--gx-oy, 12%);
+  transform: scale(9);
+  filter: blur(4px) brightness(1.55);
+  transition:
+    transform 0.68s cubic-bezier(0.62, -0.02, 0.92, 0.44),
+    filter 0.68s cubic-bezier(0.7, 0, 0.95, 0.5);
+}
+body.gx-warping .gx-hero-copy {
+  opacity: 0;
+  transition: opacity 0.3s ease-out;
+}
+body.gx-warping .ghx-scrim,
+body.gx-warping .ghx-lore {
+  opacity: 0;
+  transition: opacity 0.35s ease-out;
+}
+/* The route change itself: old page flashes out through blur, the new one
+   resolves out of the same blur (named by the warp transition type). */
+::view-transition-old(.gx-warp-out) {
+  animation: 360ms cubic-bezier(0.7, 0, 1, 0.5) both gx-warp-out;
+}
+::view-transition-new(.gx-warp-in) {
+  animation: 540ms cubic-bezier(0.16, 0.8, 0.25, 1) 60ms both gx-warp-in;
+}
+@keyframes gx-warp-out {
+  to {
+    transform: scale(1.4);
+    filter: blur(18px) brightness(1.7);
+    opacity: 0;
+  }
+}
+@keyframes gx-warp-in {
+  from {
+    transform: scale(1.05);
+    filter: blur(16px) brightness(1.45);
+    opacity: 0.1;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  body.gx-warping .ghx-plane { transition: none; transform: none; filter: none; }
+  ::view-transition-old(.gx-warp-out),
+  ::view-transition-new(.gx-warp-in) {
+    animation-duration: 0s !important;
+    animation-delay: 0s !important;
+  }
+}
