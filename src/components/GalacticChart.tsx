@@ -20,9 +20,10 @@ import { fmt, fmtCompact, fmtEtaDays, etaDate, shortName } from "@/lib/format";
 import { neighborEtas, type NeighborEta } from "@/lib/projections";
 import { sound } from "@/lib/sound";
 
-const W = 1200;
-// Panel geometry; the fullscreen COMMAND DECK swaps in a taller canvas
-// (real vertical room, not scaled pixels) inside the component.
+const BASE_W = 1200;
+// Panel geometry; the fullscreen COMMAND DECK swaps in a taller AND wider
+// canvas (real room measured from the screen, not scaled pixels) inside
+// the component.
 const BASE_H = 520;
 const BASE_BAND_A_Y = 200; // headroom above keeps three label tiers clear of the header
 const BASE_BAND_B_Y = 436;
@@ -89,6 +90,7 @@ export default function GalacticChart({
   onPinTarget,
   liveLocals = false,
   deck = false,
+  deckW,
 }: {
   inputs: ChartInputs;
   target?: string | null;
@@ -100,15 +102,20 @@ export default function GalacticChart({
   // Fullscreen COMMAND DECK: taller canvas, smaller type, more label
   // tiers, and the context dots scatter into a 2D star system.
   deck?: boolean;
+  // Deck canvas width, measured by the deck from its real screen hole so
+  // ultrawide monitors get MORE MAP (wider scale, more label room) instead
+  // of dead side bands. ViewBox units ~= screen pixels at deck scale.
+  deckW?: number;
 }) {
-  // The deck trades the panel's wide aspect for vertical room: labels get
-  // two extra tiers, the local band breathes, and type shrinks back to
-  // panel-like screen size (the fullscreen scale-up did the opposite).
+  // The deck trades the panel's fixed aspect for the screen's real room:
+  // labels get two extra tiers, the local band breathes, and type stays at
+  // UI size (the canvas matches the screen, so 1 unit ~= 1px).
+  const W = deck ? Math.min(Math.max(Math.round(deckW ?? 1680), 1200), 2600) : BASE_W;
   const H = deck ? 740 : BASE_H;
   const BAND_A_Y = deck ? 300 : BASE_BAND_A_Y;
   const CLIP_BOTTOM = deck ? 556 : BASE_CLIP_BOTTOM;
   const BAND_B_Y = deck ? 654 : BASE_BAND_B_Y;
-  const fs = deck ? 0.84 : 1; // font scale: deck pixels are ~1.6x panel pixels
+  const fs = deck ? 0.9 : 1;
 
   const C = usePalette();
   const router = useRouter();
@@ -275,7 +282,7 @@ export default function GalacticChart({
       r: rand() < 0.85 ? 0.7 : 1.3,
       o: 0.12 + rand() * 0.45,
     }));
-  }, [inputs.repo]);
+  }, [inputs.repo, W, CLIP_BOTTOM]);
 
   // Multi-depth star layers for the local system. Each layer drifts on its
   // own clock (slow time parallax) AND shifts with the pan position at its
@@ -301,7 +308,7 @@ export default function GalacticChart({
       { id: 2, f: 0.45, dur: 400, warp: false, trail: 3, stars: mk("::mid", 55, 0.5, 1.0, 0.12, 0.3) },
       { id: 3, f: 0.9, dur: 0, warp: true, trail: 5, stars: mk("::near", 45, 0.7, 1.5, 0.18, 0.45) },
     ];
-  }, [inputs.repo]);
+  }, [inputs.repo, W, CLIP_BOTTOM]);
 
   // How fast WE move through the fixed field, 0..1. sqrt compresses the
   // long tail: ~900 stars/day pins the ceiling, single digits read as a
@@ -331,7 +338,7 @@ export default function GalacticChart({
         o: 0.25 + rand() * 0.4,
       })),
     }));
-  }, [inputs.repo]);
+  }, [inputs.repo, W, CLIP_BOTTOM]);
 
   // FTL stretch while panning: armed by wheel events, relaxes shortly after.
   // The zone sets the regime: "local" pans fine, "route" pans fast with a
@@ -718,7 +725,11 @@ export default function GalacticChart({
               <stop offset="0%" stopColor={C.accent} stopOpacity="0.9" />
               <stop offset="100%" stopColor={C.accent} stopOpacity="0" />
             </radialGradient>
-            <clipPath id="bandAClip">
+            {/* the dashboard renders TWO charts at once (panel + deck
+                overlay); duplicate SVG ids resolve to the FIRST one in the
+                document, so the deck was clipping with the panel's shorter
+                rect and the below-line labels vanished. Suffix per mode. */}
+            <clipPath id={deck ? "bandAClip-deck" : "bandAClip"}>
               <rect x={28} y={0} width={W - 56} height={CLIP_BOTTOM} />
             </clipPath>
             <radialGradient id="gal-cool">
@@ -782,7 +793,7 @@ export default function GalacticChart({
               stroke="url(#fadeBeyond)" strokeWidth={1} />
           ) : null}
 
-          <g clipPath="url(#bandAClip)">
+          <g clipPath={deck ? "url(#bandAClip-deck)" : "url(#bandAClip)"}>
             {/* multi-depth parallax: each layer shifts with the pan at its
                 depth factor (travel) and drifts on its own clock (time).
                 The near layer stretches into FTL streaks while panning. */}
@@ -805,7 +816,9 @@ export default function GalacticChart({
                   className="dust-stream"
                   style={{
                     animationDuration: `${(layer.dur || Math.max(50, 1400 / Math.sqrt(Math.max(vOwn, 4)))).toFixed(1)}s`,
-                  }}
+                    // the wrap distance must match the variable deck width
+                    "--dust-w": `-${W}px`,
+                  } as React.CSSProperties}
                 >
                   {[0, W, 2 * W].map((dx) => (
                     <g key={dx} transform={`translate(${dx} 0)`}>

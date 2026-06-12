@@ -360,7 +360,8 @@ svg text {
 
 @keyframes dust-stream {
   from { transform: translateX(0); }
-  to { transform: translateX(-1200px); }
+  /* wrap distance = canvas width (the deck canvas can be wider than 1200) */
+  to { transform: translateX(var(--dust-w, -1200px)); }
 }
 
 /* FTL warp: near-layer stars stretch into streaks while panning.

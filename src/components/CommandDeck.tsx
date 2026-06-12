@@ -103,6 +103,24 @@ export default function CommandDeck({
     return () => clearInterval(t);
   }, []);
 
+  // Measure the chart's real screen hole so the canvas width matches the
+  // monitor's aspect: ultrawide screens get MORE MAP, not dead side bands.
+  // With W = hole aspect x 740 the SVG fills both axes exactly; the only
+  // overflow case is the clamp, capped via maxPx below.
+  const chartHole = useRef<HTMLDivElement | null>(null);
+  const [canvas, setCanvas] = useState<{ w: number; maxPx: number } | null>(null);
+  useEffect(() => {
+    const measure = () => {
+      const r = chartHole.current?.getBoundingClientRect();
+      if (!r || r.height < 120 || r.width < 320) return;
+      const w = Math.min(Math.max(Math.round((r.width / r.height) * 740), 1200), 2600);
+      setCanvas({ w, maxPx: Math.floor(r.height * (w / 740)) });
+    };
+    measure();
+    window.addEventListener("resize", measure);
+    return () => window.removeEventListener("resize", measure);
+  }, []);
+
   useEffect(() => {
     const el = hostRef.current;
     if (el && el.requestFullscreen) {
@@ -227,14 +245,21 @@ export default function CommandDeck({
         </div>
       </div>
 
-      {/* the chart, at the largest size that keeps everything on one screen.
-          deck mode swaps in a taller canvas (1200x740), so the width cap
-          follows that aspect to fill the vertical room instead of floating
-          in it */}
-      <div className="flex min-h-0 flex-1 items-center justify-center">
-        <div className="w-full" style={{ maxWidth: "min(100%, calc((100vh - 250px) * 1.62))" }}>
-          <GalacticChart inputs={inputs} target={target} onPinTarget={onPinTarget} deck />
-        </div>
+      {/* the chart fills its real screen hole: the canvas width is derived
+          from the measured aspect, so there are no dead side bands on wide
+          monitors and no scaled-up pixels */}
+      <div ref={chartHole} className="flex min-h-0 flex-1 items-center justify-center">
+        {canvas ? (
+          <div className="w-full" style={{ maxWidth: canvas.maxPx }}>
+            <GalacticChart
+              inputs={inputs}
+              target={target}
+              onPinTarget={onPinTarget}
+              deck
+              deckW={canvas.w}
+            />
+          </div>
+        ) : null}
       </div>
 
       {/* mission cards */}
