@@ -22,6 +22,13 @@ export default function Masthead({ demo }: { demo?: string | null }) {
         >
           VELOCITY
         </Link>
+        <Link
+          prefetch={false}
+          href="/pricing"
+          className="numeral text-micro tracking-[0.2em] text-dim transition-colors hover:text-accent"
+        >
+          PRICING
+        </Link>
         <SoundToggle />
         <ThemeToggle />
         {demo ? (

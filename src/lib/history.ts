@@ -54,6 +54,29 @@ export function loadMeta(): RepoMetaFile | null {
   return JSON.parse(readFileSync(p, "utf8")) as RepoMetaFile;
 }
 
+// Paying missions beyond the house repo. The collector walks each one's
+// exact history into data/tenants/{owner}--{name}/ on every run.
+export interface TenantEntry {
+  repo: string;
+  plan: "hosted" | "fleet";
+  since: string;
+}
+
+export function loadTenants(): TenantEntry[] {
+  const p = path.join(DATA, "tenants.json");
+  if (!existsSync(p)) return [];
+  try {
+    return JSON.parse(readFileSync(p, "utf8")) as TenantEntry[];
+  } catch {
+    return [];
+  }
+}
+
+export function isHostedRepo(repo: string): boolean {
+  const lower = repo.toLowerCase();
+  return loadTenants().some((t) => t.repo.toLowerCase() === lower);
+}
+
 export function loadMilestones(): MilestonesFile | null {
   const p = path.join(DATA, "milestones.json");
   if (!existsSync(p)) return null;

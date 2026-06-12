@@ -8,7 +8,7 @@
 //
 // Usage: GH_TOKEN=... node collector/collect.mjs [--dry-run]
 
-import { readFileSync, writeFileSync, appendFileSync, existsSync, copyFileSync } from "node:fs";
+import { readFileSync, writeFileSync, appendFileSync, existsSync, copyFileSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import {
   DATA_DIR, readConfig, repoMeta, backwalk, countAbove,
@@ -242,6 +242,48 @@ try {
 }
 
 console.log(`[collect] snapshot appended (partial=${partial}).`);
+
+// HOSTED MISSIONS: every paying repo in data/tenants.json gets the same
+// exact treatment as the house repo: incremental timestamp backwalk plus a
+// summary line per run. Missing file or empty list = zero cost. A tenant
+// failing never poisons the run (their last data simply carries forward).
+// First run on a new tenant walks up to 200 pages (~20K stars); deeper
+// repos finish across the next runs incrementally.
+try {
+  const tenantsPath = join(DATA_DIR, "tenants.json");
+  const tenants = existsSync(tenantsPath) ? JSON.parse(readFileSync(tenantsPath, "utf8")) : [];
+  for (const t of tenants) {
+    try {
+      const [tOwner, tName] = t.repo.split("/");
+      const tDir = join(DATA_DIR, "tenants", `${tOwner}--${tName}`.toLowerCase());
+      mkdirSync(tDir, { recursive: true });
+      const tMeta = await repoMeta(tOwner, tName);
+      const tRank = (await countAbove(tMeta.stargazerCount)) + 1;
+      const tTsPath = join(tDir, "stargazer_timestamps.txt");
+      let newTs = [];
+      if (existsSync(tTsPath)) {
+        const lines = readFileSync(tTsPath, "utf8").trimEnd().split("\n");
+        const walk = await backwalk(tOwner, tName, { stopAfter: lines[lines.length - 1], maxPages: 30 });
+        newTs = walk.timestamps;
+      } else {
+        const walk = await backwalk(tOwner, tName, { maxPages: 200 });
+        newTs = walk.timestamps;
+      }
+      if (!dryRun) {
+        if (newTs.length) appendFileSync(tTsPath, newTs.join("\n") + "\n");
+        appendFileSync(
+          join(tDir, "history.jsonl"),
+          JSON.stringify({ ts: nowISO, stars: tMeta.stargazerCount, rank: tRank }) + "\n"
+        );
+      }
+      console.log(`[collect] tenant ${t.repo}: ${tMeta.stargazerCount} stars #${tRank} (+${newTs.length} ts)`);
+    } catch (err) {
+      console.error(`[collect] tenant ${t.repo} failed: ${err.message}`);
+    }
+  }
+} catch (err) {
+  console.error(`[collect] tenants pass failed: ${err.message}`);
+}
 
 // Optional alerts to a Discord/Slack webhook (secret ALERT_WEBHOOK_URL).
 // Compares the two most recent snapshots, so it runs AFTER the append.
