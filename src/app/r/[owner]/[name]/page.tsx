@@ -3,10 +3,9 @@
 // GitHub API cost.
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { PulsePanel, UsagePanel } from "@/components/DossierPanels";
+import ConsoleLayout from "@/components/ConsoleLayout";
 import GalacticChart from "@/components/GalacticChart";
 import VerticalChart from "@/components/VerticalChart";
-import Panel from "@/components/Panel";
 import LiveProvider from "@/components/LiveProvider";
 import VelocityChart from "@/components/VelocityChart";
 import Projections from "@/components/Projections";
@@ -284,91 +283,98 @@ export default async function ExplorerPage({
         </div>
       </header>
 
-      <Panel
-        index="01"
-        title="Star chart"
-        meta={inputs.apex ? `destination: ${inputs.apex.r} · ${fmt(inputs.apex.s)} stars` : undefined}
-        delay={80}
-      >
-        <div className="mb-2 hidden items-center justify-end gap-2 lg:flex">
-          <a
-            href={`/r/${demo.meta?.repo ?? ""}#deck`}
-            title="Fullscreen flight console. Unlocks with tracking; click to see it live on the demo mission."
-            className="numeral border border-grid px-2.5 py-1 text-micro tracking-[0.2em] text-faint transition-colors hover:border-accent/50 hover:text-accent"
-          >
-            ⛶ COMMAND DECK · ◈ LOCKED — SEE IT ON THE DEMO →
-          </a>
-        </div>
-        <div className="hidden lg:block">
-          <GalacticChart inputs={inputs} liveLocals />
-        </div>
-        <div className="lg:hidden">
-          <VerticalChart inputs={inputs} />
-        </div>
-      </Panel>
-
       <LiveProvider bundle={demoBundle} polling={false}>
-        {/* FREE SHELF FIRST: everything generated from public data sits
-            right under the star chart (cumulative anchors the left column,
-            the dossier stacks on the right); the locked depth only appears
-            once the visitor is already hooked */}
-        <div className="grid grid-cols-1 items-stretch gap-4 lg:grid-cols-2">
-          <Panel index="02" title="Cumulative stars" meta="real data · interactive" delay={160}>
-            <div className="flex h-full flex-col justify-between gap-2">
-              {/* /api/curve shares the cached reconstruction with the SVG
-                  embed, so a page visit warms the embed for everyone */}
-              <CurveChart repo={repoLabel} />
-              <a
-                href={`/explore#embed=${encodeURIComponent(repoLabel)}`}
-                className="numeral self-start border border-accent/40 px-3 py-2 text-label tracking-[0.18em] text-accent transition-colors hover:bg-accent/10"
-              >
-                GET THE ANIMATED README EMBED →
-              </a>
-            </div>
-          </Panel>
-          <div className="flex flex-col gap-4">
-            <PulsePanel dossier={data.dossier} index="03" delay={200} />
-            <UsagePanel dossier={data.dossier} index="04" delay={240} />
-          </div>
-        </div>
-
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-12">
-          <Panel index="05" title="Velocity, stars per hour" meta="24h vs previous 24h" className="lg:col-span-8" delay={280}>
-            <Locked unlockFor={repoLabel}>
-              <VelocityChart />
-            </Locked>
-          </Panel>
-          <Panel index="06" title="Milestone projections" meta="unlocks with tracking" className="lg:col-span-4" delay={320}>
-            <Locked unlockFor={repoLabel}>
-              <Projections bundle={demoBundle} />
-            </Locked>
-          </Panel>
-        </div>
-
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-          <Panel index="07" title="Daily ladder" meta="unlocks with tracking" delay={360}>
-            <Locked unlockFor={repoLabel}>
-              <DailyLadder bundle={demoBundle} />
-            </Locked>
-          </Panel>
-          <Panel index="08" title="Activity heatmap" meta="unlocks with tracking" delay={400}>
-            <Locked unlockFor={repoLabel}>
-              <Heatmap bundle={demoBundle} />
-            </Locked>
-          </Panel>
-        </div>
-
-        <Panel index="09" title="World rank over time" meta="unlocks with tracking" delay={440}>
-          <Locked unlockFor={repoLabel}>
-            <RankChart bundle={demoBundle} />
-          </Locked>
-        </Panel>
-
-        <Panel index="10" title="Mission log" meta="unlocks with tracking" delay={480}>
-          <Locked unlockFor={repoLabel}>
-            <MissionLog events={demoBundle.events.slice(0, 8)} captain={demoBundle.captain} />
-          </Locked>
-        </Panel>
+        <ConsoleLayout
+          dossier={data.dossier}
+          starChart={{
+            meta: inputs.apex
+              ? `destination: ${inputs.apex.r} · ${fmt(inputs.apex.s)} stars`
+              : undefined,
+            node: (
+              <>
+                <div className="mb-2 hidden items-center justify-end gap-2 lg:flex">
+                  <a
+                    href={`/r/${demo.meta?.repo ?? ""}#deck`}
+                    title="Fullscreen flight console. Unlocks with tracking; click to see it live on the demo mission."
+                    className="numeral border border-grid px-2.5 py-1 text-micro tracking-[0.2em] text-faint transition-colors hover:border-accent/50 hover:text-accent"
+                  >
+                    ⛶ COMMAND DECK · ◈ LOCKED — SEE IT ON THE DEMO →
+                  </a>
+                </div>
+                <div className="hidden lg:block">
+                  <GalacticChart inputs={inputs} liveLocals />
+                </div>
+                <div className="lg:hidden">
+                  <VerticalChart inputs={inputs} />
+                </div>
+              </>
+            ),
+          }}
+          cumulative={{
+            meta: "real data · interactive",
+            node: (
+              <div className="flex h-full flex-col justify-between gap-2">
+                {/* /api/curve shares the cached reconstruction with the SVG
+                    embed, so a page visit warms the embed for everyone */}
+                <CurveChart repo={repoLabel} />
+                <a
+                  href={`/explore#embed=${encodeURIComponent(repoLabel)}`}
+                  className="numeral self-start border border-accent/40 px-3 py-2 text-label tracking-[0.18em] text-accent transition-colors hover:bg-accent/10"
+                >
+                  GET THE ANIMATED README EMBED →
+                </a>
+              </div>
+            ),
+          }}
+          velocity={{
+            meta: "24h vs previous 24h",
+            node: (
+              <Locked unlockFor={repoLabel}>
+                <VelocityChart />
+              </Locked>
+            ),
+          }}
+          projections={{
+            meta: "unlocks with tracking",
+            node: (
+              <Locked unlockFor={repoLabel}>
+                <Projections bundle={demoBundle} />
+              </Locked>
+            ),
+          }}
+          ladder={{
+            meta: "unlocks with tracking",
+            node: (
+              <Locked unlockFor={repoLabel}>
+                <DailyLadder bundle={demoBundle} />
+              </Locked>
+            ),
+          }}
+          heatmap={{
+            meta: "unlocks with tracking",
+            node: (
+              <Locked unlockFor={repoLabel}>
+                <Heatmap bundle={demoBundle} />
+              </Locked>
+            ),
+          }}
+          rank={{
+            meta: "unlocks with tracking",
+            node: (
+              <Locked unlockFor={repoLabel}>
+                <RankChart bundle={demoBundle} />
+              </Locked>
+            ),
+          }}
+          log={{
+            meta: "unlocks with tracking",
+            node: (
+              <Locked unlockFor={repoLabel}>
+                <MissionLog events={demoBundle.events.slice(0, 8)} captain={demoBundle.captain} />
+              </Locked>
+            ),
+          }}
+        />
       </LiveProvider>
 
       <div className="hud flex flex-wrap items-center justify-between gap-3 px-4 py-3">

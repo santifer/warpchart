@@ -5,8 +5,7 @@ import Link from "next/link";
 import LiveProvider, { useLive } from "./LiveProvider";
 import StatusBar from "./StatusBar";
 import Masthead from "./Masthead";
-import Panel from "./Panel";
-import { PulsePanel, UsagePanel } from "./DossierPanels";
+import ConsoleLayout from "./ConsoleLayout";
 import type { Dossier } from "@/lib/explorer";
 import GalacticChart from "./GalacticChart";
 import VerticalChart from "./VerticalChart";
@@ -110,26 +109,6 @@ export default function Dashboard({
           <TargetHud bundle={bundle} target={target} onClear={() => pinTarget(null)} />
         ) : null}
 
-        <Panel
-          index="01"
-          title="Star chart"
-          meta={
-            bundle.apex
-              ? `destination: ${bundle.apex.r} · ${fmt(bundle.apex.s)} stars`
-              : undefined
-          }
-          delay={80}
-        >
-          <div className="mb-2 hidden justify-end lg:flex">
-            <button
-              onClick={() => setDeck(true)}
-              className="numeral border border-grid px-2.5 py-1 text-micro tracking-[0.2em] text-dim transition-colors hover:border-accent/50 hover:text-accent"
-            >
-              ⛶ COMMAND DECK
-            </button>
-          </div>
-          <ChartIsland bundle={bundle} target={target} onPinTarget={pinTarget} />
-        </Panel>
         {deck ? (
           <CommandDeck
             bundle={bundle}
@@ -139,82 +118,43 @@ export default function Dashboard({
           />
         ) : null}
 
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-12">
-          <Panel
-            index="02"
-            title="Velocity, stars per hour"
-            meta="24h vs previous 24h"
-            className="lg:col-span-8"
-            delay={160}
-          >
-            <VelocityChart />
-          </Panel>
-          <Panel
-            index="03"
-            title="Milestone projections"
-            meta={`own v7d ${fmt(Math.round(bundle.v7d))}/day`}
-            className="lg:col-span-4"
-            delay={240}
-          >
-            <Projections bundle={bundle} />
-          </Panel>
-        </div>
-
-        {/* public dossier (maintenance pulse + real usage), same cards the
-            explorer shows for every other system */}
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-12">
-          <PulsePanel dossier={dossier} index="04" className="lg:col-span-7" />
-          <UsagePanel dossier={dossier} index="05" className="lg:col-span-5" />
-        </div>
-
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-          <Panel
-            index="06"
-            title="Daily ladder"
-            meta="30 days · night floor 00-05 UTC"
-            delay={320}
-          >
-            <DailyLadder bundle={bundle} />
-          </Panel>
-          <Panel
-            index="07"
-            title="Cumulative stars"
-            meta={`since ${bundle.meta?.created_at?.slice(0, 10) ?? "launch"} · replay available`}
-            delay={400}
-          >
-            <CumulativeChart bundle={bundle} />
-          </Panel>
-        </div>
-
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-12">
-          <Panel
-            index="08"
-            title="Activity heatmap"
-            meta={`${fmt(bundle.totalStars)} star events`}
-            className="lg:col-span-7"
-            delay={480}
-          >
-            <Heatmap bundle={bundle} />
-          </Panel>
-          <Panel
-            index="09"
-            title="World rank over time"
-            meta="hourly snapshots"
-            className="lg:col-span-5"
-            delay={560}
-          >
-            <RankChart bundle={bundle} />
-          </Panel>
-        </div>
-
-        <Panel
-          index="10"
-          title="Mission log"
-          meta="auto-detected from telemetry"
-          delay={640}
-        >
-          <MissionLog events={bundle.events} captain={bundle.captain} />
-        </Panel>
+        <ConsoleLayout
+          dossier={dossier}
+          starChart={{
+            meta: bundle.apex
+              ? `destination: ${bundle.apex.r} · ${fmt(bundle.apex.s)} stars`
+              : undefined,
+            node: (
+              <>
+                <div className="mb-2 hidden justify-end lg:flex">
+                  <button
+                    onClick={() => setDeck(true)}
+                    className="numeral border border-grid px-2.5 py-1 text-micro tracking-[0.2em] text-dim transition-colors hover:border-accent/50 hover:text-accent"
+                  >
+                    ⛶ COMMAND DECK
+                  </button>
+                </div>
+                <ChartIsland bundle={bundle} target={target} onPinTarget={pinTarget} />
+              </>
+            ),
+          }}
+          cumulative={{
+            meta: `since ${bundle.meta?.created_at?.slice(0, 10) ?? "launch"} · replay available`,
+            node: <CumulativeChart bundle={bundle} />,
+          }}
+          velocity={{ meta: "24h vs previous 24h", node: <VelocityChart /> }}
+          projections={{
+            meta: `own v7d ${fmt(Math.round(bundle.v7d))}/day`,
+            node: <Projections bundle={bundle} />,
+          }}
+          ladder={{ meta: "30 days · night floor 00-05 UTC", node: <DailyLadder bundle={bundle} /> }}
+          heatmap={{ meta: `${fmt(bundle.totalStars)} star events`, node: <Heatmap bundle={bundle} /> }}
+          rank={{ meta: "hourly snapshots", node: <RankChart bundle={bundle} /> }}
+          log={{
+            meta: "auto-detected from telemetry",
+            node: <MissionLog events={bundle.events} captain={bundle.captain} />,
+          }}
+        />
 
         <footer className="flex flex-wrap items-center justify-between gap-2 px-1 pb-4 pt-2">
           <span className="numeral text-micro tracking-[0.15em] text-faint">
