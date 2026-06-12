@@ -544,8 +544,93 @@ export default function GalacticChart({
         return { lo: nLo, hi: nLo + sp };
       });
     };
+    // TOUCH: one finger drags the map (the window follows the finger), two
+    // fingers pinch-zoom. touch-action: pan-y (set on the svg) leaves
+    // vertical page scroll to the browser and gives us the horizontal axis.
+    const pointers = new Map<number, { x: number; y: number }>();
+    let lastDist = 0;
+    const dismissHint = () => {
+      setPanHint(false);
+      try {
+        localStorage.setItem("mc_pan_hint", "done");
+      } catch { /* private mode */ }
+    };
+    const panBy = (d: number, clientY: number) => {
+      const rect = el.getBoundingClientRect();
+      const yView = ((clientY - rect.top) / Math.max(rect.height, 1)) * H;
+      const zone: "local" | "route" = yView > CLIP_BOTTOM + 12 ? "route" : "local";
+      sound.warpPan(zone === "route" ? 1 : 0);
+      armWarp(zone);
+      setWarpDir(d > 0 ? 1 : -1);
+      const g = geom.current;
+      setView((v) => {
+        const lo = v?.lo ?? g.defLo;
+        const hi = v?.hi ?? g.defHi;
+        const sp = hi - lo;
+        const speed = zone === "route" ? 8 : 1.6;
+        const shift = (d / 600) * sp * speed;
+        const nLo = Math.min(Math.max(lo + shift, g.bMin), g.bMax - sp);
+        return { lo: nLo, hi: nLo + sp };
+      });
+    };
+    const zoomBy = (deltaY: number) => {
+      sound.zoomTick(deltaY < 0);
+      const g = geom.current;
+      setView((v) => {
+        const lo = v?.lo ?? g.defLo;
+        const hi = v?.hi ?? g.defHi;
+        const sp = hi - lo;
+        const c = (lo + hi) / 2;
+        let ns = sp * (1 + deltaY / 250);
+        ns = Math.min(Math.max(ns, 0.004), g.bMax - g.bMin);
+        let nLo = c - ns / 2;
+        nLo = Math.min(Math.max(nLo, g.bMin), g.bMax - ns);
+        return { lo: nLo, hi: nLo + ns };
+      });
+    };
+    const onPointerDown = (e: PointerEvent) => {
+      if (e.pointerType !== "touch") return;
+      pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      if (pointers.size === 2) {
+        const [a, b] = [...pointers.values()];
+        lastDist = Math.hypot(a.x - b.x, a.y - b.y);
+      }
+    };
+    const onPointerMove = (e: PointerEvent) => {
+      if (e.pointerType !== "touch" || !pointers.has(e.pointerId)) return;
+      const prev = pointers.get(e.pointerId)!;
+      pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      if (pointers.size === 1) {
+        const dx = prev.x - e.clientX; // dragging the map, not the window
+        if (Math.abs(dx) < 0.5) return;
+        dismissHint();
+        panBy(dx * 2.2, e.clientY);
+      } else if (pointers.size === 2) {
+        const [a, b] = [...pointers.values()];
+        const dist = Math.hypot(a.x - b.x, a.y - b.y);
+        if (lastDist > 0 && Math.abs(dist - lastDist) > 1) {
+          dismissHint();
+          zoomBy((lastDist - dist) * 2.4);
+        }
+        lastDist = dist;
+      }
+    };
+    const onPointerEnd = (e: PointerEvent) => {
+      pointers.delete(e.pointerId);
+      lastDist = 0;
+    };
     el.addEventListener("wheel", onWheel, { passive: false });
-    return () => el.removeEventListener("wheel", onWheel);
+    el.addEventListener("pointerdown", onPointerDown);
+    el.addEventListener("pointermove", onPointerMove);
+    el.addEventListener("pointerup", onPointerEnd);
+    el.addEventListener("pointercancel", onPointerEnd);
+    return () => {
+      el.removeEventListener("wheel", onWheel);
+      el.removeEventListener("pointerdown", onPointerDown);
+      el.removeEventListener("pointermove", onPointerMove);
+      el.removeEventListener("pointerup", onPointerEnd);
+      el.removeEventListener("pointercancel", onPointerEnd);
+    };
   }, []);
 
   // ---------- band A content ----------
@@ -706,6 +791,7 @@ export default function GalacticChart({
           ref={svgRef}
           viewBox={`0 0 ${W} ${H}`}
           className="h-auto w-full"
+          style={{ touchAction: "pan-y" }}
           role="img"
           aria-label="Star chart: pannable local system window and the route to the worldwide number one repository"
           onDoubleClick={() => setView(null)}

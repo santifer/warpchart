@@ -9,6 +9,7 @@
 // dot always sits at its REAL position. Tap a ship to pin it (dashboard)
 // or warp to it (explorer); the chevron opens its scan page.
 import { useRouter } from "next/navigation";
+import RotateHint from "./RotateHint";
 import type { ChartInputs } from "@/lib/types";
 import type { Palette } from "@/lib/theme";
 import { usePalette } from "@/lib/usePalette";
@@ -151,6 +152,7 @@ export default function VerticalChart({
 
   return (
     <div className="flex flex-col gap-1">
+      <RotateHint />
       {/* the core is light-years up: a compact heading instead of dead space */}
       <div className="flex items-baseline justify-between gap-2 px-1 pb-1">
         <span className="numeral text-label font-semibold text-star">

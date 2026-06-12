@@ -502,6 +502,20 @@ svg text {
   .bk-ping, .bk-traj, .bk-pass { animation: none; opacity: 0; }
 }
 
+/* Rotate nudge: the phone tips over, settles, tips back. */
+.rotate-hint-icon {
+  animation: rotate-hint 3.2s ease-in-out infinite;
+  transform-origin: center;
+}
+@keyframes rotate-hint {
+  0%, 18% { transform: rotate(0deg); }
+  38%, 62% { transform: rotate(-90deg); }
+  82%, 100% { transform: rotate(0deg); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .rotate-hint-icon { animation: none; transform: rotate(-90deg); }
+}
+
 /* Ships fade softly into the sky when the chart replaces its skeleton
    (staggered per node via inline animation-delay). */
 @keyframes ship-in {
