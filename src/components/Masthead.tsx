@@ -68,7 +68,10 @@ export default function Masthead({ demo }: { demo?: string | null }) {
             href={`/r/${demo}`}
             className="numeral border border-grid px-3 py-1.5 text-micro tracking-[0.18em] text-dim transition-colors hover:border-accent/50 hover:text-accent"
           >
-            LIVE DEMO MISSION: {demo} →
+            {/* phones get the short form: the full repo path wraps mid-name
+                inside the box and reads broken */}
+            <span className="sm:hidden">DEMO: {demo.split("/")[1]} →</span>
+            <span className="hidden sm:inline">LIVE DEMO MISSION: {demo} →</span>
           </Link>
         ) : null}
       </div>

@@ -53,8 +53,13 @@ export default function StatusBar({ bundle }: { bundle: DashboardBundle }) {
           ) : null}
           <div className="min-w-0">
             <div className="flex items-center gap-3">
-              <h1 className="font-display text-sm tracking-[0.18em] text-star uppercase truncate">
-                {repo}
+              {/* phones: the full path doesn't fit next to the avatar, so it
+                  wraps ONCE after the slash (never mid-name) instead of
+                  truncating the most important datum on the page */}
+              <h1 className="font-display min-w-0 text-sm tracking-[0.18em] text-star uppercase sm:truncate">
+                <span className="whitespace-nowrap">{repo.split("/")[0]}/</span>
+                <wbr />
+                <span className="whitespace-nowrap">{repo.split("/")[1]}</span>
               </h1>
               <span
                 className="flex items-center gap-1.5 shrink-0"
@@ -80,7 +85,7 @@ export default function StatusBar({ bundle }: { bundle: DashboardBundle }) {
                 </span>
               </span>
             </div>
-            <p className="mt-0.5 truncate text-sm font-light text-dim">
+            <p className="mt-0.5 line-clamp-2 text-sm font-light text-dim sm:line-clamp-1">
               {bundle.meta?.description ?? "growth telemetry"}
             </p>
           </div>

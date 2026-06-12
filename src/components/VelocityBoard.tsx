@@ -61,14 +61,16 @@ function Lane({
     <Link
       prefetch={false}
       href={`/r/${repo.r}`}
-      className="group grid grid-cols-[2rem_1fr] items-center gap-x-3 gap-y-1 border-b border-grid/60 px-2 py-2.5 transition-colors hover:bg-accent/5 sm:grid-cols-[2.5rem_minmax(180px,1fr)_340px_auto]"
+      className="group grid grid-cols-[2rem_1fr_auto] items-center gap-x-3 gap-y-1 border-b border-grid/60 px-2 py-2.5 transition-colors hover:bg-accent/5 sm:grid-cols-[2.5rem_minmax(180px,1fr)_340px_auto]"
     >
       <span className="numeral text-data text-faint">{pos}</span>
       <span className="min-w-0">
         <span className="numeral block truncate text-data text-ink group-hover:text-accent">
           {shortName(repo.r)}
         </span>
-        <span className="numeral block truncate text-micro text-faint">
+        {/* phones: the overtake callout is the whole point of the row, so it
+            wraps instead of truncating; desktop keeps the single line */}
+        <span className="numeral block text-micro text-faint sm:truncate">
           {fmtCompact(repo.s)} ★ · #{repo.rank}
           {repo.l ? ` · ${repo.l}` : ""}
           {repo.hunt ? (
@@ -80,7 +82,7 @@ function Lane({
         width={W}
         height={20}
         viewBox={`0 0 ${W} 20`}
-        className="col-span-2 w-full sm:col-span-1 sm:w-[340px]"
+        className="col-span-3 col-start-1 row-start-2 w-full sm:col-span-1 sm:col-start-auto sm:row-start-auto sm:w-[340px]"
         aria-hidden
       >
         <path
@@ -90,7 +92,12 @@ function Lane({
         />
         <path d={`M ${len - 1} 4.5 L ${len + 8} 10 L ${len - 1} 15.5 Z`} fill={color} />
       </svg>
-      <span className="numeral hidden text-right text-data sm:block" style={{ color }}>
+      {/* the headline metric of the page: visible on phones too, pinned to
+          the first row next to the name (the arrow takes the second row) */}
+      <span
+        className="numeral col-start-3 row-start-1 self-start text-right text-data sm:col-start-auto sm:row-start-auto sm:self-auto"
+        style={{ color }}
+      >
         {metric === "abs" ? `${fmt(Math.round(repo.v))}/day` : `+${repo.relPct.toFixed(1)}%/day`}
       </span>
     </Link>

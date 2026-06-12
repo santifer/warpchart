@@ -206,6 +206,15 @@ body {
   color: var(--faint);
 }
 
+/* phones: the wide tracking truncates real panel names ("MILESTONE
+   PROJECTI…"); tighter spacing keeps every title whole at 390px */
+@media (max-width: 639px) {
+  .module-title {
+    font-size: 0.75rem;
+    letter-spacing: 0.14em;
+  }
+}
+
 /* ---- Numerals ---- */
 
 .numeral {
@@ -849,7 +858,9 @@ body.gx-immersed .gx-hero-copy {
   /* phones: the visible window is the right side of the map, so the bulge
      and the core stay on screen behind the centered copy */
   .ghx-plane { opacity: 0.75; }
-  .ghx-lore, .ghx-name { display: none; }
+  /* every map label goes: ring thresholds and the core caption cross right
+     behind the centered headline at 390px and fight it for legibility */
+  .ghx-lore, .ghx-name, .ghx-ring-label, .ghx-core-label { display: none; }
   .ghx-scrim { background: linear-gradient(0deg, var(--void) 0%, transparent 30%), rgba(2, 5, 9, 0.30); }
   .scheme-light .ghx-scrim { background: linear-gradient(0deg, var(--void) 0%, transparent 30%), rgba(238, 243, 248, 0.30); }
 }

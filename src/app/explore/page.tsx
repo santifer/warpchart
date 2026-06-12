@@ -168,7 +168,9 @@ export default async function Explore() {
 
       <section className="rise flex flex-col gap-3" style={{ animationDelay: "160ms" }}>
         <h2 className="font-display text-title tracking-[0.14em] text-ink">FEATURED SCANS</h2>
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+        {/* phones: one full-width row per card so long names ("system-design-
+            primer") survive whole; two narrow columns truncated them to 4 chars */}
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
           {featured.map((f) => (
             <Link
               key={f.r}

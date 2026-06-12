@@ -43,7 +43,7 @@ function ScanLog() {
   }, []);
   const lines = STEPS.slice(0, visible).slice(-4);
   return (
-    <div className="numeral flex w-[360px] flex-col gap-1 text-micro">
+    <div className="numeral flex w-full max-w-[360px] flex-col gap-1 px-3 text-micro">
       {lines.map((s, i) => {
         const isLast = i === lines.length - 1 && visible < STEPS.length;
         return (
