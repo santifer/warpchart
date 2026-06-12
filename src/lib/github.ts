@@ -98,6 +98,24 @@ export async function currentStars(owner: string, name: string): Promise<number>
   return d.repository.stargazerCount;
 }
 
+// Exact star counts for a small batch in ONE aliased query (one rate
+// point): the real-time anchor behind hot explorer scenes.
+export async function starsBatch(repos: string[]): Promise<Record<string, number>> {
+  const fields = repos.map((r, i) => {
+    const [owner, name] = r.split("/");
+    return `r${i}: repository(owner: ${JSON.stringify(owner)}, name: ${JSON.stringify(name)}) { stargazerCount }`;
+  });
+  const d = await graphql<Record<string, { stargazerCount: number } | null>>(
+    `query { ${fields.join("\n")} }`
+  );
+  const out: Record<string, number> = {};
+  repos.forEach((r, i) => {
+    const hit = d[`r${i}`];
+    if (hit) out[r.toLowerCase()] = hit.stargazerCount;
+  });
+  return out;
+}
+
 export interface RepoLite {
   nameWithOwner: string;
   stargazerCount: number;

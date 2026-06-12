@@ -82,19 +82,79 @@ function tailPath(x: number, y: number, len: number, dir: number, girth = 1.7): 
 }
 
 export default function GalacticChart({
-  inputs,
+  inputs: ssrInputs,
   target = null,
   onPinTarget,
+  liveLocals = false,
 }: {
   inputs: ChartInputs;
   target?: string | null;
   onPinTarget?: (r: string | null) => void;
+  // Explorer pages opt in: poll the shared per-scene anchor so fast locals
+  // move with REAL minute-fresh data. The tenant dashboard already gets
+  // live neighbors from its own polling, so it never sets this.
+  liveLocals?: boolean;
 }) {
   const C = usePalette();
   const router = useRouter();
   const [scan, setScan] = useState<Scan | null>(null);
   const [view, setView] = useState<{ lo: number; hi: number } | null>(null);
   const svgRef = useRef<SVGSVGElement | null>(null);
+
+  // REAL-TIME ANCHOR (hot scenes only): re-sync every local ship's exact
+  // star count once a minute. One edge-cached response is shared by every
+  // viewer of the same scene, so cost does not scale with audience.
+  const [liveAnchor, setLiveAnchor] = useState<{ ts: number; stars: Record<string, number> } | null>(null);
+  const sceneHot =
+    Math.max(ssrInputs.v7d, ...ssrInputs.neighbors.map((n) => n.v || 0)) >= 300;
+  useEffect(() => {
+    if (!liveLocals || !sceneHot) return;
+    let gone = false;
+    const repos = [ssrInputs.repo, ...ssrInputs.neighbors.map((n) => n.r)]
+      .slice(0, 30)
+      .sort() // normalized order = one cache entry per scene
+      .join(",");
+    const tick = async () => {
+      if (document.hidden) return;
+      try {
+        const res = await fetch(`/api/live/locals?repos=${encodeURIComponent(repos)}`);
+        if (!res.ok) return;
+        const j = await res.json();
+        if (!gone && j?.stars) setLiveAnchor({ ts: j.ts ?? Date.now(), stars: j.stars });
+      } catch {
+        /* next tick */
+      }
+    };
+    const warm = window.setTimeout(tick, 1500); // let the page settle first
+    const id = window.setInterval(tick, 60_000);
+    const onVis = () => {
+      if (!document.hidden) tick();
+    };
+    document.addEventListener("visibilitychange", onVis);
+    return () => {
+      gone = true;
+      window.clearTimeout(warm);
+      window.clearInterval(id);
+      document.removeEventListener("visibilitychange", onVis);
+    };
+  }, [liveLocals, sceneHot, ssrInputs.repo, ssrInputs.neighbors]);
+
+  // Stars only ever climb here: an older cache entry must never drag a
+  // ship backwards. Re-anchoring also resets nowMs, which re-zeroes the
+  // drift clock below.
+  const inputs = useMemo(() => {
+    if (!liveAnchor) return ssrInputs;
+    const fresh = (r: string, s: number) => Math.max(s, liveAnchor.stars[r.toLowerCase()] ?? 0);
+    return {
+      ...ssrInputs,
+      stars: fresh(ssrInputs.repo, ssrInputs.stars),
+      nowMs: liveAnchor.ts,
+      neighbors: ssrInputs.neighbors.map((n) => {
+        const s = fresh(n.r, n.s);
+        return s === n.s ? n : { ...n, s };
+      }),
+    };
+  }, [ssrInputs, liveAnchor]);
 
   // Origin marker: jumps between charts carry #from=owner/name (a hash, so
   // it never reaches the server and cannot bust the ISR cache). Falls back
@@ -346,6 +406,35 @@ export default function GalacticChart({
   const span = logHi - logLo;
 
   const ax = (s: number) => 40 + ((log10(s) - logLo) / span) * (W - 80);
+
+  // LIVE DRIFT (player frame): our ship IS the camera, so it never moves;
+  // every other local creeps at its velocity RELATIVE to ours between data
+  // anchors. In tightly packed fast scenes (apple/container gains a star
+  // every ~20s against 4-star gaps) overtakes become visible IN REAL TIME.
+  // Positions are recomputed each tick from anchor + elapsed (NOT a CSS
+  // transform: a second coordinate system would visibly rebound on every
+  // re-anchor). The clock only starts when the fastest relative mover
+  // covers pixels a human could actually notice during a visit; every
+  // other scene pays nothing. Labels/etas keep the anchor's real numbers:
+  // the drift moves ships, never data.
+  const pxPerStar = (ax(stars * 1.001) - ax(stars)) / Math.max(stars * 0.001, 1);
+  const maxRelV = Math.max(0, ...inputs.neighbors.map((n) => Math.abs((n.v || 0) - vOwn)));
+  const driftHot = pxPerStar * maxRelV >= 1000; // ~0.7px per minute floor
+  const [driftNowMs, setDriftNowMs] = useState<number | null>(null);
+  useEffect(() => {
+    if (!driftHot) {
+      setDriftNowMs(null);
+      return;
+    }
+    setDriftNowMs(Date.now());
+    const id = window.setInterval(() => setDriftNowMs(Date.now()), 4_000);
+    return () => window.clearInterval(id);
+  }, [driftHot, nowMs]);
+  // cap extrapolation at 45 min: a zombie tab must not invent the future
+  const driftDays =
+    driftNowMs === null ? 0 : Math.min(Math.max(0, driftNowMs - nowMs), 45 * 60_000) / 86_400_000;
+  const driftS = (s: number, v: number | null | undefined) =>
+    !driftDays || v == null ? s : Math.max(1, s + (v - vOwn) * driftDays);
 
   // Route band: focus+context scale. Position follows log(1 + distance/K)
   // measured FROM OUR CURRENT STARS, so the stretch we are flying right now
@@ -818,29 +907,30 @@ export default function GalacticChart({
               .map((p) => {
                 const color = routeDotColor.get(p.r) ?? C.white;
                 const tail = dotTail(p.v);
+                const xp = ax(driftS(p.s, p.v));
                 return (
                   <g
                     key={p.r}
                     className="nbr"
                     onMouseEnter={() =>
-                      openScan({ kind: "route", p, xPct: clampPct((ax(p.s) / W) * 100), topPct: bandATop, place: "below" })
+                      openScan({ kind: "route", p, xPct: clampPct((xp / W) * 100), topPct: bandATop, place: "below" })
                     }
                     onMouseLeave={scheduleClose}
                     onClick={() => togglePin(p.r)}
                   >
-                    <circle cx={ax(p.s)} cy={BAND_A_Y} r={8} fill="transparent" />
+                    <circle cx={xp} cy={BAND_A_Y} r={8} fill="transparent" />
                     {tail ? (
-                      <path d={tailPath(ax(p.s), BAND_A_Y, tail.len, tail.dir, 1.2)}
+                      <path d={tailPath(xp, BAND_A_Y, tail.len, tail.dir, 1.2)}
                         fill={color} opacity={0.22} />
                     ) : null}
-                    <circle className="nbr-dot" cx={ax(p.s)} cy={BAND_A_Y} r={1.6}
+                    <circle className="nbr-dot" cx={xp} cy={BAND_A_Y} r={1.6}
                       fill={color} opacity={0.6} />
                   </g>
                 );
               })}
 
             {items.map((it, i) => {
-              const x = ax(it.s);
+              const x = ax(driftS(it.s, it.kind === "n" ? it.n.v : it.p.v));
               const isTarget = target !== null && (it.kind === "n" ? it.n.r : it.p.r) === target;
               if (it.kind === "n") {
                 const n = it.n;

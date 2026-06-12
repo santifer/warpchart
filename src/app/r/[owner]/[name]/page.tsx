@@ -269,7 +269,7 @@ export default async function ExplorerPage({
           </a>
         </div>
         <div className="hidden lg:block">
-          <GalacticChart inputs={inputs} />
+          <GalacticChart inputs={inputs} liveLocals />
         </div>
         <div className="lg:hidden">
           <VerticalChart inputs={inputs} />
