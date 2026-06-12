@@ -13,12 +13,14 @@ export function fmtSigned(n: number): string {
   return (n >= 0 ? "+" : "") + fmt(Math.round(n));
 }
 
-// "2.3d" / "16h" / "now"
+// "2.3d" / "16h" / "now" / "8y"
 export function fmtEtaDays(days: number | null): string {
   if (days === null) return "n/a";
   if (days <= 0) return "now";
   if (days < 1) return Math.max(1, Math.round(days * 24)) + "h";
   if (days < 10) return days.toFixed(1).replace(/\.0$/, "") + "d";
+  // beyond a year, day counts read as noise ("eta 117950d"); years stay honest
+  if (days > 365) return (days / 365).toFixed(days < 1825 ? 1 : 0).replace(/\.0$/, "") + "y";
   return Math.round(days) + "d";
 }
 

@@ -11,6 +11,7 @@ class AudioEngine {
   private send: GainNode | null = null; // shared space-echo bus
   private padGain: GainNode | null = null;
   private padOscs: OscillatorNode[] = [];
+  private padFilter: BiquadFilterNode | null = null;
   private lastBlip = 0;
   private lastWhoosh = 0;
   private _enabled = false;
@@ -115,6 +116,7 @@ class AudioEngine {
     lfo.start();
     this.padOscs = [o1, o2, lfo];
     this.padGain = gain;
+    this.padFilter = lp;
   }
 
   private stopPad(): void {
@@ -123,6 +125,20 @@ class AudioEngine {
     }
     this.padOscs = [];
     this.padGain = null;
+    this.padFilter = null;
+  }
+
+  // Position along the route (0 = home edge, 1 = galactic core). The pad
+  // rises about two semitones toward the core and the filter opens a touch:
+  // same timbre, just the sky getting busier. Smooth ramps, never steps.
+  setTravelPosition(t: number): void {
+    if (!this.ctx || this.padOscs.length < 2) return;
+    const k = Math.min(1, Math.max(0, t));
+    const ratio = Math.pow(2, (k * 2) / 12);
+    const now = this.ctx.currentTime;
+    this.padOscs[0].frequency.setTargetAtTime(110 * ratio, now, 0.35);
+    this.padOscs[1].frequency.setTargetAtTime(110.45 * ratio, now, 0.35);
+    this.padFilter?.frequency.setTargetAtTime(320 + 140 * k, now, 0.5);
   }
 
   // velocity-driven ambient brightness (0..1)

@@ -283,14 +283,17 @@ export default function GalacticChart({
     sound.warpPan(0);
     const t0 = performance.now();
     const DUR = 900;
-    const lerpLog = (a: number, b: number, k: number) =>
-      Math.exp(Math.log(Math.max(a, 1)) + (Math.log(Math.max(b, 1)) - Math.log(Math.max(a, 1))) * k);
+    // the window is already in log10(stars) space, so a linear lerp here
+    // IS perceptually uniform travel
     const step = (t: number) => {
       const k = Math.min(1, (t - t0) / DUR);
       const e = 1 - Math.pow(1 - k, 3);
       if (k < 1) {
         armWarp("local");
-        setView({ lo: lerpLog(from.lo, to.lo, e), hi: lerpLog(from.hi, to.hi, e) });
+        setView({
+          lo: from.lo + (to.lo - from.lo) * e,
+          hi: from.hi + (to.hi - from.hi) * e,
+        });
         requestAnimationFrame(step);
       } else {
         setView(null);
@@ -357,6 +360,13 @@ export default function GalacticChart({
   // Parallax: pan position projected onto a fixed-scale world, per layer depth.
   const WORLD_PX = 6000;
   const worldX = ((logLo - bMin) / Math.max(bMax - bMin, 1e-6)) * WORLD_PX;
+
+  // the ambient pad rises gently as the window travels toward the core,
+  // where the sky is busier: position as a frequency, like everything else
+  const travelT = (logLo - bMin) / Math.max(bMax - bMin, 1e-6);
+  useEffect(() => {
+    sound.setTravelPosition(travelT);
+  }, [travelT]);
   const layerOffset = (f: number) => -((((worldX * f) % W) + W) % W);
 
   const geom = useRef({ defLo, defHi, bMin, bMax });
@@ -417,9 +427,15 @@ export default function GalacticChart({
 
   const LABEL_MAX = 13;
   const dotBudget = Math.max(0, LABEL_MAX - visNbrs.length);
-  const dotStep = dotBudget > 0 ? Math.max(1, Math.ceil(visDots.length / dotBudget)) : Infinity;
+  // label candidates by STORY value (fastest movers first), not an every-Nth
+  // sample: routed dots are full synthetic neighbors now, and an unlabeled
+  // orange hunter next to empty space read as a bug. The width-aware tier
+  // pass below still sheds whatever genuinely does not fit.
   const labeledDotSet = new Set(
-    visDots.filter((_, i) => i % dotStep === 0).slice(0, dotBudget).map((p) => p.r)
+    [...visDots]
+      .sort((a, b) => (b.v ?? 0) - (a.v ?? 0))
+      .slice(0, dotBudget)
+      .map((p) => p.r)
   );
 
   const items: AItem[] = [
@@ -768,7 +784,8 @@ export default function GalacticChart({
                 <rect x={W - 180} y={CLIP_BOTTOM - 34} width={160} height={28} fill="transparent" />
                 <text x={W - 40} y={CLIP_BOTTOM - 16} textAnchor="end" fontSize={12} fill={C.white}
                   letterSpacing={2} className="numeral" opacity={0.95}>
-                  {stars < view.lo ? "‹‹‹ CENTER" : "CENTER ›››"}
+                  {/* the window lives in log10(stars) space */}
+                  {log10(stars) < view.lo ? "‹‹‹ CENTER" : "CENTER ›››"}
                 </text>
               </g>
             ) : null}
