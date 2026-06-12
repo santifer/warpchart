@@ -19,6 +19,9 @@ export interface RouteRepo {
   d?: string | null;
   l?: string | null;
   f?: number; // forks
+  // stars/day from the daily registry diff (collector); colors the whole
+  // galaxy with doppler dots at zero API cost. Null/absent = unknown.
+  v?: number | null;
 }
 
 export interface RouteFile {

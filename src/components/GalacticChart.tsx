@@ -155,6 +155,26 @@ export default function GalacticChart({
     return { shipTail: tail, shipDur: dur };
   }, [inputs.neighbors, vOwn]);
 
+  // Registry-diff velocity colors the WHOLE galaxy: every routed dot gets a
+  // doppler hue (and a short static tail in the local band) at zero API
+  // cost. Static fills only: animated particles stay reserved for the live
+  // neighbor band, so a thousand dots cost nothing at runtime.
+  const routeDotColor = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const p of inputs.routeAll) {
+      if (p.v != null) m.set(p.r, dopplerTilt(p.v / Math.max(vOwn, 1), C));
+    }
+    return m;
+  }, [inputs.routeAll, vOwn, C]);
+  const dotTail = (v: number | null | undefined) => {
+    if (v == null) return null;
+    const rel = v / Math.max(vOwn, 1);
+    const mag = Math.abs(1 - rel);
+    if (mag <= 0.15) return null;
+    // half scale: route dots are context, not the chase
+    return { len: (6 + Math.min(mag, 2.2) * 14) * 0.5, dir: rel < 1 ? 1 : -1 };
+  };
+
   // Golden pulsar: every REAL star (post-sync increments of the live count)
   // fires an expanding ring on our ship. The first jump after load is the
   // backlog catching up with the bundle, so it stays quiet.
@@ -665,21 +685,29 @@ export default function GalacticChart({
 
             {visDots
               .filter((p) => !labeledDotSet.has(p.r))
-              .map((p) => (
-                <g
-                  key={p.r}
-                  className="nbr"
-                  onMouseEnter={() =>
-                    openScan({ kind: "route", p, xPct: clampPct((ax(p.s) / W) * 100), topPct: bandATop, place: "below" })
-                  }
-                  onMouseLeave={scheduleClose}
-                  onClick={() => togglePin(p.r)}
-                >
-                  <circle cx={ax(p.s)} cy={BAND_A_Y} r={8} fill="transparent" />
-                  <circle className="nbr-dot" cx={ax(p.s)} cy={BAND_A_Y} r={1.6}
-                    fill={C.white} opacity={0.55} />
-                </g>
-              ))}
+              .map((p) => {
+                const color = routeDotColor.get(p.r) ?? C.white;
+                const tail = dotTail(p.v);
+                return (
+                  <g
+                    key={p.r}
+                    className="nbr"
+                    onMouseEnter={() =>
+                      openScan({ kind: "route", p, xPct: clampPct((ax(p.s) / W) * 100), topPct: bandATop, place: "below" })
+                    }
+                    onMouseLeave={scheduleClose}
+                    onClick={() => togglePin(p.r)}
+                  >
+                    <circle cx={ax(p.s)} cy={BAND_A_Y} r={8} fill="transparent" />
+                    {tail ? (
+                      <path d={tailPath(ax(p.s), BAND_A_Y, tail.len, tail.dir, 1.2)}
+                        fill={color} opacity={0.22} />
+                    ) : null}
+                    <circle className="nbr-dot" cx={ax(p.s)} cy={BAND_A_Y} r={1.6}
+                      fill={color} opacity={0.6} />
+                  </g>
+                );
+              })}
 
             {items.map((it, i) => {
               const x = ax(it.s);
@@ -816,12 +844,21 @@ export default function GalacticChart({
                   {isTarget ? (
                     <circle cx={x} cy={BAND_A_Y} r={8} fill="none" stroke={C.accent} strokeWidth={1.2} />
                   ) : null}
-                  <circle className="nbr-dot" cx={x} cy={BAND_A_Y} r={2.4} fill={C.white} opacity={0.8} />
+                  {(() => {
+                    const tail = dotTail(p.v);
+                    return tail ? (
+                      <path d={tailPath(x, BAND_A_Y, tail.len, tail.dir, 1.4)}
+                        fill={routeDotColor.get(p.r) ?? C.white} opacity={0.25} />
+                    ) : null;
+                  })()}
+                  <circle className="nbr-dot" cx={x} cy={BAND_A_Y} r={2.4}
+                    fill={routeDotColor.get(p.r) ?? C.white} opacity={0.85} />
                   <text className="nbr-name" x={x} y={tierY - 2} fill={C.ink} fontSize={12.5} textAnchor="middle">
                     {trunc(shortName(p.r))}
                   </text>
                   <text x={x} y={tierY + 12} fill={C.dim} fontSize={11} textAnchor="middle">
                     {fmtCompact(p.s)} · #{p.rank}
+                    {p.v != null ? ` · ${Math.round(p.v)}/d` : ""}
                   </text>
                 </g>
               );
@@ -961,7 +998,7 @@ export default function GalacticChart({
             >
               <circle cx={bx(p.s)} cy={BAND_B_Y} r={9} fill="transparent" />
               <circle className="nbr-dot" cx={bx(p.s)} cy={BAND_B_Y} r={1.4}
-                fill={C.white} opacity={0.4 + (p.rank % 4) * 0.12} />
+                fill={routeDotColor.get(p.r) ?? C.white} opacity={0.45 + (p.rank % 4) * 0.12} />
             </g>
           ))}
 
@@ -1156,6 +1193,9 @@ function ScanContent({ scan, ownV, nowMs, rank }: { scan: Scan; ownV: number; no
       <div className="numeral mt-2 grid grid-cols-2 gap-x-3 gap-y-1 border-t border-grid pt-2 text-label">
         <Row k="stars" v={fmt(scan.kind === "neighbor" ? scan.n.s : scan.p.s)} />
         {scan.kind === "neighbor" && rank !== null ? <Row k="rank" v={`#${fmt(rank)}`} /> : null}
+        {scan.kind === "route" && scan.p.v != null ? (
+          <Row k="velocity" v={`${Math.round(scan.p.v)}/day`} />
+        ) : null}
         {scan.kind === "neighbor" ? (
           <>
             <Row k="velocity" v={`${Math.round(scan.n.v)}/day`} />

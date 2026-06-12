@@ -389,6 +389,11 @@ svg text {
 .warp-tint-fwd .star-warp { fill: var(--dop-fwd); }
 .warp-tint-back .star-warp { fill: var(--dop-back); }
 
+/* The FTL smear follows the direction of travel: panning toward the core
+   anchors streaks on their left edge (they stretch forward), panning back
+   anchors right so they stretch the other way. */
+.warp-tint-back .star-warp { transform-origin: right center; }
+
 @media (prefers-reduced-motion: reduce) {
   .star-warp.warping, .star-warp.warping-fast { transform: none; }
 }

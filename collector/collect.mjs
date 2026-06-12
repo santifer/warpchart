@@ -114,11 +114,33 @@ try {
   }
   if (staleRoute) {
     const route = await topRepos();
+    // Daily velocity for every routed repo, free: diff against the
+    // outgoing registry. It colors the whole galaxy (doppler dots) without
+    // a single API call; the local band still measures live.
+    let withV = route;
+    try {
+      if (existsSync(routePath)) {
+        const prev = JSON.parse(readFileSync(routePath, "utf8"));
+        const prevStars = new Map((prev.repos ?? []).map((p) => [p.r.toLowerCase(), p.s]));
+        const days = (now - new Date(prev.generated_at)) / 864e5;
+        if (days > 0.25) {
+          withV = route.map((p) => {
+            const was = prevStars.get(p.r.toLowerCase());
+            return was === undefined
+              ? p
+              : { ...p, v: Math.round(((p.s - was) / days) * 10) / 10 };
+          });
+          console.log(`[collect] route velocities computed over ${days.toFixed(2)}d`);
+        }
+      }
+    } catch (err) {
+      console.error(`[collect] route velocity diff failed: ${err.message}`);
+    }
     if (!dryRun) {
       // keep the outgoing registry: today vs yesterday is the collision
       // scanner's zero-cost velocity source for all 1000 repos
       if (existsSync(routePath)) copyFileSync(routePath, join(DATA_DIR, "route-prev.json"));
-      writeFileSync(routePath, JSON.stringify({ generated_at: nowISO, repos: route }) + "\n");
+      writeFileSync(routePath, JSON.stringify({ generated_at: nowISO, repos: withV }) + "\n");
     }
     routeRefreshed = true;
     console.log(`[collect] route landmarks refreshed: ${route.length} repos`);
