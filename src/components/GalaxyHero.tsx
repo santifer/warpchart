@@ -2,9 +2,10 @@
 
 // Partially isometric galaxy hero. The isometry itself is pre-projected into
 // the SVG coordinates (squash + log radii in lib/galaxy), so labels stay
-// crisp and horizontal; on top of that a REAL 3D micro-tilt (CSS perspective
-// + translateZ-separated layers) follows the pointer, which is what makes the
-// dust, the rings and the systems parallax against each other.
+// crisp and horizontal; on top of that the pointer drives a LOCAL ZOOM: the
+// neighborhood under the cursor leans in (no rotation, the galaxy's angle
+// never changes), and each layer zooms by a different factor so depth reads
+// as the dust lagging behind the systems.
 import { useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import {
@@ -12,6 +13,7 @@ import {
   GX_H,
   GX_CORE_X,
   GX_CORE_Y,
+  galaxyAngle,
   projectGalaxy,
   ringPath,
   ringPoint,
@@ -25,12 +27,11 @@ declare global {
   }
 }
 
-const WARP_MS = 640;
-
 export default function GalaxyHero({ data }: { data: GalaxyData }) {
   const router = useRouter();
   const planeRef = useRef<HTMLDivElement>(null);
   const warping = useRef(false);
+  const prefetched = useRef(new Set<string>());
 
   useEffect(() => {
     const el = planeRef.current;
@@ -38,51 +39,90 @@ export default function GalaxyHero({ data }: { data: GalaxyData }) {
     if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
     if (!window.matchMedia("(pointer: fine)").matches) return;
     let raf = 0;
-    let cx = 0,
-      cy = 0,
-      tx = 0,
-      ty = 0;
+    // zoom factor (0 = resting, ZMAX = leaning in) and its origin, all
+    // lerped so the neighborhood swims toward the cursor instead of snapping
+    const ZMAX = 0.34;
+    let zf = 0,
+      zx = 60,
+      zy = 40,
+      tzf = 0,
+      tzx = 60,
+      tzy = 40;
     const step = () => {
-      cx += (tx - cx) * 0.07;
-      cy += (ty - cy) * 0.07;
-      el.style.setProperty("--gxy", `${(cx * 2.6).toFixed(3)}deg`);
-      el.style.setProperty("--gxx", `${(-cy * 1.8).toFixed(3)}deg`);
+      zf += (tzf - zf) * 0.08;
+      zx += (tzx - zx) * 0.1;
+      zy += (tzy - zy) * 0.1;
+      el.style.setProperty("--gx-zf", zf.toFixed(4));
+      el.style.setProperty("--gx-zx", `${zx.toFixed(2)}%`);
+      el.style.setProperty("--gx-zy", `${zy.toFixed(2)}%`);
       raf =
-        Math.abs(tx - cx) > 0.001 || Math.abs(ty - cy) > 0.001
+        Math.abs(tzf - zf) > 0.0005 || Math.abs(tzx - zx) > 0.05 || Math.abs(tzy - zy) > 0.05
           ? requestAnimationFrame(step)
           : 0;
     };
     const onMove = (e: PointerEvent) => {
-      tx = (e.clientX / window.innerWidth) * 2 - 1;
-      ty = (e.clientY / window.innerHeight) * 2 - 1;
+      if (warping.current) return;
+      const r = el.getBoundingClientRect();
+      tzx = Math.min(100, Math.max(0, ((e.clientX - r.left) / r.width) * 100));
+      tzy = Math.min(100, Math.max(0, ((e.clientY - r.top) / r.height) * 100));
+      tzf = ZMAX;
       if (!raf) raf = requestAnimationFrame(step);
     };
-    window.addEventListener("pointermove", onMove, { passive: true });
+    const onLeave = () => {
+      tzf = 0;
+      if (!raf) raf = requestAnimationFrame(step);
+    };
+    // the map plane only: hovering the headline column (which sits on top
+    // and swallows its own pointer events) must never lean the galaxy in
+    el.addEventListener("pointermove", onMove, { passive: true });
+    el.addEventListener("pointerleave", onLeave);
     return () => {
-      window.removeEventListener("pointermove", onMove);
+      el.removeEventListener("pointermove", onMove);
+      el.removeEventListener("pointerleave", onLeave);
       if (raf) cancelAnimationFrame(raf);
     };
   }, []);
 
-  // the jump: dive toward the star (css zoom on the plane, the headline
-  // column fades), then navigate with the "warp" transition type so the
-  // route change itself plays the warp-out/warp-in view transition. the
-  // calculation time of /r/ hides inside the travel.
+  // the jump: dive toward the star while ROTATING the galaxy around it and
+  // undoing the isometric squash, so the system->core line lands exactly
+  // horizontal (core to the right) on the dive's last frame: the same
+  // geometry the /r/ chart opens with. the route change then rides the
+  // "warp" view transition, and the navigation fires on animationend so
+  // the old-page snapshot IS that aligned final frame (match cut).
   const warpTo = (repo: string, point: { x: number; y: number } | null) => {
     if (warping.current) return;
     const el = planeRef.current;
     const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const push = () => router.push(`/r/${repo}`, { transitionTypes: ["warp"] });
     if (!el || !point || reduced) {
-      router.push(`/r/${repo}`, { transitionTypes: ["warp"] });
+      push();
       return;
     }
     warping.current = true;
+    const isCore = point.x === GX_CORE_X && point.y === GX_CORE_Y;
+    const rot = isCore
+      ? 0
+      : Math.max(-75, Math.min(75, galaxyAngle(point.x, point.y) - 180));
+    el.style.willChange = "transform";
     el.style.setProperty("--gx-ox", `${((point.x / GX_W) * 100).toFixed(2)}%`);
     el.style.setProperty("--gx-oy", `${((point.y / GX_H) * 100).toFixed(2)}%`);
+    el.style.setProperty("--gx-rot", `${rot.toFixed(2)}deg`);
+    let done = false;
+    const fire = () => {
+      if (done) return;
+      done = true;
+      push();
+    };
+    el.addEventListener(
+      "animationend",
+      (e) => {
+        if (e.animationName === "gx-dive") fire();
+      },
+      { once: true },
+    );
+    // safety net: if the dive animation never runs, still navigate
+    window.setTimeout(fire, 1100);
     document.body.classList.add("gx-warping");
-    window.setTimeout(() => {
-      router.push(`/r/${repo}`, { transitionTypes: ["warp"] });
-    }, WARP_MS);
   };
 
   // landing search picks ride the same jump: project the repo's REAL
@@ -179,6 +219,12 @@ export default function GalaxyHero({ data }: { data: GalaxyData }) {
                 // node list is static, so react never fights this)
                 const el = e.currentTarget;
                 el.parentNode?.appendChild(el);
+                // hover is intent: prefetch /r/ now so the warp's travel
+                // time covers the render, not the network
+                if (!prefetched.current.has(n.r)) {
+                  prefetched.current.add(n.r);
+                  router.prefetch(`/r/${n.r}`);
+                }
               }}
             >
               <circle cx={n.x} cy={n.y} r={13} fill="transparent" />
@@ -191,13 +237,26 @@ export default function GalaxyHero({ data }: { data: GalaxyData }) {
                   style={{ "--d": `${(i % 7) * 0.45}s` } as React.CSSProperties}
                 />
               ) : null}
+              {n.me ? (
+                // the house mission's quiet signature: the only system that
+                // wears a steady gold ring
+                <circle className="ghx-me-ring" cx={n.x} cy={n.y} r={n.size + 3.5} />
+              ) : null}
               <circle
                 className="ghx-dot"
                 cx={n.x}
                 cy={n.y}
                 r={n.size}
-                fill={n.hot ? "var(--warn)" : n.anchor ? "var(--star-white)" : "var(--accent)"}
-                opacity={0.62 + (1 - n.depth) * 0.33}
+                fill={
+                  n.me
+                    ? "var(--star-white)"
+                    : n.hot
+                      ? "var(--warn)"
+                      : n.anchor
+                        ? "var(--star-white)"
+                        : "var(--accent)"
+                }
+                opacity={n.me ? 1 : 0.62 + (1 - n.depth) * 0.33}
               />
               {n.anchor ? (
                 <text
@@ -222,25 +281,33 @@ export default function GalaxyHero({ data }: { data: GalaxyData }) {
           ))}
         </svg>
 
-        {/* the core: rank #1, the destination of every mission */}
-        <a
-          href={`/r/${data.core.r}`}
-          className="ghx-core"
-          onClick={(e) => go(e, data.core.r, { x: GX_CORE_X, y: GX_CORE_Y })}
-          aria-label={`The core: ${data.core.r}, rank 1`}
-          style={{
-            left: `${((GX_CORE_X / GX_W) * 100).toFixed(2)}%`,
-            top: `${((GX_CORE_Y / GX_H) * 100).toFixed(2)}%`,
-          }}
-        >
-          <span className="ghx-core-glow" aria-hidden />
-          <span className="ghx-core-label numeral">
-            THE CORE ◆ {data.core.label}
-            <br />
-            <span className="ghx-core-tip">{data.core.tip}</span>
-          </span>
-        </a>
+        {/* the core: rank #1, the destination of every mission (wrapped in
+            its own layer so it rides the near zoom with the systems) */}
+        <div className="ghx-layer ghx-zlnear">
+          <a
+            href={`/r/${data.core.r}`}
+            className="ghx-core"
+            onClick={(e) => go(e, data.core.r, { x: GX_CORE_X, y: GX_CORE_Y })}
+            aria-label={`The core: ${data.core.r}, rank 1`}
+            style={{
+              left: `${((GX_CORE_X / GX_W) * 100).toFixed(2)}%`,
+              top: `${((GX_CORE_Y / GX_H) * 100).toFixed(2)}%`,
+            }}
+          >
+            <span className="ghx-core-glow" aria-hidden />
+            <span className="ghx-core-label numeral">
+              THE CORE ◆ {data.core.label}
+              <br />
+              <span className="ghx-core-tip">{data.core.tip}</span>
+            </span>
+          </a>
+        </div>
       </div>
+
+      {/* motion-blur veil for the dive: a fixed backdrop-filter whose
+          OPACITY animates (animating filter blur over ~1000 svg nodes
+          re-rasters every frame; this stays on the compositor) */}
+      <div className="ghx-warpveil" aria-hidden />
 
       {/* scrims keep the headline legible without dimming the core side */}
       <div className="ghx-scrim" aria-hidden />

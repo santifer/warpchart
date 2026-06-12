@@ -30,6 +30,7 @@ export type GalaxyNode = {
   size: number;
   hot: boolean; // fast mover today
   anchor: boolean; // famous head-of-ranking system with a permanent label
+  me: boolean; // the house mission: subtly set apart among the anchors
   label: string; // short name
   tip: string; // hover readout: rank, stars, velocity
 };
@@ -113,8 +114,19 @@ export function ringPoint(radius: number, deg: number): { x: number; y: number }
   };
 }
 
+// a system's TRUE galactic angle (squash undone), degrees in [0, 360).
+// the warp dive rotates the galaxy by (angle - 180) while unsquashing, so
+// the system->core line lands exactly horizontal, core to the right: the
+// same geometry the /r/ chart opens with (match cut)
+export function galaxyAngle(x: number, y: number): number {
+  const deg =
+    (Math.atan2((GX_CORE_Y - y) / GX_SQUASH, x - GX_CORE_X) * 180) / Math.PI;
+  return (deg + 360) % 360;
+}
+
 export function buildGalaxy(
   repos: { r: string; s: number; v?: number | null }[],
+  homeRepo?: string | null,
 ): GalaxyData {
   const core = repos[0];
   const floor = repos[repos.length - 1];
@@ -174,6 +186,7 @@ export function buildGalaxy(
       size: Math.round((2.1 + (1 - q.depth) * 1.9 + (hot ? 0.6 : 0)) * 10) / 10,
       hot,
       anchor: false,
+      me: false,
       label: p.r.split("/")[1] ?? p.r,
       tip:
         `#${rank} · ${fmtCompact(p.s)} ★` +
@@ -182,14 +195,45 @@ export function buildGalaxy(
   };
   for (const p of head) tryAccept(p);
   for (const p of repos) if (hotSet.has(p.r)) tryAccept(p);
+  // the house mission always makes the map (bypassing the spacing check),
+  // marked so the hero can set it apart with its own quiet signature
+  const home = homeRepo
+    ? repos.find((p) => p.r.toLowerCase() === homeRepo.toLowerCase())
+    : null;
+  if (home && home.r !== core.r) {
+    const had = nodes.length;
+    tryAccept(home);
+    let mine = nodes.find((n) => n.r === home.r);
+    if (!mine && had === nodes.length) {
+      const q = proj(home);
+      mine = {
+        r: home.r,
+        rank: rankOf.get(home.r) ?? 0,
+        x: Math.round(q.x * 10) / 10,
+        y: Math.round(q.y * 10) / 10,
+        depth: Math.round(q.depth * 100) / 100,
+        size: Math.round((2.1 + (1 - q.depth) * 1.9) * 10) / 10,
+        hot: false,
+        anchor: false,
+        me: false,
+        label: home.r.split("/")[1] ?? home.r,
+        tip: `#${rankOf.get(home.r) ?? 0} · ${fmtCompact(home.s)} ★`,
+      };
+      nodes.push(mine);
+    }
+    if (mine) {
+      mine.me = true;
+      mine.anchor = true;
+    }
+  }
   for (const p of sweep) tryAccept(p);
 
   // permanent labels: best-ranked accepted systems anywhere in the fan
   // (the head alone piles into a 200px box by the core, so labels must
   // come from the whole arc); hot movers already announce themselves
-  const anchored: GalaxyNode[] = [];
+  const anchored: GalaxyNode[] = nodes.filter((n) => n.me);
   for (const n of [...nodes].sort((a, b) => a.rank - b.rank)) {
-    if (n.hot || anchored.length >= 8) continue;
+    if (n.hot || n.me || anchored.length >= 8) continue;
     // the strip right under the core belongs to the core's own label
     if (n.y < 170 && n.x > 1080) continue;
     if (anchored.every((a) => (a.x - n.x) ** 2 + (a.y - n.y) ** 2 > 72 * 72)) {

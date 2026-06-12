@@ -9,7 +9,7 @@ import EmbedGenerator from "@/components/EmbedGenerator";
 import GalaxyHero from "@/components/GalaxyHero";
 import SpaceBackdrop from "@/components/SpaceBackdrop";
 import Masthead from "@/components/Masthead";
-import GalacticChart from "@/components/GalacticChart";
+import SpotlightChart from "@/components/SpotlightChart";
 import VerticalChart from "@/components/VerticalChart";
 import { buildDemoSpotlight } from "@/lib/demo";
 import { buildGalaxy } from "@/lib/galaxy";
@@ -37,9 +37,13 @@ export default async function Explore() {
     .filter((i) => i < catalog.length)
     .map((i) => catalog[i]);
 
-  // hero galaxy: the whole top 1000 projected onto the isometric star map
+  // hero galaxy: the whole top 1000 projected onto the isometric star map;
+  // the house mission rides along with its own quiet signature
   const galaxy = route?.repos?.length
-    ? buildGalaxy(route.repos.map((p) => ({ r: p.r, s: p.s, v: p.v ?? null })))
+    ? buildGalaxy(
+        route.repos.map((p) => ({ r: p.r, s: p.s, v: p.v ?? null })),
+        meta?.repo ?? null,
+      )
     : null;
 
   // landing teaser for the velocity rankings: today's three fastest movers
@@ -67,21 +71,25 @@ export default async function Explore() {
       >
         <div className="relative h-[560px] sm:h-[640px]">
           {galaxy ? <GalaxyHero data={galaxy} /> : null}
-          <div className="gx-hero-copy pointer-events-none relative z-10 mx-auto flex h-full max-w-[1840px] flex-col items-center justify-center gap-7 px-4 text-center sm:px-10 lg:items-start lg:text-left 2xl:px-16">
-            <h1 className="glow-star font-display pointer-events-auto max-w-[900px] text-[clamp(1.9rem,3.5vw,3rem)] leading-[1.14] tracking-[0.05em] text-star">
-              GROWTH TELEMETRY
-              <br className="hidden sm:block" /> FOR ANY GITHUB REPO
-            </h1>
-            <p className="pointer-events-auto max-w-[600px] text-lg font-light leading-relaxed text-dim">
-              Live star chart, worldwide rank, neighbors with relative velocity, and the route
-              to the number one repository on Earth. Pick a system.
-            </p>
-            <div className="pointer-events-auto w-full max-w-[640px]">
-              <ExploreSearch catalog={catalog} />
+          <div className="gx-hero-copy pointer-events-none relative z-10 mx-auto flex h-full max-w-[1840px] flex-col items-center justify-center px-4 sm:px-10 lg:items-start 2xl:px-16">
+            {/* one solid block: it owns the pointer over the whole copy
+                column, so the galaxy's hover zoom only lives on the map */}
+            <div className="pointer-events-auto flex w-fit flex-col items-center gap-7 text-center lg:items-start lg:text-left">
+              <h1 className="glow-star font-display max-w-[900px] text-[clamp(1.9rem,3.5vw,3rem)] leading-[1.14] tracking-[0.05em] text-star">
+                GROWTH TELEMETRY
+                <br className="hidden sm:block" /> FOR ANY GITHUB REPO
+              </h1>
+              <p className="max-w-[600px] text-lg font-light leading-relaxed text-dim">
+                Live star chart, worldwide rank, neighbors with relative velocity, and the
+                route to the number one repository on Earth. Pick a system.
+              </p>
+              <div className="w-full max-w-[640px]">
+                <ExploreSearch catalog={catalog} />
+              </div>
+              <p className="numeral text-label tracking-[0.18em] text-faint">
+                free · no signup · open source (mit) · self-host in 5 minutes
+              </p>
             </div>
-            <p className="pointer-events-auto numeral text-label tracking-[0.18em] text-faint">
-              free · no signup · open source (mit) · self-host in 5 minutes
-            </p>
           </div>
         </div>
       </section>
@@ -107,7 +115,7 @@ export default async function Explore() {
           <div className="border-y border-grid bg-hull/30 py-2 sm:py-3">
             <div className="mx-auto max-w-[2200px] px-2 sm:px-6">
               <div className="hidden lg:block">
-                <GalacticChart inputs={spotlight.inputs} />
+                <SpotlightChart inputs={spotlight.inputs} />
               </div>
               <div className="lg:hidden">
                 <VerticalChart inputs={spotlight.inputs} />

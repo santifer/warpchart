@@ -91,6 +91,7 @@ export default function GalacticChart({
   liveLocals = false,
   deck = false,
   deckW,
+  fitW,
 }: {
   inputs: ChartInputs;
   target?: string | null;
@@ -106,11 +107,19 @@ export default function GalacticChart({
   // ultrawide monitors get MORE MAP (wider scale, more label room) instead
   // of dead side bands. ViewBox units ~= screen pixels at deck scale.
   deckW?: number;
+  // Same idea for wide inline showcases (landing spotlight): the measured
+  // container width becomes the canvas width, so type stays at design size
+  // and wide monitors get more map instead of giant letters.
+  fitW?: number;
 }) {
   // The deck trades the panel's fixed aspect for the screen's real room:
   // labels get two extra tiers, the local band breathes, and type stays at
   // UI size (the canvas matches the screen, so 1 unit ~= 1px).
-  const W = deck ? Math.min(Math.max(Math.round(deckW ?? 1680), 1200), 2600) : BASE_W;
+  const W = deck
+    ? Math.min(Math.max(Math.round(deckW ?? 1680), 1200), 2600)
+    : fitW
+      ? Math.min(Math.max(Math.round(fitW), 1200), 2400)
+      : BASE_W;
   const H = deck ? 740 : BASE_H;
   const BAND_A_Y = deck ? 300 : BASE_BAND_A_Y;
   const CLIP_BOTTOM = deck ? 556 : BASE_CLIP_BOTTOM;

@@ -8,9 +8,11 @@ import Masthead from "@/components/Masthead";
 import SpaceBackdrop from "@/components/SpaceBackdrop";
 import VelocityBoard, { type LaneRepo, type HuntRow } from "@/components/VelocityBoard";
 import { loadRoute, loadCollisions, loadMeta } from "@/lib/history";
-import { fmtCompact } from "@/lib/format";
+import { fmtCompact, fmtEtaDays } from "@/lib/format";
 
-export const revalidate = 3600;
+// 15 min: the data file is daily, but ETAs age in render time, so rebuilds
+// must outpace the shortest hunts (zero API cost, this page only reads fs)
+export const revalidate = 900;
 
 export const metadata: Metadata = {
   title: "Velocity rankings · fastest growing repos of the GitHub top 1000 · Warpchart",
@@ -27,11 +29,21 @@ export default function VelocityPage() {
   const ranked = (route?.repos ?? []).map((p, i) => ({ ...p, rank: i + 1 }));
   const withV = ranked.filter((p) => p.v != null && p.v > 0);
 
+  // the scan runs once per daily route refresh, but this page rebuilds
+  // hourly: age every ETA by the time elapsed since the scan and drop
+  // hunts whose deadline already passed (otherwise a 4-hour overtake
+  // would still read "next" twenty hours after it happened)
+  const scannedMs = collisions?.generated_at ? new Date(collisions.generated_at).getTime() : 0;
+  const elapsedDays = scannedMs ? (Date.now() - scannedMs) / 864e5 : 0;
+  const live = (collisions?.collisions ?? [])
+    .map((c) => ({ ...c, leftDays: c.etaDays - elapsedDays }))
+    .filter((c) => c.leftDays > 0);
+
   // an active hunt per hunter, for the row context line
   const huntByHunter = new Map<string, { victim: string; eta: string }>();
-  for (const c of collisions?.collisions ?? []) {
-    if (!huntByHunter.has(c.hunter.r) && c.etaDays <= 7) {
-      huntByHunter.set(c.hunter.r, { victim: c.victim.r, eta: c.eta });
+  for (const c of live) {
+    if (!huntByHunter.has(c.hunter.r) && c.leftDays <= 7) {
+      huntByHunter.set(c.hunter.r, { victim: c.victim.r, eta: fmtEtaDays(c.leftDays) });
     }
   }
 
@@ -54,9 +66,9 @@ export default function VelocityPage() {
   const vs = withV.map((p) => p.v!).sort((a, b) => a - b);
   const medianV = vs.length ? vs[Math.floor(vs.length / 2)] : 1;
 
-  const hunts: HuntRow[] = (collisions?.collisions ?? [])
-    .filter((c) => c.etaDays <= 7)
-    .sort((a, b) => a.etaDays - b.etaDays)
+  const hunts: HuntRow[] = live
+    .filter((c) => c.leftDays <= 7)
+    .sort((a, b) => a.leftDays - b.leftDays)
     .slice(0, 25)
     .map((c) => ({
       hunter: c.hunter.r,
@@ -64,8 +76,8 @@ export default function VelocityPage() {
       hunterV: c.hunter.v,
       victimRank: c.victim.rank,
       gap: c.gap,
-      eta: c.eta,
-      etaDays: c.etaDays,
+      eta: fmtEtaDays(c.leftDays),
+      etaDays: c.leftDays,
       angles: c.angles,
     }));
 
