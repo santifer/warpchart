@@ -269,6 +269,37 @@ export default function GalacticChart({
     warpTimer.current = window.setTimeout(() => setWarpZone(null), 200);
   };
 
+  // Fly the window back to the default view: an eased ~0.9s journey in log
+  // space with the warp armed the whole way, so coming home FEELS like
+  // travel (streaking stars, doppler tint) instead of a teleport.
+  const flyingHome = useRef(false);
+  const flyHome = () => {
+    const from = view;
+    if (!from || flyingHome.current) return;
+    flyingHome.current = true;
+    const g = geom.current;
+    const to = { lo: g.defLo, hi: g.defHi };
+    setWarpDir(to.lo < from.lo ? -1 : 1); // heading back = redshift tint
+    sound.warpPan(0);
+    const t0 = performance.now();
+    const DUR = 900;
+    const lerpLog = (a: number, b: number, k: number) =>
+      Math.exp(Math.log(Math.max(a, 1)) + (Math.log(Math.max(b, 1)) - Math.log(Math.max(a, 1))) * k);
+    const step = (t: number) => {
+      const k = Math.min(1, (t - t0) / DUR);
+      const e = 1 - Math.pow(1 - k, 3);
+      if (k < 1) {
+        armWarp("local");
+        setView({ lo: lerpLog(from.lo, to.lo, e), hi: lerpLog(from.hi, to.hi, e) });
+        requestAnimationFrame(step);
+      } else {
+        setView(null);
+        flyingHome.current = false;
+      }
+    };
+    requestAnimationFrame(step);
+  };
+
   // ---------- geometry ----------
   const ahead = etas.filter((n) => n.gap > 0).sort((a, b) => a.gap - b.gap).slice(0, 10);
   const behind = etas.filter((n) => n.gap <= 0).sort((a, b) => b.gap - a.gap).slice(0, 3);
@@ -714,17 +745,31 @@ export default function GalacticChart({
               </g>
             ))}
 
-            {panHint ? (
+            {panHint && inWindow(stars) ? (
               <g className="pan-hint">
-                <text x={W - 64} y={BAND_A_Y + 4} textAnchor="end" fontSize={11.5}
+                <text x={W - 76} y={CLIP_BOTTOM - 16} textAnchor="end" fontSize={11.5}
                   fill={C.accent} letterSpacing={2} className="numeral" opacity={0.9}>
                   PAN
                 </text>
                 <g className="pan-hint-arrows">
-                  <text x={W - 56} y={BAND_A_Y + 4.5} fontSize={14} fill={C.accent}>
+                  <text x={W - 68} y={CLIP_BOTTOM - 15.5} fontSize={14} fill={C.accent}>
                     ›››
                   </text>
                 </g>
+              </g>
+            ) : null}
+
+            {/* far from home: a white compass in the same lower-right slot
+                the PAN hint uses (they never coexist). The chevrons point
+                wherever home went; clicking flies the window back with the
+                full warp smear instead of teleporting. */}
+            {view !== null && !inWindow(stars) ? (
+              <g onClick={flyHome} style={{ cursor: "pointer" }}>
+                <rect x={W - 180} y={CLIP_BOTTOM - 34} width={160} height={28} fill="transparent" />
+                <text x={W - 40} y={CLIP_BOTTOM - 16} textAnchor="end" fontSize={12} fill={C.white}
+                  letterSpacing={2} className="numeral" opacity={0.95}>
+                  {stars < view.lo ? "‹‹‹ CENTER" : "CENTER ›››"}
+                </text>
               </g>
             ) : null}
 
