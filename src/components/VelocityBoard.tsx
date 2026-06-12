@@ -173,7 +173,7 @@ export default function VelocityBoard({
             </Link>
           ))}
           <p className="numeral px-2 py-2 text-micro text-faint">
-            watch any of them live: the orange ship on the victim&apos;s chart is the hunter
+            watch any of them live: the orange system on the victim&apos;s chart is the hunter
           </p>
         </div>
       )}

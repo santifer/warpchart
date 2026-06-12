@@ -5,11 +5,13 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import ExploreSearch, { type CatalogEntry } from "@/components/ExploreSearch";
 import EmbedGenerator from "@/components/EmbedGenerator";
+import GalaxyHero from "@/components/GalaxyHero";
 import SpaceBackdrop from "@/components/SpaceBackdrop";
 import Masthead from "@/components/Masthead";
 import GalacticChart from "@/components/GalacticChart";
 import VerticalChart from "@/components/VerticalChart";
 import { buildDemoSpotlight } from "@/lib/demo";
+import { buildGalaxy } from "@/lib/galaxy";
 import { loadRoute, loadMeta } from "@/lib/history";
 import { fmtCompact } from "@/lib/format";
 
@@ -34,6 +36,11 @@ export default async function Explore() {
     .filter((i) => i < catalog.length)
     .map((i) => catalog[i]);
 
+  // hero galaxy: the whole top 1000 projected onto the isometric star map
+  const galaxy = route?.repos?.length
+    ? buildGalaxy(route.repos.map((p) => ({ r: p.r, s: p.s, v: p.v ?? null })))
+    : null;
+
   // landing teaser for the velocity rankings: today's three fastest movers
   const fastest = (route?.repos ?? [])
     .map((p, i) => ({ r: p.r, v: p.v ?? null, rank: i + 1 }))
@@ -48,27 +55,31 @@ export default async function Explore() {
         <Masthead demo={meta?.repo ?? null} />
       </header>
 
-      <section className="rise relative flex flex-col items-center gap-7 pb-4 pt-12 text-center sm:pt-16" style={{ animationDelay: "80ms" }}>
-        {/* soft nebula behind the hero */}
-        <div
-          aria-hidden
-          className="pointer-events-none absolute left-1/2 top-0 -z-10 h-[480px] w-[900px] -translate-x-1/2 opacity-60"
-          style={{ background: "radial-gradient(ellipse 50% 45% at 50% 38%, var(--accent-soft), transparent 70%)" }}
-        />
-        <h1 className="glow-star font-display max-w-[980px] text-[clamp(2.3rem,4.8vw,3.8rem)] leading-[1.12] tracking-[0.05em] text-star">
-          GROWTH TELEMETRY
-          <br className="hidden sm:block" /> FOR ANY GITHUB REPO
-        </h1>
-        <p className="max-w-[660px] text-lg font-light leading-relaxed text-dim">
-          Live star chart, worldwide rank, neighbors with relative velocity, and the route to
-          the number one repository on Earth. Pick a ship.
-        </p>
-        <div className="w-full max-w-[720px]">
-          <ExploreSearch catalog={catalog} />
+      {/* hero: the real top 1000 as a partially isometric galaxy, core in
+          the top-right corner, headline column on the left */}
+      <section
+        className="rise relative left-1/2 w-screen -translate-x-1/2 overflow-hidden"
+        style={{ animationDelay: "80ms" }}
+      >
+        <div className="relative h-[560px] sm:h-[640px]">
+          {galaxy ? <GalaxyHero data={galaxy} /> : null}
+          <div className="pointer-events-none relative z-10 mx-auto flex h-full max-w-[1840px] flex-col items-center justify-center gap-7 px-4 text-center sm:px-10 lg:items-start lg:text-left 2xl:px-16">
+            <h1 className="glow-star font-display pointer-events-auto max-w-[900px] text-[clamp(1.9rem,3.5vw,3rem)] leading-[1.14] tracking-[0.05em] text-star">
+              GROWTH TELEMETRY
+              <br className="hidden sm:block" /> FOR ANY GITHUB REPO
+            </h1>
+            <p className="pointer-events-auto max-w-[600px] text-lg font-light leading-relaxed text-dim">
+              Live star chart, worldwide rank, neighbors with relative velocity, and the route
+              to the number one repository on Earth. Pick a system.
+            </p>
+            <div className="pointer-events-auto w-full max-w-[640px]">
+              <ExploreSearch catalog={catalog} />
+            </div>
+            <p className="pointer-events-auto numeral text-label tracking-[0.18em] text-faint">
+              free · no signup · open source (mit) · self-host in 5 minutes
+            </p>
+          </div>
         </div>
-        <p className="numeral text-label tracking-[0.18em] text-faint">
-          free · no signup · open source (mit) · self-host in 5 minutes
-        </p>
       </section>
 
       {spotlight ? (
@@ -84,7 +95,7 @@ export default async function Explore() {
               <span className="text-dim">· #{spotlight.rank} worldwide</span>
             </h2>
             <span className="numeral text-micro text-faint">
-              random pick from the top 1000 · rotates daily · pan it, hover the ships
+              random pick from the top 1000 · rotates daily · pan it, hover the systems
             </span>
           </div>
           {/* the space itself runs edge to edge (the page backdrop's stars
@@ -117,7 +128,7 @@ export default async function Explore() {
           style={{ animationDelay: "140ms" }}
         >
           <span className="numeral text-label tracking-[0.18em] text-dim">
-            FASTEST SHIPS TODAY ·{" "}
+            FASTEST SYSTEMS TODAY ·{" "}
             {fastest.map((f, i) => (
               <span key={f.r}>
                 {i > 0 ? " · " : ""}
