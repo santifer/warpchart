@@ -133,7 +133,28 @@ try {
 if (routeRefreshed && !dryRun) {
   try {
     const { runCollisionScan } = await import("./collisions.mjs");
-    await runCollisionScan();
+    const scan = await runCollisionScan();
+    // pre-warm the day's top stories: when the overtake tweet goes out,
+    // both the victim's page (where the hunter shows orange) and its
+    // curve/embed are already hot for the crowd
+    const base = (process.env.WARM_BASE_URL ?? "").replace(/\/$/, "");
+    if (base && scan?.collisions?.length) {
+      const targets = new Set();
+      for (const c of scan.collisions.slice(0, 3)) {
+        targets.add(c.victim.r);
+        targets.add(c.hunter.r);
+      }
+      for (const r of targets) {
+        const q = encodeURIComponent(r);
+        for (const path of [`/r/${r}`, `/api/curve?repo=${q}`, `/api/chart?repo=${q}`]) {
+          try {
+            await fetch(`${base}${path}`);
+          } catch { /* best effort */ }
+          await new Promise((ok) => setTimeout(ok, 1500));
+        }
+      }
+      console.log(`[collect] collision stories warmed: ${targets.size} repos`);
+    }
   } catch (err) {
     console.error(`[collect] collision scan failed: ${err.message}`);
   }

@@ -4,7 +4,7 @@
 //   - deep space -> ~5 calls (meta, rank, 2 searches, velocities)
 // Pages are ISR-cached, so cost stays flat regardless of traffic.
 import { loadRoute, loadMeta, lastSnapshot } from "./history";
-import { repoLite, worldwideRank, searchNeighbors, neighborsVelocity } from "./github";
+import { repoLite, worldwideRank, searchNeighbors, neighborsVelocity, lowFuel } from "./github";
 import { reqLog } from "./log";
 import { nextMilestones } from "./milestones";
 import { buildRouteLayers, forkRatioPercentile } from "./bundle";
@@ -59,6 +59,13 @@ export async function getExplorerData(owner: string, name: string): Promise<Expl
       ...ranked.slice(Math.max(0, idx - 15), idx).map((p) => p.r).reverse(), // ahead, nearest first
     ];
   } else {
+    // LOW FUEL: a deep-space scan costs ~5 calls including the scarce
+    // search budget; when every token is nearly dry, defer instead of
+    // burning the reserve the hot pages depend on
+    if (lowFuel()) {
+      log.warn("deep-space.deferred", { reason: "low fuel" });
+      throw new Error("high traffic: deep-space scans paused, retry in a few minutes");
+    }
     const lite = await repoLite(owner, name);
     repoName = lite.nameWithOwner;
     stars = lite.stargazerCount;
@@ -76,6 +83,9 @@ export async function getExplorerData(owner: string, name: string): Promise<Expl
   let v7d = 0;
   let degraded = false;
   try {
+    // low fuel: skip straight to the registry fallback instead of burning
+    // 4-5 GraphQL calls on a page the route data can still draw
+    if (lowFuel() && inTop1000) throw new Error("low fuel: serving registry data");
     const vel = await neighborsVelocity([repoName, ...neighborNames]);
     const self = vel.find((v) => v.r.toLowerCase() === repoName.toLowerCase());
     neighbors = vel.filter((v) => v.r.toLowerCase() !== repoName.toLowerCase());

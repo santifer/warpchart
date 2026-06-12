@@ -11,6 +11,8 @@ const nextConfig: NextConfig = {
     "/api/og": ["./data/**"],
     "/api/chart": ["./data/**"],
     "/api/curve": ["./data/**"],
+    "/api/search": ["./data/**"],
+    "/api/health": ["./data/**"],
     "/feed.xml": ["./data/**"],
     "/hq": ["./data/**"],
     "/r/*": ["./data/**"],

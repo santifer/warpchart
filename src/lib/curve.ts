@@ -3,7 +3,7 @@
 // visit warms the embed and vice versa.
 import { unstable_cache } from "next/cache";
 import { loadTimestamps, loadMeta, lastSnapshot } from "@/lib/history";
-import { repoBasic, stargazerPageFirst } from "@/lib/github";
+import { repoBasic, stargazerPageFirst, lowFuel } from "@/lib/github";
 import { reqLog } from "@/lib/log";
 
 export interface Curve {
@@ -24,22 +24,33 @@ export interface Curve {
 // repos (GitHub suppresses public WatchEvents in bursts, verified jun-26:
 // career-ops 8K archived vs 52K real), so callers MUST validate coverage
 // before trusting it.
-async function fetchArchiveMonthly(
-  repoId: number
-): Promise<{ t: number; total: number }[] | null> {
+async function fetchArchiveMonthlyRaw(repoId: number): Promise<{ t: number; total: number }[]> {
+  const res = await fetch(
+    `https://api.ossinsight.io/q/analyze-stars-history?repoId=${repoId}`,
+    { headers: { "User-Agent": "warpchart" }, signal: AbortSignal.timeout(15_000) }
+  );
+  if (!res.ok) throw new Error(`ossinsight ${res.status}`);
+  const body = (await res.json()) as { data?: { event_month: string; total: number }[] };
+  const rows = body.data ?? [];
+  // throwing keeps failures and empty answers OUT of the 30-day cache, so
+  // they retry on the next curve rebuild instead of sticking for a month
+  if (!rows.length) throw new Error("ossinsight empty");
+  return rows
+    .map((r) => ({ t: Date.parse(r.event_month), total: r.total }))
+    .filter((r) => Number.isFinite(r.t))
+    .sort((a, b) => a.t - b.t);
+}
+
+// Monthly archive history is immutable (only the current month moves, and
+// the both-ends normalization absorbs that), so cache it for 30 days: one
+// third-party call per repo per month instead of one per curve rebuild,
+// and an OSS Insight outage stops mattering for already-seen repos.
+async function fetchArchiveMonthly(repoId: number): Promise<{ t: number; total: number }[] | null> {
   try {
-    const res = await fetch(
-      `https://api.ossinsight.io/q/analyze-stars-history?repoId=${repoId}`,
-      { headers: { "User-Agent": "warpchart" } }
-    );
-    if (!res.ok) return null;
-    const body = (await res.json()) as { data?: { event_month: string; total: number }[] };
-    const rows = body.data ?? [];
-    if (!rows.length) return null;
-    return rows
-      .map((r) => ({ t: Date.parse(r.event_month), total: r.total }))
-      .filter((r) => Number.isFinite(r.t))
-      .sort((a, b) => a.t - b.t);
+    return await unstable_cache(fetchArchiveMonthlyRaw, ["archive-monthly-v1"], {
+      revalidate: 30 * 86_400,
+      tags: [`archive:${repoId}`],
+    })(repoId);
   } catch {
     return null;
   }
@@ -49,6 +60,9 @@ async function fetchArchiveMonthly(
 // reconstruction star-history uses (they hide the estimated stretch; we
 // label it). 24 samples give the interactive chart a decent shape.
 async function sampleCurve(owner: string, name: string): Promise<Curve> {
+  // a cold curve costs ~24 REST calls; when the fuel is nearly gone the
+  // edge keeps serving stale copies and cold repos wait for the reset
+  if (lowFuel()) throw new Error("high traffic: curve sampling paused, retry in a few minutes");
   const basic = await repoBasic(owner, name);
   const reachable = Math.min(basic.s, 40_000);
   const totalPages = Math.max(1, Math.ceil(reachable / 100));
@@ -146,6 +160,7 @@ export function cachedSampleCurve(owner: string, name: string): Promise<Curve> {
 // (expensive to rebuild), but the header counter and the endpoint always
 // match GitHub right now, at the cost of one REST call per edge-cache miss.
 export async function withLiveTotal(curve: Curve, owner: string, name: string): Promise<Curve> {
+  if (lowFuel()) return curve; // cached totals are fine when fuel is short
   try {
     const basic = await repoBasic(owner, name);
     const pts = [...curve.pts];

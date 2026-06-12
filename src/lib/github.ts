@@ -1,15 +1,14 @@
 // Live GitHub helpers for the API routes. Single-attempt (serverless time
 // budget); the client treats failures as transient and keeps polling.
+// Auth comes from the token pool (GitHub App budget + PAT failover) and
+// every response feeds the pool's rate-limit accounting.
 import { reqLog, serializeError } from "@/lib/log";
+import { pickAuth, noteRateLimit, lowFuel } from "@/lib/ghauth";
+
+export { lowFuel };
 
 const API = "https://api.github.com";
 const ghlog = reqLog("github");
-
-function token(): string {
-  const t = process.env.GITHUB_TOKEN || process.env.GH_TOKEN;
-  if (!t) throw new Error("Missing GITHUB_TOKEN env var");
-  return t;
-}
 
 // GitHub returns transient 502s now and then; retry briefly (the budget is
 // fine: these routes are ISR/edge-cached, not user-blocking). Every attempt
@@ -23,13 +22,14 @@ async function ghFetch<T>(
   const timeoutMs = init?.timeoutMs ?? 12_000;
   for (let attempt = 0; ; attempt++) {
     let res: Response | null = null;
+    const auth = await pickAuth();
     try {
       res = await fetch(API + path, {
         method: init?.method ?? "GET",
         body: init?.body ? JSON.stringify(init.body) : undefined,
         signal: AbortSignal.timeout(timeoutMs),
         headers: {
-          Authorization: `Bearer ${token()}`,
+          Authorization: `Bearer ${auth.token}`,
           Accept: init?.accept ?? "application/vnd.github+json",
           "User-Agent": "mission-control",
           ...(init?.body ? { "Content-Type": "application/json" } : {}),
@@ -41,12 +41,17 @@ async function ghFetch<T>(
     } catch (err) {
       if (attempt >= delays.length) throw err;
     }
-    if (res?.ok) {
+    if (res) {
       const remaining = Number(res.headers.get("x-ratelimit-remaining") ?? NaN);
-      if (remaining < 300) {
-        ghlog.warn("ratelimit.low", { path: path.slice(0, 80), remaining,
-          reset: res.headers.get("x-ratelimit-reset") });
+      const reset = Number(res.headers.get("x-ratelimit-reset") ?? NaN);
+      if (Number.isFinite(remaining) && Number.isFinite(reset)) {
+        noteRateLimit(auth.source, remaining, reset);
+        if (remaining < 300) {
+          ghlog.warn("ratelimit.low", { path: path.slice(0, 80), source: auth.source, remaining, reset });
+        }
       }
+    }
+    if (res?.ok) {
       return res.json() as Promise<T>;
     }
     const retriable = !res || res.status >= 500;
