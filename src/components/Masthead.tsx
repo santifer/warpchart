@@ -15,6 +15,13 @@ export default function Masthead({ demo }: { demo?: string | null }) {
         WARPCHART
       </Link>
       <div className="flex flex-wrap items-center gap-x-4">
+        <Link
+          prefetch={false}
+          href="/velocity"
+          className="numeral text-micro tracking-[0.2em] text-dim transition-colors hover:text-accent"
+        >
+          VELOCITY
+        </Link>
         <SoundToggle />
         <ThemeToggle />
         {demo ? (

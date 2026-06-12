@@ -26,7 +26,24 @@ export interface RouteRepo {
 
 export interface RouteFile {
   generated_at: string;
-  repos: { r: string; s: number; d?: string | null; l?: string | null; f?: number }[];
+  repos: { r: string; s: number; d?: string | null; l?: string | null; f?: number; v?: number | null }[];
+}
+
+// data/collisions.json, written daily by the collector's collision scanner.
+export interface CollisionsFile {
+  generated_at: string;
+  baseline: { from: string; to: string; days: number };
+  collisions: {
+    hunter: { r: string; s: number; v: number; l: string | null; rank: number; age?: string | null; x?: string | null };
+    victim: { r: string; s: number; v: number; l: string | null; rank: number; age?: string | null; x?: string | null };
+    gap: number;
+    etaDays: number;
+    eta: string;
+    sameLang: boolean;
+    score: number;
+    angles: string[];
+  }[];
+  entrants: { r: string; s: number; rank: number }[];
 }
 
 export interface SpikeCause {

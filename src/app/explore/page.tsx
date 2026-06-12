@@ -34,6 +34,13 @@ export default async function Explore() {
     .filter((i) => i < catalog.length)
     .map((i) => catalog[i]);
 
+  // landing teaser for the velocity rankings: today's three fastest movers
+  const fastest = (route?.repos ?? [])
+    .map((p, i) => ({ r: p.r, v: p.v ?? null, rank: i + 1 }))
+    .filter((p): p is { r: string; v: number; rank: number } => p.v !== null && p.v > 0)
+    .sort((a, b) => b.v - a.v)
+    .slice(0, 3);
+
   return (
     <main className="mx-auto flex min-h-screen max-w-[1120px] flex-col gap-14 px-4 py-12 sm:px-6">
       <ExploreBackdrop />
@@ -101,6 +108,33 @@ export default async function Explore() {
               OPEN THIS SYSTEM →
             </Link>
           </div>
+        </section>
+      ) : null}
+
+      {fastest.length ? (
+        <section
+          className="rise flex flex-wrap items-baseline justify-between gap-x-6 gap-y-2"
+          style={{ animationDelay: "140ms" }}
+        >
+          <span className="numeral text-label tracking-[0.18em] text-dim">
+            FASTEST SHIPS TODAY ·{" "}
+            {fastest.map((f, i) => (
+              <span key={f.r}>
+                {i > 0 ? " · " : ""}
+                <Link prefetch={false} href={`/r/${f.r}`} className="text-ink hover:text-accent">
+                  {f.r.split("/")[1]}
+                </Link>{" "}
+                <span className="text-accent">{Math.round(f.v)}/day</span>
+              </span>
+            ))}
+          </span>
+          <Link
+            prefetch={false}
+            href="/velocity"
+            className="numeral text-label tracking-[0.18em] text-accent hover:underline underline-offset-4"
+          >
+            FULL VELOCITY RANKINGS →
+          </Link>
         </section>
       ) : null}
 
