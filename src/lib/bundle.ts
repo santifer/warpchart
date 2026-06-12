@@ -22,6 +22,8 @@ export interface MilestoneInfo {
   rank: number;
   threshold: number;
   drift: number | null;
+  // drawn position: midpoint between rank N and rank N-1 (see ChartInputs)
+  at?: number | null;
 }
 
 export interface DashboardBundle {
@@ -140,6 +142,12 @@ export function buildBundle(): DashboardBundle {
   const { dots: routeDots, landmarks: routeLandmarks, all: routeAll } = buildRouteLayers(
     netStars, milestones, apex, meta?.repo ?? null
   );
+  // gates draw midway between rank N and rank N-1: a doorway between ships,
+  // never on top of the rank-N repo itself
+  for (const m of milestones) {
+    const above = routeAll.find((p) => p.rank === m.rank - 1);
+    m.at = above ? Math.round((m.threshold + above.s) / 2) : null;
+  }
 
   // Whole-life series for replay + event detection.
   const firstMs = timestamps.length ? Date.parse(timestamps[0]) : nowMs;

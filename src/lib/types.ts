@@ -88,7 +88,11 @@ export interface ChartInputs {
   rank: number | null;
   v7d: number;
   neighbors: Neighbor[];
-  milestones: { rank: number; threshold: number; drift: number | null }[];
+  // `at` is the DRAWN position: the midpoint between the stars of rank N
+  // and rank N-1, so the gate reads as a doorway BETWEEN both ships instead
+  // of sitting on top of the rank-N repo. `threshold` keeps the semantics
+  // (gap and eta math).
+  milestones: { rank: number; threshold: number; drift: number | null; at?: number | null }[];
   apex: Apex | null;
   routeDots: RouteRepo[];
   routeLandmarks: RouteRepo[];

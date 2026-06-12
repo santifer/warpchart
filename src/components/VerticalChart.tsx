@@ -203,22 +203,23 @@ export default function VerticalChart({
           opacity={0.8}
         />
 
-        {/* gates at their real altitude */}
+        {/* gates drawn midway between rank N and rank N-1 (a doorway, never
+            on top of the rank-N ship); the label keeps the real threshold */}
         {inputs.milestones
-          .filter((m) => m.threshold > loS && m.threshold < hiS)
+          .filter((m) => (m.at ?? m.threshold) > loS && (m.at ?? m.threshold) < hiS)
           .map((m) => (
             <g key={m.rank}>
               <line
                 x1={14}
-                y1={yFor(m.threshold)}
+                y1={yFor(m.at ?? m.threshold)}
                 x2={W - 14}
-                y2={yFor(m.threshold)}
+                y2={yFor(m.at ?? m.threshold)}
                 stroke={C.accent}
                 strokeWidth={1}
                 strokeDasharray="2 5"
                 opacity={0.55}
               />
-              <text x={W - 14} y={yFor(m.threshold) - 5} textAnchor="end" fontSize={11}
+              <text x={W - 14} y={yFor(m.at ?? m.threshold) - 5} textAnchor="end" fontSize={11}
                 fill={C.accent} letterSpacing={1.5} className="numeral">
                 TOP {m.rank} · {fmtCompact(m.threshold)} ★
               </text>

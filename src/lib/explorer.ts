@@ -102,6 +102,8 @@ export async function getExplorerData(owner: string, name: string): Promise<Expl
     rank: m,
     threshold: ranked[m - 1].s,
     drift: null,
+    // drawn midway between rank N and rank N-1, a doorway between ships
+    at: m >= 2 ? Math.round((ranked[m - 1].s + ranked[m - 2].s) / 2) : null,
   }));
 
   const apex = { r: ranked[0].r, s: ranked[0].s };

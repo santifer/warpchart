@@ -406,7 +406,7 @@ export default function GalacticChart({
     }
   }
 
-  const visGates = inputs.milestones.filter((m) => inWindow(m.threshold));
+  const visGates = inputs.milestones.filter((m) => inWindow(m.at ?? m.threshold));
   const isDefaultView = view === null;
 
   // High-route waypoints beyond the projection milestones (top 50/25/10),
@@ -651,11 +651,11 @@ export default function GalacticChart({
             {visGates.map((m) => (
               <g key={m.rank}>
                 <line
-                  x1={ax(m.threshold)} y1={26} x2={ax(m.threshold)} y2={BAND_A_Y + 38}
+                  x1={ax(m.at ?? m.threshold)} y1={26} x2={ax(m.at ?? m.threshold)} y2={BAND_A_Y + 38}
                   stroke={C.accent} strokeWidth={1} strokeDasharray="2 4" opacity={0.7}
                 />
                 <text
-                  x={Math.min(Math.max(ax(m.threshold), 150), W - 190)} y={18} fill={C.accent} fontSize={12}
+                  x={Math.min(Math.max(ax(m.at ?? m.threshold), 150), W - 190)} y={18} fill={C.accent} fontSize={12}
                   textAnchor="middle" letterSpacing={2}
                 >
                   TOP {m.rank} GATE · {fmt(m.threshold)}
@@ -1010,14 +1010,14 @@ export default function GalacticChart({
 
           {[...inputs.milestones].sort((a, b) => b.rank - a.rank).map((m) => (
             <g key={m.rank}>
-              <circle cx={bx(m.threshold)} cy={BAND_B_Y} r={5} fill="none" stroke={C.accent}
+              <circle cx={bx(m.at ?? m.threshold)} cy={BAND_B_Y} r={5} fill="none" stroke={C.accent}
                 strokeWidth={1} opacity={0.85} />
-              <circle cx={bx(m.threshold)} cy={BAND_B_Y} r={1.6} fill={C.accent} />
-              <text x={bx(m.threshold)} y={BAND_B_Y - 20} fill={C.ink} fontSize={11.5}
+              <circle cx={bx(m.at ?? m.threshold)} cy={BAND_B_Y} r={1.6} fill={C.accent} />
+              <text x={bx(m.at ?? m.threshold)} y={BAND_B_Y - 20} fill={C.ink} fontSize={11.5}
                 textAnchor="middle">
                 TOP {m.rank}
               </text>
-              <text x={bx(m.threshold)} y={BAND_B_Y - 32} fill={C.faint} fontSize={10.5}
+              <text x={bx(m.at ?? m.threshold)} y={BAND_B_Y - 32} fill={C.faint} fontSize={10.5}
                 textAnchor="middle">
                 {fmtCompact(m.threshold)}
               </text>
@@ -1080,7 +1080,16 @@ export default function GalacticChart({
                   : C.scanBorder,
             }}
           >
-            <ScanContent scan={scan} ownV={vOwn} nowMs={nowMs} />
+            <ScanContent
+              scan={scan}
+              ownV={vOwn}
+              nowMs={nowMs}
+              rank={
+                scan.kind === "route"
+                  ? scan.p.rank
+                  : inputs.routeAll.find((p) => p.r.toLowerCase() === scan.n.r.toLowerCase())?.rank ?? null
+              }
+            />
             <div className="mt-2 flex items-center gap-2 border-t border-grid pt-2">
               <Link
                 prefetch
@@ -1105,7 +1114,7 @@ export default function GalacticChart({
   );
 }
 
-function ScanContent({ scan, ownV, nowMs }: { scan: Scan; ownV: number; nowMs: number }) {
+function ScanContent({ scan, ownV, nowMs, rank }: { scan: Scan; ownV: number; nowMs: number; rank: number | null }) {
   const full = scan.kind === "neighbor" ? scan.n.r : scan.p.r;
   const owner = full.split("/")[0];
   const desc = scan.kind === "neighbor" ? scan.n.d : scan.p.d;
@@ -1146,6 +1155,7 @@ function ScanContent({ scan, ownV, nowMs }: { scan: Scan; ownV: number; nowMs: n
       ) : null}
       <div className="numeral mt-2 grid grid-cols-2 gap-x-3 gap-y-1 border-t border-grid pt-2 text-label">
         <Row k="stars" v={fmt(scan.kind === "neighbor" ? scan.n.s : scan.p.s)} />
+        {scan.kind === "neighbor" && rank !== null ? <Row k="rank" v={`#${fmt(rank)}`} /> : null}
         {scan.kind === "neighbor" ? (
           <>
             <Row k="velocity" v={`${Math.round(scan.n.v)}/day`} />
