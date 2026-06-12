@@ -72,7 +72,10 @@ html {
 }
 
 body {
-  background: var(--void);
+  /* TRANSPARENT on purpose: an opaque body background paints ABOVE every
+     negative-z fixed layer (nebulas, animated star backdrops), hiding them
+     all. The canvas color comes from html's background instead. */
+  background: transparent;
   color: var(--ink);
   font-family: var(--font-chakra), sans-serif;
   min-height: 100vh;
@@ -442,6 +445,61 @@ svg text {
 @media (prefers-reduced-motion: reduce) {
   .lnd-drift, .lnd-streak { animation: none; }
   .lnd-streak { opacity: 0; }
+}
+
+/* ---- Page-character backdrop layers (SpaceBackdrop modes) ---- */
+
+/* LAUNCH (pricing): tracked missions breathing on the field. Each ring
+   expands once and rests: a slow heartbeat, not an alarm. */
+.bk-ping {
+  transform-box: fill-box;
+  transform-origin: center;
+  transform: scale(0.12);
+  opacity: 0;
+  animation: bk-ping var(--dur, 9s) ease-out infinite;
+  animation-delay: var(--delay, 0s);
+}
+@keyframes bk-ping {
+  0% { transform: scale(0.12); opacity: 0; }
+  6% { opacity: 0.5; }
+  34% { transform: scale(1); opacity: 0; }
+  100% { transform: scale(1); opacity: 0; }
+}
+
+/* LAUNCH (pricing): a golden growth curve draws itself, holds, lets go.
+   The page sells a tracked mission; the sky rehearses one. */
+.bk-traj {
+  stroke-dasharray: var(--len, 2400);
+  stroke-dashoffset: var(--len, 2400);
+  opacity: 0;
+  animation: bk-traj 26s ease-in-out infinite;
+}
+@keyframes bk-traj {
+  0% { stroke-dashoffset: var(--len, 2400); opacity: 0; }
+  8% { opacity: 0.5; }
+  40% { stroke-dashoffset: 0; opacity: 0.5; }
+  64% { stroke-dashoffset: 0; opacity: 0.5; }
+  80% { stroke-dashoffset: 0; opacity: 0; }
+  100% { stroke-dashoffset: 0; opacity: 0; }
+}
+
+/* RACEWAY (velocity): traffic crossing at three depths, always toward the
+   core (right). Near lanes are fast and hot, far lanes slow and pale. */
+.bk-pass {
+  transform: translateX(-260px);
+  opacity: 0;
+  animation: bk-pass var(--dur, 10s) linear infinite;
+  animation-delay: var(--delay, 0s);
+}
+@keyframes bk-pass {
+  0% { transform: translateX(-260px); opacity: 0; }
+  5% { opacity: var(--op, 0.6); }
+  90% { opacity: var(--op, 0.6); }
+  100% { transform: translateX(1880px); opacity: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bk-ping, .bk-traj, .bk-pass { animation: none; opacity: 0; }
 }
 
 /* Ships fade softly into the sky when the chart replaces its skeleton

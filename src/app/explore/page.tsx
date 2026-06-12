@@ -5,7 +5,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import ExploreSearch, { type CatalogEntry } from "@/components/ExploreSearch";
 import EmbedGenerator from "@/components/EmbedGenerator";
-import ExploreBackdrop from "@/components/ExploreBackdrop";
+import SpaceBackdrop from "@/components/SpaceBackdrop";
 import Masthead from "@/components/Masthead";
 import GalacticChart from "@/components/GalacticChart";
 import VerticalChart from "@/components/VerticalChart";
@@ -43,7 +43,7 @@ export default async function Explore() {
 
   return (
     <main className="mx-auto flex min-h-screen max-w-[1120px] flex-col gap-14 px-4 py-12 sm:px-6">
-      <ExploreBackdrop />
+      <SpaceBackdrop mode="scan" />
       <header className="rise" style={{ animationDelay: "0ms" }}>
         <Masthead demo={meta?.repo ?? null} />
       </header>

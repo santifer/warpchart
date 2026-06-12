@@ -5,6 +5,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { loadMeta } from "@/lib/history";
+import SpaceBackdrop from "@/components/SpaceBackdrop";
 
 export const dynamic = "force-static";
 
@@ -75,6 +76,7 @@ export default function Pricing() {
   const meta = loadMeta();
   return (
     <main className="mx-auto flex min-h-screen max-w-[1000px] flex-col gap-10 px-4 py-10 sm:px-6">
+      <SpaceBackdrop mode="launch" />
       <header className="rise flex items-center justify-between" style={{ animationDelay: "0ms" }}>
         <Link href="/explore" className="font-display text-sm tracking-[0.3em] text-star hover:text-accent">
           WARPCHART

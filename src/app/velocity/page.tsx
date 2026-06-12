@@ -5,7 +5,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import Masthead from "@/components/Masthead";
-import ExploreBackdrop from "@/components/ExploreBackdrop";
+import SpaceBackdrop from "@/components/SpaceBackdrop";
 import VelocityBoard, { type LaneRepo, type HuntRow } from "@/components/VelocityBoard";
 import { loadRoute, loadCollisions, loadMeta } from "@/lib/history";
 import { fmtCompact } from "@/lib/format";
@@ -74,7 +74,7 @@ export default function VelocityPage() {
 
   return (
     <main className="mx-auto flex min-h-screen max-w-[1120px] flex-col gap-8 px-4 py-8 sm:px-6">
-      <ExploreBackdrop />
+      <SpaceBackdrop mode="raceway" />
       <header className="rise" style={{ animationDelay: "0ms" }}>
         <Masthead demo={meta?.repo ?? null} />
       </header>
