@@ -763,6 +763,9 @@ svg text {
   line-height: 1.5;
   letter-spacing: 0.14em;
   color: var(--dim);
+  /* the label box overlaps the head systems crowded around the core;
+     only the glow itself should catch their clicks */
+  pointer-events: none;
 }
 .ghx-core-tip { color: var(--faint); }
 .ghx-core:hover .ghx-core-label { color: var(--star-white); }
