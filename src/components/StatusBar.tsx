@@ -37,7 +37,7 @@ export default function StatusBar({ bundle }: { bundle: DashboardBundle }) {
   }
 
   return (
-    <header className="hud rise px-4 py-4 sm:px-6 sm:py-5" style={{ animationDelay: "0ms" }}>
+    <header className="hud px-4 py-4 sm:px-6 sm:py-5">
       <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-4">
         {/* Identity */}
         <div className="flex items-center gap-4 min-w-0">

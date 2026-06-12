@@ -91,7 +91,7 @@ export default function Dashboard({ bundle, polling = true }: { bundle: Dashboar
     <LiveProvider bundle={bundle} polling={polling}>
       <SoundController nextThreshold={next?.threshold ?? null} nextRank={next?.rank ?? null} />
       <main className="mx-auto flex max-w-[1440px] flex-col gap-4 px-3 py-4 sm:px-6 sm:py-6">
-        <div className="rise px-1">
+        <div className="px-1">
           <Masthead />
         </div>
         <StatusBar bundle={bundle} />
@@ -199,7 +199,7 @@ export default function Dashboard({ bundle, polling = true }: { bundle: Dashboar
           <MissionLog events={bundle.events} captain={bundle.captain} />
         </Panel>
 
-        <footer className="rise flex flex-wrap items-center justify-between gap-2 px-1 pb-4 pt-2" style={{ animationDelay: "700ms" }}>
+        <footer className="flex flex-wrap items-center justify-between gap-2 px-1 pb-4 pt-2">
           <span className="numeral text-micro tracking-[0.15em] text-faint">
             WARPCHART · open telemetry over public GitHub data
           </span>

@@ -207,11 +207,11 @@ export default async function ExplorerPage({
     // warp entrance, and the skeleton -> content reveal must be an in-place
     // swap (a second animated entrance made everything vanish and reappear)
     <main className="mx-auto flex max-w-[1440px] flex-col gap-4 px-3 py-4 sm:px-6 sm:py-6">
-      <div className="rise px-1">
+      <div className="px-1">
         <Masthead />
       </div>
       {/* header */}
-      <header className="hud rise px-4 py-4 sm:px-6 sm:py-5">
+      <header className="hud px-4 py-4 sm:px-6 sm:py-5">
         <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-4">
           <div className="flex items-center gap-4 min-w-0">
             {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -391,7 +391,7 @@ export default async function ExplorerPage({
         </div>
       </div>
 
-      <footer className="rise flex flex-wrap items-center justify-between gap-2 px-1 pb-4 pt-2">
+      <footer className="flex flex-wrap items-center justify-between gap-2 px-1 pb-4 pt-2">
         <span className="numeral text-micro tracking-[0.15em] text-faint">
           WARPCHART · open telemetry over public GitHub data
         </span>
