@@ -65,8 +65,11 @@ export default async function Explore() {
 
       {/* hero: the real top 1000 as a partially isometric galaxy, core in
           the top-right corner, headline column on the left */}
+      {/* no overflow-hidden here: the galaxy stage does its own clipping
+          with a raised roof, so starlight can glow past the hero's top
+          edge instead of cutting on an invisible line under the header */}
       <section
-        className="rise relative left-1/2 w-screen -translate-x-1/2 overflow-hidden"
+        className="rise relative left-1/2 w-screen -translate-x-1/2"
         style={{ animationDelay: "80ms" }}
       >
         <div className="relative h-[560px] sm:h-[640px]">

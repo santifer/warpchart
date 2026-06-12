@@ -657,20 +657,22 @@ svg text {
    pointer drives a LOCAL ZOOM around the cursor (vars set by rAF lerp on
    the plane): each layer zooms by a different factor, so the dust lags
    behind the systems and depth reads without ever rotating the galaxy. */
-/* the clip box extends 150px above the hero so the core's glow (especially
-   while zoomed) never hits the edge and cuts into a hard line; the stage
-   itself is click-transparent so the masthead above stays usable */
+/* the clip box extends far above the hero (--ghx-roof) so starlight never
+   hits an edge and cuts into a hard line, even at the local zoom's worst
+   case (layer x1.34 with a far origin pushes the core's glow ~240px up);
+   the stage is click-transparent so the masthead above stays usable */
 .ghx-stage {
+  --ghx-roof: 280px;
   position: absolute;
-  inset: -150px 0 0 0;
+  inset: calc(-1 * var(--ghx-roof)) 0 0 0;
   overflow: hidden;
   pointer-events: none;
 }
 .ghx-plane {
   position: absolute;
-  top: 150px;
+  top: var(--ghx-roof);
   right: 0;
-  height: calc(100% - 150px);
+  height: calc(100% - var(--ghx-roof));
   aspect-ratio: 1560 / 640;
   pointer-events: auto;
   animation: ghx-in 1.1s ease-out both;
@@ -817,7 +819,7 @@ svg text {
    blends into it without a visible seam */
 .ghx-scrim {
   position: absolute;
-  inset: 150px 0 0 0;
+  inset: var(--ghx-roof, 280px) 0 0 0;
   pointer-events: none;
   background: linear-gradient(90deg, var(--void) 0%, transparent 44%);
   opacity: 0.82;
@@ -861,7 +863,9 @@ svg text {
    final frame becomes the view transition's old snapshot. */
 body.gx-warping .ghx-plane {
   transform-origin: var(--gx-ox, 95%) var(--gx-oy, 12%);
-  animation: gx-dive 950ms forwards;
+  animation:
+    gx-dive 950ms forwards,
+    gx-dive-s 950ms forwards;
 }
 @keyframes gx-dive {
   0% {
@@ -880,11 +884,47 @@ body.gx-warping .ghx-plane {
     transform: scale(6);
   }
 }
+/* the same choreography as a NUMBER (registered property), so children can
+   counter-scale against the dive: stars stay near point-size while the
+   space between them grows sixfold, which is what reads as a galaxy being
+   vast instead of dots inflating */
+@property --gx-dive-s {
+  syntax: "<number>";
+  inherits: true;
+  initial-value: 1;
+}
+@keyframes gx-dive-s {
+  0% {
+    --gx-dive-s: 1;
+    animation-timing-function: cubic-bezier(0.45, 0, 0.7, 0.3);
+  }
+  16% {
+    --gx-dive-s: 1.02;
+    animation-timing-function: cubic-bezier(0.5, 0.05, 0.75, 0.4);
+  }
+  55% {
+    --gx-dive-s: 2.8;
+    animation-timing-function: cubic-bezier(0.45, 0.1, 0.5, 0.95);
+  }
+  100% {
+    --gx-dive-s: 6;
+  }
+}
+/* dots grow only as the cube-root-ish of the dive (x6 space -> ~x1.7 star)
+   and the gate rings keep their hairline stroke all the way in */
+.ghx-dot {
+  transform-box: fill-box;
+  transform-origin: center;
+  transform: scale(pow(var(--gx-dive-s, 1), -0.7));
+}
+.ghx-ring {
+  stroke-width: calc(1 / var(--gx-dive-s, 1));
+}
 /* the veil: motion blur + the brightness flash that bridges the cut, all
    via a FIXED backdrop-filter whose opacity animates (compositor-only) */
 .ghx-warpveil {
   position: absolute;
-  inset: 150px 0 0 0;
+  inset: var(--ghx-roof, 280px) 0 0 0;
   opacity: 0;
   pointer-events: none;
   backdrop-filter: blur(7px) brightness(1.5);

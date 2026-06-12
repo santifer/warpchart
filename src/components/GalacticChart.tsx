@@ -794,8 +794,12 @@ export default function GalacticChart({
   const bandBTop = ((BAND_B_Y - 14) / H) * 100;
 
   return (
-    <div className="w-full overflow-x-auto">
-      <div className="relative min-w-[760px]">
+    // no scroll container here: every mount is lg+ and the svg scales to
+    // fit, while an overflow-x-auto wrapper turned overflow-y auto too, so
+    // a scan card opening past the bottom edge spawned a phantom vertical
+    // scrollbar and clipped the card
+    <div className="w-full">
+      <div className="relative">
         <svg
           ref={svgRef}
           viewBox={`0 0 ${W} ${H}`}
