@@ -165,7 +165,7 @@ export default async function Explore() {
           The chart draws itself on every view: pure SVG animation, no JavaScript, works
           through GitHub&apos;s image proxy and follows the reader&apos;s color scheme.
         </p>
-        <EmbedGenerator defaultRepo={meta?.repo ?? "facebook/react"} />
+        <EmbedGenerator defaultRepo={meta?.repo ?? "facebook/react"} catalog={catalog} />
       </section>
 
       <footer className="rise mt-auto flex flex-wrap items-center justify-between gap-2 border-t border-grid pt-4" style={{ animationDelay: "320ms" }}>

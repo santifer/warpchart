@@ -21,10 +21,12 @@ import { neighborEtas, type NeighborEta } from "@/lib/projections";
 import { sound } from "@/lib/sound";
 
 const W = 1200;
-const H = 520;
-const BAND_A_Y = 200; // headroom above keeps three label tiers clear of the header
-const BAND_B_Y = 436;
-const CLIP_BOTTOM = 345;
+// Panel geometry; the fullscreen COMMAND DECK swaps in a taller canvas
+// (real vertical room, not scaled pixels) inside the component.
+const BASE_H = 520;
+const BASE_BAND_A_Y = 200; // headroom above keeps three label tiers clear of the header
+const BASE_BAND_B_Y = 436;
+const BASE_CLIP_BOTTOM = 345;
 
 type ScanPlace = "above" | "below";
 
@@ -86,6 +88,7 @@ export default function GalacticChart({
   target = null,
   onPinTarget,
   liveLocals = false,
+  deck = false,
 }: {
   inputs: ChartInputs;
   target?: string | null;
@@ -94,7 +97,19 @@ export default function GalacticChart({
   // move with REAL minute-fresh data. The tenant dashboard already gets
   // live neighbors from its own polling, so it never sets this.
   liveLocals?: boolean;
+  // Fullscreen COMMAND DECK: taller canvas, smaller type, more label
+  // tiers, and the context dots scatter into a 2D star system.
+  deck?: boolean;
 }) {
+  // The deck trades the panel's wide aspect for vertical room: labels get
+  // two extra tiers, the local band breathes, and type shrinks back to
+  // panel-like screen size (the fullscreen scale-up did the opposite).
+  const H = deck ? 740 : BASE_H;
+  const BAND_A_Y = deck ? 300 : BASE_BAND_A_Y;
+  const CLIP_BOTTOM = deck ? 556 : BASE_CLIP_BOTTOM;
+  const BAND_B_Y = deck ? 654 : BASE_BAND_B_Y;
+  const fs = deck ? 0.84 : 1; // font scale: deck pixels are ~1.6x panel pixels
+
   const C = usePalette();
   const router = useRouter();
   const [scan, setScan] = useState<Scan | null>(null);
@@ -436,6 +451,15 @@ export default function GalacticChart({
   const driftS = (s: number, v: number | null | undefined) =>
     !driftDays || v == null ? s : Math.max(1, s + (v - vOwn) * driftDays);
 
+  // DECK scatter: context dots fan out into a 2D star system (seeded per
+  // repo, stable across renders and pans). The rail stays the racing line:
+  // neighbors and anything labeled keep flying on it; x remains the data.
+  const scatter = (r: string) => {
+    if (!deck) return 0;
+    const u = mulberry32(seedFrom(r))() * 2 - 1;
+    return Math.sign(u || 1) * (16 + Math.abs(u) * 74); // 16..90px off the rail
+  };
+
   // Route band: focus+context scale. Position follows log(1 + distance/K)
   // measured FROM OUR CURRENT STARS, so the stretch we are flying right now
   // gets the most room, compressing toward the core; as we overtake and our
@@ -565,8 +589,10 @@ export default function GalacticChart({
   // as a bare dot (tier -1), with all its data still on hover.
   const tiers: number[] = new Array(items.length).fill(-1);
   {
-    const rowsAbove: number[] = [-1e9, -1e9, -1e9]; // rightmost occupied edge per tier
-    const rowsBelow: number[] = [-1e9, -1e9, -1e9];
+    // the deck's taller canvas buys two extra tiers per side
+    const nTiers = deck ? 5 : 3;
+    const rowsAbove: number[] = new Array(nTiers).fill(-1e9); // rightmost occupied edge per tier
+    const rowsBelow: number[] = new Array(nTiers).fill(-1e9);
     // label priority: hunters first (the chart's most urgent object must
     // never be shed in dense zones), then chase targets with an eta, then
     // the rest of the neighbors, route dots last
@@ -583,7 +609,7 @@ export default function GalacticChart({
       const it = items[i];
       const x = ax(it.s);
       const name = trunc(shortName(it.kind === "n" ? it.n.r : it.p.r));
-      const halfW = (Math.max(name.length, 12) * 7.6) / 2 + 10;
+      const halfW = (Math.max(name.length, 12) * 7.6 * fs) / 2 + 10;
       // hunters (behind us but closing) label ABOVE the line with the
       // chase: their catch eta is the most urgent number on the chart
       const hunts = it.kind === "n" && it.n.gap <= 0 && it.n.catchDays !== null;
@@ -737,14 +763,14 @@ export default function GalacticChart({
           </g>
 
           {/* ============ BAND A: LOCAL SYSTEM (pannable window) ============ */}
-          <text x={40} y={30} fill={C.dim} fontSize={12} letterSpacing={4} className="font-display">
+          <text x={40} y={30} fill={C.dim} fontSize={12 * fs} letterSpacing={4} className="font-display">
             LOCAL SYSTEM
           </text>
-          <text x={40} y={47} fill={C.faint} fontSize={10.5}>
+          <text x={40} y={47} fill={C.faint} fontSize={10.5 * fs}>
             scroll sideways to pan · pinch to zoom · doppler tails: length = speed gap · blue = you gain the duel, red = it outruns you
           </text>
           {!isDefaultView ? (
-            <text x={W - 40} y={30} fill={C.accent} fontSize={11} textAnchor="end" opacity={0.8}>
+            <text x={W - 40} y={30} fill={C.accent} fontSize={11 * fs} textAnchor="end" opacity={0.8}>
               window {fmtCompact(Math.round(Math.pow(10, logLo)))} .. {fmtCompact(Math.round(Math.pow(10, logHi)))} ★
             </text>
           ) : null}
@@ -841,18 +867,18 @@ export default function GalacticChart({
                       ))}
                       {local > 0.45 ? (
                         <text x={Math.min(gx, W - 170)} y={g.y + g.ry + 18} fill={C.faint}
-                          fontSize={10} letterSpacing={2} textAnchor="middle">
+                          fontSize={10 * fs} letterSpacing={2} textAnchor="middle">
                           PARALLEL SEQUENCE {g.seq} · UNCHARTED
                         </text>
                       ) : null}
                     </g>
                   );
                 })}
-                <text x={W - 44} y={70} fill={C.accent} fontSize={11.5} letterSpacing={3}
+                <text x={W - 44} y={70} fill={C.accent} fontSize={11.5 * fs} letterSpacing={3}
                   textAnchor="end" opacity={Math.min(0.9, beyondT)} className="font-display">
                   EDGE OF CHARTED SPACE
                 </text>
-                <text x={W - 44} y={84} fill={C.dim} fontSize={10.5} textAnchor="end"
+                <text x={W - 44} y={84} fill={C.dim} fontSize={10.5 * fs} textAnchor="end"
                   opacity={Math.min(0.85, beyondT)}>
                   parallel sequences detected · the journey does not end at the core
                 </text>
@@ -865,7 +891,7 @@ export default function GalacticChart({
                   stroke={C.accent} strokeWidth={1} strokeDasharray="2 4" opacity={0.7}
                 />
                 <text
-                  x={Math.min(Math.max(ax(m.at ?? m.threshold), 150), W - 190)} y={18} fill={C.accent} fontSize={12}
+                  x={Math.min(Math.max(ax(m.at ?? m.threshold), 150), W - 190)} y={18} fill={C.accent} fontSize={12 * fs}
                   textAnchor="middle" letterSpacing={2}
                 >
                   TOP {m.rank} GATE · {fmt(m.threshold)}
@@ -875,7 +901,7 @@ export default function GalacticChart({
 
             {panHint && inWindow(stars) ? (
               <g className="pan-hint">
-                <text x={W - 76} y={CLIP_BOTTOM - 16} textAnchor="end" fontSize={11.5}
+                <text x={W - 76} y={CLIP_BOTTOM - 16} textAnchor="end" fontSize={11.5 * fs}
                   fill={C.accent} letterSpacing={2} className="numeral" opacity={0.9}>
                   PAN
                 </text>
@@ -894,7 +920,7 @@ export default function GalacticChart({
             {view !== null && !inWindow(stars) ? (
               <g onClick={flyHome} style={{ cursor: "pointer" }}>
                 <rect x={W - 180} y={CLIP_BOTTOM - 34} width={160} height={28} fill="transparent" />
-                <text x={W - 40} y={CLIP_BOTTOM - 16} textAnchor="end" fontSize={12} fill={C.white}
+                <text x={W - 40} y={CLIP_BOTTOM - 16} textAnchor="end" fontSize={12 * fs} fill={C.white}
                   letterSpacing={2} className="numeral" opacity={0.95}>
                   {/* the window lives in log10(stars) space */}
                   {log10(stars) < view.lo ? "‹‹‹ CENTER" : "CENTER ›››"}
@@ -908,22 +934,23 @@ export default function GalacticChart({
                 const color = routeDotColor.get(p.r) ?? C.white;
                 const tail = dotTail(p.v);
                 const xp = ax(driftS(p.s, p.v));
+                const yp = BAND_A_Y + scatter(p.r);
                 return (
                   <g
                     key={p.r}
                     className="nbr"
                     onMouseEnter={() =>
-                      openScan({ kind: "route", p, xPct: clampPct((xp / W) * 100), topPct: bandATop, place: "below" })
+                      openScan({ kind: "route", p, xPct: clampPct((xp / W) * 100), topPct: ((yp + 18) / H) * 100, place: "below" })
                     }
                     onMouseLeave={scheduleClose}
                     onClick={() => togglePin(p.r)}
                   >
-                    <circle cx={xp} cy={BAND_A_Y} r={8} fill="transparent" />
+                    <circle cx={xp} cy={yp} r={8} fill="transparent" />
                     {tail ? (
-                      <path d={tailPath(xp, BAND_A_Y, tail.len, tail.dir, 1.2)}
+                      <path d={tailPath(xp, yp, tail.len, tail.dir, 1.2)}
                         fill={color} opacity={0.22} />
                     ) : null}
-                    <circle className="nbr-dot" cx={xp} cy={BAND_A_Y} r={1.6}
+                    <circle className="nbr-dot" cx={xp} cy={yp} r={1.6}
                       fill={color} opacity={0.6} />
                   </g>
                 );
@@ -1006,18 +1033,18 @@ export default function GalacticChart({
                       </>
                     ) : null}
                     <circle className="nbr-dot" cx={x} cy={BAND_A_Y} r={3.2} fill={color} opacity={isAhead ? 0.95 : 0.55} />
-                    <text className="nbr-name" x={x} y={tierY - 13} fill={labelAbove ? C.ink : C.faint} fontSize={12.5}
+                    <text className="nbr-name" x={x} y={tierY - 13} fill={labelAbove ? C.ink : C.faint} fontSize={12.5 * fs}
                       textAnchor="middle">
                       {trunc(shortName(n.r))}
                     </text>
                     {/* passed ships compress to two lines so the below band
                         never outgrows its tier spacing or the clip */}
-                    <text x={x} y={tierY + 1} fill={C.dim} fontSize={11} textAnchor="middle">
+                    <text x={x} y={tierY + 1} fill={C.dim} fontSize={11 * fs} textAnchor="middle">
                       {fmtSignedGap(n.gap)} · {Math.round(n.v)}/d
                       {!labelAbove ? " · passed" : ""}
                     </text>
                     {labelAbove ? (
-                      <text x={x} y={tierY + 14} fontSize={11} textAnchor="middle"
+                      <text x={x} y={tierY + 14} fontSize={11 * fs} textAnchor="middle"
                         fill={hunts ? color : n.receding ? C.warn : C.accent}>
                         {hunts
                           ? `catches you in ${fmtEtaDays(n.catchDays)}`
@@ -1073,10 +1100,10 @@ export default function GalacticChart({
                   })()}
                   <circle className="nbr-dot" cx={x} cy={BAND_A_Y} r={2.4}
                     fill={routeDotColor.get(p.r) ?? C.white} opacity={0.85} />
-                  <text className="nbr-name" x={x} y={tierY - 2} fill={C.ink} fontSize={12.5} textAnchor="middle">
+                  <text className="nbr-name" x={x} y={tierY - 2} fill={C.ink} fontSize={12.5 * fs} textAnchor="middle">
                     {trunc(shortName(p.r))}
                   </text>
-                  <text x={x} y={tierY + 12} fill={C.dim} fontSize={11} textAnchor="middle">
+                  <text x={x} y={tierY + 12} fill={C.dim} fontSize={11 * fs} textAnchor="middle">
                     {fmtCompact(p.s)} · #{p.rank}
                     {p.v != null ? ` · ${Math.round(p.v)}/d` : ""}
                   </text>
@@ -1098,7 +1125,7 @@ export default function GalacticChart({
                     d={`M ${ax(origin.s)} ${BAND_A_Y - 7} L ${ax(origin.s) + 5} ${BAND_A_Y} L ${ax(origin.s)} ${BAND_A_Y + 7} L ${ax(origin.s) - 5} ${BAND_A_Y} Z`}
                     fill="none" stroke={C.accent} strokeWidth={1.3}
                   />
-                  <text x={ax(origin.s) + 9} y={BAND_A_Y + 3.5} fill={C.accent} fontSize={11.5}
+                  <text x={ax(origin.s) + 9} y={BAND_A_Y + 3.5} fill={C.accent} fontSize={11.5 * fs}
                     textAnchor="start" opacity={0.9}>
                     {trunc(shortName(origin.r))} · origin
                   </text>
@@ -1110,7 +1137,7 @@ export default function GalacticChart({
               <g className="core-glow">
                 <circle cx={ax(coreStars)} cy={BAND_A_Y} r={30} fill="url(#coreGrad)" />
                 <circle cx={ax(coreStars)} cy={BAND_A_Y} r={4} fill={C.white} />
-                <text x={ax(coreStars)} y={BAND_A_Y - 44} fill={C.white} fontSize={12}
+                <text x={ax(coreStars)} y={BAND_A_Y - 44} fill={C.white} fontSize={12 * fs}
                   textAnchor="middle" fontWeight={700}>
                   GALACTIC CORE · #1 {shortName(apex.r)}
                 </text>
@@ -1155,14 +1182,26 @@ export default function GalacticChart({
                   fill={C.white}
                   className="core-glow"
                 />
-                <text x={ax(stars)} y={BAND_A_Y + 26} fill={C.white} fontSize={12.5}
-                  textAnchor="middle" fontWeight={700}>
-                  {repoName}
-                </text>
-                <text x={ax(stars)} y={BAND_A_Y + 41} fill={C.accent} fontSize={11.5}
-                  textAnchor="middle">
-                  {fmt(stars)} ★
-                </text>
+                {/* the label clamps inside the band clip (the ship itself
+                    never moves): hugging the left edge used to amputate the
+                    first characters ("areer-ops") */}
+                {(() => {
+                  const half = (repoName.length * 7.6 * fs) / 2;
+                  // the band clip starts at x=28; stay inside it
+                  const lx = Math.min(Math.max(ax(stars), half + 32), W - half - 32);
+                  return (
+                    <>
+                      <text x={lx} y={BAND_A_Y + 26} fill={C.white} fontSize={12.5 * fs}
+                        textAnchor="middle" fontWeight={700}>
+                        {repoName}
+                      </text>
+                      <text x={lx} y={BAND_A_Y + 41} fill={C.accent} fontSize={11.5 * fs}
+                        textAnchor="middle">
+                        {fmt(stars)} ★
+                      </text>
+                    </>
+                  );
+                })()}
               </g>
             ) : null}
           </g>
@@ -1174,10 +1213,10 @@ export default function GalacticChart({
             stroke={C.grid} strokeWidth={1} strokeDasharray="3 5" opacity={0.8} />
 
           {/* ============ BAND B: ROUTE TO THE CORE ============ */}
-          <text x={40} y={BAND_B_Y - 88} fill={C.dim} fontSize={12} letterSpacing={4} className="font-display">
+          <text x={40} y={BAND_B_Y - 88} fill={C.dim} fontSize={12 * fs} letterSpacing={4} className="font-display">
             ROUTE TO THE CORE
           </text>
-          <text x={40} y={BAND_B_Y - 71} fill={C.faint} fontSize={10.5}>
+          <text x={40} y={BAND_B_Y - 71} fill={C.faint} fontSize={10.5 * fs}>
             distance scale, widest around you · every dot is a top 1000 repo · [ ] marks the window above
           </text>
 
@@ -1228,7 +1267,7 @@ export default function GalacticChart({
               <g key={p.r}>
                 <line x1={bx(p.s)} y1={BAND_B_Y + 6} x2={bx(p.s)} y2={BAND_B_Y + 26 + (i % 2) * 13}
                   stroke={C.grid} strokeWidth={1} />
-                <text x={bx(p.s)} y={BAND_B_Y + 38 + (i % 2) * 13} fill={C.dim} fontSize={11}
+                <text x={bx(p.s)} y={BAND_B_Y + 38 + (i % 2) * 13} fill={C.dim} fontSize={11 * fs}
                   textAnchor="middle">
                   {shortName(p.r)} · {fmtCompact(p.s)}
                 </text>
@@ -1240,11 +1279,11 @@ export default function GalacticChart({
             <g key={`x${m.rank}`} opacity={0.6}>
               <circle cx={bx(m.threshold)} cy={BAND_B_Y} r={4} fill="none" stroke={C.accent}
                 strokeWidth={1} opacity={0.7} />
-              <text x={bx(m.threshold)} y={BAND_B_Y - 20} fill={C.dim} fontSize={11}
+              <text x={bx(m.threshold)} y={BAND_B_Y - 20} fill={C.dim} fontSize={11 * fs}
                 textAnchor="middle">
                 TOP {m.rank}
               </text>
-              <text x={bx(m.threshold)} y={BAND_B_Y - 32} fill={C.faint} fontSize={10.5}
+              <text x={bx(m.threshold)} y={BAND_B_Y - 32} fill={C.faint} fontSize={10.5 * fs}
                 textAnchor="middle">
                 {fmtCompact(m.threshold)}
               </text>
@@ -1258,7 +1297,7 @@ export default function GalacticChart({
                 d={`M ${bx(inputs.home.s)} ${BAND_B_Y - 7} L ${bx(inputs.home.s) + 5} ${BAND_B_Y + 5} L ${bx(inputs.home.s) - 5} ${BAND_B_Y + 5} Z`}
                 fill="none" stroke={C.accent} strokeWidth={1.2}
               />
-              <text x={bx(inputs.home.s)} y={BAND_B_Y + 64} fill={C.accent} fontSize={11}
+              <text x={bx(inputs.home.s)} y={BAND_B_Y + 64} fill={C.accent} fontSize={11 * fs}
                 textAnchor="middle" opacity={0.9}>
                 ⌂ {trunc(shortName(inputs.home.r))}
               </text>
@@ -1270,11 +1309,11 @@ export default function GalacticChart({
               <circle cx={bx(m.at ?? m.threshold)} cy={BAND_B_Y} r={5} fill="none" stroke={C.accent}
                 strokeWidth={1} opacity={0.85} />
               <circle cx={bx(m.at ?? m.threshold)} cy={BAND_B_Y} r={1.6} fill={C.accent} />
-              <text x={bx(m.at ?? m.threshold)} y={BAND_B_Y - 20} fill={C.ink} fontSize={11.5}
+              <text x={bx(m.at ?? m.threshold)} y={BAND_B_Y - 20} fill={C.ink} fontSize={11.5 * fs}
                 textAnchor="middle">
                 TOP {m.rank}
               </text>
-              <text x={bx(m.at ?? m.threshold)} y={BAND_B_Y - 32} fill={C.faint} fontSize={10.5}
+              <text x={bx(m.at ?? m.threshold)} y={BAND_B_Y - 32} fill={C.faint} fontSize={10.5 * fs}
                 textAnchor="middle">
                 {fmtCompact(m.threshold)}
               </text>
@@ -1285,11 +1324,11 @@ export default function GalacticChart({
             <g className="core-glow">
               <circle cx={bx(coreStars)} cy={BAND_B_Y} r={26} fill="url(#coreGrad)" />
               <circle cx={bx(coreStars)} cy={BAND_B_Y} r={3.4} fill={C.white} />
-              <text x={bx(coreStars)} y={BAND_B_Y - 36} fill={C.white} fontSize={12}
+              <text x={bx(coreStars)} y={BAND_B_Y - 36} fill={C.white} fontSize={12 * fs}
                 textAnchor="end" fontWeight={700}>
                 GALACTIC CORE
               </text>
-              <text x={bx(coreStars)} y={BAND_B_Y - 24} fill={C.dim} fontSize={11}
+              <text x={bx(coreStars)} y={BAND_B_Y - 24} fill={C.dim} fontSize={11 * fs}
                 textAnchor="end">
                 #1 {shortName(apex.r)} · {fmtCompact(apex.s)} ★
               </text>
@@ -1302,7 +1341,7 @@ export default function GalacticChart({
                 d={`M ${bx(origin.s)} ${BAND_B_Y - 6} L ${bx(origin.s) + 4.5} ${BAND_B_Y} L ${bx(origin.s)} ${BAND_B_Y + 6} L ${bx(origin.s) - 4.5} ${BAND_B_Y} Z`}
                 fill="none" stroke={C.accent} strokeWidth={1.2}
               />
-              <text x={bx(origin.s)} y={BAND_B_Y + 52} fill={C.accent} fontSize={11}
+              <text x={bx(origin.s)} y={BAND_B_Y + 52} fill={C.accent} fontSize={11 * fs}
                 textAnchor="middle" opacity={0.85}>
                 {trunc(shortName(origin.r))} · origin
               </text>
@@ -1315,7 +1354,7 @@ export default function GalacticChart({
               fill={C.accent}
               className="core-glow"
             />
-            <text x={Math.max(40, bx(stars) - 6)} y={BAND_B_Y + 22} fill={C.white} fontSize={11.5}
+            <text x={Math.max(40, bx(stars) - 6)} y={BAND_B_Y + 22} fill={C.white} fontSize={11.5 * fs}
               textAnchor="start">
               you are here{rank ? ` · #${rank}` : ""}
             </text>

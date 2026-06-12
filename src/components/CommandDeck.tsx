@@ -147,6 +147,11 @@ export default function CommandDeck({
     etas
       .filter((n) => n.gap > 0 && !n.receding && n.etaDays !== null)
       .sort((a, b) => (a.etaDays ?? 1e9) - (b.etaDays ?? 1e9))[0] ?? null;
+  // the most urgent number on the deck: who catches us first
+  const threat =
+    etas
+      .filter((n) => n.gap <= 0 && n.catchDays !== null)
+      .sort((a, b) => (a.catchDays ?? 1e9) - (b.catchDays ?? 1e9))[0] ?? null;
 
   return (
     <div
@@ -222,15 +227,18 @@ export default function CommandDeck({
         </div>
       </div>
 
-      {/* the chart, at the largest size that keeps everything on one screen */}
+      {/* the chart, at the largest size that keeps everything on one screen.
+          deck mode swaps in a taller canvas (1200x740), so the width cap
+          follows that aspect to fill the vertical room instead of floating
+          in it */}
       <div className="flex min-h-0 flex-1 items-center justify-center">
-        <div className="w-full" style={{ maxWidth: "min(100%, calc((100vh - 250px) * 2.2))" }}>
-          <GalacticChart inputs={inputs} target={target} onPinTarget={onPinTarget} />
+        <div className="w-full" style={{ maxWidth: "min(100%, calc((100vh - 250px) * 1.62))" }}>
+          <GalacticChart inputs={inputs} target={target} onPinTarget={onPinTarget} deck />
         </div>
       </div>
 
       {/* mission cards */}
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-5">
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
         {gates.map((g) => (
           <DeckCard
             key={g.rank}
@@ -240,6 +248,17 @@ export default function CommandDeck({
             accent={g.gap === 0}
           />
         ))}
+        {threat ? (
+          <div className="hud px-4 py-2.5">
+            <div className="module-title !text-micro">INBOUND THREAT</div>
+            <div className="numeral mt-1 truncate text-base leading-tight text-warn">
+              {shortName(threat.r)}
+            </div>
+            <div className="numeral mt-0.5 truncate text-label text-dim">
+              catches you in {fmtEtaDays(threat.catchDays)} · {Math.round(threat.v)}/d
+            </div>
+          </div>
+        ) : null}
         {chase ? (
           <DeckCard
             label="CHASE TARGET"

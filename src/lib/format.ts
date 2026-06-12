@@ -13,15 +13,25 @@ export function fmtSigned(n: number): string {
   return (n >= 0 ? "+" : "") + fmt(Math.round(n));
 }
 
-// "2.3d" / "16h" / "now" / "8y"
+// "16h" / "2.3d" / "42d" / "4mo" / "1y 8mo" / "8y"
+// Mixed units read at a glance: nobody converts "1.75y" in their head, and
+// "117950d" is noise. Months take over past 60 days, years past one year
+// (with the leftover months until ~5y, where they stop mattering).
 export function fmtEtaDays(days: number | null): string {
   if (days === null) return "n/a";
   if (days <= 0) return "now";
   if (days < 1) return Math.max(1, Math.round(days * 24)) + "h";
   if (days < 10) return days.toFixed(1).replace(/\.0$/, "") + "d";
-  // beyond a year, day counts read as noise ("eta 117950d"); years stay honest
-  if (days > 365) return (days / 365).toFixed(days < 1825 ? 1 : 0).replace(/\.0$/, "") + "y";
-  return Math.round(days) + "d";
+  if (days < 60) return Math.round(days) + "d";
+  if (days < 365) {
+    const mo = Math.round(days / 30.44);
+    return mo >= 12 ? "1y" : mo + "mo";
+  }
+  const years = Math.floor(days / 365.25);
+  const months = Math.round((days - years * 365.25) / 30.44);
+  if (years >= 5 || months === 0) return Math.round(days / 365.25) + "y";
+  if (months === 12) return years + 1 + "y";
+  return `${years}y ${months}mo`;
 }
 
 export function etaDate(days: number | null, from = new Date()): string | null {

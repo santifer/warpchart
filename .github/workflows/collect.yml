@@ -1,7 +1,12 @@
 name: collect
 on:
   schedule:
-    - cron: "7 * * * *" # :07 avoids the :00 congestion on Actions
+    # Every 2h (was hourly): each data commit triggers a full Vercel build,
+    # and build minutes were eating 76% of the monthly credit. The health
+    # monitor alerts at >3h, so 2h keeps a comfortable margin, and live
+    # polling + /api/live/locals cover the real-time layer between commits.
+    # :07 avoids the :00 congestion on Actions.
+    - cron: "7 */2 * * *"
   workflow_dispatch:
 
 permissions:

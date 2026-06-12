@@ -1,16 +1,23 @@
 "use client";
 
-// The diffusion engine: type any repo, watch its animated chart draw itself,
-// copy the README snippet. The snippet uses the <picture> pattern so the
-// embed follows GitHub's color scheme.
+// The diffusion engine: search any repo (same live finder as the landing
+// scan), watch its animated chart draw itself, copy the README snippet.
+// The snippet uses the <picture> pattern so the embed follows GitHub's
+// color scheme.
 import { useEffect, useMemo, useState } from "react";
 import { useThemeMode } from "@/lib/usePalette";
+import RepoSearch, { type CatalogEntry } from "./RepoSearch";
 
 const REPO_RE = /^[\w.-]+\/[\w.-]+$/;
 
-export default function EmbedGenerator({ defaultRepo }: { defaultRepo: string }) {
+export default function EmbedGenerator({
+  defaultRepo,
+  catalog,
+}: {
+  defaultRepo: string;
+  catalog: CatalogEntry[];
+}) {
   const { resolved } = useThemeMode();
-  const [repo, setRepo] = useState(defaultRepo);
   const [applied, setApplied] = useState(defaultRepo);
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
   const [copied, setCopied] = useState(false);
@@ -24,14 +31,12 @@ export default function EmbedGenerator({ defaultRepo }: { defaultRepo: string })
     if (m) {
       const r = decodeURIComponent(m[1]);
       if (REPO_RE.test(r)) {
-        setRepo(r);
         setApplied(r);
         setStatus("loading");
       }
     }
   }, []);
 
-  const valid = REPO_RE.test(repo.trim());
   const isTenant = applied.toLowerCase() === defaultRepo.toLowerCase();
 
   // The tenant's chart needs no ?repo= : it reads the exact local archive
@@ -64,36 +69,24 @@ export default function EmbedGenerator({ defaultRepo }: { defaultRepo: string })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [origin, applied]);
 
-  const scan = () => {
-    if (!valid) return;
+  const scan = (r: string) => {
     setStatus("loading");
-    setApplied(repo.trim());
+    setApplied(r);
     setCopied(false);
     setRetry(0);
   };
 
   return (
     <div className="flex flex-col gap-3">
-      <div className="hud flex items-center gap-3 px-4 py-2.5">
-        <span className="numeral shrink-0 text-label tracking-[0.25em] text-accent">EMBED</span>
-        <input
-          value={repo}
-          onChange={(e) => setRepo(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") scan();
-          }}
-          placeholder="owner/name"
-          className="numeral w-full bg-transparent text-sm text-ink outline-none placeholder:text-faint"
-          aria-label="Repository for the embeddable chart"
-        />
-        <button
-          onClick={scan}
-          disabled={!valid}
-          className="numeral shrink-0 border border-accent/40 px-3 py-1 text-micro tracking-[0.18em] text-accent transition-colors hover:bg-accent/10 disabled:opacity-40"
-        >
-          RENDER
-        </button>
-      </div>
+      {/* the same live finder as the landing scan, pointed at rendering:
+          pick a repo and its chart + snippet appear below */}
+      <RepoSearch
+        catalog={catalog}
+        size="sm"
+        label="EMBED"
+        placeholder={`search any repository to embed… (showing ${applied})`}
+        onPick={scan}
+      />
 
       <div className="hud relative min-h-[120px] p-3">
         {status === "loading" ? (
