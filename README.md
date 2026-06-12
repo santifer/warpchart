@@ -4,7 +4,9 @@
 
 > Growth telemetry for any GitHub repository. A live star chart of your repo's journey through the worldwide ranking, with sound.
 
-![Warpchart](assets/hero.png)
+https://github.com/user-attachments/assets/1b04b08e-7154-4123-a1a5-184227882cf8
+
+*The landing galaxy: every light is a real top-1000 repository at its real log-scale position. Click any system to warp into its full telemetry console.*
 
 **[Live demo](https://warpchart.dev)** (tracking [career-ops](https://github.com/santifer/career-ops) as example tenant) · **[Scan any repo instantly](https://warpchart.dev/r/tinygrad/tinygrad)** by changing the URL: `/r/owner/name`
 
@@ -113,6 +115,10 @@ MIT
 # :es: Versión en Español
 
 > Telemetría de crecimiento para cualquier repositorio de GitHub. Una carta estelar en vivo del viaje de tu repo por el ranking mundial, con sonido.
+
+https://github.com/user-attachments/assets/1b04b08e-7154-4123-a1a5-184227882cf8
+
+*La galaxia de la portada: cada luz es un repositorio real del top 1000 en su posición logarítmica real. Haz clic en cualquier sistema para saltar a su consola de telemetría completa.*
 
 **[Demo en vivo](https://warpchart.dev)** (siguiendo a [career-ops](https://github.com/santifer/career-ops) como tenant de ejemplo) · **Escanea cualquier repo al instante** cambiando la URL: `/r/owner/name`
 
