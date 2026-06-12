@@ -1,7 +1,6 @@
 // Instant explorer: a live snapshot of any GitHub repo's position on the
 // route to worldwide rank 1. ISR-cached per repo, so traffic never multiplies
 // GitHub API cost.
-import { ViewTransition } from "react";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import GalacticChart from "@/components/GalacticChart";
@@ -154,12 +153,10 @@ export default async function ExplorerPage({
         forks: 0,
       };
       return (
-        <ViewTransition enter={{ warp: "gx-warp-in", default: "none" }} default="none">
-          <Dashboard
-            bundle={buildBundle({ timestamps: tTimestamps, history: tHistory, meta: tMeta })}
-            polling={false}
-          />
-        </ViewTransition>
+        <Dashboard
+          bundle={buildBundle({ timestamps: tTimestamps, history: tHistory, meta: tMeta })}
+          polling={false}
+        />
       );
     }
   }
@@ -206,10 +203,9 @@ export default async function ExplorerPage({
   };
 
   return (
-    // arriving via the galaxy's warp jump: the explorer resolves out of the
-    // warp blur (the loading skeleton plays the same entrance when it goes
-    // first); regular navigations stay plain
-    <ViewTransition enter={{ warp: "gx-warp-in", default: "none" }} default="none">
+    // NO ViewTransition here on purpose: the loading skeleton plays the
+    // warp entrance, and the skeleton -> content reveal must be an in-place
+    // swap (a second animated entrance made everything vanish and reappear)
     <main className="mx-auto flex max-w-[1440px] flex-col gap-4 px-3 py-4 sm:px-6 sm:py-6">
       <div className="rise px-1">
         <Masthead />
@@ -409,6 +405,5 @@ export default async function ExplorerPage({
         </a>
       </footer>
     </main>
-    </ViewTransition>
   );
 }

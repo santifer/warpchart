@@ -71,7 +71,7 @@ export default async function Explore() {
           with a raised roof, so starlight can glow past the hero's top
           edge instead of cutting on an invisible line under the header */}
       <section
-        className="rise relative left-1/2 w-screen -translate-x-1/2"
+        className="gx-hero-sec rise relative left-1/2 w-screen -translate-x-1/2"
         style={{ animationDelay: "80ms" }}
       >
         <div className="relative h-[560px] sm:h-[640px]">

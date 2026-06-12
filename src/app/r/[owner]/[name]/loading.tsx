@@ -28,6 +28,8 @@ function seeded(seed: number) {
   };
 }
 
+// Lives CENTERED inside the star chart skeleton (a fixed-height stage), so
+// the appearing lines never resize the header or shift the page: zero CLS.
 function ScanLog() {
   const [visible, setVisible] = useState(1);
   const [slow, setSlow] = useState(false);
@@ -41,7 +43,7 @@ function ScanLog() {
   }, []);
   const lines = STEPS.slice(0, visible).slice(-4);
   return (
-    <div className="numeral flex flex-col items-end gap-0.5 text-right text-micro">
+    <div className="numeral flex w-[360px] flex-col gap-1 text-micro">
       {lines.map((s, i) => {
         const isLast = i === lines.length - 1 && visible < STEPS.length;
         return (
@@ -118,11 +120,20 @@ function StarfieldSkeleton({ mobile = false }: { mobile?: boolean }) {
   }, [mobile]);
   const ticks = [12, 27, 42, 57, 72, 87];
   return (
-    <div className={`relative overflow-hidden ${mobile ? "h-[600px]" : "h-[430px]"}`}>
+    // desktop mirrors the REAL chart's box exactly (the svg renders at
+    // width x 520/1200), so the content swap costs zero layout shift
+    <div
+      className={`relative overflow-hidden ${mobile ? "h-[600px]" : ""}`}
+      style={mobile ? undefined : { aspectRatio: "1200 / 520" }}
+    >
       <style>{`@keyframes sk-tw { 0%, 100% { opacity: 0.12 } 50% { opacity: 0.85 } }`}</style>
       <span className="numeral absolute left-1 top-1 text-micro tracking-[0.25em] text-faint">
         LOCAL SYSTEM
       </span>
+      {/* the journey log, center stage while the system resolves */}
+      <div className="absolute inset-0 flex items-center justify-center">
+        <ScanLog />
+      </div>
       {stars.map((s, i) => (
         <span
           key={i}
@@ -284,10 +295,15 @@ export default function ExplorerLoading() {
               <Bar w="w-64" />
             </div>
           </div>
-          {/* reserve the metrics row height so the header doesn't grow when
-              the real numbers land */}
-          <div className="flex min-h-[52px] items-start">
-            <ScanLog />
+          {/* metric silhouettes at the REAL metrics row's size: the header
+              never changes height (the journey log lives in the chart) */}
+          <div className="flex min-h-[52px] items-center gap-8" aria-hidden>
+            {["w-16", "w-14", "w-12", "w-16"].map((w, i) => (
+              <div key={i} className="flex flex-col gap-2">
+                <Bar w="w-10" />
+                <Bar w={w} />
+              </div>
+            ))}
           </div>
         </div>
         <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-grid pt-2">

@@ -955,6 +955,13 @@ body.gx-warping .gx-hero-copy {
   opacity: 0;
   transition: opacity 0.3s ease-out;
 }
+/* the whole page travels: everything below/around the hero melts away
+   during the dive, otherwise the lower half of the landing sits still and
+   sharp while the galaxy flies, and the cut reads as a jump */
+body.gx-warping main > :not(.gx-hero-sec) {
+  opacity: 0.05;
+  transition: opacity 0.5s ease-out;
+}
 /* lettering never travels: every label, tip and signal ring fades during
    the anticipation phase (first ~150ms), so by the time the rotation and
    zoom explode only stars, dust and light make the jump (giant rotated
@@ -990,7 +997,9 @@ body.gx-warping .ghx-lore {
   from {
     transform: scale(1.04);
     filter: blur(14px) brightness(1.7);
-    opacity: 0;
+    /* 0.35, not 0: a fully transparent start left a near-black valley
+       between the dive's last frame and the skeleton's arrival */
+    opacity: 0.35;
   }
 }
 @media (prefers-reduced-motion: reduce) {
