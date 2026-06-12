@@ -119,10 +119,10 @@ export default async function Explore() {
               shine through the tinted band); only the text stays in column */}
           <div className="border-y border-grid bg-hull/30 py-2 sm:py-3">
             <div className="mx-auto max-w-[2200px] px-2 sm:px-6">
-              <div className="hidden lg:block">
+              <div className="hidden landscape:block lg:block">
                 <SpotlightChart inputs={spotlight.inputs} />
               </div>
-              <div className="lg:hidden">
+              <div className="landscape:hidden lg:hidden">
                 <VerticalChart inputs={spotlight.inputs} />
               </div>
             </div>

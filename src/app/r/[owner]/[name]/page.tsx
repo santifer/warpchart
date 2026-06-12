@@ -301,10 +301,10 @@ export default async function ExplorerPage({
                     ⛶ COMMAND DECK · ◈ LOCKED — SEE IT ON THE DEMO →
                   </a>
                 </div>
-                <div className="hidden lg:block">
+                <div className="hidden landscape:block lg:block">
                   <GalacticChart inputs={inputs} liveLocals />
                 </div>
-                <div className="lg:hidden">
+                <div className="landscape:hidden lg:hidden">
                   <VerticalChart inputs={inputs} />
                 </div>
               </>

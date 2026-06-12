@@ -54,10 +54,10 @@ function ChartIsland({
   );
   return (
     <>
-      <div className="hidden lg:block">
+      <div className="hidden landscape:block lg:block">
         <GalacticChart inputs={inputs} target={target} onPinTarget={onPinTarget} />
       </div>
-      <div className="lg:hidden">
+      <div className="landscape:hidden lg:hidden">
         <VerticalChart inputs={inputs} target={target} onPinTarget={onPinTarget} />
       </div>
     </>

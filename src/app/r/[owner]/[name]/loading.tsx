@@ -315,10 +315,10 @@ export default function ExplorerLoading() {
       </header>
 
       <PanelSkeleton index="01" title="Star chart" meta="resolving local band…" delay={80}>
-        <div className="hidden lg:block">
+        <div className="hidden landscape:block lg:block">
           <StarfieldSkeleton />
         </div>
-        <div className="lg:hidden">
+        <div className="landscape:hidden lg:hidden">
           <StarfieldSkeleton mobile />
         </div>
       </PanelSkeleton>
