@@ -17,7 +17,7 @@ import Dashboard from "@/components/Dashboard";
 import CurveChart from "@/components/CurveChart";
 import Masthead from "@/components/Masthead";
 import { buildBundle } from "@/lib/bundle";
-import { loadMeta } from "@/lib/history";
+import { loadMeta, isHostedRepo, loadTenantHistory, loadTenantTimestamps } from "@/lib/history";
 import { unstable_cache } from "next/cache";
 import { getExplorerData } from "@/lib/explorer";
 
@@ -129,6 +129,36 @@ export default async function ExplorerPage({
   const tenant = loadMeta();
   if (tenant && `${owner}/${name}`.toLowerCase() === tenant.repo.toLowerCase()) {
     return <Dashboard bundle={buildBundle()} />;
+  }
+
+  // HOSTED MISSIONS: paying repos get the same full console, fed by their
+  // own collected history (same pipeline as the house repo). Live polling
+  // stays off (the /api/live endpoints serve the house repo); the collector
+  // cadence is the freshness contract. A tenant whose first collection has
+  // not landed yet falls through to the public explorer view.
+  const hostedLabel = `${owner}/${name}`;
+  if (isHostedRepo(hostedLabel)) {
+    const tHistory = loadTenantHistory(hostedLabel);
+    const tTimestamps = loadTenantTimestamps(hostedLabel);
+    if (tHistory.length) {
+      const tMeta = {
+        repo: hostedLabel,
+        owner,
+        name,
+        description: null,
+        created_at: tTimestamps[0] ?? tHistory[0].ts,
+        avatar_url: `https://github.com/${owner}.png`,
+        homepage: null,
+        language: null,
+        forks: 0,
+      };
+      return (
+        <Dashboard
+          bundle={buildBundle({ timestamps: tTimestamps, history: tHistory, meta: tMeta })}
+          polling={false}
+        />
+      );
+    }
   }
 
   let data;

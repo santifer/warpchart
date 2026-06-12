@@ -63,7 +63,9 @@ function ChartIsland({
   );
 }
 
-export default function Dashboard({ bundle }: { bundle: DashboardBundle }) {
+// polling=false for hosted tenants: the /api/live endpoints serve the house
+// repo, so a tenant console refreshes on the collector cadence instead.
+export default function Dashboard({ bundle, polling = true }: { bundle: DashboardBundle; polling?: boolean }) {
   const repo = bundle.meta?.repo;
   const next = bundle.milestones[0] ?? null;
   const [target, setTarget] = useState<string | null>(null);
@@ -86,7 +88,7 @@ export default function Dashboard({ bundle }: { bundle: DashboardBundle }) {
   };
 
   return (
-    <LiveProvider bundle={bundle}>
+    <LiveProvider bundle={bundle} polling={polling}>
       <SoundController nextThreshold={next?.threshold ?? null} nextRank={next?.rank ?? null} />
       <main className="mx-auto flex max-w-[1440px] flex-col gap-4 px-3 py-4 sm:px-6 sm:py-6">
         <div className="rise px-1">

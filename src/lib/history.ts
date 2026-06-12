@@ -77,6 +77,31 @@ export function isHostedRepo(repo: string): boolean {
   return loadTenants().some((t) => t.repo.toLowerCase() === lower);
 }
 
+function tenantDir(repo: string): string {
+  return path.join(DATA, "tenants", repo.toLowerCase().replace("/", "--"));
+}
+
+export function loadTenantTimestamps(repo: string): string[] {
+  const p = path.join(tenantDir(repo), "stargazer_timestamps.txt");
+  if (!existsSync(p)) return [];
+  return readFileSync(p, "utf8").trimEnd().split("\n").filter(Boolean);
+}
+
+export function loadTenantHistory(repo: string): Snapshot[] {
+  const p = path.join(tenantDir(repo), "history.jsonl");
+  if (!existsSync(p)) return [];
+  const out: Snapshot[] = [];
+  for (const line of readFileSync(p, "utf8").trimEnd().split("\n")) {
+    if (!line.trim()) continue;
+    try {
+      out.push(JSON.parse(line) as Snapshot);
+    } catch {
+      /* skip torn line */
+    }
+  }
+  return out;
+}
+
 export function loadMilestones(): MilestonesFile | null {
   const p = path.join(DATA, "milestones.json");
   if (!existsSync(p)) return null;

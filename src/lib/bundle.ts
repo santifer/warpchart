@@ -111,15 +111,25 @@ export function buildRouteLayers(
   return { dots, landmarks, all: ranked };
 }
 
-export function buildBundle(): DashboardBundle {
+// With no source the bundle is the house repo's; hosted tenants feed their
+// own timestamps/history (collected by the same pipeline) plus whatever
+// meta the caller already holds. Tenant snapshots may lack milestones,
+// neighbors or apex: every consumer below already tolerates absence.
+export function buildBundle(src?: {
+  timestamps: string[];
+  history: Snapshot[];
+  meta: RepoMetaFile | null;
+}): DashboardBundle {
   const nowMs = Date.now();
-  const timestamps = loadTimestamps();
-  const history = loadHistory();
-  const meta = loadMeta();
+  const timestamps = src ? src.timestamps : loadTimestamps();
+  const history = src ? src.history : loadHistory();
+  const meta = src ? src.meta : loadMeta();
   const latest: Snapshot | null = history.length ? history[history.length - 1] : null;
 
-  // Latest known milestone thresholds; drift estimated from the full history.
-  const msRecord = latest?.milestones ?? loadMilestones()?.milestones ?? {};
+  // Latest known milestone thresholds; drift estimated from the full
+  // history. Tenants never fall back to the HOUSE milestone file: their
+  // gates belong to their own rank neighborhood.
+  const msRecord = latest?.milestones ?? (src ? {} : loadMilestones()?.milestones) ?? {};
   const milestones: MilestoneInfo[] = Object.entries(msRecord)
     .map(([rank, threshold]) => ({
       rank: Number(rank),
@@ -135,6 +145,12 @@ export function buildBundle(): DashboardBundle {
     if (!neighbors.length && history[i].neighbors?.length) neighbors = history[i].neighbors!;
     if (!apex && history[i].apex) apex = history[i].apex!;
     if (neighbors.length && apex) break;
+  }
+  // the worldwide #1 is global truth: tenant histories without their own
+  // apex snapshot borrow it from the registry so the route band still draws
+  if (!apex) {
+    const top = loadRoute()?.repos[0];
+    if (top) apex = { r: top.r, s: top.s };
   }
 
   const daily = dailyCounts(timestamps, 35, nowMs);
