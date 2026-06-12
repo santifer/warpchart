@@ -213,16 +213,26 @@ export default function GalacticChart({
         y: 54 + rand() * (CLIP_BOTTOM - 106),
         r: rA + rand() * (rB - rA),
         o: oA + rand() * (oB - oA),
+        t: 0.7 + rand() * 0.6,
       }));
     };
     // At relative rest the field barely drifts (5x slower than it used to):
     // cruise is a crawl, so the FTL jump while panning lands much harder.
+    // `trail` is each depth's motion-streak ceiling: the background answers
+    // OUR absolute speed (neighbors answer relative speed), with parallax
+    // making near specks streak more than far ones.
     return [
-      { id: 1, f: 0.15, dur: 750, warp: false, stars: mk("::far", 40, 0.4, 0.8, 0.08, 0.2) },
-      { id: 2, f: 0.45, dur: 400, warp: false, stars: mk("::mid", 55, 0.5, 1.0, 0.12, 0.3) },
-      { id: 3, f: 0.9, dur: 0, warp: true, stars: mk("::near", 45, 0.7, 1.5, 0.18, 0.45) },
+      { id: 1, f: 0.15, dur: 750, warp: false, trail: 1.4, stars: mk("::far", 40, 0.4, 0.8, 0.08, 0.2) },
+      { id: 2, f: 0.45, dur: 400, warp: false, trail: 3, stars: mk("::mid", 55, 0.5, 1.0, 0.12, 0.3) },
+      { id: 3, f: 0.9, dur: 0, warp: true, trail: 5, stars: mk("::near", 45, 0.7, 1.5, 0.18, 0.45) },
     ];
   }, [inputs.repo]);
+
+  // How fast WE move through the fixed field, 0..1. sqrt compresses the
+  // long tail: ~900 stars/day pins the ceiling, single digits read as a
+  // near-standstill. The streak trails behind apparent motion: we fly
+  // toward the core, the field flows left, so trails extend right.
+  const bgSpeedT = Math.min(1, Math.sqrt(Math.max(vOwn, 0)) / 30);
 
   // Parallel sequences beyond the core: when the window peeks past the
   // worldwide #1, other faint galaxies surface in the deep background. They
@@ -684,25 +694,38 @@ export default function GalacticChart({
                 >
                   {[0, W, 2 * W].map((dx) => (
                     <g key={dx} transform={`translate(${dx} 0)`}>
-                      {layer.stars.map((p, i) => (
-                        <circle
-                          key={i}
-                          className={
-                            layer.warp
-                              ? warpZone === "route"
-                                ? "star-warp warping-fast"
-                                : warpZone === "local"
-                                  ? "star-warp warping"
-                                  : "star-warp"
-                              : undefined
-                          }
-                          cx={p.x}
-                          cy={p.y}
-                          r={p.r}
-                          fill={C.speck}
-                          opacity={p.o}
-                        />
-                      ))}
+                      {layer.stars.map((p, i) => {
+                        const trail = layer.trail * bgSpeedT * p.t;
+                        return (
+                          <g key={i}>
+                            {trail >= 0.7 ? (
+                              <line
+                                x1={p.x} y1={p.y} x2={p.x + trail} y2={p.y}
+                                stroke={C.speck}
+                                strokeWidth={Math.min(p.r * 0.9, 0.8)}
+                                strokeLinecap="round"
+                                opacity={p.o * 0.4}
+                              />
+                            ) : null}
+                            <circle
+                              className={
+                                layer.warp
+                                  ? warpZone === "route"
+                                    ? "star-warp warping-fast"
+                                    : warpZone === "local"
+                                      ? "star-warp warping"
+                                      : "star-warp"
+                                  : undefined
+                              }
+                              cx={p.x}
+                              cy={p.y}
+                              r={p.r}
+                              fill={C.speck}
+                              opacity={p.o}
+                            />
+                          </g>
+                        );
+                      })}
                     </g>
                   ))}
                 </g>

@@ -5,9 +5,11 @@
 //   /api/chart                         -> the tracked repo (exact history)
 //   /api/chart?repo=owner/name         -> ANY repository (sampled history)
 //   /api/chart?w=600&h=200&theme=dark  -> size and scheme overrides
-import { cachedSampleCurve, tenantCurve, isTenantRepo, withLiveTotal, type Curve } from "@/lib/curve";
+import { cachedSampleCurve, tenantCurve, isTenantRepo, withLiveTotal, curveTailV, type Curve } from "@/lib/curve";
+import { loadRoute } from "@/lib/history";
 import { reqLog } from "@/lib/log";
 import { fmt, fmtCompact } from "@/lib/format";
+import { fmtEmbed, adaptiveTtl, embedCache, TENANT_EMBED_CACHE } from "@/lib/embed";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -48,7 +50,11 @@ export async function GET(req: Request) {
   const log = reqLog("chart", { repo: repoParam ?? "tenant", w, h });
 
   let curve: Curve | null = null;
-  let cacheControl = "public, s-maxage=3600, stale-while-revalidate=86400";
+  // The tenant promises an EXACT counter, so its embed trades cache length
+  // for freshness; generic repos show a rounded counter instead, so their
+  // TTL stretches with how slowly that rounded display actually moves.
+  let exact = false;
+  let cacheControl = TENANT_EMBED_CACHE;
   if (repoParam) {
     if (!/^[\w.-]+\/[\w.-]+$/.test(repoParam)) {
       return new Response("invalid repo", { status: 400, headers: { "Cache-Control": "no-store" } });
@@ -57,14 +63,21 @@ export async function GET(req: Request) {
     // ?repo= pointing at the tracked tenant must serve the SAME exact local
     // curve as the no-param branch (the sampled path showed a dashed
     // "estimated" tail for a repo whose full history we hold)
-    if (isTenantRepo(repoParam)) curve = tenantCurve();
+    if (isTenantRepo(repoParam)) {
+      curve = tenantCurve();
+      if (curve) {
+        curve = await withLiveTotal(curve, owner, name);
+        exact = true;
+      }
+    }
     if (!curve) {
       try {
         curve = await log.time("sample", () => cachedSampleCurve(owner, name));
         curve = await withLiveTotal(curve, owner, name);
-        // short edge TTL + long SWR: the embed tracks the live counter at
-        // star-history cadence while the curve shape stays cached for 6h
-        cacheControl = "public, s-maxage=1800, stale-while-revalidate=86400";
+        // velocity-aware TTL: we already know how fast most repos move
+        // (registry diff for the top 1000, curve tail for deep space)
+        const hit = loadRoute()?.repos.find((p) => p.r.toLowerCase() === repoParam.toLowerCase());
+        cacheControl = embedCache(adaptiveTtl(curve.total, hit?.v ?? curveTailV(curve)));
       } catch (err) {
         const msg = (err as Error).message;
         const notFound = /404|not found/i.test(msg);
@@ -79,6 +92,9 @@ export async function GET(req: Request) {
     if (!curve) {
       return new Response("no data", { status: 404, headers: { "Cache-Control": "no-store" } });
     }
+    const [owner, name] = curve.repo.split("/");
+    curve = await withLiveTotal(curve, owner, name);
+    exact = true;
   }
 
   const { repo, total, pts, dashedFrom } = curve;
@@ -236,7 +252,7 @@ export async function GET(req: Request) {
 ${specks}
 <text x="${padL}" y="22" font-family="${mono}" font-size="13" letter-spacing="2" style="fill:var(--dm)">${esc(repo.toUpperCase())}</text>
 ${branding}
-<text class="cp" x="${w - 16}" y="22" text-anchor="end" font-family="${mono}" font-size="15" font-weight="700" style="fill:var(--ac)">${fmt(total)} ★</text>
+<text class="cp" x="${w - 16}" y="22" text-anchor="end" font-family="${mono}" font-size="15" font-weight="700" style="fill:var(--ac)">${exact ? fmt(total) : fmtEmbed(total)} ★</text>
 ${yMarks}
 <line x1="${padL}" y1="${axisY}" x2="${padL + iw}" y2="${axisY}" style="stroke:var(--bd)"/>
 <g class="wg" clip-path="url(#wipe)">

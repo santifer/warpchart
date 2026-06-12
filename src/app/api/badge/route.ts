@@ -3,9 +3,10 @@
 //   /api/badge?repo=owner/x   -> any repo (free if in the top 1000, else live)
 //   ?theme=light|dark         -> force a scheme (for GitHub <picture> embeds);
 //                                default adapts via prefers-color-scheme.
-import { loadHistory, loadRoute } from "@/lib/history";
-import { currentStars, worldwideRank } from "@/lib/github";
+import { loadHistory, loadMeta, loadRoute } from "@/lib/history";
+import { currentStars, worldwideRank, lowFuel } from "@/lib/github";
 import { fmt } from "@/lib/format";
+import { fmtEmbed, adaptiveTtl, embedCache, TENANT_EMBED_CACHE } from "@/lib/embed";
 
 export const dynamic = "force-dynamic";
 
@@ -24,11 +25,11 @@ function schemeStyle(theme: string | null): string {
   return `:root{${DARK}}@media (prefers-color-scheme: light){:root{${LIGHT}}}`;
 }
 
-function badgeSvg(label: string, rank: number | null, stars: number, trend: Trend, theme: string | null): string {
+function badgeSvg(label: string, rank: number | null, stars: number, trend: Trend, theme: string | null, exact: boolean): string {
   const mono = "ui-monospace,SFMono-Regular,Menlo,Consolas,monospace";
   const rankTxt = rank !== null ? `#${fmt(rank)}` : "unranked";
   const arrow = trend === "up" ? " ▲" : trend === "down" ? " ▼" : trend === "flat" ? " ▬" : "";
-  const starsTxt = `${fmt(stars)} ★`;
+  const starsTxt = `${exact ? fmt(stars) : fmtEmbed(stars)} ★`;
 
   const CH = 7.9;
   const pad = 12;
@@ -69,6 +70,11 @@ export async function GET(req: Request) {
     let rank: number | null = null;
     let stars = 0;
     let trend: Trend = null;
+    // exact counter (and a short TTL) for the tenant; rounded counter (and a
+    // velocity-stretched TTL) for everyone else -- shown precision should
+    // never outrun the freshness the caches can actually deliver
+    let exact = false;
+    let cacheControl = TENANT_EMBED_CACHE;
 
     if (!repoParam) {
       const history = loadHistory();
@@ -76,6 +82,14 @@ export async function GET(req: Request) {
       if (!last) return new Response("no data", { status: 404, headers: { "Cache-Control": "no-store" } });
       rank = last.rank;
       stars = last.stars;
+      exact = true;
+      const meta = loadMeta();
+      if (meta && !lowFuel()) {
+        try {
+          const [owner, name] = meta.repo.split("/");
+          stars = Math.max(stars, await currentStars(owner, name));
+        } catch { /* the hourly snapshot is an acceptable fallback */ }
+      }
       const cutoff = Date.now() - 24 * 3600_000;
       let past = null;
       for (const s of history) {
@@ -94,18 +108,20 @@ export async function GET(req: Request) {
       if (idx >= 0) {
         rank = idx + 1;
         stars = route!.repos[idx].s;
+        cacheControl = embedCache(adaptiveTtl(stars, route!.repos[idx].v));
       } else {
         const [owner, name] = repoParam.split("/");
         stars = await currentStars(owner, name);
         rank = await worldwideRank(stars);
+        cacheControl = embedCache(adaptiveTtl(stars, null));
       }
     }
 
-    const svg = badgeSvg("WORLD RANK", rank, stars, trend, theme);
+    const svg = badgeSvg("WORLD RANK", rank, stars, trend, theme, exact);
     return new Response(svg, {
       headers: {
         "Content-Type": "image/svg+xml; charset=utf-8",
-        "Cache-Control": "public, s-maxage=3600, stale-while-revalidate=86400",
+        "Cache-Control": cacheControl,
       },
     });
   } catch {

@@ -197,3 +197,17 @@ export function isTenantRepo(repo: string): boolean {
   const meta = loadMeta();
   return !!meta && meta.repo.toLowerCase() === repo.toLowerCase();
 }
+
+// Rough stars/day from the tail of an already-sampled curve: free velocity
+// for repos outside the registry (feeds the embeds' adaptive cache TTL).
+export function curveTailV(curve: Curve): number | null {
+  const pts = curve.pts;
+  if (pts.length < 2) return null;
+  const t1 = pts[pts.length - 1].t;
+  const cutoff = t1 - 14 * 86_400_000;
+  let i = pts.length - 2;
+  while (i > 0 && pts[i].t > cutoff) i--;
+  const days = (t1 - pts[i].t) / 86_400_000;
+  if (days < 0.5) return null;
+  return (pts[pts.length - 1].v - pts[i].v) / days;
+}
