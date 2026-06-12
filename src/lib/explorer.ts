@@ -1,3 +1,4 @@
+import { unstable_cache } from "next/cache";
 // Data assembly for the instant explorer (/r/owner/name): a live snapshot of
 // ANY GitHub repo's position on the route, with tiered cost:
 //   - repo in the precomputed top 1000 -> 1 GraphQL call (velocities only)
@@ -22,6 +23,25 @@ import type { ChartInputs, Neighbor, RouteRepo } from "./types";
 export interface Dossier extends DossierRaw {
   npmLast30: number | null;
 }
+
+// standalone cached dossier for routes that don't run the full explorer
+// assembly (the house and hosted-tenant consoles)
+export async function fetchDossier(owner: string, name: string): Promise<Dossier | null> {
+  try {
+    const raw = await repoDossier(owner, name);
+    const npmLast30 = raw.npmPkg ? await npmDownloads(raw.npmPkg) : null;
+    return { ...raw, npmLast30 };
+  } catch {
+    return null;
+  }
+}
+
+export const getCachedDossier = (owner: string, name: string) =>
+  unstable_cache(
+    () => fetchDossier(owner, name),
+    ["dossier-v1", `${owner}/${name}`.toLowerCase()],
+    { revalidate: 900 },
+  )();
 
 export interface ExplorerData {
   inputs: ChartInputs;

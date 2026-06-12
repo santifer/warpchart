@@ -323,11 +323,55 @@ export default function ExplorerLoading() {
         </div>
       </PanelSkeleton>
 
+      {/* FREE SHELF: same grid as the real page (cumulative left, dossier
+          stacked right), same boxes, same min-heights (zero-CLS contract) */}
+      <div className="grid grid-cols-1 items-stretch gap-4 lg:grid-cols-2">
+        <PanelSkeleton index="02" title="Cumulative stars" meta="real data · interactive" delay={160}>
+          <div className="flex h-full flex-col justify-between gap-2">
+            <CurveSilhouette />
+            <div className="h-9 w-72 animate-pulse self-start border border-grid bg-grid/30" />
+          </div>
+        </PanelSkeleton>
+        <div className="flex flex-col gap-4">
+          <PanelSkeleton index="03" title="Maintenance pulse" meta="last 30 days · public telemetry" delay={200}>
+            <div className="flex min-h-[158px] flex-col justify-between gap-4 py-1">
+              <div className="grid grid-cols-2 gap-x-6 gap-y-4 sm:grid-cols-4">
+                {[0, 1, 2, 3].map((i) => (
+                  <div key={i} className="flex flex-col gap-2">
+                    <Bar w="w-14" />
+                    <Bar w="w-20" />
+                  </div>
+                ))}
+              </div>
+              <div className="flex flex-col gap-2">
+                <div className="h-1.5 w-full animate-pulse bg-grid/60" />
+                <Bar w="w-2/3" />
+              </div>
+            </div>
+          </PanelSkeleton>
+          <PanelSkeleton index="04" title="Real usage" meta="installs, not applause" delay={240}>
+            <div className="flex min-h-[158px] flex-col gap-3 py-1">
+              <div className="flex flex-col gap-2">
+                <Bar w="w-24" />
+                <Bar w="w-32" />
+              </div>
+              {[0, 1, 2].map((i) => (
+                <div key={i} className="flex items-center gap-2">
+                  <Bar w="w-24" />
+                  <div className="h-1.5 flex-1 animate-pulse bg-grid/60" />
+                  <Bar w="w-12" />
+                </div>
+              ))}
+            </div>
+          </PanelSkeleton>
+        </div>
+      </div>
+
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-12">
-        <PanelSkeleton index="02" title="Velocity, stars per hour" meta="24h vs previous 24h" className="lg:col-span-8" delay={160}>
+        <PanelSkeleton index="05" title="Velocity, stars per hour" meta="24h vs previous 24h" className="lg:col-span-8" delay={280}>
           <VelocitySilhouette />
         </PanelSkeleton>
-        <PanelSkeleton index="03" title="Milestone projections" meta="unlocks with tracking" className="lg:col-span-4" delay={240}>
+        <PanelSkeleton index="06" title="Milestone projections" meta="unlocks with tracking" className="lg:col-span-4" delay={320}>
           <div className="relative">
             <div className="flex h-[260px] flex-col justify-between py-2 blur-[1px]" aria-hidden>
               {[0, 1, 2, 3].map((i) => (
@@ -342,64 +386,20 @@ export default function ExplorerLoading() {
         </PanelSkeleton>
       </div>
 
-      {/* dossier row: same boxes and inner min-height as the real
-          PulsePanel/UsagePanel (zero-CLS contract) */}
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-12">
-        <PanelSkeleton index="04" title="Maintenance pulse" meta="last 30 days · public telemetry" className="lg:col-span-7" delay={280}>
-          <div className="flex min-h-[158px] flex-col justify-between gap-4 py-1">
-            <div className="grid grid-cols-2 gap-x-6 gap-y-4 sm:grid-cols-4">
-              {[0, 1, 2, 3].map((i) => (
-                <div key={i} className="flex flex-col gap-2">
-                  <Bar w="w-14" />
-                  <Bar w="w-20" />
-                </div>
-              ))}
-            </div>
-            <div className="flex flex-col gap-2">
-              <div className="h-1.5 w-full animate-pulse bg-grid/60" />
-              <Bar w="w-2/3" />
-            </div>
-          </div>
-        </PanelSkeleton>
-        <PanelSkeleton index="05" title="Real usage" meta="installs, not applause" className="lg:col-span-5" delay={300}>
-          <div className="flex min-h-[158px] flex-col gap-3 py-1">
-            <div className="flex flex-col gap-2">
-              <Bar w="w-24" />
-              <Bar w="w-32" />
-            </div>
-            {[0, 1, 2].map((i) => (
-              <div key={i} className="flex items-center gap-2">
-                <Bar w="w-24" />
-                <div className="h-1.5 flex-1 animate-pulse bg-grid/60" />
-                <Bar w="w-12" />
-              </div>
-            ))}
-          </div>
-        </PanelSkeleton>
-      </div>
-
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <PanelSkeleton index="06" title="Daily ladder" meta="unlocks with tracking" delay={320}>
+        <PanelSkeleton index="07" title="Daily ladder" meta="unlocks with tracking" delay={360}>
           <LadderSilhouette />
         </PanelSkeleton>
-        <PanelSkeleton index="07" title="Cumulative stars" meta="real data · interactive" delay={400}>
-          <div className="flex flex-col gap-2">
-            <CurveSilhouette />
-            <div className="h-9 w-72 animate-pulse self-start border border-grid bg-grid/30" />
-          </div>
-        </PanelSkeleton>
-      </div>
-
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-12">
-        <PanelSkeleton index="08" title="Activity heatmap" meta="unlocks with tracking" className="lg:col-span-7" delay={480}>
+        <PanelSkeleton index="08" title="Activity heatmap" meta="unlocks with tracking" delay={400}>
           <HeatmapSilhouette />
         </PanelSkeleton>
-        <PanelSkeleton index="09" title="World rank over time" meta="unlocks with tracking" className="lg:col-span-5" delay={560}>
-          <StepsSilhouette />
-        </PanelSkeleton>
       </div>
 
-      <PanelSkeleton index="10" title="Mission log" meta="unlocks with tracking" delay={640}>
+      <PanelSkeleton index="09" title="World rank over time" meta="unlocks with tracking" delay={440}>
+        <StepsSilhouette />
+      </PanelSkeleton>
+
+      <PanelSkeleton index="10" title="Mission log" meta="unlocks with tracking" delay={480}>
         <LogSilhouette />
       </PanelSkeleton>
     </main>

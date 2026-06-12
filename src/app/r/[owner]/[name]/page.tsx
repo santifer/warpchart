@@ -20,7 +20,7 @@ import Masthead from "@/components/Masthead";
 import { buildBundle } from "@/lib/bundle";
 import { loadMeta, isHostedRepo, loadTenantHistory, loadTenantTimestamps } from "@/lib/history";
 import { unstable_cache } from "next/cache";
-import { getExplorerData } from "@/lib/explorer";
+import { getExplorerData, getCachedDossier } from "@/lib/explorer";
 
 // Shared data cache: even when the route renders dynamically, the GitHub
 // round-trips are paid at most once per repo per 15 minutes.
@@ -129,7 +129,7 @@ export default async function ExplorerPage({
   // this route" instead of "is it the tenant".
   const tenant = loadMeta();
   if (tenant && `${owner}/${name}`.toLowerCase() === tenant.repo.toLowerCase()) {
-    return <Dashboard bundle={buildBundle()} />;
+    return <Dashboard bundle={buildBundle()} dossier={await getCachedDossier(owner, name)} />;
   }
 
   // HOSTED MISSIONS: paying repos get the same full console, fed by their
@@ -157,6 +157,7 @@ export default async function ExplorerPage({
         <Dashboard
           bundle={buildBundle({ timestamps: tTimestamps, history: tHistory, meta: tMeta })}
           polling={false}
+          dossier={await getCachedDossier(owner, name)}
         />
       );
     }
@@ -307,34 +308,13 @@ export default async function ExplorerPage({
       </Panel>
 
       <LiveProvider bundle={demoBundle} polling={false}>
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-12">
-          <Panel index="02" title="Velocity, stars per hour" meta="24h vs previous 24h" className="lg:col-span-8" delay={160}>
-            <Locked unlockFor={repoLabel}>
-              <VelocityChart />
-            </Locked>
-          </Panel>
-          <Panel index="03" title="Milestone projections" meta="unlocks with tracking" className="lg:col-span-4" delay={240}>
-            <Locked unlockFor={repoLabel}>
-              <Projections bundle={demoBundle} />
-            </Locked>
-          </Panel>
-        </div>
-
-        {/* the public dossier: is this system alive, and is the hype backed
-            by real installs (both audiences: the owner and the curious) */}
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-12">
-          <PulsePanel dossier={data.dossier} />
-          <UsagePanel dossier={data.dossier} />
-        </div>
-
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-          <Panel index="06" title="Daily ladder" meta="unlocks with tracking" delay={320}>
-            <Locked unlockFor={repoLabel}>
-              <DailyLadder bundle={demoBundle} />
-            </Locked>
-          </Panel>
-          <Panel index="07" title="Cumulative stars" meta="real data · interactive" delay={400}>
-            <div className="flex flex-col gap-2">
+        {/* FREE SHELF FIRST: everything generated from public data sits
+            right under the star chart (cumulative anchors the left column,
+            the dossier stacks on the right); the locked depth only appears
+            once the visitor is already hooked */}
+        <div className="grid grid-cols-1 items-stretch gap-4 lg:grid-cols-2">
+          <Panel index="02" title="Cumulative stars" meta="real data · interactive" delay={160}>
+            <div className="flex h-full flex-col justify-between gap-2">
               {/* /api/curve shares the cached reconstruction with the SVG
                   embed, so a page visit warms the embed for everyone */}
               <CurveChart repo={repoLabel} />
@@ -346,22 +326,45 @@ export default async function ExplorerPage({
               </a>
             </div>
           </Panel>
+          <div className="flex flex-col gap-4">
+            <PulsePanel dossier={data.dossier} index="03" delay={200} />
+            <UsagePanel dossier={data.dossier} index="04" delay={240} />
+          </div>
         </div>
 
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-12">
-          <Panel index="08" title="Activity heatmap" meta="unlocks with tracking" className="lg:col-span-7" delay={480}>
+          <Panel index="05" title="Velocity, stars per hour" meta="24h vs previous 24h" className="lg:col-span-8" delay={280}>
+            <Locked unlockFor={repoLabel}>
+              <VelocityChart />
+            </Locked>
+          </Panel>
+          <Panel index="06" title="Milestone projections" meta="unlocks with tracking" className="lg:col-span-4" delay={320}>
+            <Locked unlockFor={repoLabel}>
+              <Projections bundle={demoBundle} />
+            </Locked>
+          </Panel>
+        </div>
+
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+          <Panel index="07" title="Daily ladder" meta="unlocks with tracking" delay={360}>
+            <Locked unlockFor={repoLabel}>
+              <DailyLadder bundle={demoBundle} />
+            </Locked>
+          </Panel>
+          <Panel index="08" title="Activity heatmap" meta="unlocks with tracking" delay={400}>
             <Locked unlockFor={repoLabel}>
               <Heatmap bundle={demoBundle} />
             </Locked>
           </Panel>
-          <Panel index="09" title="World rank over time" meta="unlocks with tracking" className="lg:col-span-5" delay={560}>
-            <Locked unlockFor={repoLabel}>
-              <RankChart bundle={demoBundle} />
-            </Locked>
-          </Panel>
         </div>
 
-        <Panel index="10" title="Mission log" meta="unlocks with tracking" delay={640}>
+        <Panel index="09" title="World rank over time" meta="unlocks with tracking" delay={440}>
+          <Locked unlockFor={repoLabel}>
+            <RankChart bundle={demoBundle} />
+          </Locked>
+        </Panel>
+
+        <Panel index="10" title="Mission log" meta="unlocks with tracking" delay={480}>
           <Locked unlockFor={repoLabel}>
             <MissionLog events={demoBundle.events.slice(0, 8)} captain={demoBundle.captain} />
           </Locked>
@@ -375,12 +378,10 @@ export default async function ExplorerPage({
         </span>
         <div className="flex flex-wrap gap-2">
           <a
-            href="https://github.com/santifer/warpchart/issues/8"
-            target="_blank"
-            rel="noopener noreferrer"
+            href="/pricing"
             className="numeral border border-accent/50 bg-accent/10 px-3 py-1.5 text-label tracking-[0.2em] text-accent transition-colors hover:bg-accent/20"
           >
-            JOIN THE WAITLIST →
+            TRACK {name.toUpperCase().slice(0, 24)} · $19/MO →
           </a>
           <a
             href={`/r/${demo.meta?.repo ?? ""}#from=${encodeURIComponent(repoLabel)}`}

@@ -6,6 +6,8 @@ import LiveProvider, { useLive } from "./LiveProvider";
 import StatusBar from "./StatusBar";
 import Masthead from "./Masthead";
 import Panel from "./Panel";
+import { PulsePanel, UsagePanel } from "./DossierPanels";
+import type { Dossier } from "@/lib/explorer";
 import GalacticChart from "./GalacticChart";
 import VerticalChart from "./VerticalChart";
 import CommandDeck from "./CommandDeck";
@@ -65,7 +67,15 @@ function ChartIsland({
 
 // polling=false for hosted tenants: the /api/live endpoints serve the house
 // repo, so a tenant console refreshes on the collector cadence instead.
-export default function Dashboard({ bundle, polling = true }: { bundle: DashboardBundle; polling?: boolean }) {
+export default function Dashboard({
+  bundle,
+  polling = true,
+  dossier = null,
+}: {
+  bundle: DashboardBundle;
+  polling?: boolean;
+  dossier?: Dossier | null;
+}) {
   const repo = bundle.meta?.repo;
   const next = bundle.milestones[0] ?? null;
   const [target, setTarget] = useState<string | null>(null);
@@ -150,9 +160,16 @@ export default function Dashboard({ bundle, polling = true }: { bundle: Dashboar
           </Panel>
         </div>
 
+        {/* public dossier (maintenance pulse + real usage), same cards the
+            explorer shows for every other system */}
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-12">
+          <PulsePanel dossier={dossier} index="04" className="lg:col-span-7" />
+          <UsagePanel dossier={dossier} index="05" className="lg:col-span-5" />
+        </div>
+
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
           <Panel
-            index="04"
+            index="06"
             title="Daily ladder"
             meta="30 days · night floor 00-05 UTC"
             delay={320}
@@ -160,7 +177,7 @@ export default function Dashboard({ bundle, polling = true }: { bundle: Dashboar
             <DailyLadder bundle={bundle} />
           </Panel>
           <Panel
-            index="05"
+            index="07"
             title="Cumulative stars"
             meta={`since ${bundle.meta?.created_at?.slice(0, 10) ?? "launch"} · replay available`}
             delay={400}
@@ -171,7 +188,7 @@ export default function Dashboard({ bundle, polling = true }: { bundle: Dashboar
 
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-12">
           <Panel
-            index="06"
+            index="08"
             title="Activity heatmap"
             meta={`${fmt(bundle.totalStars)} star events`}
             className="lg:col-span-7"
@@ -180,7 +197,7 @@ export default function Dashboard({ bundle, polling = true }: { bundle: Dashboar
             <Heatmap bundle={bundle} />
           </Panel>
           <Panel
-            index="07"
+            index="09"
             title="World rank over time"
             meta="hourly snapshots"
             className="lg:col-span-5"
@@ -191,7 +208,7 @@ export default function Dashboard({ bundle, polling = true }: { bundle: Dashboar
         </div>
 
         <Panel
-          index="08"
+          index="10"
           title="Mission log"
           meta="auto-detected from telemetry"
           delay={640}

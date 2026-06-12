@@ -26,7 +26,17 @@ function Metric({ label, value, hint, tone }: { label: string; value: string; hi
   );
 }
 
-export function PulsePanel({ dossier, delay = 0 }: { dossier: Dossier | null; delay?: number }) {
+export function PulsePanel({
+  dossier,
+  index = "03",
+  className = "",
+  delay = 0,
+}: {
+  dossier: Dossier | null;
+  index?: string;
+  className?: string;
+  delay?: number;
+}) {
   const d = dossier;
   const net = d ? d.issuesOpened30 - d.issuesClosed30 : 0;
   const flowTotal = d ? d.issuesOpened30 + d.issuesClosed30 : 0;
@@ -35,10 +45,10 @@ export function PulsePanel({ dossier, delay = 0 }: { dossier: Dossier | null; de
   const releaseDays = lastRelease ? (Date.now() - new Date(lastRelease.at).getTime()) / 864e5 : null;
   return (
     <Panel
-      index="04"
+      index={index}
       title="Maintenance pulse"
       meta="last 30 days · public telemetry"
-      className="lg:col-span-7"
+      className={className}
       delay={delay}
     >
       <div className="flex min-h-[150px] flex-col justify-between gap-4 py-1">
@@ -89,17 +99,27 @@ export function PulsePanel({ dossier, delay = 0 }: { dossier: Dossier | null; de
   );
 }
 
-export function UsagePanel({ dossier, delay = 0 }: { dossier: Dossier | null; delay?: number }) {
+export function UsagePanel({
+  dossier,
+  index = "04",
+  className = "",
+  delay = 0,
+}: {
+  dossier: Dossier | null;
+  index?: string;
+  className?: string;
+  delay?: number;
+}) {
   const d = dossier;
   const withDownloads = (d?.releases ?? []).filter((r) => r.downloads > 0).slice(0, 4);
   const maxDl = Math.max(1, ...withDownloads.map((r) => r.downloads));
   const hasUsage = Boolean(d && (d.npmLast30 !== null || withDownloads.length));
   return (
     <Panel
-      index="05"
+      index={index}
       title="Real usage"
       meta="installs, not applause"
-      className="lg:col-span-5"
+      className={className}
       delay={delay}
     >
       <div className="flex min-h-[150px] flex-col gap-3 py-1">
