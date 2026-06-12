@@ -13,6 +13,7 @@ const nextConfig: NextConfig = {
     "/api/curve": ["./data/**"],
     "/api/search": ["./data/**"],
     "/api/health": ["./data/**"],
+    "/api/monitor": ["./data/**"],
     "/feed.xml": ["./data/**"],
     "/hq": ["./data/**"],
     "/r/*": ["./data/**"],
