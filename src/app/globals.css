@@ -853,38 +853,31 @@ svg text {
 }
 
 /* ---- Phase C: the warp jump (galaxy -> /r/) ---- */
-/* The dive, choreographed as a match cut. Three phases in one keyframe
-   animation (every keyframe repeats the SAME transform function order, so
-   the browser never falls back to wobbly matrix decomposition):
-     1. anticipation: a breath backwards while the rotation arms
-     2. the dive: explosive zoom while the galaxy rotates around the chosen
-        star AND the isometric squash is undone (scaleY 2 = 1/GX_SQUASH),
-        so the star->core line lands exactly horizontal, core to the right,
-        which is the /r/ chart's own geometry
-     3. lock-in: tiny overshoot, then a decisive settle on the final frame
-        (that frame becomes the view transition's old snapshot) */
+/* The dive is a PURE zoom into the chosen star: no rotation, no unsquash
+   (both stretched every dot into tilted ellipses and read as a glitch;
+   Santiago's call: the destination chart doesn't show the core anyway, so
+   the cleaner cut wins). Velocity is spread across a mid keyframe so the
+   pixel speed stays near-geometric, which the eye reads as constant; the
+   final frame becomes the view transition's old snapshot. */
 body.gx-warping .ghx-plane {
   transform-origin: var(--gx-ox, 95%) var(--gx-oy, 12%);
   animation: gx-dive 950ms forwards;
 }
-/* velocity is spread across a mid keyframe so the pixel speed stays
-   near-constant: the old two-stop explosion went from x2 to x9 in the
-   last 150ms and read as a glitch, not as motion */
 @keyframes gx-dive {
   0% {
-    transform: scale(1) rotate(0deg) scaleY(1);
+    transform: scale(1);
     animation-timing-function: cubic-bezier(0.45, 0, 0.7, 0.3);
   }
   16% {
-    transform: scale(1.02) rotate(calc(var(--gx-rot, 0deg) * 0.06)) scaleY(1.04);
+    transform: scale(1.02);
     animation-timing-function: cubic-bezier(0.5, 0.05, 0.75, 0.4);
   }
   55% {
-    transform: scale(2.8) rotate(calc(var(--gx-rot, 0deg) * 0.58)) scaleY(1.6);
+    transform: scale(2.8);
     animation-timing-function: cubic-bezier(0.45, 0.1, 0.5, 0.95);
   }
   100% {
-    transform: scale(6) rotate(var(--gx-rot, 0deg)) scaleY(2);
+    transform: scale(6);
   }
 }
 /* the veil: motion blur + the brightness flash that bridges the cut, all

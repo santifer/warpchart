@@ -13,7 +13,6 @@ import {
   GX_H,
   GX_CORE_X,
   GX_CORE_Y,
-  galaxyAngle,
   projectGalaxy,
   ringPath,
   ringPoint,
@@ -83,12 +82,11 @@ export default function GalaxyHero({ data }: { data: GalaxyData }) {
     };
   }, []);
 
-  // the jump: dive toward the star while ROTATING the galaxy around it and
-  // undoing the isometric squash, so the system->core line lands exactly
-  // horizontal (core to the right) on the dive's last frame: the same
-  // geometry the /r/ chart opens with. the route change then rides the
-  // "warp" view transition, and the navigation fires on animationend so
-  // the old-page snapshot IS that aligned final frame (match cut).
+  // the jump: a pure zoom into the star (no rotation: it warped every dot
+  // into tilted ellipses and read as a glitch), lettering fading out while
+  // the veil's blur builds. the route change then rides the "warp" view
+  // transition, and the navigation fires on animationend so the old-page
+  // snapshot IS the dive's final frame.
   const warpTo = (repo: string, point: { x: number; y: number } | null) => {
     if (warping.current) return;
     const el = planeRef.current;
@@ -99,14 +97,9 @@ export default function GalaxyHero({ data }: { data: GalaxyData }) {
       return;
     }
     warping.current = true;
-    const isCore = point.x === GX_CORE_X && point.y === GX_CORE_Y;
-    const rot = isCore
-      ? 0
-      : Math.max(-75, Math.min(75, galaxyAngle(point.x, point.y) - 180));
     el.style.willChange = "transform";
     el.style.setProperty("--gx-ox", `${((point.x / GX_W) * 100).toFixed(2)}%`);
     el.style.setProperty("--gx-oy", `${((point.y / GX_H) * 100).toFixed(2)}%`);
-    el.style.setProperty("--gx-rot", `${rot.toFixed(2)}deg`);
     let done = false;
     const fire = () => {
       if (done) return;
