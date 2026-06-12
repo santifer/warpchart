@@ -59,6 +59,10 @@ export default function GalaxyHero({ data }: { data: GalaxyData }) {
           ? requestAnimationFrame(step)
           : 0;
     };
+    // immersion: after dwelling on the map a while, the headline column
+    // steps back (dims via body class) so the galaxy takes the stage; the
+    // moment the pointer leaves the map it returns to full strength
+    let dwell = 0;
     const onMove = (e: PointerEvent) => {
       if (warping.current) return;
       const r = el.getBoundingClientRect();
@@ -66,10 +70,20 @@ export default function GalaxyHero({ data }: { data: GalaxyData }) {
       tzy = Math.min(100, Math.max(0, ((e.clientY - r.top) / r.height) * 100));
       tzf = ZMAX;
       if (!raf) raf = requestAnimationFrame(step);
+      if (!dwell && !document.body.classList.contains("gx-immersed")) {
+        dwell = window.setTimeout(() => {
+          document.body.classList.add("gx-immersed");
+        }, 1400);
+      }
     };
     const onLeave = () => {
       tzf = 0;
       if (!raf) raf = requestAnimationFrame(step);
+      if (dwell) {
+        clearTimeout(dwell);
+        dwell = 0;
+      }
+      document.body.classList.remove("gx-immersed");
     };
     // the map plane only: hovering the headline column (which sits on top
     // and swallows its own pointer events) must never lean the galaxy in
@@ -79,6 +93,8 @@ export default function GalaxyHero({ data }: { data: GalaxyData }) {
       el.removeEventListener("pointermove", onMove);
       el.removeEventListener("pointerleave", onLeave);
       if (raf) cancelAnimationFrame(raf);
+      if (dwell) clearTimeout(dwell);
+      document.body.classList.remove("gx-immersed");
     };
   }, []);
 
@@ -179,7 +195,7 @@ export default function GalaxyHero({ data }: { data: GalaxyData }) {
           <ellipse cx={1308} cy={170} rx={470} ry={168} fill="url(#ghxHalo)" />
           <ellipse cx={GX_CORE_X} cy={GX_CORE_Y} rx={190} ry={76} fill="url(#ghxCoreGlow)" />
           {data.rings.map((g) => {
-            const lp = ringPoint(g.radius, 244);
+            const lp = ringPoint(g.radius, 258);
             return (
               <g key={g.label}>
                 <path className="ghx-ring" d={ringPath(g.radius)} />

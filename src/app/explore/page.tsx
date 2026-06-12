@@ -38,11 +38,13 @@ export default async function Explore() {
     .map((i) => catalog[i]);
 
   // hero galaxy: the whole top 1000 projected onto the isometric star map;
-  // the house mission rides along with its own quiet signature
+  // the house mission rides along with its own quiet signature, and half
+  // of the featured labels rotate with the build day (like the spotlight)
   const galaxy = route?.repos?.length
     ? buildGalaxy(
         route.repos.map((p) => ({ r: p.r, s: p.s, v: p.v ?? null })),
         meta?.repo ?? null,
+        new Date().toISOString().slice(0, 10),
       )
     : null;
 

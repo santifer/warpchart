@@ -15,9 +15,14 @@ export const GX_CORE_Y = 78;
 // partial isometry: the galactic disc seen at an angle, not top-down
 export const GX_SQUASH = 0.5;
 const FAN_FROM = 200; // degrees, math convention with y flipped for screen
-const FAN_SPAN = 50; // 200 -> 250 sweeps from left to straight down
+// 200 -> 264: sweeps from the left almost to straight-down-from-the-core
+// (6 degrees shy of vertical), filling the lower-right quadrant that a
+// 250-degree cap left dead
+const FAN_SPAN = 64;
 const R_MIN = 64;
-const R_MAX = 1180;
+// capped by the canvas at the fan's most vertical edge: radius is pure
+// log(stars) and can never depend on angle, so the whole scale shares it
+const R_MAX = 1110;
 const MIN_NODE_GAP = 26; // px between interactive systems (label air)
 const MAX_NODES = 130;
 
@@ -127,6 +132,7 @@ export function galaxyAngle(x: number, y: number): number {
 export function buildGalaxy(
   repos: { r: string; s: number; v?: number | null }[],
   homeRepo?: string | null,
+  daySeed?: string,
 ): GalaxyData {
   const core = repos[0];
   const floor = repos[repos.length - 1];
@@ -228,19 +234,32 @@ export function buildGalaxy(
   }
   for (const p of sweep) tryAccept(p);
 
-  // permanent labels: best-ranked accepted systems anywhere in the fan
-  // (the head alone piles into a 200px box by the core, so labels must
-  // come from the whole arc); hot movers already announce themselves
+  // permanent labels read as "today's featured systems": half are the
+  // best-ranked giants (recognition), half rotate daily from the wider
+  // accepted pool (freshness, and nobody looks like a permanent favorite);
+  // hot movers already announce themselves, the house keeps its ring
+  const pool = [...nodes]
+    .filter((n) => !n.hot && !n.me && !(n.y < 170 && n.x > 1080))
+    .sort((a, b) => a.rank - b.rank);
+  const giants = pool.slice(0, 12);
+  const dayRand = mulberry32(seedFrom("anchors::" + (daySeed ?? "")));
+  const rotating = pool
+    .slice(12)
+    .filter((n) => n.rank <= 600)
+    .map((n) => ({ n, k: dayRand() }))
+    .sort((a, b) => a.k - b.k)
+    .map((e) => e.n);
   const anchored: GalaxyNode[] = nodes.filter((n) => n.me);
-  for (const n of [...nodes].sort((a, b) => a.rank - b.rank)) {
-    if (n.hot || n.me || anchored.length >= 8) continue;
-    // the strip right under the core belongs to the core's own label
-    if (n.y < 170 && n.x > 1080) continue;
+  const tryAnchor = (n: GalaxyNode, cap: number) => {
+    if (anchored.length >= cap) return;
     if (anchored.every((a) => (a.x - n.x) ** 2 + (a.y - n.y) ** 2 > 72 * 72)) {
       n.anchor = true;
       anchored.push(n);
     }
-  }
+  };
+  for (const n of giants) tryAnchor(n, 5); // home + 4 giants
+  for (const n of rotating) tryAnchor(n, 9); // + 4 daily picks
+  for (const n of giants) tryAnchor(n, 9); // backfill if rotation collided
 
   // everything not interactive is dust: the rest of the real top 1000
   const nodeSet = new Set(nodes.map((n) => n.r));
