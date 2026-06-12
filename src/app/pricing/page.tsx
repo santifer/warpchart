@@ -15,13 +15,15 @@ export const metadata: Metadata = {
     "Self-host Warpchart free, or get your repository tracked with exact hourly history, alerts and zero ops. The public explorer stays free forever; the data is never for sale.",
 };
 
-// Polar checkout links (merchant of record: taxes and invoices handled).
+// Dynamic Polar checkout (merchant of record: taxes and invoices handled).
+// The route creates a session with the required github-repo field and falls
+// back to the static buy.polar.sh links if the API is unavailable.
 const CHECKOUT = {
-  hosted: "https://buy.polar.sh/polar_cl_8CDF8qOQrPcZbpqOc8RPnCH9QF18kiKrIPUyh3cPbnU" as string | null,
-  fleet: "https://buy.polar.sh/polar_cl_6CaoF5JYYrFq3Jnwypr8BNqLhDKJfr7vz53Ti2Te5Si" as string | null,
+  hosted: "/api/checkout?plan=hosted" as string | null,
+  fleet: "/api/checkout?plan=fleet" as string | null,
 };
 const CLAIM_MAIL = (plan: string) =>
-  `mailto:hola@santifer.io?subject=${encodeURIComponent(`warpchart ${plan}: track my repo`)}&body=${encodeURIComponent(
+  `mailto:support@warpchart.dev?subject=${encodeURIComponent(`warpchart ${plan}: track my repo`)}&body=${encodeURIComponent(
     "Repo (owner/name):\n\nYour mission goes live within 24h of payment setup."
   )}`;
 

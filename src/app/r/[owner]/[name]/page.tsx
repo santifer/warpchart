@@ -64,7 +64,7 @@ function Locked({ unlockFor, children }: { unlockFor: string; children: React.Re
           content underneath contains link-looking text, and a dead click
           there reads as "the links are broken" */}
       <a
-        href="/pricing"
+        href={`/api/checkout?repo=${encodeURIComponent(unlockFor)}&plan=hosted`}
         className="absolute inset-0 z-[9]"
         aria-label={`Unlock for ${unlockFor}`}
       />
@@ -73,7 +73,7 @@ function Locked({ unlockFor, children }: { unlockFor: string; children: React.Re
           ◈ LOCKED · PREVIEW SHOWS THE LIVE DEMO MISSION
         </span>
         <a
-          href="/pricing"
+          href={`/api/checkout?repo=${encodeURIComponent(unlockFor)}&plan=hosted`}
           className="numeral border border-accent/50 bg-void/85 px-3 py-1.5 text-label tracking-[0.2em] text-accent transition-colors hover:bg-accent/10"
         >
           TRACK {unlockFor} · $19/MO →
@@ -384,7 +384,7 @@ export default async function ExplorerPage({
         </span>
         <div className="flex flex-wrap gap-2">
           <a
-            href="/pricing"
+            href={`/api/checkout?repo=${encodeURIComponent(repoLabel)}&plan=hosted`}
             className="numeral border border-accent/50 bg-accent/10 px-3 py-1.5 text-label tracking-[0.2em] text-accent transition-colors hover:bg-accent/20"
           >
             TRACK {name.toUpperCase().slice(0, 24)} · $19/MO →
