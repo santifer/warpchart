@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import LiveProvider, { useLive } from "./LiveProvider";
 import StatusBar from "./StatusBar";
+import Masthead from "./Masthead";
 import Panel from "./Panel";
 import GalacticChart from "./GalacticChart";
 import VerticalChart from "./VerticalChart";
@@ -88,6 +89,9 @@ export default function Dashboard({ bundle }: { bundle: DashboardBundle }) {
     <LiveProvider bundle={bundle}>
       <SoundController nextThreshold={next?.threshold ?? null} nextRank={next?.rank ?? null} />
       <main className="mx-auto flex max-w-[1440px] flex-col gap-4 px-3 py-4 sm:px-6 sm:py-6">
+        <div className="rise px-1">
+          <Masthead />
+        </div>
         <StatusBar bundle={bundle} />
         <DailyBriefing bundle={bundle} />
         {target ? (

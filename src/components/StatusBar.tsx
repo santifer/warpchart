@@ -2,8 +2,6 @@
 
 import NumberFlow from "@number-flow/react";
 import { useLive } from "./LiveProvider";
-import SoundToggle from "./SoundToggle";
-import ThemeToggle from "./ThemeToggle";
 import type { DashboardBundle } from "@/lib/bundle";
 import { fmt, fmtEtaDays, timeAgo } from "@/lib/format";
 
@@ -135,17 +133,13 @@ export default function StatusBar({ bundle }: { bundle: DashboardBundle }) {
       </div>
 
       <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-grid pt-2">
-        <div className="flex items-center gap-5">
-          <a
-            href="/"
-            className="numeral text-micro tracking-[0.15em] text-faint transition-colors hover:text-accent"
-            title="Back to warpchart.dev"
-          >
-            WARPCHART // GROWTH TELEMETRY
-          </a>
-          <SoundToggle />
-          <ThemeToggle />
-        </div>
+        <a
+          href="/"
+          className="numeral text-micro tracking-[0.15em] text-faint transition-colors hover:text-accent"
+          title="Back to warpchart.dev"
+        >
+          WARPCHART // GROWTH TELEMETRY
+        </a>
         <span className="numeral text-micro text-faint">
           {live.stale ? "STALE DATA · " : ""}
           {bundle.forkRatio !== null ? (
