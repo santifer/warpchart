@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 360 260" fill="none">
+  <!-- warpchart mark: a symmetric W whose last stroke climbs into a
+       round-tipped arrow. One gradient in user space so stroke and head
+       read as a single beam, dark at the valley floor, brightest at the
+       tip (gold is the chart's job; the mark is pure accent cyan). -->
+  <defs>
+    <linearGradient id="wgrad" gradientUnits="userSpaceOnUse" x1="45" y1="200" x2="330" y2="42">
+      <stop offset="0" stop-color="#14506e"/>
+      <stop offset="0.55" stop-color="#2ba6c9"/>
+      <stop offset="1" stop-color="#4de1f7"/>
+    </linearGradient>
+  </defs>
+  <path d="M 45 100 L 92 195 L 139 100 L 186 195 L 282 91"
+        stroke="url(#wgrad)" stroke-width="34" stroke-linecap="round" stroke-linejoin="round"/>
+  <!-- the head's stroke (same gradient, round joins) is what rounds the tips -->
+  <path d="M 320 49 L 313 103 L 266 60 Z" fill="url(#wgrad)"
+        stroke="url(#wgrad)" stroke-width="18" stroke-linejoin="round"/>
+</svg>

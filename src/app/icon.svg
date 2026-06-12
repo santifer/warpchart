@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-2 -58 360 360" fill="none">
+  <!-- favicon: the warpchart mark (symmetric W climbing into a rounded
+       arrow), centered in a square frame -->
+  <defs>
+    <linearGradient id="wgrad" gradientUnits="userSpaceOnUse" x1="45" y1="200" x2="330" y2="42">
+      <stop offset="0" stop-color="#14506e"/>
+      <stop offset="0.55" stop-color="#2ba6c9"/>
+      <stop offset="1" stop-color="#4de1f7"/>
+    </linearGradient>
+  </defs>
+  <path d="M 45 100 L 92 195 L 139 100 L 186 195 L 282 91"
+        stroke="url(#wgrad)" stroke-width="38" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M 320 49 L 313 103 L 266 60 Z" fill="url(#wgrad)"
+        stroke="url(#wgrad)" stroke-width="20" stroke-linejoin="round"/>
+</svg>
