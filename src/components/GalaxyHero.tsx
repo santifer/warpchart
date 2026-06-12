@@ -121,7 +121,7 @@ export default function GalaxyHero({ data }: { data: GalaxyData }) {
       { once: true },
     );
     // safety net: if the dive animation never runs, still navigate
-    window.setTimeout(fire, 1100);
+    window.setTimeout(fire, 1400);
     document.body.classList.add("gx-warping");
   };
 

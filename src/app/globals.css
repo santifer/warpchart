@@ -697,11 +697,20 @@ svg text {
 .ghx-node .ghx-dot { transition: opacity 0.15s ease; }
 .ghx-node:hover .ghx-dot, .ghx-node:focus-visible .ghx-dot { opacity: 1; }
 .ghx-node:focus-visible .ghx-dot { stroke: var(--accent); stroke-width: 1.5; }
+/* type never changes size: while the neighborhood leans in (local zoom),
+   every label counter-scales by its own layer's factor, so dots grow but
+   the lettering stays at design size, pinned to its anchor point */
 .ghx-name {
   font-size: 11px;
   fill: var(--faint);
   letter-spacing: 0.08em;
   pointer-events: none;
+  transform-box: fill-box;
+  transform-origin: left center;
+  transform: scale(calc(1 / (1 + var(--gx-zf, 0) * 1.12)));
+}
+.ghx-name[text-anchor="end"] {
+  transform-origin: right center;
 }
 .ghx-tip {
   opacity: 0;
@@ -716,6 +725,12 @@ svg text {
   stroke: var(--void);
   stroke-width: 4px;
   stroke-linejoin: round;
+  transform-box: fill-box;
+  transform-origin: left center;
+  transform: scale(calc(1 / (1 + var(--gx-zf, 0) * 1.12)));
+}
+.ghx-tip text[text-anchor="end"] {
+  transform-origin: right center;
 }
 .ghx-tip tspan { fill: var(--accent); }
 .ghx-ring {
@@ -729,6 +744,9 @@ svg text {
   fill: var(--faint);
   opacity: 0.55;
   letter-spacing: 0.14em;
+  transform-box: fill-box;
+  transform-origin: left center;
+  transform: scale(calc(1 / (1 + var(--gx-zf, 0) * 0.78)));
 }
 .ghx-ping {
   fill: none;
@@ -786,6 +804,8 @@ svg text {
   line-height: 1.5;
   letter-spacing: 0.14em;
   color: var(--dim);
+  transform-origin: top right;
+  transform: scale(calc(1 / (1 + var(--gx-zf, 0) * 1.12)));
   /* the label box overlaps the head systems crowded around the core;
      only the glow itself should catch their clicks */
   pointer-events: none;
@@ -845,23 +865,26 @@ svg text {
         (that frame becomes the view transition's old snapshot) */
 body.gx-warping .ghx-plane {
   transform-origin: var(--gx-ox, 95%) var(--gx-oy, 12%);
-  animation: gx-dive 700ms forwards;
+  animation: gx-dive 950ms forwards;
 }
+/* velocity is spread across a mid keyframe so the pixel speed stays
+   near-constant: the old two-stop explosion went from x2 to x9 in the
+   last 150ms and read as a glitch, not as motion */
 @keyframes gx-dive {
   0% {
     transform: scale(1) rotate(0deg) scaleY(1);
-    animation-timing-function: cubic-bezier(0.3, 0, 0.8, 0.15);
+    animation-timing-function: cubic-bezier(0.45, 0, 0.7, 0.3);
   }
-  18% {
-    transform: scale(0.985) rotate(calc(var(--gx-rot, 0deg) * 0.06)) scaleY(1);
-    animation-timing-function: cubic-bezier(0.6, 0.04, 0.98, 0.335);
+  16% {
+    transform: scale(1.02) rotate(calc(var(--gx-rot, 0deg) * 0.06)) scaleY(1.04);
+    animation-timing-function: cubic-bezier(0.5, 0.05, 0.75, 0.4);
   }
-  88% {
-    transform: scale(9.15) rotate(var(--gx-rot, 0deg)) scaleY(2);
-    animation-timing-function: cubic-bezier(0.165, 0.84, 0.44, 1);
+  55% {
+    transform: scale(2.8) rotate(calc(var(--gx-rot, 0deg) * 0.58)) scaleY(1.6);
+    animation-timing-function: cubic-bezier(0.45, 0.1, 0.5, 0.95);
   }
   100% {
-    transform: scale(9) rotate(var(--gx-rot, 0deg)) scaleY(2);
+    transform: scale(6) rotate(var(--gx-rot, 0deg)) scaleY(2);
   }
 }
 /* the veil: motion blur + the brightness flash that bridges the cut, all
@@ -876,16 +899,31 @@ body.gx-warping .ghx-plane {
   background: radial-gradient(closest-side, rgba(245, 251, 255, 0.16), transparent 80%);
 }
 body.gx-warping .ghx-warpveil {
-  animation: gx-veil 700ms cubic-bezier(0.55, 0, 0.9, 0.4) forwards;
+  animation: gx-veil 950ms cubic-bezier(0.5, 0, 0.8, 0.5) forwards;
 }
 @keyframes gx-veil {
   0% { opacity: 0; }
-  22% { opacity: 0.08; }
+  16% { opacity: 0.18; }
+  55% { opacity: 0.55; }
   100% { opacity: 1; }
 }
 body.gx-warping .gx-hero-copy {
   opacity: 0;
   transition: opacity 0.3s ease-out;
+}
+/* lettering never travels: every label, tip and signal ring fades during
+   the anticipation phase (first ~150ms), so by the time the rotation and
+   zoom explode only stars, dust and light make the jump (giant rotated
+   type reads as a glitch, not as speed) */
+body.gx-warping .ghx-name,
+body.gx-warping .ghx-tip,
+body.gx-warping .ghx-ring-label,
+body.gx-warping .ghx-core-label,
+body.gx-warping .ghx-ping,
+body.gx-warping .ghx-me-ring {
+  opacity: 0 !important;
+  transition: opacity 0.16s ease-out;
+  animation: none;
 }
 body.gx-warping .ghx-scrim,
 body.gx-warping .ghx-lore {
@@ -899,7 +937,7 @@ body.gx-warping .ghx-lore {
   animation: 160ms ease-out both gx-warp-out;
 }
 ::view-transition-new(.gx-warp-in) {
-  animation: 540ms cubic-bezier(0.2, 0.9, 0.3, 1) both gx-warp-in;
+  animation: 620ms cubic-bezier(0.22, 0.85, 0.3, 1) both gx-warp-in;
 }
 @keyframes gx-warp-out {
   to { opacity: 0; }
