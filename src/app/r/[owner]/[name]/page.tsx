@@ -18,6 +18,7 @@ import CurveChart from "@/components/CurveChart";
 import Masthead from "@/components/Masthead";
 import { buildBundle } from "@/lib/bundle";
 import { loadMeta, isHostedRepo, loadTenantHistory, loadTenantTimestamps } from "@/lib/history";
+import { fetchLiveSnapshot } from "@/lib/live-blob";
 import { unstable_cache } from "next/cache";
 import { getExplorerData, getCachedDossier } from "@/lib/explorer";
 
@@ -92,7 +93,12 @@ function Locked({ unlockFor, children }: { unlockFor: string; children: React.Re
   );
 }
 
-export const revalidate = 900;
+// Regenerate the PAGE every 60s so tenant consoles pick up the fresh Vercel
+// Blob snapshot near real-time. The expensive explorer GitHub calls stay on
+// the 900s data cache (getCachedData above): this 60s only re-runs the render
+// + a cheap edge-cached Blob read (null for non-tenants), no GitHub cost and
+// no build.
+export const revalidate = 60;
 // First scans make several GitHub round-trips; on flaky days the retries can
 // exceed the default serverless budget, which surfaced as recurring 500s.
 export const maxDuration = 60;
@@ -128,7 +134,10 @@ export default async function ExplorerPage({
   // this route" instead of "is it the tenant".
   const tenant = loadMeta();
   if (tenant && `${owner}/${name}`.toLowerCase() === tenant.repo.toLowerCase()) {
-    return <Dashboard bundle={buildBundle()} dossier={await getCachedDossier(owner, name)} />;
+    const live = await fetchLiveSnapshot(tenant.repo);
+    return (
+      <Dashboard bundle={buildBundle(undefined, live)} dossier={await getCachedDossier(owner, name)} />
+    );
   }
 
   // HOSTED MISSIONS: paying repos get the same full console, fed by their
@@ -140,6 +149,7 @@ export default async function ExplorerPage({
   if (isHostedRepo(hostedLabel)) {
     const tHistory = loadTenantHistory(hostedLabel);
     const tTimestamps = loadTenantTimestamps(hostedLabel);
+    const tLive = await fetchLiveSnapshot(hostedLabel);
     if (tHistory.length) {
       const tMeta = {
         repo: hostedLabel,
@@ -154,7 +164,7 @@ export default async function ExplorerPage({
       };
       return (
         <Dashboard
-          bundle={buildBundle({ timestamps: tTimestamps, history: tHistory, meta: tMeta })}
+          bundle={buildBundle({ timestamps: tTimestamps, history: tHistory, meta: tMeta }, tLive)}
           polling={false}
           dossier={await getCachedDossier(owner, name)}
         />

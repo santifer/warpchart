@@ -1,0 +1,34 @@
+name: live
+on:
+  schedule:
+    # Every 10 min: writes the current state (stars/rank/neighbors/milestones)
+    # of the house repo and every paying tenant to the PUBLIC warpchart-data
+    # Vercel Blob. NO git commit and NO Vercel build, so it is free to run
+    # often: this is the freshness layer paid consoles read at render time.
+    - cron: "2-59/10 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: live
+  cancel-in-progress: true
+
+jobs:
+  snapshot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+      # only dependency the live collector needs (lib.mjs is built-ins only)
+      - run: npm install @vercel/blob --no-save --no-audit --no-fund
+      - run: node collector/live.mjs
+        env:
+          # automatic Actions token covers the ~6 public-data reads per repo
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # read-write token of the warpchart-data Blob store
+          BLOB_READ_WRITE_TOKEN: ${{ secrets.BLOB_READ_WRITE_TOKEN }}

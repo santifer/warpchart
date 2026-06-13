@@ -115,14 +115,29 @@ export function buildRouteLayers(
 // own timestamps/history (collected by the same pipeline) plus whatever
 // meta the caller already holds. Tenant snapshots may lack milestones,
 // neighbors or apex: every consumer below already tolerates absence.
-export function buildBundle(src?: {
-  timestamps: string[];
-  history: Snapshot[];
-  meta: RepoMetaFile | null;
-}): DashboardBundle {
+export function buildBundle(
+  src?: {
+    timestamps: string[];
+    history: Snapshot[];
+    meta: RepoMetaFile | null;
+  },
+  // optional fresh "current state" from Vercel Blob (collector/live.mjs):
+  // stars/rank/neighbors/milestones collected every ~10 min without a build.
+  // When strictly newer than the committed tail it becomes the latest
+  // snapshot, so the headline, rank, neighbors and gates all paint fresh
+  // while the heavy timestamp curve stays on the committed cadence.
+  live?: Snapshot | null,
+): DashboardBundle {
   const nowMs = Date.now();
   const timestamps = src ? src.timestamps : loadTimestamps();
-  const history = src ? src.history : loadHistory();
+  let history = src ? src.history : loadHistory();
+  if (
+    live &&
+    (!history.length ||
+      Date.parse(live.ts) > Date.parse(history[history.length - 1].ts))
+  ) {
+    history = [...history, live];
+  }
   const meta = src ? src.meta : loadMeta();
   const latest: Snapshot | null = history.length ? history[history.length - 1] : null;
 
