@@ -19,6 +19,7 @@ import Masthead from "@/components/Masthead";
 import { buildBundle } from "@/lib/bundle";
 import { loadMeta, isHostedRepo, loadTenantHistory, loadTenantTimestamps } from "@/lib/history";
 import { fetchLiveSnapshot } from "@/lib/live-blob";
+import { isOwnedBy } from "@/lib/config";
 import { unstable_cache } from "next/cache";
 import { getExplorerData, getCachedDossier } from "@/lib/explorer";
 
@@ -140,13 +141,14 @@ export default async function ExplorerPage({
     );
   }
 
-  // HOSTED MISSIONS: paying repos get the same full console, fed by their
-  // own collected history (same pipeline as the house repo). Live polling
+  // HOSTED MISSIONS + OWNER PORTFOLIO: paying repos AND every repo owned by a
+  // privileged owner (santifer's whole portfolio) get the full console, fed by
+  // their own collected history (same pipeline as the house repo). Live polling
   // stays off (the /api/live endpoints serve the house repo); the collector
-  // cadence is the freshness contract. A tenant whose first collection has
-  // not landed yet falls through to the public explorer view.
+  // cadence is the freshness contract. A repo whose first collection has not
+  // landed yet falls through to the public explorer view until it does.
   const hostedLabel = `${owner}/${name}`;
-  if (isHostedRepo(hostedLabel)) {
+  if (isHostedRepo(hostedLabel) || isOwnedBy(owner)) {
     const tHistory = loadTenantHistory(hostedLabel);
     const tTimestamps = loadTenantTimestamps(hostedLabel);
     const tLive = await fetchLiveSnapshot(hostedLabel);
