@@ -168,7 +168,7 @@ export function buildBundle(
     if (top) apex = { r: top.r, s: top.s };
   }
 
-  const daily = dailyCounts(timestamps, 35, nowMs);
+  const daily = dailyCounts(timestamps, 62, nowMs); // ~2 months for the daily ladder
   const netStars = latest?.stars ?? timestamps.length;
   const { dots: routeDots, landmarks: routeLandmarks, all: routeAll } = buildRouteLayers(
     netStars, milestones, apex, meta?.repo ?? null
@@ -210,7 +210,7 @@ export function buildBundle(
     hourly: hourlyBuckets(timestamps, 8 * 24, nowMs),
     daily,
     ma7: movingAverage(daily, 7),
-    floor: madrugadaFloor(timestamps, 30, nowMs),
+    floor: madrugadaFloor(timestamps, 62, nowMs),
     cumulative: cumulativeSeries(timestamps),
     heatmap: heatmapMatrix(timestamps),
     v7d: velocity7d(timestamps, nowMs),
