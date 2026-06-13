@@ -82,7 +82,7 @@ for (const repo of repos) {
     const snapshot = { ts: nowISO, stars, rank, milestones, neighbors, apex };
     const key = `live/${repo.toLowerCase().replace("/", "--")}.json`;
     await put(key, JSON.stringify(snapshot), {
-      access: "public",
+      access: "private", // the moat: nothing is publicly fetchable
       addRandomSuffix: false,
       allowOverwrite: true,
       contentType: "application/json",
