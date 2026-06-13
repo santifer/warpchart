@@ -83,46 +83,70 @@ export default function VerticalChart({
   const shipExcess = vOwn / Math.max(medianV, 0.5) - 1;
   const shipTail = shipExcess <= 0.15 ? 0 : 5 + Math.min(shipExcess, 2.2) * 12;
   const shipDur = Math.max(0.8, 2.6 - Math.min(shipExcess, 2) * 0.8) * 0.7;
-  const ahead = etas.filter((n) => n.gap > 0).sort((a, b) => a.gap - b.gap).slice(0, 9);
-  const behind = etas.filter((n) => n.gap <= 0).sort((a, b) => b.gap - a.gap).slice(0, 3);
-
-  // density-adaptive vertical window, same spirit as the horizontal chart
-  const aheadSpread = ahead.length
-    ? Math.max(ahead[ahead.length - 1].s - stars, stars * 0.004)
-    : stars * 0.05;
-  const gate = inputs.milestones[0]?.threshold ?? null;
-  let hiS = stars + aheadSpread * 1.25;
-  if (gate !== null && gate <= stars + aheadSpread * 2.6) hiS = Math.max(hiS, gate * 1.012);
-  const loS = behind.length
-    ? Math.min(...behind.map((n) => n.s)) * 0.997
-    : stars * 0.988;
-
-  const ships: NeighborEta[] = [...ahead, ...behind];
-  const H = PAD_TOP + PAD_BOT + Math.max(420, (ships.length + 2) * MIN_GAP);
   const log10 = Math.log10;
-  const yFor = (s: number) => {
-    const t = (log10(Math.max(s, 1)) - log10(loS)) / Math.max(log10(hiS) - log10(loS), 1e-6);
-    return H - PAD_BOT - t * (H - PAD_TOP - PAD_BOT);
-  };
 
-  // labels keep MIN_GAP via leader lines; dots stay at their real y. Our
-  // own ship's block is reserved space: neighbor labels flow around it
-  // (above when there is room, otherwise below).
-  const meY = yFor(stars);
-  const ME_TOP = meY - 32;
-  const ME_BOT = meY + 36;
-  const placed = ships
-    .map((n) => ({ n, y: yFor(n.s) }))
-    .sort((a, b) => a.y - b.y);
-  let cursor = PAD_TOP + 8;
-  const rows = placed.map((p) => {
-    let labelY = Math.max(p.y, cursor);
-    if (labelY > ME_TOP - 16 && labelY < ME_BOT) {
-      labelY = cursor <= ME_TOP - 16 ? ME_TOP - 16 : ME_BOT;
+  // Ranked ascent. The vertical axis is NOT raw log-stars (neighbors sit a
+  // few hundred stars apart out of tens of thousands, so a pure star scale
+  // crushes them into one pixel and the de-collision then spills "ahead"
+  // labels below ME). Instead: order everyone by star count (most ahead at
+  // the top, toward the core), drop ME in at its gap=0 slot, and space each
+  // row by a CONSTANT floor plus a logarithmic bump for the REAL star gap.
+  // Tiny gaps read as "right next door"; a thousand-star jump reads as
+  // "farther" without the linear blow-out that would shove it off-screen.
+  // Dots and labels share a row, so the order is always honest and nothing
+  // collides: no leader lines, no labels stranded on the wrong side of ME.
+  const aheadDesc = etas.filter((n) => n.gap > 0).sort((a, b) => b.gap - a.gap).slice(0, 9);
+  const behindDesc = etas.filter((n) => n.gap <= 0).sort((a, b) => b.gap - a.gap).slice(0, 3);
+
+  type SeqNode = { me: boolean; n?: NeighborEta; s: number };
+  const seq: SeqNode[] = [
+    ...aheadDesc.map((n) => ({ me: false, n, s: n.s })),
+    { me: true, s: stars },
+    ...behindDesc.map((n) => ({ me: false, n, s: n.s })),
+  ];
+
+  const SEP_K = 13; // px of extra spacing per decade of star gap
+  const ys: number[] = [];
+  let cy = PAD_TOP + 30;
+  for (let i = 0; i < seq.length; i++) {
+    if (i > 0) {
+      const d = Math.abs(seq[i - 1].s - seq[i].s);
+      const meAdjacent = seq[i].me || seq[i - 1].me;
+      cy += (meAdjacent ? MIN_GAP + 12 : MIN_GAP) + SEP_K * log10(1 + d);
     }
-    cursor = labelY + MIN_GAP;
-    return { ...p, labelY };
-  });
+    ys.push(cy);
+  }
+  const H = cy + PAD_BOT + 24;
+
+  type Row =
+    | { me: true; s: number; y: number }
+    | { me: false; n: NeighborEta; s: number; y: number };
+  const rows: Row[] = seq.map((node, i) =>
+    node.me
+      ? { me: true as const, s: node.s, y: ys[i] }
+      : { me: false as const, n: node.n!, s: node.s, y: ys[i] },
+  );
+  const meIdx = seq.findIndex((node) => node.me);
+  const meY = ys[meIdx];
+  const hiS = seq[0].s;
+  const loS = seq[seq.length - 1].s;
+
+  // gates fall BETWEEN two ranked rows (a doorway), interpolated by the log
+  // of the real star gap so the threshold lands at its honest spot
+  const yForStar = (s: number) => {
+    if (s >= seq[0].s) return ys[0] - 22;
+    for (let i = 1; i < seq.length; i++) {
+      if (seq[i].s <= s) {
+        const sHi = seq[i - 1].s;
+        const sLo = seq[i].s;
+        const f =
+          (log10(sHi) - log10(Math.max(s, 1))) /
+          Math.max(log10(sHi) - log10(Math.max(sLo, 1)), 1e-9);
+        return ys[i - 1] + f * (ys[i] - ys[i - 1]);
+      }
+    }
+    return ys[ys.length - 1] + 22;
+  };
 
   // backdrop: twinkling specks + climbing FTL streaks, seeded per repo
   const rand = mulberry32(seedFrom(inputs.repo + "::ascent"));
@@ -148,7 +172,7 @@ export default function VerticalChart({
   };
   const open = (r: string) => router.push(`/r/${r}#from=${encodeURIComponent(inputs.repo)}`);
 
-  const hiddenAbove = apex && rank ? Math.max(0, rank - ahead.length - 1) : 0;
+  const hiddenAbove = apex && rank ? Math.max(0, rank - aheadDesc.length - 1) : 0;
 
   return (
     <div className="flex flex-col gap-1">
@@ -213,27 +237,30 @@ export default function VerticalChart({
             <g key={m.rank}>
               <line
                 x1={14}
-                y1={yFor(m.at ?? m.threshold)}
+                y1={yForStar(m.at ?? m.threshold)}
                 x2={W - 14}
-                y2={yFor(m.at ?? m.threshold)}
+                y2={yForStar(m.at ?? m.threshold)}
                 stroke={C.accent}
                 strokeWidth={1}
                 strokeDasharray="2 5"
                 opacity={0.55}
               />
-              <text x={W - 14} y={yFor(m.at ?? m.threshold) - 5} textAnchor="end" fontSize={11}
+              <text x={W - 14} y={yForStar(m.at ?? m.threshold) - 5} textAnchor="end" fontSize={11}
                 fill={C.accent} letterSpacing={1.5} className="numeral">
                 TOP {m.rank} · {fmtCompact(m.threshold)} ★
               </text>
             </g>
           ))}
 
-        {/* ships */}
-        {rows.map(({ n, y, labelY }, i) => {
+        {/* ships: dot and label share one row Y (no leader lines needed,
+            the ranked spacing already keeps them apart and in order) */}
+        {rows.map((row, i) => {
+          if (row.me) return null;
+          const n = row.n;
+          const y = row.y;
           const isAhead = n.gap > 0;
           const dop = dopplerFor(n.v / Math.max(vOwn, 1), isAhead, C);
           const isTarget = target === n.r;
-          const shifted = Math.abs(labelY - y) > 6;
           return (
             <g
               key={n.r}
@@ -241,7 +268,7 @@ export default function VerticalChart({
               onClick={() => act(n.r)}
               style={{ cursor: "pointer", animation: `ship-in 0.5s ease-out ${Math.min(i, 14) * 50}ms both` }}
             >
-              <rect x={0} y={labelY - 20} width={W - 40} height={44} fill="transparent" />
+              <rect x={0} y={y - 20} width={W - 40} height={44} fill="transparent" />
               {dop.tailLen > 0 ? (
                 <>
                   <path
@@ -266,14 +293,11 @@ export default function VerticalChart({
                 <circle cx={AXIS_X} cy={y} r={8} fill="none" stroke={C.accent} strokeWidth={1.2} />
               ) : null}
               <circle cx={AXIS_X} cy={y} r={3.4} fill={dop.color} opacity={isAhead ? 0.95 : 0.55} />
-              {shifted ? (
-                <line x1={AXIS_X + 5} y1={y} x2={LABEL_X - 3} y2={labelY - 4} stroke={C.grid} strokeWidth={1} />
-              ) : null}
-              <text x={LABEL_X} y={labelY - 2} fontSize={13}
+              <text x={LABEL_X} y={y - 2} fontSize={13}
                 fill={isAhead || n.catchDays !== null ? C.ink : C.faint} className="numeral">
                 {trunc(shortName(n.r))}
               </text>
-              <text x={LABEL_X} y={labelY + 13} fontSize={11} fill={C.dim} className="numeral">
+              <text x={LABEL_X} y={y + 13} fontSize={11} fill={C.dim} className="numeral">
                 {isAhead ? `+${fmtCompact(n.gap)}` : fmtCompact(n.gap)} · {Math.round(n.v)}/d ·{" "}
                 <tspan
                   fill={
@@ -304,8 +328,8 @@ export default function VerticalChart({
                 }}
                 style={{ cursor: "pointer" }}
               >
-                <rect x={W - 48} y={labelY - 17} width={44} height={44} fill="transparent" />
-                <text x={W - 16} y={labelY + 5} textAnchor="end" fontSize={13} fill={C.dim} className="numeral">
+                <rect x={W - 48} y={y - 17} width={44} height={44} fill="transparent" />
+                <text x={W - 16} y={y + 5} textAnchor="end" fontSize={13} fill={C.dim} className="numeral">
                   →
                 </text>
               </g>
@@ -365,7 +389,7 @@ export default function VerticalChart({
       </svg>
 
       <span className="numeral px-1 text-micro text-faint">
-        ascent view · real log distance · doppler tails: up = you gain, down = it escapes
+        ranked ascent · even spacing, log bump for the star gap · doppler tails: up = you gain, down = it escapes
       </span>
     </div>
   );
