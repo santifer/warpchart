@@ -1022,3 +1022,33 @@ body.gx-warping .ghx-lore {
     animation-delay: 0s !important;
   }
 }
+
+/* ---- CODEX modal (system dossier) ---- */
+.cdx-pulse {
+  animation: cdx-pulse 2.2s ease-in-out infinite;
+}
+@keyframes cdx-pulse {
+  0%, 100% { opacity: 0.35; transform: scale(0.9); }
+  50% { opacity: 1; transform: scale(1.1); }
+}
+.cdx-backdrop {
+  background: rgba(2, 5, 9, 0.72);
+  backdrop-filter: blur(3px);
+  animation: cdx-fade 0.18s ease-out;
+}
+.scheme-light .cdx-backdrop { background: rgba(228, 235, 242, 0.72); }
+.cdx-panel {
+  animation: cdx-rise 0.28s cubic-bezier(0.22, 1, 0.36, 1);
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.5);
+}
+@keyframes cdx-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes cdx-rise {
+  from { opacity: 0; transform: translateY(14px) scale(0.985); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .cdx-pulse, .cdx-backdrop, .cdx-panel { animation: none; }
+}

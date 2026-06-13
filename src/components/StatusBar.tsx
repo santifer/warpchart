@@ -2,6 +2,7 @@
 
 import NumberFlow from "@number-flow/react";
 import { useLive } from "./LiveProvider";
+import CodexModal from "./CodexModal";
 import type { DashboardBundle } from "@/lib/bundle";
 import { fmt, fmtEtaDays, timeAgo } from "@/lib/format";
 
@@ -88,6 +89,9 @@ export default function StatusBar({ bundle }: { bundle: DashboardBundle }) {
             <p className="mt-0.5 line-clamp-2 text-sm font-light text-dim sm:line-clamp-1">
               {bundle.meta?.description ?? "growth telemetry"}
             </p>
+            <div className="mt-2">
+              <CodexModal repo={repo} />
+            </div>
           </div>
         </div>
 
