@@ -222,6 +222,16 @@ body {
   font-variant-numeric: tabular-nums;
 }
 
+/* NYT rule E — chart labels float over the starfield; a canvas-colored halo
+   keeps them legible over stars and dust. SVG <text> only (stroke is an SVG
+   property; harmless on HTML). Theme-aware: --void is the canvas in both. */
+.chart-anno {
+  paint-order: stroke fill;
+  stroke: var(--void);
+  stroke-width: 2.6px;
+  stroke-linejoin: round;
+}
+
 .glow-accent {
   text-shadow: 0 0 18px var(--glow);
 }
@@ -328,6 +338,11 @@ svg text {
 
 .nbr .nbr-name {
   transition: fill 0.15s ease;
+  /* halo so the neighbour name stays legible over the starfield (NYT rule E) */
+  paint-order: stroke fill;
+  stroke: var(--void);
+  stroke-width: 2.6px;
+  stroke-linejoin: round;
 }
 
 .nbr:hover .nbr-name {

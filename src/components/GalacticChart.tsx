@@ -92,10 +92,14 @@ export default function GalacticChart({
   deck = false,
   deckW,
   fitW,
+  charted,
 }: {
   inputs: ChartInputs;
   target?: string | null;
   onPinTarget?: (r: string | null) => void;
+  // repos already charted (a codex exists). Vignelli transit convention:
+  // charted = solid dot, uncharted = hollow ring. Undefined = all solid.
+  charted?: string[];
   // Explorer pages opt in: poll the shared per-scene anchor so fast locals
   // move with REAL minute-fresh data. The tenant dashboard already gets
   // live neighbors from its own polling, so it never sets this.
@@ -206,6 +210,7 @@ export default function GalacticChart({
   }, [inputs.repo, inputs.routeAll, inputs.neighbors]);
 
   const { stars, rank, v7d: vOwn, apex, nowMs } = inputs;
+  const chartedSet = charted ? new Set(charted.map((r) => r.toLowerCase())) : null;
   const repoName = shortName(inputs.repo);
   const nextMilestone = inputs.milestones[0] ?? null;
 
@@ -1105,7 +1110,11 @@ export default function GalacticChart({
                         <path d={tailPath(x, BAND_A_Y, dop.tailLen, dop.tailDir, dop.girth)}
                           fill={color} opacity={dop.threat ? 0.45 : isAhead ? 0.3 : 0.18} />
                       ) : null}
-                      <circle className="nbr-dot" cx={x} cy={BAND_A_Y} r={3.2} fill={color} opacity={isAhead ? 0.95 : 0.55} />
+                      {chartedSet && !chartedSet.has(n.r.toLowerCase()) ? (
+                        <circle className="nbr-dot" cx={x} cy={BAND_A_Y} r={3.6} fill="none" stroke={color} strokeWidth={1.3} opacity={isAhead ? 0.85 : 0.5} />
+                      ) : (
+                        <circle className="nbr-dot" cx={x} cy={BAND_A_Y} r={3.2} fill={color} opacity={isAhead ? 0.95 : 0.55} />
+                      )}
                     </g>
                   );
                 }

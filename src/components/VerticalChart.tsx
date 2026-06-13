@@ -67,13 +67,19 @@ export default function VerticalChart({
   inputs,
   target = null,
   onPinTarget,
+  charted,
 }: {
   inputs: ChartInputs;
   target?: string | null;
   onPinTarget?: (r: string | null) => void;
+  // repos that have already been charted (a codex exists). Vignelli's transit
+  // convention: a charted system is a SOLID dot, an uncharted one a HOLLOW
+  // ring waiting to be filled. Undefined = everything solid (legacy callers).
+  charted?: string[];
 }) {
   const router = useRouter();
   const C = usePalette();
+  const chartedSet = charted ? new Set(charted.map((r) => r.toLowerCase())) : null;
   const { stars, rank, v7d: vOwn, apex } = inputs;
   const etas = neighborEtas(inputs.neighbors, stars, vOwn);
 
@@ -289,7 +295,7 @@ export default function VerticalChart({
                   opacity={0.55}
                 />
                 <text x={W - 14} y={gy - 5} textAnchor="end" fontSize={11}
-                  fill={C.accent} letterSpacing={1.5} className="numeral">
+                  fill={C.accent} letterSpacing={1.5} className="numeral chart-anno">
                   TOP {m.rank} · {fmtCompact(m.threshold)} ★{gEta ? ` · ${gEta}` : ""}
                 </text>
               </g>
@@ -305,6 +311,7 @@ export default function VerticalChart({
           const isAhead = n.gap > 0;
           const dop = dopplerFor(n.v / Math.max(vOwn, 1), isAhead, C);
           const isTarget = target === n.r;
+          const uncharted = chartedSet ? !chartedSet.has(n.r.toLowerCase()) : false;
           return (
             <g
               key={n.r}
@@ -312,6 +319,9 @@ export default function VerticalChart({
               onClick={() => act(n.r)}
               style={{ cursor: "pointer", animation: `ship-in 0.5s ease-out ${Math.min(i, 14) * 50}ms both` }}
             >
+              <title>
+                {uncharted ? `${n.r} · uncharted system — open to chart it` : n.r}
+              </title>
               <rect x={0} y={y - 20} width={W - 40} height={44} fill="transparent" />
               {dop.tailLen > 0 ? (
                 <>
@@ -336,12 +346,25 @@ export default function VerticalChart({
               {isTarget ? (
                 <circle cx={AXIS_X} cy={y} r={8} fill="none" stroke={C.accent} strokeWidth={1.2} />
               ) : null}
-              <circle cx={AXIS_X} cy={y} r={3.4} fill={dop.color} opacity={isAhead ? 0.95 : 0.55} />
+              {uncharted ? (
+                // Vignelli: a system not yet charted reads as a hollow ring
+                <circle
+                  cx={AXIS_X}
+                  cy={y}
+                  r={3.7}
+                  fill="none"
+                  stroke={dop.color}
+                  strokeWidth={1.3}
+                  opacity={isAhead ? 0.85 : 0.5}
+                />
+              ) : (
+                <circle cx={AXIS_X} cy={y} r={3.4} fill={dop.color} opacity={isAhead ? 0.95 : 0.55} />
+              )}
               <text x={LABEL_X} y={y - 2} fontSize={13}
-                fill={isAhead || n.catchDays !== null ? C.ink : C.faint} className="numeral">
+                fill={isAhead || n.catchDays !== null ? C.ink : C.faint} className="numeral chart-anno">
                 {trunc(shortName(n.r))}
               </text>
-              <text x={LABEL_X} y={y + 13} fontSize={11} fill={C.dim} className="numeral">
+              <text x={LABEL_X} y={y + 13} fontSize={11} fill={C.dim} className="numeral chart-anno">
                 {isAhead ? `+${fmtCompact(n.gap)}` : fmtCompact(n.gap)} · {Math.round(n.v)}/d ·{" "}
                 <tspan
                   fill={
@@ -373,7 +396,7 @@ export default function VerticalChart({
                 style={{ cursor: "pointer" }}
               >
                 <rect x={W - 48} y={y - 17} width={44} height={44} fill="transparent" />
-                <text x={W - 16} y={y + 5} textAnchor="end" fontSize={13} fill={C.dim} className="numeral">
+                <text x={W - 16} y={y + 5} textAnchor="end" fontSize={13} fill={C.dim} className="numeral chart-anno">
                   →
                 </text>
               </g>
@@ -416,10 +439,10 @@ export default function VerticalChart({
             fill={C.white}
             className="core-glow"
           />
-          <text x={LABEL_X} y={meY - 1} fontSize={14} fontWeight={700} fill={C.white} className="numeral">
+          <text x={LABEL_X} y={meY - 1} fontSize={14} fontWeight={700} fill={C.white} className="numeral chart-anno">
             {trunc(shortName(inputs.repo))}
           </text>
-          <text x={LABEL_X} y={meY + 15} fontSize={11.5} fill={C.accent} className="numeral">
+          <text x={LABEL_X} y={meY + 15} fontSize={11.5} fill={C.accent} className="numeral chart-anno">
             {fmt(stars)} ★{rank ? ` · #${fmt(rank)}` : ""} · {fmt(Math.round(vOwn))}/day
           </text>
         </g>

@@ -21,7 +21,7 @@ import { loadMeta, isHostedRepo, loadTenantHistory, loadTenantTimestamps } from 
 import { fetchLiveSnapshot } from "@/lib/live-blob";
 import { isOwnedBy } from "@/lib/config";
 import CodexModal from "@/components/CodexModal";
-import { getCachedCodex } from "@/lib/codex";
+import { getCachedCodex, listCodexes } from "@/lib/codex";
 import { unstable_cache } from "next/cache";
 import { getExplorerData, getCachedDossier } from "@/lib/explorer";
 
@@ -197,6 +197,8 @@ export default async function ExplorerPage({
   // the dossier tagline shown inline (unique content up front, not hidden
   // behind the button) and the one-line verdict numbers
   const codex = await getCachedCodex(repoLabel).catch(() => null);
+  // charted frontier for the chart dots (solid = charted, hollow = uncharted)
+  const chartedRepos = (await listCodexes().catch(() => [])).map((c) => c.repo);
   const gap = next ? Math.max(0, next.threshold - inputs.stars) : null;
   const netV = next ? inputs.v7d - (next.drift ?? 0) : 0;
   const eta = next && gap !== null && gap > 0 && netV > 0 ? fmtEtaDays(gap / netV) : null;
@@ -348,10 +350,10 @@ export default async function ExplorerPage({
                   </a>
                 </div>
                 <div className="hidden landscape:block lg:block">
-                  <GalacticChart inputs={inputs} liveLocals />
+                  <GalacticChart inputs={inputs} liveLocals charted={chartedRepos} />
                 </div>
                 <div className="landscape:hidden lg:hidden">
-                  <VerticalChart inputs={inputs} />
+                  <VerticalChart inputs={inputs} charted={chartedRepos} />
                 </div>
               </>
             ),
