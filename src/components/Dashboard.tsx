@@ -30,10 +30,12 @@ function ChartIsland({
   bundle,
   target,
   onPinTarget,
+  charted,
 }: {
   bundle: DashboardBundle;
   target: string | null;
   onPinTarget: (r: string | null) => void;
+  charted?: string[];
 }) {
   const live = useLive();
   const inputs = useMemo<ChartInputs>(
@@ -55,10 +57,10 @@ function ChartIsland({
   return (
     <>
       <div className="hidden landscape:block lg:block">
-        <GalacticChart inputs={inputs} target={target} onPinTarget={onPinTarget} />
+        <GalacticChart inputs={inputs} target={target} onPinTarget={onPinTarget} charted={charted} />
       </div>
       <div className="landscape:hidden lg:hidden">
-        <VerticalChart inputs={inputs} target={target} onPinTarget={onPinTarget} />
+        <VerticalChart inputs={inputs} target={target} onPinTarget={onPinTarget} charted={charted} />
       </div>
     </>
   );
@@ -70,10 +72,12 @@ export default function Dashboard({
   bundle,
   polling = true,
   dossier = null,
+  charted,
 }: {
   bundle: DashboardBundle;
   polling?: boolean;
   dossier?: Dossier | null;
+  charted?: string[];
 }) {
   const repo = bundle.meta?.repo;
   const next = bundle.milestones[0] ?? null;
@@ -134,7 +138,7 @@ export default function Dashboard({
                     ⛶ COMMAND DECK
                   </button>
                 </div>
-                <ChartIsland bundle={bundle} target={target} onPinTarget={pinTarget} />
+                <ChartIsland bundle={bundle} target={target} onPinTarget={pinTarget} charted={charted} />
               </>
             ),
           }}

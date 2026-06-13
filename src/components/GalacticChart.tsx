@@ -702,6 +702,15 @@ export default function GalacticChart({
     return { it: m.it, x: m.x, left, w: Math.max(0, right - left) };
   });
 
+  // T8 — the ONE most-active uncharted system in view emits a radio signal.
+  const signalRepo = chartedSet
+    ? (items
+        .flatMap((it) =>
+          it.kind === "n" && !chartedSet.has(it.n.r.toLowerCase()) && it.n.v > 0 ? [it.n] : [],
+        )
+        .sort((a, b) => b.v - a.v)[0]?.r ?? null)
+    : null;
+
   // Tier assignment is aware of each label's real width, so long names like
   // "coding-interview-university" never overlap their neighbors. Neighbors
   // claim tiers first; whoever finds no free tier SHEDS its label and stays
@@ -1143,6 +1152,9 @@ export default function GalacticChart({
                       {dop.tailLen > 0 ? (
                         <path d={tailPath(x, BAND_A_Y, dop.tailLen, dop.tailDir, dop.girth)}
                           fill={color} opacity={dop.threat ? 0.45 : isAhead ? 0.3 : 0.18} />
+                      ) : null}
+                      {n.r === signalRepo ? (
+                        <circle className="sig-ping" cx={x} cy={BAND_A_Y} r={4} fill="none" stroke={color} strokeWidth={1.1} />
                       ) : null}
                       {chartedSet && !chartedSet.has(n.r.toLowerCase()) ? (
                         <circle className="nbr-dot" cx={x} cy={BAND_A_Y} r={3.6} fill="none" stroke={color} strokeWidth={1.3} opacity={isAhead ? 0.85 : 0.5} />

@@ -321,6 +321,19 @@ svg text {
   100% { transform: scale(1.7); opacity: 0; }
 }
 
+/* Radio signal: a slow sonar sweep on the ONE most-active uncharted system in
+   view (scarce on purpose — activity detected, come discover it). */
+.sig-ping {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: sig-ping 3.4s ease-out infinite;
+}
+@keyframes sig-ping {
+  0% { transform: scale(0.5); opacity: 0.55; }
+  80% { opacity: 0; }
+  100% { transform: scale(4.4); opacity: 0; }
+}
+
 /* Neighbor hover affordances */
 .nbr {
   cursor: pointer;
@@ -609,7 +622,7 @@ svg text {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .dust-layer, .dust-tw, .dust-stream, .route-flow, .ship-ping, .scan-card, .scan-card::after, .vel-streak, .star-pulse, .vel-streak-y, .asc-streak {
+  .dust-layer, .dust-tw, .dust-stream, .route-flow, .ship-ping, .scan-card, .scan-card::after, .vel-streak, .star-pulse, .vel-streak-y, .asc-streak, .sig-ping {
     animation: none;
   }
 }

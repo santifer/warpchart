@@ -118,6 +118,10 @@ export default async function ExplorerPage({
   const { owner, name } = await params;
   if (!VALID.test(owner) || !VALID.test(name)) notFound();
 
+  // charted frontier for the chart dots (solid = charted, hollow = uncharted),
+  // shared by the unlocked dashboard branches and the public explorer below.
+  const chartedRepos = (await listCodexes().catch(() => [])).map((c) => c.repo);
+
   // The tracked (unlocked) repo gets the FULL mission console on its own
   // /r/ route: same template as everyone, nothing locked. With paid
   // multi-tenant tracking this branch becomes "is tracking active for
@@ -126,7 +130,7 @@ export default async function ExplorerPage({
   if (tenant && `${owner}/${name}`.toLowerCase() === tenant.repo.toLowerCase()) {
     const live = await fetchLiveSnapshot(tenant.repo);
     return (
-      <Dashboard bundle={buildBundle(undefined, live)} dossier={await getCachedDossier(owner, name)} />
+      <Dashboard bundle={buildBundle(undefined, live)} dossier={await getCachedDossier(owner, name)} charted={chartedRepos} />
     );
   }
 
@@ -158,6 +162,7 @@ export default async function ExplorerPage({
           bundle={buildBundle({ timestamps: tTimestamps, history: tHistory, meta: tMeta }, tLive)}
           polling={false}
           dossier={await getCachedDossier(owner, name)}
+          charted={chartedRepos}
         />
       );
     }
@@ -197,8 +202,6 @@ export default async function ExplorerPage({
   // the dossier tagline shown inline (unique content up front, not hidden
   // behind the button) and the one-line verdict numbers
   const codex = await getCachedCodex(repoLabel).catch(() => null);
-  // charted frontier for the chart dots (solid = charted, hollow = uncharted)
-  const chartedRepos = (await listCodexes().catch(() => [])).map((c) => c.repo);
   const gap = next ? Math.max(0, next.threshold - inputs.stars) : null;
   const netV = next ? inputs.v7d - (next.drift ?? 0) : 0;
   const eta = next && gap !== null && gap > 0 && netV > 0 ? fmtEtaDays(gap / netV) : null;

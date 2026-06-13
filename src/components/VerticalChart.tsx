@@ -109,6 +109,15 @@ export default function VerticalChart({
   const aheadDesc = [...aheadAsc].sort((a, b) => b.gap - a.gap);
   const behindDesc = etas.filter((n) => n.gap <= 0).sort((a, b) => b.gap - a.gap).slice(0, 3);
 
+  // T8 — the ONE most-active uncharted system in view emits a radio signal
+  // (scarce on purpose: activity detected, come discover it). Charted set
+  // unknown -> no signals.
+  const signalRepo = chartedSet
+    ? ([...aheadAsc, ...behindDesc]
+        .filter((n) => !chartedSet.has(n.r.toLowerCase()) && n.v > 0)
+        .sort((a, b) => b.v - a.v)[0]?.r ?? null)
+    : null;
+
   type SeqNode = { me: boolean; n?: NeighborEta; s: number };
   const seq: SeqNode[] = [
     ...aheadDesc.map((n) => ({ me: false, n, s: n.s })),
@@ -312,6 +321,7 @@ export default function VerticalChart({
           const dop = dopplerFor(n.v / Math.max(vOwn, 1), isAhead, C);
           const isTarget = target === n.r;
           const uncharted = chartedSet ? !chartedSet.has(n.r.toLowerCase()) : false;
+          const signal = uncharted && n.r === signalRepo;
           return (
             <g
               key={n.r}
@@ -320,7 +330,11 @@ export default function VerticalChart({
               style={{ cursor: "pointer", animation: `ship-in 0.5s ease-out ${Math.min(i, 14) * 50}ms both` }}
             >
               <title>
-                {uncharted ? `${n.r} · uncharted system — open to chart it` : n.r}
+                {signal
+                  ? `${n.r} · ◌ activity detected — open to chart this system`
+                  : uncharted
+                    ? `${n.r} · uncharted system — open to chart it`
+                    : n.r}
               </title>
               <rect x={0} y={y - 20} width={W - 40} height={44} fill="transparent" />
               {dop.tailLen > 0 ? (
@@ -345,6 +359,9 @@ export default function VerticalChart({
               ) : null}
               {isTarget ? (
                 <circle cx={AXIS_X} cy={y} r={8} fill="none" stroke={C.accent} strokeWidth={1.2} />
+              ) : null}
+              {signal ? (
+                <circle className="sig-ping" cx={AXIS_X} cy={y} r={4} fill="none" stroke={C.accent} strokeWidth={1.1} />
               ) : null}
               {uncharted ? (
                 // Vignelli: a system not yet charted reads as a hollow ring
@@ -385,6 +402,7 @@ export default function VerticalChart({
                         ? "pulling away"
                         : `eta ${fmtEtaDays(n.etaDays)}`}
                 </tspan>
+                {signal ? <tspan fill={C.accent}> · ◌</tspan> : null}
               </text>
               {/* 44px finger-sized hit area: the bare glyph was 15x14px and
                   thumb taps landed on the row (pin) instead of navigating */}
