@@ -230,27 +230,34 @@ export default function VerticalChart({
         />
 
         {/* gates drawn midway between rank N and rank N-1 (a doorway, never
-            on top of the rank-N ship); the label keeps the real threshold */}
+            on top of the rank-N ship). The label shows the real threshold AND
+            the stars-to-go, so a gate sitting close above ME reads as "you
+            are nearly there" instead of a misplaced line (the compact "53K"
+            alone looked equal to ME's own 53,320). */}
         {inputs.milestones
           .filter((m) => (m.at ?? m.threshold) > loS && (m.at ?? m.threshold) < hiS)
-          .map((m) => (
-            <g key={m.rank}>
-              <line
-                x1={14}
-                y1={yForStar(m.at ?? m.threshold)}
-                x2={W - 14}
-                y2={yForStar(m.at ?? m.threshold)}
-                stroke={C.accent}
-                strokeWidth={1}
-                strokeDasharray="2 5"
-                opacity={0.55}
-              />
-              <text x={W - 14} y={yForStar(m.at ?? m.threshold) - 5} textAnchor="end" fontSize={11}
-                fill={C.accent} letterSpacing={1.5} className="numeral">
-                TOP {m.rank} · {fmtCompact(m.threshold)} ★
-              </text>
-            </g>
-          ))}
+          .map((m) => {
+            const gy = yForStar(m.at ?? m.threshold);
+            const toGo = m.threshold - stars;
+            return (
+              <g key={m.rank}>
+                <line
+                  x1={14}
+                  y1={gy}
+                  x2={W - 14}
+                  y2={gy}
+                  stroke={C.accent}
+                  strokeWidth={1}
+                  strokeDasharray="2 5"
+                  opacity={0.55}
+                />
+                <text x={W - 14} y={gy - 5} textAnchor="end" fontSize={11}
+                  fill={C.accent} letterSpacing={1.5} className="numeral">
+                  TOP {m.rank} · {fmt(m.threshold)} ★{toGo > 0 ? ` · +${fmt(toGo)} to go` : ""}
+                </text>
+              </g>
+            );
+          })}
 
         {/* ships: dot and label share one row Y (no leader lines needed,
             the ranked spacing already keeps them apart and in order) */}
