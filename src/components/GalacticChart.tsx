@@ -689,6 +689,19 @@ export default function GalacticChart({
       }),
   ].sort((a, b) => a.s - b.s);
 
+  // NYT rule B — proximity hover: a 1D-Voronoi hit layer behind every mark so
+  // hovering ANYWHERE in the local band snaps to the nearest system's scan
+  // card (no dead zones between the small dots). Hover-only, reuses openScan;
+  // pan/zoom are native listeners on the svg, so these never block the drag.
+  const proxMarks = items
+    .map((it) => ({ it, x: ax(driftS(it.s, it.kind === "n" ? it.n.v : it.p.v)) }))
+    .sort((a, b) => a.x - b.x);
+  const proxZones = proxMarks.map((m, i) => {
+    const left = i === 0 ? 28 : (proxMarks[i - 1].x + m.x) / 2;
+    const right = i === proxMarks.length - 1 ? W - 28 : (proxMarks[i + 1].x + m.x) / 2;
+    return { it: m.it, x: m.x, left, w: Math.max(0, right - left) };
+  });
+
   // Tier assignment is aware of each label's real width, so long names like
   // "coding-interview-university" never overlap their neighbors. Neighbors
   // claim tiers first; whoever finds no free tier SHEDS its label and stays
@@ -898,6 +911,27 @@ export default function GalacticChart({
           ) : null}
 
           <g clipPath={deck ? "url(#bandAClip-deck)" : "url(#bandAClip)"}>
+            {/* proximity hit layer (NYT rule B): at the back so every real
+                mark stays on top and keeps its own hover; these only fire in
+                the gaps, snapping to the nearest system. */}
+            {proxZones.map(({ it, x, left, w }) => (
+              <rect
+                key={`pz-${it.kind === "n" ? it.n.r : it.p.r}`}
+                x={left}
+                y={BAND_A_Y - 30}
+                width={w}
+                height={60}
+                fill="transparent"
+                onMouseEnter={() =>
+                  openScan(
+                    it.kind === "n"
+                      ? { kind: "neighbor", n: it.n, xPct: clampPct((x / W) * 100), topPct: bandATop, place: "below" }
+                      : { kind: "route", p: it.p, xPct: clampPct((x / W) * 100), topPct: bandATop, place: "below" },
+                  )
+                }
+                onMouseLeave={scheduleClose}
+              />
+            ))}
             {/* multi-depth parallax: each layer shifts with the pan at its
                 depth factor (travel) and drifts on its own clock (time).
                 The near layer stretches into FTL streaks while panning. */}
