@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Michroma, Chakra_Petch, JetBrains_Mono } from "next/font/google";
 import { ThemeProvider } from "@/lib/usePalette";
+import DemoBanner from "@/components/DemoBanner";
 import "./globals.css";
 
 const michroma = Michroma({
@@ -58,6 +59,7 @@ export default function RootLayout({
           <div className="space-backdrop" aria-hidden />
           <div className="space-grid" aria-hidden />
           <div className="starfield" aria-hidden />
+          <DemoBanner />
           {children}
         </ThemeProvider>
       </body>

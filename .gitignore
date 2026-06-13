@@ -36,6 +36,12 @@ yarn-error.log*
 # vercel
 .vercel
 
+# accumulated star history — the moat. It lives in the PRIVATE Vercel Blob
+# store and is pulled at build time by scripts/sync-from-blob.mjs (prebuild),
+# never committed to this public repo. A fork with no token builds from the
+# synthetic data-sample/ instead.
+/data/
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts

@@ -54,6 +54,15 @@ export function loadMeta(): RepoMetaFile | null {
   return JSON.parse(readFileSync(p, "utf8")) as RepoMetaFile;
 }
 
+// True when the app is running on the bundled synthetic sample — i.e. a fork
+// with no private data store fell back to data-sample/. The accumulated real
+// history is the moat and never ships in git; a fork gets the "toy" instead.
+// Drives the DEMO banner (a billboard back to the hosted product). On the real
+// site (a real repo in data/) this is always false.
+export function isSampleMode(): boolean {
+  return loadMeta()?.repo?.toLowerCase() === "warpchart/sample";
+}
+
 // Paying missions beyond the house repo. The collector walks each one's
 // exact history into data/tenants/{owner}--{name}/ on every run.
 export interface TenantEntry {

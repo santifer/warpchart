@@ -1052,3 +1052,36 @@ body.gx-warping .ghx-lore {
 @media (prefers-reduced-motion: reduce) {
   .cdx-pulse, .cdx-backdrop, .cdx-panel { animation: none; }
 }
+
+/* DEMO banner — only rendered on forks running the synthetic sample dataset
+   (see DemoBanner.tsx). A thin billboard back to the hosted product. */
+.demo-banner {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  padding: 0.4rem 0.9rem;
+  background: linear-gradient(90deg, rgba(83, 214, 232, 0.08), rgba(242, 163, 60, 0.07));
+  border-bottom: 1px solid var(--grid);
+  font-size: 0.62rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--dim);
+  text-align: center;
+}
+.demo-banner__tag {
+  color: var(--void);
+  background: var(--warn);
+  padding: 0.05rem 0.42rem;
+  border-radius: 2px;
+  font-weight: 600;
+  letter-spacing: 0.2em;
+}
+.demo-banner__cta {
+  color: var(--accent);
+  white-space: nowrap;
+}
+.demo-banner__cta:hover {
+  text-decoration: underline;
+}

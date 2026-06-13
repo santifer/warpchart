@@ -1,0 +1,12 @@
+{
+  "repo": "warpchart/sample",
+  "owner": "warpchart",
+  "name": "sample",
+  "description": "Synthetic demo telemetry. A fork with no private data store renders this dataset.",
+  "created_at": "2026-01-04T00:00:00Z",
+  "avatar_url": "https://avatars.githubusercontent.com/u/9919?v=4",
+  "homepage": "https://warpchart.dev",
+  "language": "TypeScript",
+  "forks": 87,
+  "bootstrapped_at": "2026-06-13T00:00:00Z"
+}

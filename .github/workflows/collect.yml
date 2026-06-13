@@ -1,11 +1,10 @@
 name: collect
 on:
   schedule:
-    # Every 2h (was hourly): each data commit triggers a full Vercel build,
-    # and build minutes were eating 76% of the monthly credit. The health
-    # monitor alerts at >3h, so 2h keeps a comfortable margin, and live
-    # polling + /api/live/locals cover the real-time layer between commits.
-    # :07 avoids the :00 congestion on Actions.
+    # Every 2h: the snapshot lives in the PRIVATE Blob (the moat), never in git.
+    # A tiny .deploy-stamp commit triggers the Vercel build, whose prebuild
+    # pulls data/ back down from the Blob. Live polling + /api/live/locals cover
+    # the real-time layer between builds. :07 avoids the :00 Actions congestion.
     - cron: "7 */2 * * *"
   workflow_dispatch:
 
@@ -25,22 +24,52 @@ jobs:
       - uses: actions/setup-node@v5
         with:
           node-version: 22
-      - run: node collector/collect.mjs
+      # @vercel/blob is the only dependency the sync scripts need (the collector
+      # itself is built-ins only).
+      - run: npm install @vercel/blob --no-save --no-audit --no-fund
+
+      # 1. Hydrate data/ from the PRIVATE Blob store — the accumulated history
+      #    no longer lives in git, so the collector reads its prior state here.
+      - name: Hydrate data from private Blob
+        run: node scripts/sync-from-blob.mjs
+        env:
+          BLOB_READ_WRITE_TOKEN: ${{ secrets.BLOB_READ_WRITE_TOKEN }}
+
+      # 2. Guard: never collect on top of the demo sample. A failed hydrate
+      #    falls back to data-sample/; appending to it and mirroring back would
+      #    overwrite the real moat. Abort instead.
+      - name: Verify real data hydrated
+        run: |
+          node -e "const fs=require('fs');const m=JSON.parse(fs.readFileSync('./data/meta.json','utf8'));if(m.repo==='warpchart/sample'){console.error('hydrate fell back to sample — aborting to protect the Blob moat');process.exit(1)}console.log('hydrated: '+m.repo)"
+
+      # 3. Collect one snapshot (appends to the hydrated data/).
+      - name: Collect snapshot
+        run: node collector/collect.mjs
         env:
           # The automatic Actions token covers public-data reads (1,000 req/h,
           # the collector uses ~12). No PAT or secret setup needed.
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # Optional: a Discord or Slack incoming-webhook URL. If set, the
-          # collector posts milestone gates and overtakes as they happen.
+          # Optional: a Discord or Slack incoming-webhook URL for milestone /
+          # overtake alerts.
           ALERT_WEBHOOK_URL: ${{ secrets.ALERT_WEBHOOK_URL }}
           WARM_BASE_URL: ${{ vars.WARM_BASE_URL }}
-      - name: Commit snapshot
+
+      # 4. Mirror the updated data/ back UP to the private Blob — the moat.
+      - name: Mirror data to private Blob
+        run: node scripts/sync-to-blob.mjs
+        env:
+          BLOB_READ_WRITE_TOKEN: ${{ secrets.BLOB_READ_WRITE_TOKEN }}
+
+      # 5. No data in git: a tiny stamp commit triggers the Vercel build, whose
+      #    prebuild pulls the fresh data/ from the Blob.
+      - name: Trigger deploy
         run: |
           git config user.name "warpchart-bot"
           git config user.email "warpchart-bot@users.noreply.github.com"
-          git add data/
+          date -u +%FT%H:%MZ > .deploy-stamp
+          git add .deploy-stamp
           git diff --cached --quiet || {
-            git commit -m "snapshot $(date -u +%FT%H:%MZ)"
+            git commit -m "deploy $(date -u +%FT%H:%MZ)"
             git pull --rebase
             git push
           }

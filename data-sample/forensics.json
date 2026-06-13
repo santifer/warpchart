@@ -1,0 +1,17 @@
+{
+  "generated_at": "2026-06-13T00:00:00Z",
+  "spikes": [
+    {
+      "date": "2026-04-26",
+      "stars": 84,
+      "causes": [
+        {
+          "type": "hn",
+          "title": "Show HN: warpchart/sample",
+          "url": "https://news.ycombinator.com/",
+          "points": 312
+        }
+      ]
+    }
+  ]
+}
