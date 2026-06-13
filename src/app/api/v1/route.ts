@@ -16,8 +16,12 @@ export async function GET() {
     endpoints: {
       "GET /api/v1/repo?repo=owner/name":
         "Worldwide rank, stars, velocity, ranking neighbours and the next milestone gate for a repo in the top-1000 registry.",
-      "GET /api/v1/velocity?limit=20": "The fastest-growing repositories right now (stars/day).",
-      "GET /api/v1/overtakes?limit=20": "Imminent rank overtakes (who is about to pass whom), with ETAs.",
+      "GET /api/v1/leaderboard?limit=20&language=Rust":
+        "The biggest repositories by stars, optionally filtered to one language.",
+      "GET /api/v1/velocity?limit=20&language=Rust":
+        "The fastest-growing repositories right now (stars/day), optionally by language.",
+      "GET /api/v1/overtakes?limit=20":
+        "Imminent rank overtakes globally. Add ?repo=owner/name to get who is hunting THAT repo and who it is about to pass.",
       "GET /api/v1/compare?repos=a/b,c/d": "Side-by-side stats for up to 10 repos.",
       "GET /api/v1/embed?repo=owner/name": "An animated star-history chart embed snippet (markdown + HTML) for your README.",
     },

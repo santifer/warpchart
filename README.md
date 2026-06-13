@@ -68,17 +68,18 @@ The same telemetry is exposed three ways for developers and agents. All of it is
 
 ```bash
 curl "https://warpchart.dev/api/v1/repo?repo=vuejs/core"          # rank, velocity, neighbours, next gate
-curl "https://warpchart.dev/api/v1/velocity?limit=20"             # fastest movers right now
-curl "https://warpchart.dev/api/v1/overtakes"                     # imminent rank overtakes + ETAs
+curl "https://warpchart.dev/api/v1/leaderboard?language=Rust"     # biggest repos, optionally by language
+curl "https://warpchart.dev/api/v1/velocity?limit=20&language=Go" # fastest movers, optionally by language
+curl "https://warpchart.dev/api/v1/overtakes?repo=d3/d3"          # who is hunting a repo (and who it's about to pass)
 curl "https://warpchart.dev/api/v1/compare?repos=vuejs/core,react/react"
 curl "https://warpchart.dev/api/v1/embed?repo=OWNER/NAME"         # README embed snippet
 ```
 
-`GET /api/v1` is a self-documenting index. Use the canonical `owner/name` (e.g. `react/react`); repos outside the worldwide top-1000 return 404 (no live fetch).
+`GET /api/v1` is a self-documenting index. Use the canonical `owner/name` (e.g. `react/react`); repos outside the worldwide top-1000 return 404 (no live fetch). `/api/v1/overtakes` is global without `?repo=`.
 
 ### MCP server — `/api/mcp`
 
-A streamable-HTTP MCP server so your agent can query the leaderboard. Tools: `get_repo_stats`, `get_velocity_rankings`, `get_active_overtakes`, `compare_repos`, `get_embed_snippet`. Add it to any MCP client (Claude Desktop, Cursor, ...):
+A streamable-HTTP MCP server so your agent can query the leaderboard. Tools: `get_repo_stats`, `get_leaderboard`, `get_velocity_rankings`, `get_active_overtakes` (pass `repo` for who's hunting it), `compare_repos`, `get_embed_snippet`. Add it to any MCP client (Claude Desktop, Cursor, ...):
 
 ```json
 { "mcpServers": { "warpchart": { "url": "https://warpchart.dev/api/mcp" } } }
@@ -93,9 +94,13 @@ For stdio-only clients, wrap it with [`mcp-remote`](https://www.npmjs.com/packag
 ### CLI — `npx warpchart`
 
 ```bash
-npx warpchart vuejs/core          # rank, velocity and a braille star chart in your terminal
-npx warpchart velocity 15         # the fastest-growing repos right now
-npx warpchart vuejs/core --json   # raw JSON (agent friendly)
+npx warpchart vuejs/core              # rank, velocity, a braille star chart + who's hunting it
+npx warpchart hunters d3/d3           # who's about to pass it (and who it's about to pass)
+npx warpchart top 20 --lang Rust      # the biggest repos, optionally by language
+npx warpchart velocity --lang Go      # the fastest-growing repos right now
+npx warpchart compare react/react vuejs/core
+npx warpchart embed OWNER/NAME        # a README embed snippet
+npx warpchart vuejs/core --json       # raw JSON (agent friendly)
 ```
 
 Source in [`cli/`](cli/); point it at another instance with `WARPCHART_BASE`.
@@ -185,20 +190,20 @@ Warpchart convierte la API pública de GitHub en una consola de vuelo:
 
 La misma telemetría, expuesta de tres formas para devs y agentes. Todo **público, gratis y solo-caché** (nunca llama a GitHub por petición). El histórico per-repo es el producto hosted aparte.
 
-**REST `/api/v1`** — endpoints `repo`, `velocity`, `overtakes`, `compare`, `embed`, con un índice autodescriptivo en `/api/v1`. Usa el `owner/name` canónico (p.ej. `react/react`).
+**REST `/api/v1`** — endpoints `repo`, `leaderboard`, `velocity`, `overtakes`, `compare`, `embed`, con índice autodescriptivo en `/api/v1`. Usa el `owner/name` canónico (p.ej. `react/react`). `leaderboard` y `velocity` aceptan `?language=`; `overtakes?repo=` da quién caza ese repo.
 
 ```bash
-curl "https://warpchart.dev/api/v1/repo?repo=vuejs/core"
-curl "https://warpchart.dev/api/v1/velocity?limit=20"
+curl "https://warpchart.dev/api/v1/leaderboard?language=Rust"
+curl "https://warpchart.dev/api/v1/overtakes?repo=d3/d3"   # quién está cazando a d3/d3
 ```
 
-**MCP `/api/mcp`** — servidor MCP (streamable HTTP) para que tu agente consulte el ranking. Tools: `get_repo_stats`, `get_velocity_rankings`, `get_active_overtakes`, `compare_repos`, `get_embed_snippet`. Añádelo a Claude Desktop / Cursor:
+**MCP `/api/mcp`** — servidor MCP (streamable HTTP) para que tu agente consulte el ranking. Tools: `get_repo_stats`, `get_leaderboard`, `get_velocity_rankings`, `get_active_overtakes` (con `repo` = quién lo caza), `compare_repos`, `get_embed_snippet`. Añádelo a Claude Desktop / Cursor:
 
 ```json
 { "mcpServers": { "warpchart": { "url": "https://warpchart.dev/api/mcp" } } }
 ```
 
-**CLI** — `npx warpchart owner/name` (carta estelar braille en el terminal), `npx warpchart velocity`, `--json` para agentes. Código en [`cli/`](cli/).
+**CLI** — `npx warpchart owner/name` (carta braille + quién te caza), `npx warpchart hunters owner/name`, `top --lang Rust`, `velocity --lang Go`, `compare a/b c/d`, `embed owner/name`, `--json`. Código en [`cli/`](cli/).
 
 ## Setup en 5 minutos
 

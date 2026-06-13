@@ -23,6 +23,7 @@ const nextConfig: NextConfig = {
     "/api/v1/velocity": ["./data/**"],
     "/api/v1/overtakes": ["./data/**"],
     "/api/v1/compare": ["./data/**"],
+    "/api/v1/leaderboard": ["./data/**"],
     "/api/[transport]": ["./data/**"],
     "/api/monitor": ["./data/**"],
     "/velocity": ["./data/**"],

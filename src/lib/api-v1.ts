@@ -11,6 +11,8 @@ export const SITE = "https://warpchart.dev";
 // round-rank milestone gates, ascending
 const GATES = [1, 3, 5, 10, 25, 50, 100, 200, 300, 400, 500, 750, 1000];
 
+const clamp = (n: number) => Math.max(1, Math.min(Math.floor(n) || 20, 200));
+
 export interface RegistryMeta {
   size: number;
   asOf: string | null;
@@ -97,20 +99,28 @@ export interface VelocityEntry {
   language: string | null;
 }
 
-export function velocityRanking(limit = 20): VelocityEntry[] {
+// Fastest movers (stars/day), optionally filtered to one language.
+export function velocityRanking(limit = 20, language?: string): VelocityEntry[] {
   const r = loadRoute();
   if (!r) return [];
+  const lang = language?.trim().toLowerCase();
   return r.repos
-    .map((p, i) => ({
-      repo: p.r,
-      rank: i + 1,
-      stars: p.s,
-      velocityPerDay: p.v ?? 0,
-      language: p.l ?? null,
-    }))
-    .filter((p) => p.velocityPerDay > 0)
+    .map((p, i) => ({ repo: p.r, rank: i + 1, stars: p.s, velocityPerDay: p.v ?? 0, language: p.l ?? null }))
+    .filter((p) => p.velocityPerDay > 0 && (!lang || (p.language ?? "").toLowerCase() === lang))
     .sort((a, b) => b.velocityPerDay - a.velocityPerDay)
-    .slice(0, Math.max(1, Math.min(limit, 200)));
+    .slice(0, clamp(limit));
+}
+
+// The worldwide leaderboard: biggest repos by stars, optionally by language.
+// The registry is already sorted by stars, so this just filters and slices.
+export function leaderboard(limit = 20, language?: string): VelocityEntry[] {
+  const r = loadRoute();
+  if (!r) return [];
+  const lang = language?.trim().toLowerCase();
+  return r.repos
+    .map((p, i) => ({ repo: p.r, rank: i + 1, stars: p.s, velocityPerDay: p.v ?? 0, language: p.l ?? null }))
+    .filter((p) => !lang || (p.language ?? "").toLowerCase() === lang)
+    .slice(0, clamp(limit));
 }
 
 export interface Overtake {
@@ -123,10 +133,9 @@ export interface Overtake {
   url: string;
 }
 
-export function overtakes(limit = 20): Overtake[] {
-  const c = loadCollisions();
-  if (!c) return [];
-  return c.collisions.slice(0, Math.max(1, Math.min(limit, 200))).map((x) => ({
+type Collision = NonNullable<ReturnType<typeof loadCollisions>>["collisions"][number];
+function mapCollision(x: Collision): Overtake {
+  return {
     hunter: { repo: x.hunter.r, rank: x.hunter.rank, stars: x.hunter.s, velocityPerDay: x.hunter.v },
     victim: { repo: x.victim.r, rank: x.victim.rank, stars: x.victim.s, velocityPerDay: x.victim.v },
     gap: x.gap,
@@ -134,7 +143,32 @@ export function overtakes(limit = 20): Overtake[] {
     eta: x.eta,
     sameLanguage: x.sameLang,
     url: `${SITE}/r/${x.victim.r}`,
-  }));
+  };
+}
+
+export function overtakes(limit = 20): Overtake[] {
+  const c = loadCollisions();
+  if (!c) return [];
+  return c.collisions.slice(0, clamp(limit)).map(mapCollision);
+}
+
+export interface RepoOvertakes {
+  repo: string;
+  hunters: Overtake[]; // repos about to pass THIS repo (it is the victim)
+  targets: Overtake[]; // repos THIS repo is about to pass (it is the hunter)
+}
+
+// The competitive picture for one repo: who is hunting it, and who it hunts.
+// This is the "who is chasing my repo?" answer the launch leads with.
+export function repoOvertakes(repoInput: string): RepoOvertakes {
+  const c = loadCollisions();
+  const lower = repoInput.toLowerCase();
+  const all = c?.collisions ?? [];
+  return {
+    repo: repoInput,
+    hunters: all.filter((x) => x.victim.r.toLowerCase() === lower).map(mapCollision),
+    targets: all.filter((x) => x.hunter.r.toLowerCase() === lower).map(mapCollision),
+  };
 }
 
 export function compareRepos(repos: string[]): { repo: string; stats: RepoStats | null }[] {

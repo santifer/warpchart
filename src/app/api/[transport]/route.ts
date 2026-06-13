@@ -7,7 +7,9 @@ import { z } from "zod";
 import {
   repoStats,
   velocityRanking,
+  leaderboard,
   overtakes,
+  repoOvertakes,
   compareRepos,
   embedSnippet,
   registryMeta,
@@ -38,13 +40,29 @@ const handler = createMcpHandler(
     );
 
     server.registerTool(
+      "get_leaderboard",
+      {
+        title: "Get the leaderboard",
+        description: "The biggest repositories by stars worldwide (top 1000), optionally filtered to one language.",
+        inputSchema: {
+          language: z.string().optional().describe("e.g. Rust, Python, TypeScript"),
+          limit: z.number().int().min(1).max(200).optional().describe("default 20"),
+        },
+      },
+      async ({ limit, language }) => json({ leaderboard: leaderboard(limit ?? 20, language), registry: registryMeta() }),
+    );
+
+    server.registerTool(
       "get_velocity_rankings",
       {
         title: "Get velocity rankings",
-        description: "The fastest-growing repositories right now, by stars/day, across the worldwide top 1000.",
-        inputSchema: { limit: z.number().int().min(1).max(200).optional().describe("default 20") },
+        description: "The fastest-growing repositories right now, by stars/day, optionally filtered to one language.",
+        inputSchema: {
+          language: z.string().optional().describe("e.g. Rust, Python, TypeScript"),
+          limit: z.number().int().min(1).max(200).optional().describe("default 20"),
+        },
       },
-      async ({ limit }) => json({ fastest: velocityRanking(limit ?? 20), registry: registryMeta() }),
+      async ({ limit, language }) => json({ fastest: velocityRanking(limit ?? 20, language), registry: registryMeta() }),
     );
 
     server.registerTool(
@@ -52,10 +70,16 @@ const handler = createMcpHandler(
       {
         title: "Get active overtakes",
         description:
-          "Imminent rank overtakes: which repositories are about to pass which, with the star gap and ETA in days. The competitive pulse of the leaderboard.",
-        inputSchema: { limit: z.number().int().min(1).max(200).optional().describe("default 20") },
+          "Imminent rank overtakes with star gap and ETA in days. Without arguments, the global pulse. With repo='owner/name', who is hunting THAT repo (about to pass it) and who it is about to pass.",
+        inputSchema: {
+          repo: z.string().optional().describe("owner/name — scope to one repo's hunters and targets"),
+          limit: z.number().int().min(1).max(200).optional().describe("default 20 (global only)"),
+        },
       },
-      async ({ limit }) => json({ overtakes: overtakes(limit ?? 20), registry: registryMeta() }),
+      async ({ limit, repo }) =>
+        repo
+          ? json({ ...repoOvertakes(repo), registry: registryMeta() })
+          : json({ overtakes: overtakes(limit ?? 20), registry: registryMeta() }),
     );
 
     server.registerTool(
