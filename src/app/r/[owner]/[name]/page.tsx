@@ -21,6 +21,7 @@ import { loadMeta, isHostedRepo, loadTenantHistory, loadTenantTimestamps } from 
 import { fetchLiveSnapshot } from "@/lib/live-blob";
 import { isOwnedBy } from "@/lib/config";
 import CodexModal from "@/components/CodexModal";
+import { getCachedCodex } from "@/lib/codex";
 import { unstable_cache } from "next/cache";
 import { getExplorerData, getCachedDossier } from "@/lib/explorer";
 
@@ -51,45 +52,32 @@ const getCachedExplorerData = unstable_cache(
   ["explorer-data"],
   { revalidate: 900 }
 );
-import { fmt } from "@/lib/format";
+import { fmt, fmtEtaDays } from "@/lib/format";
 
 // Same template as the unlocked mission console: identical panels in identical
 // order. The only difference between repos is what is unlocked. Locked
 // panels render the REAL components fed with the live demo mission's data,
 // dimmed and labeled, so visitors see exactly the telemetry they unlock.
+// A quiet locked preview: the real component, dimmed, with ONE small tag.
+// The conversion ask lives once, in the upsell band below, not shouted on
+// every panel (six loud paywalls read as a wall, not a generous preview).
 function Locked({ unlockFor, children }: { unlockFor: string; children: React.ReactNode }) {
   return (
     <div className="relative">
-      <div className="pointer-events-none select-none opacity-40 blur-[1.5px]" aria-hidden>
+      <div className="pointer-events-none select-none opacity-[0.28] blur-[2px]" aria-hidden>
         {children}
       </div>
-      {/* the whole overlay surface resolves to the unlock CTA: blurred demo
-          content underneath contains link-looking text, and a dead click
-          there reads as "the links are broken" */}
+      {/* the whole surface still resolves to checkout: a dead click on the
+          blurred link-looking text would read as "the links are broken" */}
       <a
         href={`/api/checkout?repo=${encodeURIComponent(unlockFor)}&plan=hosted`}
-        className="absolute inset-0 z-[9]"
-        aria-label={`Unlock for ${unlockFor}`}
+        className="absolute inset-0 z-10"
+        aria-label={`Track ${unlockFor}`}
       />
-      <div className="pointer-events-none absolute inset-0 z-10 flex flex-col items-center justify-center gap-2 text-center [&_a]:pointer-events-auto">
-        <span className="numeral bg-void/75 px-3 py-1 text-micro tracking-[0.3em] text-dim">
-          ◈ LOCKED · PREVIEW SHOWS THE LIVE DEMO MISSION
+      <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+        <span className="numeral border border-grid bg-void/70 px-2.5 py-1 text-micro tracking-[0.28em] text-faint">
+          ◈ UNLOCK WITH TRACKING
         </span>
-        <a
-          href={`/api/checkout?repo=${encodeURIComponent(unlockFor)}&plan=hosted`}
-          className="numeral border border-accent/50 bg-void/85 px-3 py-1.5 text-label tracking-[0.2em] text-accent transition-colors hover:bg-accent/10"
-        >
-          TRACK {unlockFor} · $19/MO →
-        </a>
-        {/* hosted = convenience, never lock-in: the software is free */}
-        <a
-          href="https://github.com/santifer/warpchart"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="numeral bg-void/75 px-2 py-0.5 text-micro tracking-[0.15em] text-faint underline-offset-2 transition-colors hover:text-dim hover:underline"
-        >
-          or fork the repo and self-host it free
-        </a>
       </div>
     </div>
   );
@@ -204,6 +192,14 @@ export default async function ExplorerPage({
   const { inputs } = data;
   const next = inputs.milestones[0] ?? null;
   const repoLabel = `${owner}/${name}`;
+  const repoName = name;
+
+  // the dossier tagline shown inline (unique content up front, not hidden
+  // behind the button) and the one-line verdict numbers
+  const codex = await getCachedCodex(repoLabel).catch(() => null);
+  const gap = next ? Math.max(0, next.threshold - inputs.stars) : null;
+  const netV = next ? inputs.v7d - (next.drift ?? 0) : 0;
+  const eta = next && gap !== null && gap > 0 && netV > 0 ? fmtEtaDays(gap / netV) : null;
 
   // Demo data for the locked panels: the live mission's bundle, slimmed
   // (no route layers, sparser replay buckets) to keep the page light.
@@ -226,8 +222,8 @@ export default async function ExplorerPage({
       </div>
       {/* header */}
       <header className="hud px-4 py-4 sm:px-6 sm:py-5">
-        <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-4">
-          <div className="flex items-center gap-4 min-w-0">
+        <div className="flex flex-wrap items-start justify-between gap-x-6 gap-y-4">
+          <div className="flex items-start gap-4 min-w-0">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               src={`https://github.com/${inputs.repo.split("/")[0]}.png?size=96`}
@@ -244,11 +240,23 @@ export default async function ExplorerPage({
                 {data.desc ?? "public repository"}
                 {data.lang ? ` · ${data.lang}` : ""}
               </p>
-              <div className="mt-2">
+              {/* the dossier's own line, up front: unique content the visitor
+                  reads before deciding to open the full transmission */}
+              {codex?.tagline ? (
+                <p className="mt-1.5 max-w-[54ch] text-sm font-light leading-snug text-accent">
+                  {codex.tagline}
+                </p>
+              ) : null}
+              <div className="mt-2.5 flex items-center gap-3">
                 <CodexModal
                   repo={repoLabel}
                   stats={{ stars: inputs.stars, rank: inputs.rank, vPerDay: inputs.v7d }}
                 />
+                {!codex ? (
+                  <span className="numeral text-micro tracking-[0.15em] text-faint">
+                    be the first to chart this system
+                  </span>
+                ) : null}
               </div>
             </div>
           </div>
@@ -282,11 +290,30 @@ export default async function ExplorerPage({
             ) : null}
           </div>
         </div>
-        <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-grid pt-2">
-          <span className="numeral text-micro tracking-[0.15em] text-faint">
-            WARPCHART // INSTANT SCAN
-          </span>
-          <span className="numeral text-micro text-faint">
+        <div className="mt-3 flex flex-wrap items-center justify-between gap-x-4 gap-y-2 border-t border-grid pt-2.5">
+          <p className="max-w-[62ch] text-sm font-light text-dim">
+            {inputs.rank !== null ? (
+              <>
+                <span className="text-ink">{repoName}</span> sits{" "}
+                <span className="text-accent">#{fmt(inputs.rank)}</span> of every public repository,
+                climbing <span className="text-accent">{fmt(Math.round(inputs.v7d))}★/day</span>.
+                {next && gap !== null && gap > 0 ? (
+                  <>
+                    {" "}
+                    <span className="text-ink">{fmt(gap)}</span> more to break into the{" "}
+                    <span className="text-accent">top {next.rank}</span>
+                    {eta ? <span className="text-dim"> (~{eta})</span> : null}.
+                  </>
+                ) : null}
+              </>
+            ) : (
+              <>
+                Tracking <span className="text-ink">{inputs.repo}</span>, climbing{" "}
+                <span className="text-accent">{fmt(Math.round(inputs.v7d))}★/day</span>.
+              </>
+            )}
+          </p>
+          <span className="numeral shrink-0 text-micro text-faint">
             {data.forkRatio !== null ? (
               <>
                 fork ratio {(data.forkRatio * 100).toFixed(1)}%
