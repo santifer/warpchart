@@ -20,6 +20,7 @@ import { buildBundle } from "@/lib/bundle";
 import { loadMeta, isHostedRepo, loadTenantHistory, loadTenantTimestamps } from "@/lib/history";
 import { fetchLiveSnapshot } from "@/lib/live-blob";
 import { isOwnedBy } from "@/lib/config";
+import CodexModal from "@/components/CodexModal";
 import { unstable_cache } from "next/cache";
 import { getExplorerData, getCachedDossier } from "@/lib/explorer";
 
@@ -243,6 +244,9 @@ export default async function ExplorerPage({
                 {data.desc ?? "public repository"}
                 {data.lang ? ` · ${data.lang}` : ""}
               </p>
+              <div className="mt-2">
+                <CodexModal repo={repoLabel} />
+              </div>
             </div>
           </div>
           <div className="flex flex-wrap items-start gap-x-6 gap-y-3">
