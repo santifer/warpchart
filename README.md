@@ -60,6 +60,46 @@ For the instance's own tracked repo, drop `?repo=` (exact archived history inste
 
 **Instant explorer** for any repo, no setup: `/r/owner/name`. **Dynamic Open Graph cards**: every shared link renders a live stats card.
 
+## API, MCP & CLI
+
+The same telemetry is exposed three ways for developers and agents. All of it is **public, free and cache-only**: it never makes a GitHub call per request, so it is fast and rate-limit-proof. Per-repository historical telemetry is the separate hosted product.
+
+### REST API — `/api/v1`
+
+```bash
+curl "https://warpchart.dev/api/v1/repo?repo=vuejs/core"          # rank, velocity, neighbours, next gate
+curl "https://warpchart.dev/api/v1/velocity?limit=20"             # fastest movers right now
+curl "https://warpchart.dev/api/v1/overtakes"                     # imminent rank overtakes + ETAs
+curl "https://warpchart.dev/api/v1/compare?repos=vuejs/core,react/react"
+curl "https://warpchart.dev/api/v1/embed?repo=OWNER/NAME"         # README embed snippet
+```
+
+`GET /api/v1` is a self-documenting index. Use the canonical `owner/name` (e.g. `react/react`); repos outside the worldwide top-1000 return 404 (no live fetch).
+
+### MCP server — `/api/mcp`
+
+A streamable-HTTP MCP server so your agent can query the leaderboard. Tools: `get_repo_stats`, `get_velocity_rankings`, `get_active_overtakes`, `compare_repos`, `get_embed_snippet`. Add it to any MCP client (Claude Desktop, Cursor, ...):
+
+```json
+{ "mcpServers": { "warpchart": { "url": "https://warpchart.dev/api/mcp" } } }
+```
+
+For stdio-only clients, wrap it with [`mcp-remote`](https://www.npmjs.com/package/mcp-remote):
+
+```json
+{ "mcpServers": { "warpchart": { "command": "npx", "args": ["-y", "mcp-remote", "https://warpchart.dev/api/mcp"] } } }
+```
+
+### CLI — `npx warpchart`
+
+```bash
+npx warpchart vuejs/core          # rank, velocity and a braille star chart in your terminal
+npx warpchart velocity 15         # the fastest-growing repos right now
+npx warpchart vuejs/core --json   # raw JSON (agent friendly)
+```
+
+Source in [`cli/`](cli/); point it at another instance with `WARPCHART_BASE`.
+
 ## How it works
 
 ```
@@ -140,6 +180,25 @@ Warpchart convierte la API pública de GitHub en una consola de vuelo:
 ### Compartible en todas partes
 
 **Badge embebible** para READMEs (SVG cacheado, se actualiza cada hora), **explorer instantáneo** `/r/owner/name` para cualquier repo sin instalar nada, y **tarjetas Open Graph dinámicas** con las stats en vivo en cada link compartido.
+
+## API, MCP y CLI
+
+La misma telemetría, expuesta de tres formas para devs y agentes. Todo **público, gratis y solo-caché** (nunca llama a GitHub por petición). El histórico per-repo es el producto hosted aparte.
+
+**REST `/api/v1`** — endpoints `repo`, `velocity`, `overtakes`, `compare`, `embed`, con un índice autodescriptivo en `/api/v1`. Usa el `owner/name` canónico (p.ej. `react/react`).
+
+```bash
+curl "https://warpchart.dev/api/v1/repo?repo=vuejs/core"
+curl "https://warpchart.dev/api/v1/velocity?limit=20"
+```
+
+**MCP `/api/mcp`** — servidor MCP (streamable HTTP) para que tu agente consulte el ranking. Tools: `get_repo_stats`, `get_velocity_rankings`, `get_active_overtakes`, `compare_repos`, `get_embed_snippet`. Añádelo a Claude Desktop / Cursor:
+
+```json
+{ "mcpServers": { "warpchart": { "url": "https://warpchart.dev/api/mcp" } } }
+```
+
+**CLI** — `npx warpchart owner/name` (carta estelar braille en el terminal), `npx warpchart velocity`, `--json` para agentes. Código en [`cli/`](cli/).
 
 ## Setup en 5 minutos
 
