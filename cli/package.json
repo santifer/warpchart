@@ -1,0 +1,30 @@
+{
+  "name": "warpchart",
+  "version": "0.1.0",
+  "description": "Growth telemetry for any GitHub repository, in your terminal: worldwide rank, star velocity and a braille star-history chart.",
+  "bin": {
+    "warpchart": "./warpchart.mjs"
+  },
+  "type": "module",
+  "engines": {
+    "node": ">=18"
+  },
+  "license": "MIT",
+  "homepage": "https://warpchart.dev",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/santifer/warpchart"
+  },
+  "keywords": [
+    "github",
+    "stars",
+    "star-history",
+    "cli",
+    "telemetry",
+    "growth"
+  ],
+  "files": [
+    "warpchart.mjs",
+    "README.md"
+  ]
+}
