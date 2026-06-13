@@ -90,7 +90,10 @@ export default function StatusBar({ bundle }: { bundle: DashboardBundle }) {
               {bundle.meta?.description ?? "growth telemetry"}
             </p>
             <div className="mt-2">
-              <CodexModal repo={repo} />
+              <CodexModal
+                repo={repo}
+                stats={{ stars: live.stars, rank: live.rank, vPerDay: bundle.v7d }}
+              />
             </div>
           </div>
         </div>

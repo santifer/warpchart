@@ -245,7 +245,10 @@ export default async function ExplorerPage({
                 {data.lang ? ` · ${data.lang}` : ""}
               </p>
               <div className="mt-2">
-                <CodexModal repo={repoLabel} />
+                <CodexModal
+                  repo={repoLabel}
+                  stats={{ stars: inputs.stars, rank: inputs.rank, vPerDay: inputs.v7d }}
+                />
               </div>
             </div>
           </div>
