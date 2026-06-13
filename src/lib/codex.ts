@@ -7,7 +7,8 @@
 // warpchart has). Best-effort throughout: any failure returns null and the
 // UI simply omits the codex.
 import Anthropic from "@anthropic-ai/sdk";
-import { put, get } from "@vercel/blob";
+import { put, get, list } from "@vercel/blob";
+import { unstable_cache } from "next/cache";
 import { pickAuth } from "@/lib/ghauth";
 
 export interface Codex {
@@ -154,3 +155,47 @@ export async function getCodex(repo: string): Promise<Codex | null> {
 export async function getCachedCodex(repo: string): Promise<Codex | null> {
   return readCached(repo);
 }
+
+export interface CodexListing {
+  repo: string; // lowercase owner/name (the key form)
+  chartedAt: string; // ISO, when the system was first charted (blob uploadedAt)
+}
+
+// Every system anyone has ever charted, newest first. Read straight from the
+// Blob listing (pathname + uploadedAt), so it costs zero codex reads: the
+// charted/uncharted frontier and the discovery feed both ride on this. The
+// "/" in a repo became "--" in the key, and GitHub owners cannot contain
+// consecutive hyphens, so the first "--" is always the owner/name seam.
+async function listCodexesUncached(): Promise<CodexListing[]> {
+  const token = process.env.BLOB_READ_WRITE_TOKEN;
+  if (!token) return [];
+  try {
+    const out: CodexListing[] = [];
+    let cursor: string | undefined;
+    do {
+      const res = await list({ prefix: "codex/", cursor, token });
+      for (const b of res.blobs) {
+        const m = b.pathname.match(/^codex\/(.+)\.json$/);
+        if (!m) continue;
+        const repo = m[1].replace("--", "/");
+        const at = b.uploadedAt;
+        out.push({
+          repo,
+          chartedAt: at instanceof Date ? at.toISOString() : String(at ?? ""),
+        });
+      }
+      cursor = res.cursor;
+    } while (cursor);
+    out.sort((a, b) => Date.parse(b.chartedAt) - Date.parse(a.chartedAt));
+    return out;
+  } catch {
+    return [];
+  }
+}
+
+// Cached across the home, /explore and /codex so a single Blob listing serves
+// the charted frontier everywhere within the window.
+export const listCodexes = unstable_cache(listCodexesUncached, ["codex-listing"], {
+  revalidate: 300,
+  tags: ["codex-listing"],
+});

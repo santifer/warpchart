@@ -10,15 +10,15 @@ import { useEffect, useMemo, useState, ViewTransition } from "react";
 import Masthead from "@/components/Masthead";
 
 const STEPS = [
-  "establishing telemetry link",
-  "resolving system coordinates",
-  "reading worldwide route registry (top 1000)",
-  "measuring stargazer velocity (last 100 stars)",
-  "scanning neighboring systems",
-  "computing overtake vectors",
+  "first light · system entering sensor range",
+  "locking telemetry link",
+  "resolving position on the route to the core",
+  "reading worldwide registry (top 1000)",
+  "measuring stargazer velocity",
+  "charting neighboring systems",
 ];
 
-const SLOW_NOTE = "GitHub turbulence · retrying upstream";
+const SLOW_NOTE = "deep-space relay · holding for the signal";
 
 function seeded(seed: number) {
   let s = seed;
@@ -64,7 +64,7 @@ function Seal() {
   return (
     <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center">
       <span className="numeral bg-void/75 px-3 py-1 text-micro tracking-[0.3em] text-dim">
-        ◌ SCANNING · TELEMETRY INBOUND
+        ◌ FIRST LIGHT · CHARTING SYSTEM
       </span>
     </div>
   );
