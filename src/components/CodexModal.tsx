@@ -6,6 +6,7 @@
 // caches it), everyone after reads it instantly. The modal leads with the
 // author and the repo's own social card, big, then the tagline and the entry.
 import { useCallback, useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 
 interface Codex {
   repo: string;
@@ -16,9 +17,13 @@ interface Codex {
 export default function CodexModal({ repo }: { repo: string }) {
   const [owner, name] = repo.split("/");
   const [open, setOpen] = useState(false);
+  const [mounted, setMounted] = useState(false);
   const [state, setState] = useState<"idle" | "charting" | "ready" | "empty">("idle");
   const [codex, setCodex] = useState<Codex | null>(null);
   const fetched = useRef(false);
+
+  // portal target: only after mount (document is undefined during SSR)
+  useEffect(() => setMounted(true), []);
 
   const load = useCallback(async () => {
     if (fetched.current) return;
@@ -66,7 +71,8 @@ export default function CodexModal({ repo }: { repo: string }) {
         TRANSMISSION
       </button>
 
-      {open ? (
+      {open && mounted
+        ? createPortal(
         <div
           className="cdx-backdrop fixed inset-0 z-[60] flex items-start justify-center overflow-y-auto px-4 py-8 sm:py-14"
           onClick={() => setOpen(false)}
@@ -149,8 +155,10 @@ export default function CodexModal({ repo }: { repo: string }) {
               ) : null}
             </div>
           </div>
-        </div>
-      ) : null}
+        </div>,
+            document.body,
+          )
+        : null}
     </>
   );
 }
