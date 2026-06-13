@@ -996,20 +996,28 @@ export default function GalacticChart({
                 </text>
               </g>
             ) : null}
-            {visGates.map((m) => (
-              <g key={m.rank}>
-                <line
-                  x1={ax(m.at ?? m.threshold)} y1={26} x2={ax(m.at ?? m.threshold)} y2={BAND_A_Y + 38}
-                  stroke={C.accent} strokeWidth={1} strokeDasharray="2 4" opacity={0.7}
-                />
-                <text
-                  x={Math.min(Math.max(ax(m.at ?? m.threshold), 150), W - 190)} y={18} fill={C.accent} fontSize={12 * fs}
-                  textAnchor="middle" letterSpacing={2}
-                >
-                  TOP {m.rank} GATE · {fmt(m.threshold)}
-                </text>
-              </g>
-            ))}
+            {visGates.map((m) => {
+              // gate ETA, same model as the StatusBar headline: gap to the
+              // threshold over our v7d minus the threshold's drift. Anchored on
+              // the gate so the milestone time reads as a point on the route.
+              const gGap = Math.max(0, m.threshold - stars);
+              const net = vOwn - (m.drift ?? 0);
+              const gEta = gGap === 0 ? "crossed" : net > 0 ? ` · in ${fmtEtaDays(gGap / net)}` : "";
+              return (
+                <g key={m.rank}>
+                  <line
+                    x1={ax(m.at ?? m.threshold)} y1={26} x2={ax(m.at ?? m.threshold)} y2={BAND_A_Y + 38}
+                    stroke={C.accent} strokeWidth={1} strokeDasharray="2 4" opacity={0.7}
+                  />
+                  <text
+                    x={Math.min(Math.max(ax(m.at ?? m.threshold), 150), W - 190)} y={18} fill={C.accent} fontSize={12 * fs}
+                    textAnchor="middle" letterSpacing={2}
+                  >
+                    TOP {m.rank} GATE · {fmt(m.threshold)}{gEta}
+                  </text>
+                </g>
+              );
+            })}
 
             {panHint && inWindow(stars) ? (
               <g className="pan-hint">

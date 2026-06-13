@@ -268,6 +268,14 @@ export default function VerticalChart({
           .filter((m) => (m.at ?? m.threshold) > loS && (m.at ?? m.threshold) < hiS)
           .map((m) => {
             const gy = gateY(m);
+            // gate ETA, same model as the StatusBar headline ("top N in X"):
+            // gap to the threshold over our v7d minus the threshold's drift.
+            // Anchoring it ON the line ties that number to a spot on the climb,
+            // so a nearer ship reading a longer eta (it sits further up, past
+            // the gate) no longer looks like a contradiction.
+            const gGap = Math.max(0, m.threshold - stars);
+            const net = vOwn - (m.drift ?? 0);
+            const gEta = gGap === 0 ? "crossed" : net > 0 ? `in ${fmtEtaDays(gGap / net)}` : null;
             return (
               <g key={m.rank}>
                 <line
@@ -282,7 +290,7 @@ export default function VerticalChart({
                 />
                 <text x={W - 14} y={gy - 5} textAnchor="end" fontSize={11}
                   fill={C.accent} letterSpacing={1.5} className="numeral">
-                  TOP {m.rank} · {fmtCompact(m.threshold)} ★
+                  TOP {m.rank} · {fmtCompact(m.threshold)} ★{gEta ? ` · ${gEta}` : ""}
                 </text>
               </g>
             );
