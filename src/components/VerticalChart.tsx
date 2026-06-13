@@ -95,7 +95,12 @@ export default function VerticalChart({
   // "farther" without the linear blow-out that would shove it off-screen.
   // Dots and labels share a row, so the order is always honest and nothing
   // collides: no leader lines, no labels stranded on the wrong side of ME.
-  const aheadDesc = etas.filter((n) => n.gap > 0).sort((a, b) => b.gap - a.gap).slice(0, 9);
+  // keep the NEAREST neighbors (the rank-adjacent ones: #402, #401, #400…),
+  // then render them with the largest gap at the top. Taking the 9 LARGEST
+  // gaps instead dropped exactly the repos sitting between us and the next
+  // gate, leaving the gate floating over empty space.
+  const aheadAsc = etas.filter((n) => n.gap > 0).sort((a, b) => a.gap - b.gap).slice(0, 9);
+  const aheadDesc = [...aheadAsc].sort((a, b) => b.gap - a.gap);
   const behindDesc = etas.filter((n) => n.gap <= 0).sort((a, b) => b.gap - a.gap).slice(0, 3);
 
   type SeqNode = { me: boolean; n?: NeighborEta; s: number };
@@ -146,6 +151,34 @@ export default function VerticalChart({
       }
     }
     return ys[ys.length - 1] + 22;
+  };
+
+  // gate Y by RANK, not by a (possibly stale) star threshold. We are rank R;
+  // the repo at rank N is the (R - N)-th neighbor ahead of us, so the TOP N
+  // gate sits between it and the next one up: counting from us, exactly
+  // (R - N) repos precede the gate. This makes "#403, so 4 systems before
+  // the top-400 doorway" literally true. Falls back to the star position
+  // when the rank-N repo is beyond the shown neighbors (far gates) or the
+  // neighbors are not rank-contiguous (their stars must bracket the gate).
+  const yOfShip = new Map<NeighborEta, number>();
+  rows.forEach((row) => {
+    if (!row.me) yOfShip.set(row.n, row.y);
+  });
+  const gateY = (m: { rank: number; threshold: number; at?: number | null }) => {
+    const star = m.at ?? m.threshold;
+    const k = rank ? rank - m.rank : -1; // repos between us and rank N (incl.)
+    if (k >= 1 && k <= aheadAsc.length) {
+      const below = aheadAsc[k - 1]; // the repo AT rank N (just under the gate)
+      const above = aheadAsc[k]; // the repo at rank N-1 (just over the gate)
+      const yBelow = yOfShip.get(below);
+      // rank and stars must agree (contiguous neighbors): the rank-N repo's
+      // stars should sit at/above the threshold, the next one higher still
+      if (yBelow !== undefined && below.s >= star - 1) {
+        const yAbove = above ? yOfShip.get(above) ?? yBelow - MIN_GAP : yBelow - MIN_GAP;
+        return (yBelow + yAbove) / 2;
+      }
+    }
+    return yForStar(star);
   };
 
   // backdrop: twinkling specks + climbing FTL streaks, seeded per repo
@@ -229,16 +262,12 @@ export default function VerticalChart({
           opacity={0.8}
         />
 
-        {/* gates drawn midway between rank N and rank N-1 (a doorway, never
-            on top of the rank-N ship). The label shows the real threshold AND
-            the stars-to-go, so a gate sitting close above ME reads as "you
-            are nearly there" instead of a misplaced line (the compact "53K"
-            alone looked equal to ME's own 53,320). */}
+        {/* gates sit between rank N and rank N-1 (a doorway), positioned by
+            RANK so exactly (R - N) systems precede the top-N line */}
         {inputs.milestones
           .filter((m) => (m.at ?? m.threshold) > loS && (m.at ?? m.threshold) < hiS)
           .map((m) => {
-            const gy = yForStar(m.at ?? m.threshold);
-            const toGo = m.threshold - stars;
+            const gy = gateY(m);
             return (
               <g key={m.rank}>
                 <line
@@ -253,7 +282,7 @@ export default function VerticalChart({
                 />
                 <text x={W - 14} y={gy - 5} textAnchor="end" fontSize={11}
                   fill={C.accent} letterSpacing={1.5} className="numeral">
-                  TOP {m.rank} · {fmt(m.threshold)} ★{toGo > 0 ? ` · +${fmt(toGo)} to go` : ""}
+                  TOP {m.rank} · {fmtCompact(m.threshold)} ★
                 </text>
               </g>
             );
