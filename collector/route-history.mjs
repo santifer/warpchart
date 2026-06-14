@@ -175,3 +175,53 @@ console.log(
   `[route-history] recorded ${today}${seedDay ? ` (+seed ${seedDay})` : ""}: ${ranked.length} repos · ` +
     `${meta.days.length} days · ${totalPoints} points · largest shard ${(maxShardBytes / 1e6).toFixed(2)}MB`,
 );
+
+// ---- Catalog: the rising-by-category directory's source of truth.
+// The same deep sweep already carries every field we need (rank, stars,
+// language, topics, description, forks). Persist the top slice WITH a daily
+// velocity into the Blob data/ prefix so sync-from-blob hydrates it like
+// route.json and the /c pages read it via fs. Zero extra GitHub calls.
+const CATALOG_KEY = "data/catalog.json";
+const CATALOG_LIMIT = 3000;
+try {
+  // fresh top-1000 velocities from the committed registry (computed each day)
+  const routeV = new Map();
+  const routePath2 = join(DATA_DIR, "route.json");
+  if (existsSync(routePath2)) {
+    try {
+      const route = JSON.parse(readFileSync(routePath2, "utf8"));
+      for (const p of route.repos ?? []) {
+        if (p?.r && p.v != null) routeV.set(p.r.toLowerCase(), p.v);
+      }
+    } catch {
+      /* no usable route.json */
+    }
+  }
+
+  // yesterday's catalog gives a velocity for repos beyond the top-1000
+  const prevCat = await readJson(CATALOG_KEY);
+  const prevStars = new Map();
+  let prevDays = 0;
+  if (prevCat?.repos?.length && prevCat.generated_at) {
+    for (const p of prevCat.repos) if (p?.r) prevStars.set(p.r.toLowerCase(), p.s);
+    prevDays = (Date.parse(today + "T12:00:00Z") - Date.parse(prevCat.generated_at)) / 864e5;
+  }
+
+  const catalogRepos = ranked.slice(0, CATALOG_LIMIT).map((r) => {
+    const key = r.r.toLowerCase();
+    let v = routeV.has(key) ? routeV.get(key) : null;
+    if (v == null && prevDays > 0.25 && prevStars.has(key)) {
+      v = Math.round(((r.s - prevStars.get(key)) / prevDays) * 10) / 10;
+    }
+    return { r: r.r, rank: r.rank, s: r.s, v, l: r.l ?? null, t: r.t ?? [], d: r.d ?? null, f: r.f ?? 0 };
+  });
+
+  await writeJson(CATALOG_KEY, { generated_at: new Date().toISOString(), repos: catalogRepos });
+  const withV = catalogRepos.filter((p) => p.v != null && p.v > 0).length;
+  const withTopics = catalogRepos.filter((p) => p.t.length).length;
+  console.log(
+    `[route-history] catalog: ${catalogRepos.length} repos · ${withV} with velocity · ${withTopics} with topics`,
+  );
+} catch (err) {
+  console.error(`[route-history] catalog build failed: ${err.message}`);
+}

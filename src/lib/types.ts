@@ -29,6 +29,26 @@ export interface RouteFile {
   repos: { r: string; s: number; d?: string | null; l?: string | null; f?: number; v?: number | null }[];
 }
 
+// data/catalog.json, written daily by collector/route-history.mjs from the same
+// deep top-N sweep. The source of truth for the rising-by-category directory
+// (/c). Carries topics + a daily velocity so the directory can rank by momentum,
+// not just stars. Cache-only, zero API cost at request time.
+export interface CatalogRepo {
+  r: string;
+  rank: number;
+  s: number;
+  v?: number | null; // stars/day
+  l?: string | null; // primary language
+  t?: string[]; // GitHub topics
+  d?: string | null; // short description
+  f?: number; // forks
+}
+
+export interface CatalogFile {
+  generated_at: string;
+  repos: CatalogRepo[];
+}
+
 // data/collisions.json, written daily by the collector's collision scanner.
 export interface CollisionsFile {
   generated_at: string;

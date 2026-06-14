@@ -24,6 +24,7 @@ const nextConfig: NextConfig = {
     "/api/v1/overtakes": ["./data/**"],
     "/api/v1/compare": ["./data/**"],
     "/api/v1/leaderboard": ["./data/**"],
+    "/api/v1/rising": ["./data/**"],
     "/api/[transport]": ["./data/**"],
     "/api/monitor": ["./data/**"],
     "/api/tenant-status": ["./data/**"],
@@ -34,6 +35,9 @@ const nextConfig: NextConfig = {
     "/hq": ["./data/**"],
     "/r/*": ["./data/**"],
     "/r/**": ["./data/**"],
+    "/c": ["./data/**"],
+    "/c/*": ["./data/**"],
+    "/c/[topic]": ["./data/**"],
   },
 };
 

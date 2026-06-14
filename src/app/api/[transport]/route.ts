@@ -14,6 +14,7 @@ import {
   embedSnippet,
   registryMeta,
 } from "@/lib/api-v1";
+import { listCategories, risingInCategory, risingOverall, categoryById, catalogMeta } from "@/lib/catalog";
 
 const json = (data: unknown) => ({
   content: [{ type: "text" as const, text: JSON.stringify(data, null, 2) }],
@@ -101,6 +102,34 @@ const handler = createMcpHandler(
         inputSchema: { repo: z.string().describe("owner/name") },
       },
       async ({ repo }) => json(embedSnippet(repo)),
+    );
+
+    server.registerTool(
+      "get_rising",
+      {
+        title: "Get rising repositories by category",
+        description:
+          "Discover what is climbing fastest on GitHub right now, ranked by momentum (stars/day), not just total stars. This is the present-tense signal a trained model cannot have: the live direction of what developers are choosing. Call with no arguments to list every category (AI, CLI, databases, frontend, security, by language, and more) ordered by heat. Pass category='ai-llm' (a category id from the list) to get the repos rising fastest in that domain, or language='Rust' to filter by language. Ideal for 'recommend a rising repo for X' questions.",
+        inputSchema: {
+          category: z.string().optional().describe("a category id from the no-arg listing, e.g. ai-llm, cli, databases, lang-rust"),
+          language: z.string().optional().describe("filter the global rising list to one language, e.g. Rust, Go, Python"),
+          limit: z.number().int().min(1).max(100).optional().describe("default 30"),
+        },
+      },
+      async ({ category, language, limit }) => {
+        const catalog = catalogMeta();
+        if (category) {
+          const cat = categoryById(category);
+          const rising = risingInCategory(category, limit ?? 30);
+          return json(
+            cat && rising.length
+              ? { category: { id: cat.id, label: cat.label, kind: cat.kind }, rising, catalog }
+              : { error: "unknown or empty category", category, catalog },
+          );
+        }
+        if (language) return json({ language, rising: risingOverall(limit ?? 30, language), catalog });
+        return json({ categories: listCategories().categories, catalog });
+      },
     );
   },
   {

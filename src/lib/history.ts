@@ -1,7 +1,7 @@
 // Build-time / server-side loaders for the data/ directory.
 import { readFileSync, existsSync } from "node:fs";
 import path from "node:path";
-import type { Snapshot, RepoMetaFile, MilestonesFile, RouteFile, ForensicsFile, CollisionsFile } from "./types";
+import type { Snapshot, RepoMetaFile, MilestonesFile, RouteFile, ForensicsFile, CollisionsFile, CatalogFile } from "./types";
 
 const DATA = path.join(process.cwd(), "data");
 
@@ -125,6 +125,16 @@ export function loadRoute(): RouteFile | null {
   const p = path.join(DATA, "route.json");
   if (!existsSync(p)) return null;
   return JSON.parse(readFileSync(p, "utf8")) as RouteFile;
+}
+
+export function loadCatalog(): CatalogFile | null {
+  const p = path.join(DATA, "catalog.json");
+  if (!existsSync(p)) return null;
+  try {
+    return JSON.parse(readFileSync(p, "utf8")) as CatalogFile;
+  } catch {
+    return null;
+  }
 }
 
 export function loadForensics(): ForensicsFile | null {

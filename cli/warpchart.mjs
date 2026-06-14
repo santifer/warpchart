@@ -131,6 +131,33 @@ async function huntersView(repo) {
   if (!H.length && !T.length) console.log("  " + dim("no imminent overtakes around " + repo) + "\n");
 }
 
+async function risingView(category, lang) {
+  if (!category && !lang) {
+    const { categories } = await getJSON(`/api/v1/rising`);
+    banner("where software is moving" + dim(" · rising by category"));
+    console.log();
+    if (!categories?.length) { console.log("  " + dim("catalog still warming up") + "\n"); return; }
+    for (const c of categories.slice(0, 24)) {
+      const name = (c.label || c.id).padEnd(20).slice(0, 20);
+      console.log(`  ${bold(name)} ${accent((c.heat + " ★/day").padStart(12))}  ${dim(c.count + " systems")}`);
+    }
+    console.log("\n  " + dim("try ") + accent("warpchart rising <category>") + dim(" (e.g. ai-llm, cli, databases)") + "\n");
+    return;
+  }
+  const qs = category ? `topic=${encodeURIComponent(category)}` : `language=${encodeURIComponent(lang)}`;
+  const data = await getJSON(`/api/v1/rising?${qs}`);
+  const label = data.category?.label || lang || category;
+  banner("rising · " + bold(label));
+  console.log();
+  const rising = data.rising || [];
+  if (!rising.length) { console.log("  " + dim("nothing rising there yet") + "\n"); return; }
+  for (const f of rising) {
+    const v = f.velocityPerDay > 0 ? accent("▲ " + f.velocityPerDay + "/day") : dim("#" + f.rank);
+    console.log(`  ${bold(short(f.repo).padEnd(26).slice(0, 26))} ${(fmt(f.stars) + "★").padEnd(10)} ${v}`);
+  }
+  console.log("\n  " + dim("→ ") + accent(`${BASE}/c/${data.category?.id || ""}`) + "\n");
+}
+
 async function compareView(repos) {
   const { results } = await getJSON(`/api/v1/compare?repos=${encodeURIComponent(repos.join(","))}`);
   banner("compare");
@@ -161,6 +188,7 @@ const HELP = `
     warpchart ${accent("hunters")} <owner/name>  who's about to pass it (and who it passes)
     warpchart ${accent("top")} [N] ${dim("--lang Rust")}    biggest repos, optionally by language
     warpchart ${accent("velocity")} [N] ${dim("--lang Go")} fastest-growing repos right now
+    warpchart ${accent("rising")} ${dim("[category]")}       what is climbing fastest, by domain
     warpchart ${accent("compare")} a/b c/d       side by side
     warpchart ${accent("embed")} <owner/name>    a README embed snippet
     ${dim("flags: --json (agent output) · --lang <language>")}
@@ -195,6 +223,8 @@ async function main() {
       console.log("  " + dim("try ") + accent("warpchart <owner/name>") + dim(" or ") + accent("warpchart --help") + "\n");
     } else if (cmd === "velocity") {
       await velocityView(Number(positional[1]) || 15, lang);
+    } else if (cmd === "rising") {
+      await risingView(positional[1], lang);
     } else if (cmd === "top" || cmd === "leaderboard") {
       await leaderboardView(Number(positional[1]) || 15, lang);
     } else if (cmd === "hunters") {

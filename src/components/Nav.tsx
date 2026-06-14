@@ -12,6 +12,7 @@ import ThemeToggle from "./ThemeToggle";
 
 const LINKS = [
   { href: "/velocity", label: "WARP INDEX" },
+  { href: "/c", label: "RISING" },
   { href: "/codex", label: "CODEX" },
   { href: "/pricing", label: "PRICING" },
 ];
