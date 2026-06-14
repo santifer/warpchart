@@ -1,6 +1,5 @@
 import Link from "next/link";
-import SoundToggle from "./SoundToggle";
-import ThemeToggle from "./ThemeToggle";
+import Nav from "./Nav";
 
 // The brand mark: a symmetric W climbing into a rounded arrow (inline so it
 // inherits no requests; the full file lives at /logo.svg)
@@ -45,43 +44,7 @@ export default function Masthead({ demo }: { demo?: string | null }) {
         <LogoMark />
         WARPCHART
       </Link>
-      <div className="flex flex-wrap items-center gap-x-4">
-        <Link
-          prefetch={false}
-          href="/velocity"
-          className="numeral py-2 -my-2 text-micro tracking-[0.2em] text-dim transition-colors hover:text-accent"
-        >
-          WARP INDEX
-        </Link>
-        <Link
-          prefetch={false}
-          href="/codex"
-          className="numeral py-2 -my-2 text-micro tracking-[0.2em] text-dim transition-colors hover:text-accent"
-        >
-          CODEX
-        </Link>
-        <Link
-          prefetch={false}
-          href="/pricing"
-          className="numeral py-2 -my-2 text-micro tracking-[0.2em] text-dim transition-colors hover:text-accent"
-        >
-          PRICING
-        </Link>
-        <SoundToggle />
-        <ThemeToggle />
-        {demo ? (
-          <Link
-            prefetch={false}
-            href={`/r/${demo}`}
-            className="numeral border border-grid px-3 py-1.5 text-micro tracking-[0.18em] text-dim transition-colors hover:border-accent/50 hover:text-accent"
-          >
-            {/* phones get the short form: the full repo path wraps mid-name
-                inside the box and reads broken */}
-            <span className="sm:hidden">DEMO: {demo.split("/")[1]} →</span>
-            <span className="hidden sm:inline">LIVE DEMO MISSION: {demo} →</span>
-          </Link>
-        ) : null}
-      </div>
+      <Nav demo={demo} />
     </div>
   );
 }
