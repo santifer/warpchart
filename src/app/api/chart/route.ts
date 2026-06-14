@@ -5,7 +5,6 @@
 //   /api/chart                         -> the tracked repo (exact history)
 //   /api/chart?repo=owner/name         -> ANY repository (sampled history)
 //   /api/chart?w=600&h=200&theme=dark  -> size and scheme overrides
-import { after } from "next/server";
 import { cachedSampleCurve, tenantCurve, isTenantRepo, withLiveTotal, curveTailV, type Curve } from "@/lib/curve";
 import { loadRoute } from "@/lib/history";
 import { reqLog } from "@/lib/log";
@@ -61,9 +60,6 @@ export async function GET(req: Request) {
     if (!/^[\w.-]+\/[\w.-]+$/.test(repoParam)) {
       return new Response("invalid repo", { status: 400, headers: { "Cache-Control": "no-store" } });
     }
-    // first time GitHub's camo proxy renders this repo's embed -> notify (after
-    // the response; no-ops unless the UA is camo and the repo is new)
-    after(() => noteEmbedHit(req.headers.get("user-agent"), repoParam, "chart"));
     const [owner, name] = repoParam.split("/");
     // ?repo= pointing at the tracked tenant must serve the SAME exact local
     // curve as the no-param branch (the sampled path showed a dashed
@@ -271,6 +267,10 @@ ${capMark}
 <text class="pl" x="${(Number(endX) - 10).toFixed(1)}" y="${(Number(endY) - 10).toFixed(1)}" text-anchor="end" font-family="${mono}" font-size="10" font-weight="700" style="fill:var(--wn)">+1 ★</text>
 ${xMarks}
 </svg>`;
+
+  // record the first GitHub-camo render of this repo's embed (instant no-op for
+  // non-camo UAs; awaited so the Blob write reliably completes on serverless)
+  if (repoParam) await noteEmbedHit(req.headers.get("user-agent"), repoParam, "chart");
 
   return new Response(svg, {
     headers: {

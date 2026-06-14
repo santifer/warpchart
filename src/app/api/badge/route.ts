@@ -3,7 +3,6 @@
 //   /api/badge?repo=owner/x   -> any repo (free if in the top 1000, else live)
 //   ?theme=light|dark         -> force a scheme (for GitHub <picture> embeds);
 //                                default adapts via prefers-color-scheme.
-import { after } from "next/server";
 import { loadHistory, loadMeta, loadRoute } from "@/lib/history";
 import { currentStars, worldwideRank, lowFuel } from "@/lib/github";
 import { fmt } from "@/lib/format";
@@ -103,8 +102,6 @@ export async function GET(req: Request) {
       if (!/^[\w.-]+\/[\w.-]+$/.test(repoParam)) {
         return new Response("bad repo", { status: 400, headers: { "Cache-Control": "no-store" } });
       }
-      // first camo render of this repo's badge on GitHub -> notify (post-response)
-      after(() => noteEmbedHit(req.headers.get("user-agent"), repoParam, "badge"));
       const route = loadRoute();
       const idx = route
         ? route.repos.findIndex((p) => p.r.toLowerCase() === repoParam.toLowerCase())
@@ -120,6 +117,10 @@ export async function GET(req: Request) {
         cacheControl = embedCache(adaptiveTtl(stars, null));
       }
     }
+
+    // record the first GitHub-camo render of this repo's badge (no-op unless the
+    // UA is camo and the repo is new; awaited for reliable Blob writes)
+    if (repoParam) await noteEmbedHit(req.headers.get("user-agent"), repoParam, "badge");
 
     const svg = badgeSvg("WORLD RANK", rank, stars, trend, theme, exact);
     return new Response(svg, {
