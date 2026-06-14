@@ -26,6 +26,8 @@ const nextConfig: NextConfig = {
     "/api/v1/leaderboard": ["./data/**"],
     "/api/[transport]": ["./data/**"],
     "/api/monitor": ["./data/**"],
+    "/api/tenant-status": ["./data/**"],
+    "/pricing": ["./data/**"],
     "/velocity": ["./data/**"],
     "/feed.xml": ["./data/**"],
     "/hq": ["./data/**"],

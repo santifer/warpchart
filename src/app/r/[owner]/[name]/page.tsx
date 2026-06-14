@@ -21,6 +21,7 @@ import { loadMeta, isHostedRepo, loadTenantHistory, loadTenantTimestamps } from 
 import { fetchLiveSnapshot } from "@/lib/live-blob";
 import { isOwnedBy } from "@/lib/config";
 import CodexModal from "@/components/CodexModal";
+import FirstLightBanner from "@/components/FirstLightBanner";
 import { getCachedCodex, listCodexes } from "@/lib/codex";
 import { loadExplorerData, getCachedDossier } from "@/lib/explorer";
 import { fmt, fmtEtaDays } from "@/lib/format";
@@ -179,6 +180,9 @@ export default async function ExplorerPage({
       <div className="px-1">
         <Masthead />
       </div>
+      {/* post-payment launch sequence: renders only with ?welcome=1 (gated
+          client-side), and reveals the unlocked console once provisioning lands */}
+      <FirstLightBanner repo={repoLabel} />
       {/* header */}
       <header className="hud px-4 py-4 sm:px-6 sm:py-5">
         <div className="flex flex-wrap items-start justify-between gap-x-6 gap-y-4">
