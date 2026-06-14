@@ -270,16 +270,13 @@ ${xMarks}
 
   // record the first GitHub-camo render of this repo's embed (instant no-op for
   // non-camo UAs; awaited so the Blob write reliably completes on serverless)
-  const embedStatus = repoParam
-    ? await noteEmbedHit(req.headers.get("user-agent"), repoParam, "chart")
-    : "tenant";
+  if (repoParam) await noteEmbedHit(req.headers.get("user-agent"), repoParam, "chart");
 
   return new Response(svg, {
     headers: {
       "Content-Type": "image/svg+xml; charset=utf-8",
       "Cache-Control": cacheControl,
       "x-warp-request": log.reqId,
-      "x-embed": embedStatus,
     },
   });
 }
