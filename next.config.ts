@@ -27,6 +27,7 @@ const nextConfig: NextConfig = {
     "/api/[transport]": ["./data/**"],
     "/api/monitor": ["./data/**"],
     "/api/tenant-status": ["./data/**"],
+    "/api/traffic": ["./data/**"],
     "/pricing": ["./data/**"],
     "/velocity": ["./data/**"],
     "/feed.xml": ["./data/**"],

@@ -49,7 +49,10 @@ async function gh(path: string, init?: RequestInit) {
   });
 }
 
-async function provision(repo: string, plan: "hosted" | "fleet"): Promise<string> {
+async function provision(
+  repo: string,
+  plan: "hosted" | "fleet",
+): Promise<{ action: string; vaultKey: string | null }> {
   const cur = await gh("/contents/data/tenants.json?ref=main");
   if (!cur.ok) throw new Error(`tenants.json read ${cur.status}`);
   const file = (await cur.json()) as { content: string; sha: string };
@@ -57,11 +60,15 @@ async function provision(repo: string, plan: "hosted" | "fleet"): Promise<string
     repo: string;
     plan: string;
     since: string;
+    vaultKey?: string;
   }[];
-  if (tenants.some((t) => t.repo.toLowerCase() === repo.toLowerCase())) {
-    return "already-provisioned";
+  const existing = tenants.find((t) => t.repo.toLowerCase() === repo.toLowerCase());
+  if (existing) {
+    return { action: "already-provisioned", vaultKey: existing.vaultKey ?? null };
   }
-  tenants.push({ repo, plan, since: new Date().toISOString().slice(0, 10) });
+  // per-tenant secret for the PRIVATE traffic vault view (owner-only)
+  const vaultKey = crypto.randomUUID();
+  tenants.push({ repo, plan, since: new Date().toISOString().slice(0, 10), vaultKey });
   const put = await gh("/contents/data/tenants.json", {
     method: "PUT",
     body: JSON.stringify({
@@ -78,7 +85,7 @@ async function provision(repo: string, plan: "hosted" | "fleet"): Promise<string
     method: "POST",
     body: JSON.stringify({ ref: "main" }),
   }).catch(() => null);
-  return "provisioned";
+  return { action: "provisioned", vaultKey };
 }
 
 async function notify(text: string) {
@@ -124,10 +131,14 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: true, action: "manual-follow-up" });
     }
     try {
-      const action = await provision(repo, plan);
+      const { action, vaultKey } = await provision(repo, plan);
+      const vaultLine = vaultKey
+        ? ` Private traffic vault: https://warpchart.dev/r/${repo}?vault=${vaultKey} (owner-only, include in the welcome email).`
+        : "";
       await notify(
         `💸 NEW ${plan.toUpperCase()} MISSION: ${repo} · ${email} · ${action}. ` +
           `Console: https://warpchart.dev/r/${repo} · Send the welcome email (docs/email/welcome-hosted).` +
+          vaultLine +
           (plan === "fleet" ? " FLEET: ask for their remaining repos." : ""),
       );
       return NextResponse.json({ ok: true, action });

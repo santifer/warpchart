@@ -25,7 +25,6 @@ import FirstLightBanner from "@/components/FirstLightBanner";
 import TrafficPanel from "@/components/TrafficPanel";
 import { getCachedCodex, listCodexes } from "@/lib/codex";
 import { loadExplorerData, getCachedDossier } from "@/lib/explorer";
-import { loadTrafficVault } from "@/lib/traffic";
 import { fmt, fmtEtaDays } from "@/lib/format";
 
 // Same template as the unlocked mission console: identical panels in identical
@@ -110,7 +109,6 @@ export default async function ExplorerPage({
         bundle={buildBundle(undefined, live)}
         dossier={await getCachedDossier(owner, name)}
         charted={chartedRepos}
-        traffic={await loadTrafficVault(tenant.repo)}
       />
     );
   }
@@ -144,7 +142,6 @@ export default async function ExplorerPage({
           polling={false}
           dossier={await getCachedDossier(owner, name)}
           charted={chartedRepos}
-          traffic={await loadTrafficVault(hostedLabel)}
         />
       );
     }
@@ -384,10 +381,10 @@ export default async function ExplorerPage({
             ),
           }}
           traffic={{
-            meta: "unlocks with tracking",
+            meta: "private · unlocks with tracking",
             node: (
               <Locked unlockFor={repoLabel}>
-                <TrafficPanel vault={null} />
+                <TrafficPanel repo={repoLabel} />
               </Locked>
             ),
           }}

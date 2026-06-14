@@ -1,11 +1,11 @@
 "use client";
 
-// Traffic Vault panel: the daily views and clones GitHub deletes after 14 days,
-// kept forever, plus the latest top referrers. The DevRel surface: where star
-// growth gets its "why" (referrers) and its reach (views). Renders an empty
-// "vault filling" state until a traffic token is configured and the first
-// snapshot lands, so it is safe on every console (house, tenant, locked demo).
-import { useMemo } from "react";
+// Traffic Vault panel. Traffic (views, clones, referrers) is the repo OWNER's
+// PRIVATE data, so it is NEVER server-rendered into the public console. The
+// public panel is a value-prop teaser; the real numbers are fetched client-side
+// from /api/traffic ONLY when the URL carries a valid ?vault=<key> (the private
+// link the owner gets in their welcome email). No key -> no numbers, ever.
+import { useEffect, useState } from "react";
 import {
   ComposedChart, Bar, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
 } from "recharts";
@@ -15,22 +15,42 @@ import type { TrafficVault } from "@/lib/traffic";
 
 const WINDOW = 60; // most recent ~2 months on screen
 
-export default function TrafficPanel({ vault }: { vault: TrafficVault | null }) {
+export default function TrafficPanel({ repo }: { repo: string }) {
   const C = usePalette();
-  const view = useMemo(() => (vault?.days ?? []).slice(-WINDOW), [vault]);
+  const [vault, setVault] = useState<TrafficVault | null>(null);
 
-  if (!vault || !view.length) {
+  useEffect(() => {
+    const key = new URLSearchParams(window.location.search).get("vault");
+    if (!key || !repo) return;
+    let cancelled = false;
+    fetch(`/api/traffic?repo=${encodeURIComponent(repo)}&key=${encodeURIComponent(key)}`, {
+      cache: "no-store",
+    })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j) => {
+        if (!cancelled && j?.vault?.days?.length) setVault(j.vault as TrafficVault);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [repo]);
+
+  // teaser: shown to everyone on the public console (privacy is the pitch)
+  if (!vault) {
     return (
       <div className="flex h-[230px] flex-col items-center justify-center gap-2 text-center">
-        <span className="font-display text-label tracking-[0.3em] text-dim">TRAFFIC VAULT</span>
-        <span className="numeral max-w-[42ch] text-label leading-relaxed text-faint">
-          GitHub deletes views, clones and referrers every 14 days. The vault keeps every day from
-          the moment tracking starts. Filling now.
+        <span className="font-display text-label tracking-[0.3em] text-accent">◈ PRIVATE TRAFFIC VAULT</span>
+        <span className="numeral max-w-[46ch] text-label leading-relaxed text-faint">
+          GitHub deletes your views, clones and referrers every 14 days, and only you can read them.
+          The vault keeps every day from the moment tracking starts, and only the owner sees the
+          numbers. Open your private vault link to view.
         </span>
       </div>
     );
   }
 
+  const view = vault.days.slice(-WINDOW);
   const rows = view.map((d) => ({ label: d.d.slice(5).replace("-", "/"), views: d.views, clones: d.clones }));
   const maxV = Math.max(1, ...rows.map((r) => Math.max(r.views, r.clones)));
 
@@ -43,7 +63,7 @@ export default function TrafficPanel({ vault }: { vault: TrafficVault | null }) 
           <span className="text-faint">{vault.daysKept} days kept</span>
         </span>
         <span className="numeral text-micro tracking-[0.15em] text-faint">
-          github keeps 14 days · you keep all of it
+          private · github keeps 14 days · you keep all of it
         </span>
       </div>
 

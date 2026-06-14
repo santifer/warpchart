@@ -19,7 +19,6 @@ import RankChart from "./RankChart";
 import MissionLog from "./MissionLog";
 import TrafficPanel from "./TrafficPanel";
 import DailyBriefing from "./DailyBriefing";
-import type { TrafficVault } from "@/lib/traffic";
 import TargetHud from "./TargetHud";
 import SoundController from "./SoundController";
 import type { DashboardBundle } from "@/lib/bundle";
@@ -75,13 +74,11 @@ export default function Dashboard({
   polling = true,
   dossier = null,
   charted,
-  traffic = null,
 }: {
   bundle: DashboardBundle;
   polling?: boolean;
   dossier?: Dossier | null;
   charted?: string[];
-  traffic?: TrafficVault | null;
 }) {
   const repo = bundle.meta?.repo;
   const next = bundle.milestones[0] ?? null;
@@ -163,8 +160,8 @@ export default function Dashboard({
           heatmap={{ meta: `${fmt(bundle.totalStars)} star events`, node: <Heatmap bundle={bundle} /> }}
           rank={{ meta: "hourly snapshots", node: <RankChart bundle={bundle} /> }}
           traffic={{
-            meta: traffic ? `${traffic.daysKept} days kept · github keeps 14` : "kept past GitHub's 14-day window",
-            node: <TrafficPanel vault={traffic} />,
+            meta: "private · kept past GitHub's 14-day window",
+            node: <TrafficPanel repo={repo ?? ""} />,
           }}
           log={{
             meta: "auto-detected from telemetry",

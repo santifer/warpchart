@@ -69,6 +69,10 @@ export interface TenantEntry {
   repo: string;
   plan: "hosted" | "fleet";
   since: string;
+  // per-tenant secret that unlocks the PRIVATE traffic vault view (issued on
+  // provisioning, sent in the welcome email). Traffic is owner-only data, never
+  // shown on the public console.
+  vaultKey?: string;
 }
 
 export function loadTenants(): TenantEntry[] {
