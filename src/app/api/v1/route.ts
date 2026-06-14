@@ -22,6 +22,8 @@ export async function GET() {
         "The fastest-growing repositories right now (stars/day), optionally by language.",
       "GET /api/v1/rising":
         "The rising-by-category directory: every domain (AI, CLI, databases, frontend, security, by language and more) ordered by momentum. Add ?topic=ai-llm for the repos climbing fastest in one category, or ?language=Rust.",
+      "GET /api/v1/find?q=agentic+memory+system":
+        "Natural-language repository recommendation. Ask 'what is the best X?' and get the catalog repos that match the intent, ranked by validation (stars) and momentum (velocity).",
       "GET /api/v1/overtakes?limit=20":
         "Imminent rank overtakes globally. Add ?repo=owner/name to get who is hunting THAT repo and who it is about to pass.",
       "GET /api/v1/compare?repos=a/b,c/d": "Side-by-side stats for up to 10 repos.",

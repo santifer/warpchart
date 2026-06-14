@@ -1,7 +1,7 @@
 // Build-time / server-side loaders for the data/ directory.
 import { readFileSync, existsSync } from "node:fs";
 import path from "node:path";
-import type { Snapshot, RepoMetaFile, MilestonesFile, RouteFile, ForensicsFile, CollisionsFile, CatalogFile } from "./types";
+import type { Snapshot, RepoMetaFile, MilestonesFile, RouteFile, ForensicsFile, CollisionsFile, CatalogFile, EnrichmentEntry, EnrichmentFile } from "./types";
 
 const DATA = path.join(process.cwd(), "data");
 
@@ -132,6 +132,16 @@ export function loadCatalog(): CatalogFile | null {
   if (!existsSync(p)) return null;
   try {
     return JSON.parse(readFileSync(p, "utf8")) as CatalogFile;
+  } catch {
+    return null;
+  }
+}
+
+export function loadEnrichment(): Record<string, EnrichmentEntry> | null {
+  const p = path.join(DATA, "enrichment.json");
+  if (!existsSync(p)) return null;
+  try {
+    return (JSON.parse(readFileSync(p, "utf8")) as EnrichmentFile).entries ?? null;
   } catch {
     return null;
   }

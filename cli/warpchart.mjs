@@ -131,6 +131,21 @@ async function huntersView(repo) {
   if (!H.length && !T.length) console.log("  " + dim("no imminent overtakes around " + repo) + "\n");
 }
 
+async function findView(query, asJson) {
+  const data = await getJSON(`/api/v1/find?q=${encodeURIComponent(query)}`);
+  if (asJson) { process.stdout.write(JSON.stringify(data, null, 2) + "\n"); return; }
+  banner("best match for " + bold('"' + query + '"'));
+  console.log();
+  const results = data.results || [];
+  if (!results.length) { console.log("  " + dim("nothing in the catalog matches that yet") + "\n"); return; }
+  results.slice(0, 12).forEach((r, i) => {
+    const v = r.velocityPerDay > 0 ? accent("▲" + r.velocityPerDay + "/d") : dim("·");
+    console.log(`  ${dim(String(i + 1).padStart(2))}  ${bold(short(r.repo).padEnd(24).slice(0, 24))} ${(fmt(r.stars) + "★").padEnd(10)} ${v}`);
+    if (r.description) console.log(`      ${dim(r.description.slice(0, 64))}`);
+  });
+  console.log("\n  " + dim("→ ") + accent(results[0].url) + "\n");
+}
+
 async function risingView(category, lang) {
   if (!category && !lang) {
     const { categories } = await getJSON(`/api/v1/rising`);
@@ -189,6 +204,7 @@ const HELP = `
     warpchart ${accent("top")} [N] ${dim("--lang Rust")}    biggest repos, optionally by language
     warpchart ${accent("velocity")} [N] ${dim("--lang Go")} fastest-growing repos right now
     warpchart ${accent("rising")} ${dim("[category]")}       what is climbing fastest, by domain
+    warpchart ${accent("find")} ${dim("<question>")}        best repo for a need (e.g. agentic memory system)
     warpchart ${accent("compare")} a/b c/d       side by side
     warpchart ${accent("embed")} <owner/name>    a README embed snippet
     ${dim("flags: --json (agent output) · --lang <language>")}
@@ -225,6 +241,10 @@ async function main() {
       await velocityView(Number(positional[1]) || 15, lang);
     } else if (cmd === "rising") {
       await risingView(positional[1], lang);
+    } else if (cmd === "find" || cmd === "best" || cmd === "search") {
+      const q = positional.slice(1).join(" ").trim();
+      if (!q) throw Object.assign(new Error('usage: warpchart find "agentic memory system"'), { soft: true });
+      await findView(q, asJson);
     } else if (cmd === "top" || cmd === "leaderboard") {
       await leaderboardView(Number(positional[1]) || 15, lang);
     } else if (cmd === "hunters") {

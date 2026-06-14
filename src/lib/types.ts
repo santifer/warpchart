@@ -49,6 +49,21 @@ export interface CatalogFile {
   repos: CatalogRepo[];
 }
 
+// data/enrichment.json: optional LLM-generated capability tags + one-line
+// summary per repo, keyed by lowercased owner/name. Produced offline by
+// collector/enrich.mjs via the Claude CLI (not the API), it sharpens the
+// natural-language search beyond raw GitHub topics. Absent = search degrades to
+// topics + description, which still works.
+export interface EnrichmentEntry {
+  tags: string[];
+  summary: string;
+}
+export interface EnrichmentFile {
+  generated_at: string;
+  model?: string;
+  entries: Record<string, EnrichmentEntry>;
+}
+
 // data/collisions.json, written daily by the collector's collision scanner.
 export interface CollisionsFile {
   generated_at: string;

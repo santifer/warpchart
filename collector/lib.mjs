@@ -179,7 +179,7 @@ export async function topRepos() {
       out.push({
         r: item.full_name,
         s: item.stargazers_count,
-        d: item.description ? item.description.slice(0, 80) : null,
+        d: item.description ? item.description.slice(0, 160) : null,
         l: item.language ?? null,
         f: item.forks_count ?? 0,
         t: (item.topics ?? []).slice(0, 8),
@@ -215,7 +215,7 @@ export async function topReposDeep(limit = 10000) {
           out.push({
             r: item.full_name,
             s: item.stargazers_count,
-            d: item.description ? item.description.slice(0, 80) : null,
+            d: item.description ? item.description.slice(0, 160) : null,
             l: item.language ?? null,
             f: item.forks_count ?? 0,
             t: (item.topics ?? []).slice(0, 8),

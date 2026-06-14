@@ -25,6 +25,7 @@ const nextConfig: NextConfig = {
     "/api/v1/compare": ["./data/**"],
     "/api/v1/leaderboard": ["./data/**"],
     "/api/v1/rising": ["./data/**"],
+    "/api/v1/find": ["./data/**"],
     "/api/[transport]": ["./data/**"],
     "/api/monitor": ["./data/**"],
     "/api/tenant-status": ["./data/**"],

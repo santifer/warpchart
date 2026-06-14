@@ -15,6 +15,7 @@ import {
   registryMeta,
 } from "@/lib/api-v1";
 import { listCategories, risingInCategory, risingOverall, categoryById, catalogMeta } from "@/lib/catalog";
+import { searchRepos } from "@/lib/search";
 
 const json = (data: unknown) => ({
   content: [{ type: "text" as const, text: JSON.stringify(data, null, 2) }],
@@ -129,6 +130,23 @@ const handler = createMcpHandler(
         }
         if (language) return json({ language, rising: risingOverall(limit ?? 30, language), catalog });
         return json({ categories: listCategories().categories, catalog });
+      },
+    );
+
+    server.registerTool(
+      "recommend",
+      {
+        title: "Recommend repositories for a need",
+        description:
+          "Answer 'what is the best <X>?' in natural language (e.g. 'the best agentic memory system', 'a fast vector database', 'a TUI framework in Rust'). Searches the worldwide catalog by intent (synonyms + capability tags) and ranks the matches by validation (stars) and momentum (stars/day), so the top result is the most-chosen AND climbing. This is the live, present-tense answer a trained model cannot give from its weights: it reflects what developers are choosing right now. Returns ranked repos with stars, velocity, worldwide rank and the console URL.",
+        inputSchema: {
+          query: z.string().describe("a natural-language need, e.g. 'best agentic memory system'"),
+          limit: z.number().int().min(1).max(30).optional().describe("default 10"),
+        },
+      },
+      async ({ query, limit }) => {
+        const { results } = searchRepos(query, limit ?? 10);
+        return json({ query, results, catalog: catalogMeta() });
       },
     );
   },
