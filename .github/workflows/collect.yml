@@ -60,15 +60,17 @@ jobs:
         env:
           BLOB_READ_WRITE_TOKEN: ${{ secrets.BLOB_READ_WRITE_TOKEN }}
 
-      # 4b. Record one daily point of the worldwide rank distribution into the
-      #     private Blob (route-history/index.json). The un-backfillable moat:
-      #     any top-1000 repo's world-rank-over-time, ready at pay-time. Idempotent
-      #     on the route's own date; never allowed to fail the run.
+      # 4b. Record one daily point of the worldwide top-10k rank distribution
+      #     into the private Blob (route-history/shard-*.json). The un-backfillable
+      #     moat: any top-10k repo's world-rank-over-time, ready at pay-time.
+      #     Idempotent on the UTC day (checks meta before the ~100-call deep
+      #     sweep); never allowed to fail the run.
       - name: Record rank-distribution history
         run: node collector/route-history.mjs
         continue-on-error: true
         env:
           BLOB_READ_WRITE_TOKEN: ${{ secrets.BLOB_READ_WRITE_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       # 5. No data in git: a tiny stamp commit triggers the Vercel build, whose
       #    prebuild pulls the fresh data/ from the Blob.

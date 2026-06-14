@@ -1,25 +1,31 @@
 #!/usr/bin/env node
-// Daily snapshot of the worldwide top-1000 distribution into a compact index in
-// the PRIVATE Blob (route-history/index.json). This is the un-backfillable moat:
-// a repo's star history can be reconstructed any time, but its WORLD RANK over
-// time cannot, unless someone was recording the whole distribution each day.
-// Now we are. At pay-time (and on the pricing page's locked preview) any repo
-// that has been in the top 1000 gets its real rank trajectory, "already there".
+// Daily snapshot of the worldwide top-10,000 distribution into a SHARDED index
+// in the PRIVATE Blob (route-history/shard-{i}.json + meta.json). This is the
+// un-backfillable moat: a repo's star history reconstructs any time, but its
+// WORLD RANK over time does NOT, unless someone records the whole distribution
+// each day. Now we do, for the top 10k (every repo with a rank worth a story).
+// At pay-time (and on the pricing page's locked preview) any of them gets its
+// real rank trajectory, "already there".
 //
-// Isolated from collect.mjs on purpose: this only ever READS data/route.json
-// (freshly written by collect) and writes its own Blob prefix, so it can never
-// touch the critical snapshot path. Best-effort and idempotent on the route's
-// own date, so running it on every collect (every ~2h) records exactly one
-// point per daily route refresh.
+// Sharded because Next's data cache caps a cached item at 2MB: 10k repos x ~90
+// days would be ~22MB in one object. 32 shards keyed by a deterministic hash
+// (mirrored in src/lib/rank-history.ts) keep each readable unit ~0.7MB.
 //
-// Usage: BLOB_READ_WRITE_TOKEN=... node collector/route-history.mjs
+// Isolated from collect.mjs on purpose, best-effort, and idempotent on the UTC
+// day (it checks meta BEFORE the ~100-call deep fetch), so running it on every
+// collect records exactly one point per day at ~zero marginal cost on repeats.
+//
+// Usage: BLOB_READ_WRITE_TOKEN=... GH_TOKEN=... node collector/route-history.mjs
 import { readFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import { put, get } from "@vercel/blob";
-import { DATA_DIR } from "./lib.mjs";
+import { DATA_DIR, topReposDeep } from "./lib.mjs";
 
-const KEY = "route-history/index.json";
-const CAP_DAYS = 140; // a touch over the 2-month chart window; keeps the index small
+const SHARDS = 32; // MUST match src/lib/rank-history.ts
+const CAP_DAYS = 90; // a touch over the 2-month chart window; bounds shard size
+const PREFIX = "route-history";
+const META_KEY = `${PREFIX}/meta.json`;
+const LIMIT = 10000;
 
 const token = process.env.BLOB_READ_WRITE_TOKEN;
 if (!token) {
@@ -27,87 +33,145 @@ if (!token) {
   process.exit(0);
 }
 
-const routePath = join(DATA_DIR, "route.json");
-if (!existsSync(routePath)) {
-  console.log("[route-history] no route.json yet, skipping");
+// deterministic fnv-1a, identical to shardOf() in src/lib/rank-history.ts
+function shardOf(repo) {
+  let h = 2166136261;
+  const s = repo.toLowerCase();
+  for (let i = 0; i < s.length; i++) {
+    h ^= s.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return (h >>> 0) % SHARDS;
+}
+
+async function readJson(key) {
+  try {
+    const res = await get(key, { access: "private", token });
+    if (res?.statusCode === 200 && res.stream) {
+      return JSON.parse(await new Response(res.stream).text());
+    }
+  } catch {
+    /* missing or transient */
+  }
+  return null;
+}
+
+async function writeJson(key, value) {
+  await put(key, JSON.stringify(value), {
+    access: "private",
+    addRandomSuffix: false,
+    allowOverwrite: true,
+    contentType: "application/json",
+    token,
+  });
+}
+
+const today = new Date().toISOString().slice(0, 10);
+
+// idempotent: bail before the expensive deep fetch if today is already recorded
+const meta = (await readJson(META_KEY)) ?? { days: [] };
+meta.days ??= [];
+if (meta.days.includes(today)) {
+  console.log(`[route-history] ${today} already recorded (${meta.days.length} days), nothing to do`);
   process.exit(0);
 }
 
-const route = JSON.parse(readFileSync(routePath, "utf8"));
-const day = (route.generated_at ?? "").slice(0, 10);
-const repos = route.repos ?? [];
-if (!day || !repos.length) {
-  console.log("[route-history] route.json has no date/repos, skipping");
-  process.exit(0);
-}
-
-// load the existing index (or start fresh)
-let index = { dates: [], series: {} };
+// gather today's distribution: the deep top-10k, falling back to the committed
+// top-1000 route.json if the search sweep is unavailable (no token / failure)
+let ranked = [];
 try {
-  const res = await get(KEY, { access: "private", token });
-  if (res?.statusCode === 200 && res.stream) {
-    index = JSON.parse(await new Response(res.stream).text());
-  }
-} catch {
-  /* first run, or transient: start fresh */
+  const deep = await topReposDeep(LIMIT);
+  ranked = deep.map((r, i) => ({ ...r, rank: i + 1 }));
+  console.log(`[route-history] deep sweep: ${ranked.length} repos`);
+} catch (err) {
+  console.error(`[route-history] deep sweep failed: ${err.message}`);
 }
-index.dates ??= [];
-index.series ??= {};
-
-// one [date, rank, stars] point per repo for a given day's distribution
-function ingest(d, list) {
-  if (!d || index.dates.includes(d)) return false;
-  index.dates.push(d);
-  for (let i = 0; i < list.length; i++) {
-    const r = list[i];
-    if (!r?.r) continue;
-    (index.series[r.r] ??= []).push([d, i + 1, r.s]);
+if (!ranked.length) {
+  const routePath = join(DATA_DIR, "route.json");
+  if (existsSync(routePath)) {
+    try {
+      const route = JSON.parse(readFileSync(routePath, "utf8"));
+      ranked = (route.repos ?? []).map((r, i) => ({ ...r, rank: i + 1 }));
+      console.log(`[route-history] fell back to route.json: ${ranked.length} repos`);
+    } catch {
+      /* no usable route.json */
+    }
   }
-  return true;
+}
+if (!ranked.length) {
+  console.log("[route-history] no distribution available, skipping");
+  process.exit(0);
 }
 
-// First run: seed yesterday from the outgoing registry (route-prev.json) so the
-// locked rank preview has a real two-point trajectory from day one instead of
-// waiting a day for a second sample.
-if (!index.dates.length) {
+// first run only: seed yesterday from the committed top-1000 route-prev.json so
+// the locked preview has a real two-point trajectory from day one
+let seedDay = null;
+let seedRanked = [];
+if (!meta.days.length) {
   const prevPath = join(DATA_DIR, "route-prev.json");
   if (existsSync(prevPath)) {
     try {
       const prev = JSON.parse(readFileSync(prevPath, "utf8"));
-      const prevDay = (prev.generated_at ?? "").slice(0, 10);
-      if (prevDay && prevDay < day) ingest(prevDay, prev.repos ?? []);
+      const d = (prev.generated_at ?? "").slice(0, 10);
+      if (d && d < today) {
+        seedDay = d;
+        seedRanked = (prev.repos ?? []).map((r, i) => ({ ...r, rank: i + 1 }));
+      }
     } catch {
       /* no usable prev */
     }
   }
 }
 
-if (!ingest(day, repos)) {
-  console.log(`[route-history] ${day} already recorded (${index.dates.length} days), nothing to do`);
-  process.exit(0);
-}
-// keep chronological after a possible out-of-order prev seed
-index.dates.sort();
+// bucket repos by shard, then read-modify-write each shard once
+const byShard = Array.from({ length: SHARDS }, () => ({ today: [], seed: [] }));
+for (const r of ranked) if (r?.r) byShard[shardOf(r.r)].today.push(r);
+for (const r of seedRanked) if (r?.r) byShard[shardOf(r.r)].seed.push(r);
 
-// roll the window: drop points older than the cap so the index stays a few MB
-if (index.dates.length > CAP_DAYS) {
-  index.dates = index.dates.slice(-CAP_DAYS);
-  const cutoff = index.dates[0];
-  for (const k of Object.keys(index.series)) {
-    index.series[k] = index.series[k].filter((p) => p[0] >= cutoff);
-    if (!index.series[k].length) delete index.series[k];
+const cutoffIso = (() => {
+  const all = [...(seedDay ? [seedDay] : []), ...meta.days, today].sort();
+  return all.length > CAP_DAYS ? all[all.length - CAP_DAYS] : all[0];
+})();
+
+let totalPoints = 0;
+let maxShardBytes = 0;
+for (let i = 0; i < SHARDS; i++) {
+  const { today: tlist, seed: slist } = byShard[i];
+  if (!tlist.length && !slist.length) continue;
+  const shard = (await readJson(`${PREFIX}/shard-${i}.json`)) ?? { dates: [], series: {} };
+  shard.dates ??= [];
+  shard.series ??= {};
+
+  const ingest = (day, list) => {
+    if (!day || shard.dates.includes(day)) return;
+    shard.dates.push(day);
+    for (const r of list) (shard.series[r.r] ??= []).push([day, r.rank, r.s]);
+  };
+  if (seedDay) ingest(seedDay, slist);
+  ingest(today, tlist);
+
+  // roll the window
+  shard.dates = shard.dates.filter((d) => d >= cutoffIso).sort();
+  for (const k of Object.keys(shard.series)) {
+    shard.series[k] = shard.series[k].filter((p) => p[0] >= cutoffIso);
+    if (!shard.series[k].length) delete shard.series[k];
+    else totalPoints += shard.series[k].length;
   }
+
+  const body = JSON.stringify(shard);
+  maxShardBytes = Math.max(maxShardBytes, Buffer.byteLength(body));
+  await writeJson(`${PREFIX}/shard-${i}.json`, shard);
 }
 
-await put(KEY, JSON.stringify(index), {
-  access: "private",
-  addRandomSuffix: false,
-  allowOverwrite: true,
-  contentType: "application/json",
-  token,
-});
+// update meta last (so a mid-run failure just retries next run)
+if (seedDay) meta.days.push(seedDay);
+meta.days.push(today);
+meta.days = [...new Set(meta.days)].sort().slice(-CAP_DAYS);
+meta.shards = SHARDS;
+meta.updatedAt = new Date().toISOString();
+await writeJson(META_KEY, meta);
 
-const bytes = Buffer.byteLength(JSON.stringify(index));
 console.log(
-  `[route-history] appended ${day}: ${repos.length} repos · ${index.dates.length} days retained · index ${(bytes / 1e6).toFixed(2)}MB`,
+  `[route-history] recorded ${today}${seedDay ? ` (+seed ${seedDay})` : ""}: ${ranked.length} repos · ` +
+    `${meta.days.length} days · ${totalPoints} points · largest shard ${(maxShardBytes / 1e6).toFixed(2)}MB`,
 );

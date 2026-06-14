@@ -188,6 +188,51 @@ export async function topRepos() {
   return out;
 }
 
+// The worldwide top N (default 10,000) for the rank-distribution moat. Search
+// caps each query at 1000 results, so we walk DESCENDING star windows: each
+// window lowers the upper bound to the lowest star count seen so far and dedups
+// by name across the boundary overlap. ~N/1000 windows x up to 10 pages
+// (~100 search calls for 10k, ~3.5 min at the 30/min search limit). Best-effort:
+// returns whatever it gathered if a window fails.
+export async function topReposDeep(limit = 10000) {
+  const out = [];
+  const seen = new Set();
+  let hi = null; // null = no upper bound (start at the very top)
+  const maxWindows = Math.ceil(limit / 1000) + 4;
+  for (let win = 0; win < maxWindows && out.length < limit; win++) {
+    const q = hi === null ? "stars:>1000" : `stars:1000..${hi}`;
+    let added = 0;
+    try {
+      for (let page = 1; page <= 10 && out.length < limit; page++) {
+        const r = await search({
+          q, sort: "stars", order: "desc", per_page: "100", page: String(page),
+        });
+        const items = r.items ?? [];
+        for (const item of items) {
+          if (seen.has(item.full_name)) continue;
+          seen.add(item.full_name);
+          out.push({
+            r: item.full_name,
+            s: item.stargazers_count,
+            d: item.description ? item.description.slice(0, 80) : null,
+            l: item.language ?? null,
+            f: item.forks_count ?? 0,
+          });
+          added++;
+        }
+        if (items.length < 100) break; // window exhausted before 1000
+      }
+    } catch (err) {
+      console.error(`[topReposDeep] window ${win} (hi=${hi}) failed: ${err.message}`);
+      break; // return what we gathered so far
+    }
+    if (!added) break; // no new repos -> done
+    hi = out[out.length - 1].s; // next window starts at the lowest star count seen
+  }
+  out.sort((a, b) => b.s - a.s);
+  return out.slice(0, limit);
+}
+
 // ---- Spike forensics: correlate star spikes with HN posts, Reddit posts
 // and the repo's own releases. External APIs are free and unauthenticated.
 
