@@ -135,17 +135,17 @@ function personalizedPlans(d: NonNullable<ExplorerData>): Plan[] {
 
   return [
     {
-      name: "RECON",
+      name: "SELF-HOST",
       price: "FREE",
-      cadence: "forever",
+      cadence: "forever · MIT",
       perks: [
-        `The live snapshot of ${name} you're looking at now`,
-        "Public console, ranking neighbors and the reconstructed curve",
-        "MIT template: self-host and run your own collector",
-        "Community support",
+        `Run the full ${name} console yourself: chart, replay, sound, deck`,
+        "MIT template, deploy on your own Vercel in ~5 min",
+        "Your collector, your GitHub quota, your data",
+        `Or just keep the free public snapshot of ${name} you see now`,
       ],
-      cta: { label: `← KEEP EXPLORING ${NAME}`, href: `/r/${repoLabel}` },
-      note: "What anyone can see, free, always.",
+      cta: { label: "USE THE TEMPLATE →", href: "https://github.com/santifer/warpchart" },
+      note: "DIY: you run the ops, forever free.",
     },
     {
       name: "HOSTED MISSION",
