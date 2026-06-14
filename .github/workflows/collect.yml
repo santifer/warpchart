@@ -72,6 +72,17 @@ jobs:
           BLOB_READ_WRITE_TOKEN: ${{ secrets.BLOB_READ_WRITE_TOKEN }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+      # 4b-bis. Build the daily rising-by-category catalog (data/catalog.json in
+      #     the private Blob) from its own shallow top-3000 sweep. Powers /c,
+      #     /api/v1/rising, the get_rising MCP tool and the CLI. Self-gates to
+      #     once per UTC day; never allowed to fail the run.
+      - name: Build rising catalog
+        run: node collector/catalog.mjs
+        continue-on-error: true
+        env:
+          BLOB_READ_WRITE_TOKEN: ${{ secrets.BLOB_READ_WRITE_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
       # 4c. Traffic Vault: snapshot each tracked repo's GitHub traffic (views,
       #     clones, referrers) into the private Blob and keep it forever. GitHub
       #     deletes it after 14 days. Needs a per-repo owner token (TRAFFIC_TOKEN
