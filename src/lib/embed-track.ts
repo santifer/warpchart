@@ -65,26 +65,29 @@ function isCamo(ua: string | null): boolean {
   return !!ua && /camo/i.test(ua);
 }
 
+// Returns a short status (surfaced as the x-embed response header) so the
+// pipeline can be diagnosed from a single request without logs.
 export async function noteEmbedHit(
   ua: string | null,
   repo: string | null,
   surface: "chart" | "badge",
-): Promise<void> {
-  if (!repo || !isCamo(ua)) return;
-  if (!/^[\w.-]+\/[\w.-]+$/.test(repo)) return;
+): Promise<string> {
+  if (!repo) return "no-repo";
+  if (!isCamo(ua)) return "not-camo";
+  if (!/^[\w.-]+\/[\w.-]+$/.test(repo)) return "bad-repo";
   const key = repo.toLowerCase();
-  if (seenMem.has(key)) return;
+  if (seenMem.has(key)) return "mem-seen";
 
   const token = process.env.BLOB_READ_WRITE_TOKEN;
   if (!token) {
     seenMem.add(key); // no durable store: at least do not re-notify this instance
-    return;
+    return "no-token";
   }
 
   const seen = await readSeen(token);
   if (seen[key]) {
     seenMem.add(key);
-    return;
+    return "blob-seen";
   }
   seen[key] = { at: new Date().toISOString(), surface };
   try {
@@ -95,9 +98,14 @@ export async function noteEmbedHit(
       contentType: "application/json",
       token,
     });
-  } catch {
-    return; // could not persist -> do not notify (avoid dupes on retry)
+  } catch (e) {
+    return "write-failed:" + (e instanceof Error ? e.message.slice(0, 60) : "err");
   }
   seenMem.add(key);
-  await notify(repo, surface, Object.keys(seen).length);
+  try {
+    await notify(repo, surface, Object.keys(seen).length);
+  } catch {
+    return "written-no-notify";
+  }
+  return "written";
 }
