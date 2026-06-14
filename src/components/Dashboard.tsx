@@ -17,7 +17,9 @@ import Projections from "./Projections";
 import Heatmap from "./Heatmap";
 import RankChart from "./RankChart";
 import MissionLog from "./MissionLog";
+import TrafficPanel from "./TrafficPanel";
 import DailyBriefing from "./DailyBriefing";
+import type { TrafficVault } from "@/lib/traffic";
 import TargetHud from "./TargetHud";
 import SoundController from "./SoundController";
 import type { DashboardBundle } from "@/lib/bundle";
@@ -73,19 +75,25 @@ export default function Dashboard({
   polling = true,
   dossier = null,
   charted,
+  traffic = null,
 }: {
   bundle: DashboardBundle;
   polling?: boolean;
   dossier?: Dossier | null;
   charted?: string[];
+  traffic?: TrafficVault | null;
 }) {
   const repo = bundle.meta?.repo;
   const next = bundle.milestones[0] ?? null;
   const [target, setTarget] = useState<string | null>(null);
   const [deck, setDeck] = useState(false);
 
+  // mount-only hydration from browser-only state (saved target + deck deep
+  // link); server and first client render agree (no target, no deck), so there
+  // is no hydration mismatch.
   useEffect(() => {
     try {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setTarget(localStorage.getItem(TARGET_KEY));
     } catch { /* private mode */ }
     // deep link from locked explorer pages: see the deck live on the demo
@@ -154,6 +162,10 @@ export default function Dashboard({
           ladder={{ meta: "30 days · night floor 00-05 UTC", node: <DailyLadder bundle={bundle} /> }}
           heatmap={{ meta: `${fmt(bundle.totalStars)} star events`, node: <Heatmap bundle={bundle} /> }}
           rank={{ meta: "hourly snapshots", node: <RankChart bundle={bundle} /> }}
+          traffic={{
+            meta: traffic ? `${traffic.daysKept} days kept · github keeps 14` : "kept past GitHub's 14-day window",
+            node: <TrafficPanel vault={traffic} />,
+          }}
           log={{
             meta: "auto-detected from telemetry",
             node: <MissionLog events={bundle.events} captain={bundle.captain} />,

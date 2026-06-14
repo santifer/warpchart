@@ -72,6 +72,18 @@ jobs:
           BLOB_READ_WRITE_TOKEN: ${{ secrets.BLOB_READ_WRITE_TOKEN }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+      # 4c. Traffic Vault: snapshot each tracked repo's GitHub traffic (views,
+      #     clones, referrers) into the private Blob and keep it forever. GitHub
+      #     deletes it after 14 days. Needs a per-repo owner token (TRAFFIC_TOKEN
+      #     or TRAFFIC_TOKENS); no token just no-ops. Never fails the run.
+      - name: Snapshot Traffic Vault
+        run: node collector/traffic.mjs
+        continue-on-error: true
+        env:
+          BLOB_READ_WRITE_TOKEN: ${{ secrets.BLOB_READ_WRITE_TOKEN }}
+          TRAFFIC_TOKEN: ${{ secrets.TRAFFIC_TOKEN }}
+          TRAFFIC_TOKENS: ${{ secrets.TRAFFIC_TOKENS }}
+
       # 5. No data in git: a tiny stamp commit triggers the Vercel build, whose
       #    prebuild pulls the fresh data/ from the Blob.
       - name: Trigger deploy

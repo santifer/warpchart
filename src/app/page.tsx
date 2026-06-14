@@ -3,6 +3,7 @@ import { buildBundle } from "@/lib/bundle";
 import { getCachedDossier } from "@/lib/explorer";
 import { loadMeta } from "@/lib/history";
 import { fetchLiveSnapshot } from "@/lib/live-blob";
+import { loadTrafficVault } from "@/lib/traffic";
 
 // ISR every 60s: data/ (the heavy curve) is read at regeneration time from
 // the committed snapshot, while the fresh "current state" rides the Vercel
@@ -16,5 +17,6 @@ export default async function Home() {
   const bundle = buildBundle(undefined, live);
   const [owner, name] = repo.split("/");
   const dossier = owner && name ? await getCachedDossier(owner, name) : null;
-  return <Dashboard bundle={bundle} dossier={dossier} />;
+  const traffic = repo ? await loadTrafficVault(repo) : null;
+  return <Dashboard bundle={bundle} dossier={dossier} traffic={traffic} />;
 }

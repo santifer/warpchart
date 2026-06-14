@@ -25,6 +25,7 @@ export default function ConsoleLayout({
   ladder,
   heatmap,
   rank,
+  traffic,
   log,
 }: {
   dossier: Dossier | null;
@@ -35,6 +36,7 @@ export default function ConsoleLayout({
   ladder: ConsoleSlot;
   heatmap: ConsoleSlot;
   rank: ConsoleSlot;
+  traffic: ConsoleSlot;
   log: ConsoleSlot;
 }) {
   return (
@@ -90,7 +92,11 @@ export default function ConsoleLayout({
         {rank.node}
       </Panel>
 
-      <Panel index="10" title="Mission log" meta={log.meta} delay={480}>
+      <Panel index="10" title="Traffic vault" meta={traffic.meta} delay={480}>
+        {traffic.node}
+      </Panel>
+
+      <Panel index="11" title="Mission log" meta={log.meta} delay={520}>
         {log.node}
       </Panel>
     </>

@@ -22,8 +22,10 @@ import { fetchLiveSnapshot } from "@/lib/live-blob";
 import { isOwnedBy } from "@/lib/config";
 import CodexModal from "@/components/CodexModal";
 import FirstLightBanner from "@/components/FirstLightBanner";
+import TrafficPanel from "@/components/TrafficPanel";
 import { getCachedCodex, listCodexes } from "@/lib/codex";
 import { loadExplorerData, getCachedDossier } from "@/lib/explorer";
+import { loadTrafficVault } from "@/lib/traffic";
 import { fmt, fmtEtaDays } from "@/lib/format";
 
 // Same template as the unlocked mission console: identical panels in identical
@@ -104,7 +106,12 @@ export default async function ExplorerPage({
   if (tenant && `${owner}/${name}`.toLowerCase() === tenant.repo.toLowerCase()) {
     const live = await fetchLiveSnapshot(tenant.repo);
     return (
-      <Dashboard bundle={buildBundle(undefined, live)} dossier={await getCachedDossier(owner, name)} charted={chartedRepos} />
+      <Dashboard
+        bundle={buildBundle(undefined, live)}
+        dossier={await getCachedDossier(owner, name)}
+        charted={chartedRepos}
+        traffic={await loadTrafficVault(tenant.repo)}
+      />
     );
   }
 
@@ -137,6 +144,7 @@ export default async function ExplorerPage({
           polling={false}
           dossier={await getCachedDossier(owner, name)}
           charted={chartedRepos}
+          traffic={await loadTrafficVault(hostedLabel)}
         />
       );
     }
@@ -372,6 +380,14 @@ export default async function ExplorerPage({
             node: (
               <Locked unlockFor={repoLabel}>
                 <RankChart bundle={demoBundle} />
+              </Locked>
+            ),
+          }}
+          traffic={{
+            meta: "unlocks with tracking",
+            node: (
+              <Locked unlockFor={repoLabel}>
+                <TrafficPanel vault={null} />
               </Locked>
             ),
           }}

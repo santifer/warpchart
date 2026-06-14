@@ -113,6 +113,17 @@ export function velocityRanking(limit = 20, language?: string): VelocityEntry[] 
 
 // The worldwide leaderboard: biggest repos by stars, optionally by language.
 // The registry is already sorted by stars, so this just filters and slices.
+// CSV serialization of a velocity/leaderboard table, for investor and builder
+// workflows (the GitDealFlow-style JSON-or-CSV feed promised on the Warp Index).
+export function velocityCsv(rows: VelocityEntry[]): string {
+  const head = "rank,repo,stars,velocity_per_day,language";
+  const cell = (v: string | number | null) => String(v ?? "").replace(/[,\r\n]/g, " ");
+  const body = rows
+    .map((r) => [r.rank, r.repo, r.stars, r.velocityPerDay, cell(r.language)].join(","))
+    .join("\n");
+  return `${head}\n${body}\n`;
+}
+
 export function leaderboard(limit = 20, language?: string): VelocityEntry[] {
   const r = loadRoute();
   if (!r) return [];
