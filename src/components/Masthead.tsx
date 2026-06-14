@@ -51,7 +51,7 @@ export default function Masthead({ demo }: { demo?: string | null }) {
           href="/velocity"
           className="numeral text-micro tracking-[0.2em] text-dim transition-colors hover:text-accent"
         >
-          VELOCITY
+          WARP INDEX
         </Link>
         <Link
           prefetch={false}

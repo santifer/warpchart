@@ -15,11 +15,13 @@ import { fmtCompact, fmtEtaDays } from "@/lib/format";
 export const revalidate = 900;
 
 export const metadata: Metadata = {
-  title: "Velocity rankings · fastest growing repos of the GitHub top 1000 · Warpchart",
+  title: "The Warp Index · fastest-growing GitHub repositories, updated daily · Warpchart",
   description:
-    "Daily velocity rankings for the GitHub top 1000: fastest movers in stars/day, fastest risers relative to their size, and active overtakes with live ETAs.",
+    "The Warp Index ranks the fastest-growing repositories on GitHub every day: fastest movers in stars per day, fastest risers relative to their size, and the active overtakes about to happen, with live ETAs. Free, with a machine-readable feed for investors and builders.",
   openGraph: { images: ["/api/og"] },
 };
+
+const FEED_URL = "/api/v1/velocity"; // JSON data feed (the VC/builder wedge)
 
 export default function VelocityPage() {
   const route = loadRoute();
@@ -34,6 +36,9 @@ export default function VelocityPage() {
   // hunts whose deadline already passed (otherwise a 4-hour overtake
   // would still read "next" twenty hours after it happened)
   const scannedMs = collisions?.generated_at ? new Date(collisions.generated_at).getTime() : 0;
+  // ISR server render (revalidate=900): Date.now() ages the overtake ETAs each
+  // regeneration so a 4h hunt stops reading "next" 20h after it happened.
+  // eslint-disable-next-line react-hooks/purity
   const elapsedDays = scannedMs ? (Date.now() - scannedMs) / 864e5 : 0;
   const live = (collisions?.collisions ?? [])
     .map((c) => ({ ...c, leftDays: c.etaDays - elapsedDays }))
@@ -93,15 +98,26 @@ export default function VelocityPage() {
 
       <section className="rise flex flex-col gap-2" style={{ animationDelay: "60ms" }}>
         <h1 className="font-display text-[clamp(1.6rem,4vw,2.6rem)] leading-tight tracking-[0.08em] text-star">
-          VELOCITY RANKINGS
+          THE WARP INDEX
         </h1>
         <p className="max-w-[720px] text-base font-light leading-relaxed text-dim">
-          The fastest movers of the GitHub top 1000, measured daily from the worldwide registry.
-          Tail length is speed; hue is the doppler tilt against the median pace of the whole fleet.
+          The standings of the open-source race. Every day we chart the fastest-rising repositories
+          on GitHub: who is accelerating, who is gaining fastest relative to their size, and who is
+          about to overtake whom. Tail length is speed; hue is the doppler tilt against the median
+          pace of the whole fleet.
         </p>
         <p className="numeral text-micro tracking-[0.15em] text-faint">
           registry of {day} · velocities from the daily diff · overtake etas from the collision scan
         </p>
+        {/* a JSON API endpoint, not a page: plain anchor (not next/link). The
+            href is a variable so the no-html-link-for-pages heuristic does not
+            mistake the data feed for an internal page route. */}
+        <a
+          href={FEED_URL}
+          className="numeral mt-1 inline-flex w-fit items-center gap-2 border border-grid px-3 py-1.5 text-micro tracking-[0.15em] text-dim transition-colors hover:border-accent/50 hover:text-accent"
+        >
+          ▸ FOR INVESTORS &amp; BUILDERS · GET THIS AS JSON (/api/v1)
+        </a>
       </section>
 
       <section className="rise" style={{ animationDelay: "120ms" }}>
