@@ -49,21 +49,21 @@ export default function Masthead({ demo }: { demo?: string | null }) {
         <Link
           prefetch={false}
           href="/velocity"
-          className="numeral text-micro tracking-[0.2em] text-dim transition-colors hover:text-accent"
+          className="numeral py-2 -my-2 text-micro tracking-[0.2em] text-dim transition-colors hover:text-accent"
         >
           WARP INDEX
         </Link>
         <Link
           prefetch={false}
           href="/codex"
-          className="numeral text-micro tracking-[0.2em] text-dim transition-colors hover:text-accent"
+          className="numeral py-2 -my-2 text-micro tracking-[0.2em] text-dim transition-colors hover:text-accent"
         >
           CODEX
         </Link>
         <Link
           prefetch={false}
           href="/pricing"
-          className="numeral text-micro tracking-[0.2em] text-dim transition-colors hover:text-accent"
+          className="numeral py-2 -my-2 text-micro tracking-[0.2em] text-dim transition-colors hover:text-accent"
         >
           PRICING
         </Link>

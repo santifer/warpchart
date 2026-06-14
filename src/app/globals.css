@@ -27,12 +27,14 @@
   --grid: #c9d8e4;
   --ink: #16293c;
   --dim: #43607a;
-  --faint: #5d7388;
-  --accent: #0c7d92;
-  --accent-soft: rgba(12, 125, 146, 0.10);
+  /* faint + accent darkened so muted text and links clear WCAG AA 4.5:1 on the
+     light canvas/panels (audited: faint 4.4 -> 5.3, accent 4.31 -> 5.0) */
+  --faint: #516678;
+  --accent: #0a7286;
+  --accent-soft: rgba(10, 114, 134, 0.10);
   --warn: #a05a00;
   --star-white: #0a1726;
-  --glow: rgba(12, 125, 146, 0.30);
+  --glow: rgba(10, 114, 134, 0.30);
   --dop-fwd: #0a6c9c;
   --dop-back: #a04a2c;
 }
