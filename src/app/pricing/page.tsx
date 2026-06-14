@@ -86,7 +86,7 @@ const GENERIC_PLANS: Plan[] = [
     cadence: "per repo / month",
     accent: true,
     perks: [
-      "Exact hourly history from the day you join (it cannot be backfilled later: GitHub caps history and archives miss viral bursts)",
+      "Exact hourly history from the second you pay (it cannot be backfilled later: GitHub caps history and archives miss viral bursts)",
       "Unlocked live console at warpchart.dev/r/your/repo",
       "Live replay with the synthesized soundtrack",
       "Alerts: gate crossings and incoming hunters (Discord, Slack, RSS)",
@@ -94,7 +94,7 @@ const GENERIC_PLANS: Plan[] = [
       "Zero ops: we run the collector on your repo's own App quota",
     ],
     cta: { label: "TRACK THIS REPO →", href: "/api/checkout?plan=hosted" },
-    note: "Live within 24h.",
+    note: "Live in minutes, not days.",
   },
   {
     name: "FLEET",
@@ -154,7 +154,7 @@ function personalizedPlans(d: NonNullable<ExplorerData>): Plan[] {
       accent: true,
       tag: `RECOMMENDED FOR ${NAME}`,
       perks: [
-        `Exact hourly history of ${name} from day one (GitHub caps history and archives miss viral bursts: it cannot be backfilled later)`,
+        `Exact hourly history of ${name} from the second you pay (GitHub caps history and archives miss viral bursts: it cannot be backfilled later)`,
         `${name}'s full console unlocked: world-rank trajectory, daily ladder, heatmap and spike forensics`,
         huntersPerk,
         `Milestone log: every gate ${name} crosses, timestamped forever`,
@@ -166,7 +166,7 @@ function personalizedPlans(d: NonNullable<ExplorerData>): Plan[] {
         label: `TRACK ${NAME} · $19/MO →`,
         href: `/api/checkout?repo=${encodeURIComponent(repoLabel)}&plan=hosted`,
       },
-      note: "Live within 24h. Cancel anytime.",
+      note: "Charting starts the second you pay · live in minutes",
     },
     {
       name: "FLEET",
