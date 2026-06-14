@@ -8,6 +8,7 @@
 // then resolves in place with no layout shift.
 import { useEffect, useMemo, useState, ViewTransition } from "react";
 import Masthead from "@/components/Masthead";
+import SpaceBackdrop from "@/components/SpaceBackdrop";
 
 const STEPS = [
   "first light · system entering sensor range",
@@ -278,6 +279,7 @@ export default function ExplorerLoading() {
     // warp blur; the scan log then narrates the rest of the journey
     <ViewTransition enter={{ warp: "gx-warp-in", default: "none" }} default="none">
     <main className="mx-auto flex max-w-[1440px] flex-col gap-4 px-3 py-4 sm:px-6 sm:py-6">
+      <SpaceBackdrop mode="scan" />
       <div className="rise px-1">
         <Masthead />
       </div>

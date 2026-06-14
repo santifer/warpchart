@@ -22,6 +22,7 @@ import { fetchLiveSnapshot } from "@/lib/live-blob";
 import { isOwnedBy } from "@/lib/config";
 import CodexModal from "@/components/CodexModal";
 import FirstLightBanner from "@/components/FirstLightBanner";
+import SpaceBackdrop from "@/components/SpaceBackdrop";
 import TrafficPanel from "@/components/TrafficPanel";
 import { getCachedCodex, listCodexes } from "@/lib/codex";
 import { loadExplorerData, getCachedDossier } from "@/lib/explorer";
@@ -182,6 +183,9 @@ export default async function ExplorerPage({
     // warp entrance, and the skeleton -> content reveal must be an in-place
     // swap (a second animated entrance made everything vanish and reappear)
     <main className="mx-auto flex max-w-[1440px] flex-col gap-4 px-3 py-4 sm:px-6 sm:py-6">
+      {/* same rich starfield as the landing/explore, so the translucent hud
+          panels (and the star chart) float over space instead of flat dark */}
+      <SpaceBackdrop mode="scan" />
       <div className="px-1">
         <Masthead />
       </div>

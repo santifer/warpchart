@@ -5,6 +5,7 @@ import Link from "next/link";
 import LiveProvider, { useLive } from "./LiveProvider";
 import StatusBar from "./StatusBar";
 import Masthead from "./Masthead";
+import SpaceBackdrop from "./SpaceBackdrop";
 import ConsoleLayout from "./ConsoleLayout";
 import type { Dossier } from "@/lib/explorer";
 import GalacticChart from "./GalacticChart";
@@ -109,6 +110,7 @@ export default function Dashboard({
     <LiveProvider bundle={bundle} polling={polling}>
       <SoundController nextThreshold={next?.threshold ?? null} nextRank={next?.rank ?? null} />
       <main className="mx-auto flex max-w-[1440px] flex-col gap-4 px-3 py-4 sm:px-6 sm:py-6">
+        <SpaceBackdrop mode="scan" />
         <div className="px-1">
           <Masthead />
         </div>
