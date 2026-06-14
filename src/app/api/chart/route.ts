@@ -5,11 +5,13 @@
 //   /api/chart                         -> the tracked repo (exact history)
 //   /api/chart?repo=owner/name         -> ANY repository (sampled history)
 //   /api/chart?w=600&h=200&theme=dark  -> size and scheme overrides
+import { after } from "next/server";
 import { cachedSampleCurve, tenantCurve, isTenantRepo, withLiveTotal, curveTailV, type Curve } from "@/lib/curve";
 import { loadRoute } from "@/lib/history";
 import { reqLog } from "@/lib/log";
 import { fmt, fmtCompact } from "@/lib/format";
 import { fmtEmbed, adaptiveTtl, embedCache, TENANT_EMBED_CACHE } from "@/lib/embed";
+import { noteEmbedHit } from "@/lib/embed-track";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -59,6 +61,9 @@ export async function GET(req: Request) {
     if (!/^[\w.-]+\/[\w.-]+$/.test(repoParam)) {
       return new Response("invalid repo", { status: 400, headers: { "Cache-Control": "no-store" } });
     }
+    // first time GitHub's camo proxy renders this repo's embed -> notify (after
+    // the response; no-ops unless the UA is camo and the repo is new)
+    after(() => noteEmbedHit(req.headers.get("user-agent"), repoParam, "chart"));
     const [owner, name] = repoParam.split("/");
     // ?repo= pointing at the tracked tenant must serve the SAME exact local
     // curve as the no-param branch (the sampled path showed a dashed
@@ -117,15 +122,6 @@ export async function GET(req: Request) {
   const line = seg(solidPts);
   const dashedLine = dashedFrom !== null ? seg(pts.slice(dashedFrom)) : null;
   const area = `${seg(pts)} L ${x(t1).toFixed(1)} ${padT + ih} L ${padL} ${padT + ih} Z`;
-
-  // polyline length for the draw-on animation
-  let len = 0;
-  for (let i = 1; i < solidPts.length; i++) {
-    const dx = x(solidPts[i].t) - x(solidPts[i - 1].t);
-    const dy = y(solidPts[i].v) - y(solidPts[i - 1].v);
-    len += Math.sqrt(dx * dx + dy * dy);
-  }
-  const L = Math.ceil(len + 2);
 
   // twinkling star field, deterministic per repo
   const rand = seeded(repo);
