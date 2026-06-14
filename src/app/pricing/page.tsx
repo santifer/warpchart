@@ -13,6 +13,7 @@ import { loadMeta } from "@/lib/history";
 import { loadExplorerData, type ExplorerData } from "@/lib/explorer";
 import { fmt, fmtEtaDays } from "@/lib/format";
 import SpaceBackdrop from "@/components/SpaceBackdrop";
+import LockedRankPreview from "@/components/LockedRankPreview";
 
 // Dynamic: the page reads ?repo=. The expensive GitHub work is paid at most
 // once per repo per 15 min inside loadExplorerData, so render stays cheap.
@@ -378,6 +379,13 @@ export default async function Pricing({
               </p>
             </div>
           </section>
+
+          {/* the locked treasure: a real, blurred preview of the rank history we
+              have already been recording for this repo (renders only when we
+              have >=2 days on record) */}
+          <section className="rise" style={{ animationDelay: "180ms" }}>
+            <LockedRankPreview repo={repoLabel} name={repoName} />
+          </section>
         </>
       ) : (
         // generic hero
@@ -403,6 +411,32 @@ export default async function Pricing({
         {plans.map((p) => (
           <PlanCard key={p.name} p={p} />
         ))}
+      </section>
+
+      {/* soft conversion: the visitor who will not pay today still leaves with a
+          live badge installed (recurring brand impressions + a foot in the door) */}
+      <section className="rise" style={{ animationDelay: "240ms" }}>
+        <a
+          href={data ? `/explore#embed=${encodeURIComponent(repoLabel)}` : "/explore#embed"}
+          className="hud flex flex-wrap items-center justify-between gap-3 border-dashed px-4 py-3 transition-colors hover:border-accent/50"
+        >
+          <span className="text-data font-light leading-relaxed text-dim">
+            {data ? (
+              <>
+                Not ready to track? Put a <span className="text-ink">live stars + rank badge</span> on{" "}
+                {repoName}&apos;s README, free, and decide later.
+              </>
+            ) : (
+              <>
+                Not ready to track? Put a <span className="text-ink">live stars + rank badge</span> on
+                your README, free, and decide later.
+              </>
+            )}
+          </span>
+          <span className="numeral shrink-0 text-label tracking-[0.18em] text-accent">
+            GET THE FREE BADGE →
+          </span>
+        </a>
       </section>
 
       {/* the integrity contract: shown personalized too, where it reassures most */}
