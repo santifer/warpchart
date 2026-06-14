@@ -183,6 +183,7 @@ export async function topRepos() {
         l: item.language ?? null,
         f: item.forks_count ?? 0,
         t: (item.topics ?? []).slice(0, 8),
+        c: item.created_at ?? null,
       });
     }
   }
@@ -219,6 +220,7 @@ export async function topReposDeep(limit = 10000) {
             l: item.language ?? null,
             f: item.forks_count ?? 0,
             t: (item.topics ?? []).slice(0, 8),
+            c: item.created_at ?? null,
           });
           added++;
         }

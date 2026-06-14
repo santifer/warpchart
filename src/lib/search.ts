@@ -81,7 +81,7 @@ interface Indexed {
   name: Set<string>;
   topics: Set<string>;
   desc: Set<string>;
-  tags: Set<string>; // LLM enrichment capability tags (highest-signal)
+  tags: string[]; // LLM enrichment capability tags, ORDERED by centrality
   summaryText: string;
 }
 
@@ -108,24 +108,38 @@ function buildIndex(): Indexed[] {
       name: new Set(tokenize(repo.r)),
       topics: explode(repo.t ?? []),
       desc: new Set(tokenize(repo.d ?? "")),
-      tags: explode(e?.tags ?? []),
+      tags: (e?.tags ?? []).map((t) => t.toLowerCase().trim()).filter(Boolean),
       summaryText: e?.summary ? " " + e.summary.toLowerCase() + " " : "",
     };
   });
 }
 
-// field weights: enrichment tags and topics are the strongest "is-a" signal
-const W_TAG = 5;
+// field weights: enrichment tags and topics are the strongest "is-a" signal.
+// A tag that is the repo's PRIMARY identity (first in the ordered list) counts
+// for more than one buried deep, so a true "agentic memory" project outranks a
+// generalist that merely lists memory as a secondary feature.
+const W_TAG_TOP = 5; // weight of a matched first/primary tag
+const W_TAG_MIN = 3; // floor for a matched later tag
 const W_TOPIC = 3;
 const W_NAME = 3;
 const W_DESC = 2;
 const W_SUMMARY = 2;
 
+function tagWeight(fam: Set<string>, tags: string[]): number {
+  let best = 0;
+  for (let i = 0; i < tags.length; i++) {
+    const parts = explode([tags[i]]);
+    let hit = false;
+    for (const t of fam) if (parts.has(t)) { hit = true; break; }
+    if (hit) best = Math.max(best, Math.max(W_TAG_TOP - i * 0.7, W_TAG_MIN));
+  }
+  return best;
+}
+
 function termWeight(term: string, ix: Indexed): number {
   const fam = expand(term);
-  let w = 0;
+  let w = tagWeight(fam, ix.tags);
   for (const t of fam) {
-    if (ix.tags.has(t)) w = Math.max(w, W_TAG);
     if (ix.topics.has(t)) w = Math.max(w, W_TOPIC);
     if (ix.name.has(t)) w = Math.max(w, W_NAME);
     if (ix.desc.has(t)) w = Math.max(w, W_DESC);
@@ -137,7 +151,7 @@ function termWeight(term: string, ix: Indexed): number {
 // "best" = relevant first, then most validated (stars) and rising (velocity)
 function popularityFactor(p: CatalogRepo): number {
   const v = Math.max(0, p.v ?? 0);
-  return 1 + Math.log10(p.s + 1) / 6 + Math.min(v, 600) / 2000;
+  return 1 + Math.log10(p.s + 1) / 8 + Math.min(v, 600) / 2000;
 }
 
 // Anti-farm: a star is a human validation, but stars can be bought. Bought stars
@@ -145,13 +159,27 @@ function popularityFactor(p: CatalogRepo): number {
 // ratio is very likely farmed. Demote it so the genuinely-adopted repos win.
 // This is the "separate validation from noise" mechanism the thesis rests on.
 function qualityFactor(p: CatalogRepo): number {
+  let q = 1;
+  // fork signal: bought stars rarely bring forks
   const f = p.f ?? 0;
-  if (f <= 0 || p.s < 5000) return 1; // no fork signal, or too small to judge
-  const ratio = f / p.s;
-  if (ratio < 0.004) return 0.25;
-  if (ratio < 0.008) return 0.55;
-  if (ratio < 0.015) return 0.8;
-  return 1;
+  if (f > 0 && p.s >= 5000) {
+    const ratio = f / p.s;
+    if (ratio < 0.004) q *= 0.25;
+    else if (ratio < 0.008) q *= 0.55;
+    else if (ratio < 0.015) q *= 0.8;
+  }
+  // age signal: a six-figure star count earned in weeks is not real adoption.
+  // Genuine megarepos take years; an impossibly high lifetime star rate is the
+  // signature of a farmed repo. Degrades gracefully when created_at is absent.
+  if (p.c && p.s > 80000) {
+    const ageDays = (Date.now() - Date.parse(p.c)) / 864e5;
+    if (ageDays > 0) {
+      const lifetimeRate = p.s / ageDays;
+      if (lifetimeRate > 1500) q *= 0.2;
+      else if (lifetimeRate > 800) q *= 0.5;
+    }
+  }
+  return q;
 }
 
 export function searchRepos(query: string, limit = 15): { query: string; results: SearchEntry[] } {

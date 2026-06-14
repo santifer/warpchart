@@ -42,6 +42,7 @@ export interface CatalogRepo {
   t?: string[]; // GitHub topics
   d?: string | null; // short description
   f?: number; // forks
+  c?: string | null; // created_at ISO (for the age-based anti-farm signal)
 }
 
 export interface CatalogFile {

@@ -47,8 +47,10 @@ async function writeJson(key, value) {
 const today = new Date().toISOString().slice(0, 10);
 
 // idempotent per UTC day: bail before the sweep if today is already built
+// (unless --force, e.g. to backfill a new field into today's catalog)
+const force = process.argv.includes("--force");
 const prev = await readJson(CATALOG_KEY);
-if (prev?.generated_at?.slice(0, 10) === today && prev?.repos?.length) {
+if (!force && prev?.generated_at?.slice(0, 10) === today && prev?.repos?.length) {
   console.log(`[catalog] ${today} already built (${prev.repos.length} repos), nothing to do`);
   process.exit(0);
 }
@@ -90,7 +92,7 @@ const repos = ranked.map((r) => {
   if (v == null && prevDays > 0.25 && prevStars.has(key)) {
     v = Math.round(((r.s - prevStars.get(key)) / prevDays) * 10) / 10;
   }
-  return { r: r.r, rank: r.rank, s: r.s, v, l: r.l ?? null, t: r.t ?? [], d: r.d ?? null, f: r.f ?? 0 };
+  return { r: r.r, rank: r.rank, s: r.s, v, l: r.l ?? null, t: r.t ?? [], d: r.d ?? null, f: r.f ?? 0, c: r.c ?? null };
 });
 
 await writeJson(CATALOG_KEY, { generated_at: new Date().toISOString(), repos });
