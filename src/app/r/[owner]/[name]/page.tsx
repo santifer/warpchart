@@ -22,36 +22,7 @@ import { fetchLiveSnapshot } from "@/lib/live-blob";
 import { isOwnedBy } from "@/lib/config";
 import CodexModal from "@/components/CodexModal";
 import { getCachedCodex, listCodexes } from "@/lib/codex";
-import { unstable_cache } from "next/cache";
-import { getExplorerData, getCachedDossier } from "@/lib/explorer";
-
-// Shared data cache: even when the route renders dynamically, the GitHub
-// round-trips are paid at most once per repo per 15 minutes.
-// Degraded results (velocity unavailable) must NOT be cached: throwing
-// skips unstable_cache storage, so the next visitor gets a fresh attempt
-// instead of 15 poisoned minutes. The thrown error carries the data so
-// THIS visitor still sees the degraded-but-usable page.
-class DegradedResult extends Error {
-  constructor(public data: Awaited<ReturnType<typeof getExplorerData>>) {
-    super("__degraded__");
-  }
-}
-// Short per-instance memory of degraded results: during an upstream storm
-// every visitor would otherwise pay the full retry budget for the same
-// degraded outcome (Fluid reuses instances, so most hits land here).
-const degradedCache = new Map<
-  string,
-  { data: NonNullable<Awaited<ReturnType<typeof getExplorerData>>>; until: number }
->();
-const getCachedExplorerData = unstable_cache(
-  async (owner: string, name: string) => {
-    const data = await getExplorerData(owner, name);
-    if (data?.degraded) throw new DegradedResult(data);
-    return data;
-  },
-  ["explorer-data"],
-  { revalidate: 900 }
-);
+import { loadExplorerData, getCachedDossier } from "@/lib/explorer";
 import { fmt, fmtEtaDays } from "@/lib/format";
 
 // Same template as the unlocked mission console: identical panels in identical
@@ -67,12 +38,14 @@ function Locked({ unlockFor, children }: { unlockFor: string; children: React.Re
       <div className="pointer-events-none select-none opacity-[0.28] blur-[2px]" aria-hidden>
         {children}
       </div>
-      {/* the whole surface still resolves to checkout: a dead click on the
-          blurred link-looking text would read as "the links are broken" */}
+      {/* the whole surface resolves to the personalized plan page (NOT straight
+          to checkout): the visitor sees what THIS repo unlocks, priced for it,
+          before any payment. A dead click on the blurred link-looking text
+          would otherwise read as "the links are broken". */}
       <a
-        href={`/api/checkout?repo=${encodeURIComponent(unlockFor)}&plan=hosted`}
+        href={`/pricing?repo=${encodeURIComponent(unlockFor)}`}
         className="absolute inset-0 z-10"
-        aria-label={`Track ${unlockFor}`}
+        aria-label={`See what tracking ${unlockFor} unlocks`}
       />
       <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
         <span className="numeral border border-grid bg-void/70 px-2.5 py-1 text-micro tracking-[0.28em] text-faint">
@@ -168,30 +141,11 @@ export default async function ExplorerPage({
     }
   }
 
-  let data;
-  const degradedKey = `${owner}/${name}`.toLowerCase();
-  const recentDegraded = degradedCache.get(degradedKey);
-  try {
-    // During a GitHub 502 storm every fresh attempt costs the full retry
-    // budget and degrades anyway: serve the recent degraded copy instantly
-    // and only re-attempt when it expires (per instance, 3 min).
-    data =
-      recentDegraded && recentDegraded.until > Date.now()
-        ? recentDegraded.data
-        : await getCachedExplorerData(owner, name);
-  } catch (err) {
-    if (err instanceof DegradedResult) {
-      data = err.data; // serve it, but never enters the durable cache
-      if (data) degradedCache.set(degradedKey, { data, until: Date.now() + 180_000 });
-    } else if (err instanceof Error && /not[ _]?found|could not resolve/i.test(err.message)) {
-      // a real "repository not found" caches as 404; transient GitHub
-      // errors must NOT (rethrow -> 500, next visitor retries fresh)
-      notFound();
-    } else {
-      console.error(`[explorer] ${owner}/${name} failed:`, err);
-      throw err;
-    }
-  }
+  // Shared cached snapshot (see loadExplorerData): resilient to degraded
+  // refreshes and GitHub storms, and the SAME entry the /pricing?repo= page
+  // reads. null = repository does not exist; transient errors rethrow -> 500
+  // so the route never caches a false 404.
+  const data = await loadExplorerData(owner, name);
   if (!data) notFound();
 
   const { inputs } = data;
@@ -431,14 +385,15 @@ export default async function ExplorerPage({
       <div className="hud flex flex-wrap items-center justify-between gap-3 px-4 py-3">
         <span className="numeral text-label text-dim">
           Full mission telemetry for {repoLabel}: hourly history, forensics, replay and
-          projections. Start tracking today, own your real history forever.
+          projections, none of it backfillable later. See exactly what tracking{" "}
+          {repoName} unlocks, and what it costs.
         </span>
         <div className="flex flex-wrap gap-2">
           <a
-            href={`/api/checkout?repo=${encodeURIComponent(repoLabel)}&plan=hosted`}
+            href={`/pricing?repo=${encodeURIComponent(repoLabel)}`}
             className="numeral border border-accent/50 bg-accent/10 px-3 py-1.5 text-label tracking-[0.2em] text-accent transition-colors hover:bg-accent/20"
           >
-            TRACK {name.toUpperCase().slice(0, 24)} · $19/MO →
+            CHART {name.toUpperCase().slice(0, 24)} →
           </a>
           <a
             href={`/r/${demo.meta?.repo ?? ""}#from=${encodeURIComponent(repoLabel)}`}

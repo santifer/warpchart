@@ -209,3 +209,58 @@ export async function getExplorerData(owner: string, name: string): Promise<Expl
     generatedAt: new Date().toISOString(),
   };
 }
+
+// A degraded result (velocity telemetry unavailable) must NOT enter the
+// durable cache: throwing skips unstable_cache storage so the next visitor
+// gets a fresh attempt instead of 15 poisoned minutes. The thrown error
+// carries the data so THIS visitor still sees the degraded-but-usable page.
+class DegradedResult extends Error {
+  constructor(public data: NonNullable<ExplorerData>) {
+    super("__degraded__");
+  }
+}
+
+const getCachedExplorerData = unstable_cache(
+  async (owner: string, name: string) => {
+    const data = await getExplorerData(owner, name);
+    if (data?.degraded) throw new DegradedResult(data);
+    return data;
+  },
+  ["explorer-data"],
+  { revalidate: 900 },
+);
+
+// Short per-instance memory of degraded results: during an upstream storm every
+// visitor would otherwise pay the full retry budget for the same degraded
+// outcome (Fluid reuses instances, so most hits land here).
+const degradedCache = new Map<string, { data: NonNullable<ExplorerData>; until: number }>();
+
+// Resilient accessor shared by the explorer page (/r/owner/name) and the
+// personalized pricing page (/pricing?repo=owner/name) so both read the SAME
+// cached snapshot: identical numbers, and one GitHub spend per repo per 15 min
+// (a pricing visit that follows a repo visit is free). Returns null for a repo
+// that does not exist; rethrows transient upstream errors so the caller can
+// 500-and-retry rather than cache a 404.
+export async function loadExplorerData(
+  owner: string,
+  name: string,
+): Promise<NonNullable<ExplorerData> | null> {
+  const key = `${owner}/${name}`.toLowerCase();
+  const recent = degradedCache.get(key);
+  if (recent && recent.until > Date.now()) return recent.data;
+  try {
+    return await getCachedExplorerData(owner, name);
+  } catch (err) {
+    if (err instanceof DegradedResult) {
+      degradedCache.set(key, { data: err.data, until: Date.now() + 180_000 });
+      return err.data;
+    }
+    // a real "repository not found" -> null (caller decides 404 vs graceful);
+    // transient GitHub errors rethrow so the route never caches a false 404
+    if (err instanceof Error && /not[ _]?found|could not resolve/i.test(err.message)) {
+      return null;
+    }
+    console.error(`[explorer] ${owner}/${name} failed:`, err);
+    throw err;
+  }
+}
