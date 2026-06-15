@@ -1207,16 +1207,24 @@ body.gx-warping .ghx-lore {
 }
 
 /* ── COMMAND DECK: the real console cards relocated into a fullscreen layout ──
-   Hero star race on top, the eight telemetry cards in a grid below. Desktop
-   (>=1024px) fills the viewport with no scroll (hero ~46% of the height, the
-   grid a 4x2 that fills the rest); the recharts cards take a `fill` prop so
-   they grow to the cell. Below lg the no-scroll rule is sacrificed to keep the
-   hierarchy: it stacks (hero first) and scrolls. */
+   The star race is a full-bleed hero whose BOX matches the chart's aspect
+   (~2600/740), so the chart fills the full width with no side bands and its
+   labels stay UI-size. The eight telemetry cards keep their native readable
+   height in the grid below (no stretching). The body scrolls when hero + cards
+   exceed the viewport (tall hero + eight real cards do not fit no-scroll on a
+   laptop; readable beats cramped). */
 .deck-body {
   display: flex;
   flex-direction: column;
   gap: 0.6rem;
   min-height: 0;
+  overflow-y: auto;
+}
+.deck-hero-wrap {
+  width: 100%;
+  aspect-ratio: 2600 / 740;
+  max-height: 62vh;
+  flex: none;
 }
 .deck-hero-wrap > section {
   height: 100%;
@@ -1225,37 +1233,61 @@ body.gx-warping .ghx-lore {
   display: grid;
   gap: 0.6rem;
   grid-template-columns: 1fr;
-  min-height: 0;
 }
-.deck-grid > section {
-  min-height: 0;
-  overflow: hidden;
-}
-@media (max-width: 1023px) {
-  .deck-body {
-    overflow-y: auto;
-  }
-  .deck-hero-wrap {
-    min-height: 56vh;
-  }
-}
-@media (min-width: 640px) and (max-width: 1023px) {
+@media (min-width: 640px) {
   .deck-grid {
-    grid-template-columns: 1fr 1fr;
-    grid-auto-rows: minmax(230px, auto);
+    grid-template-columns: repeat(2, 1fr);
   }
 }
 @media (min-width: 1024px) {
-  .deck-body {
-    overflow: hidden;
-  }
-  .deck-hero-wrap {
-    flex: 0 0 46%;
-  }
   .deck-grid {
-    flex: 1 1 0;
-    overflow: hidden;
     grid-template-columns: repeat(4, 1fr);
-    grid-template-rows: repeat(2, 1fr);
+  }
+}
+
+/* ── STARFALL: a prominent golden shooting star per live star gained ──
+   Same 45-degree climb as every streak on the site (lower-left to upper-right);
+   gold is the living present. A bright head leads a fading tail; both glow. */
+.starfall {
+  position: absolute;
+  height: 2.5px;
+  border-radius: 3px;
+  background: linear-gradient(90deg, transparent, rgba(244, 180, 74, 0.55) 55%, #f6c054 100%);
+  filter: drop-shadow(0 0 7px rgba(244, 180, 74, 0.85)) drop-shadow(0 0 18px rgba(244, 180, 74, 0.4));
+  opacity: 0;
+  will-change: transform, opacity;
+  animation: starfall var(--dur, 1300ms) cubic-bezier(0.2, 0.55, 0.3, 1) forwards;
+}
+.starfall::after {
+  content: "";
+  position: absolute;
+  right: -3px;
+  top: 50%;
+  width: 7px;
+  height: 7px;
+  margin-top: -3.5px;
+  border-radius: 50%;
+  background: #fff3d4;
+  box-shadow: 0 0 12px 4px rgba(246, 192, 84, 0.9);
+}
+@keyframes starfall {
+  0% {
+    opacity: 0;
+    transform: translate(0, 0) rotate(-45deg) scaleX(0.25);
+  }
+  9% {
+    opacity: 1;
+  }
+  82% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translate(var(--dx, 900px), calc(var(--dx, 900px) * -1)) rotate(-45deg) scaleX(1);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .starfall {
+    display: none;
   }
 }

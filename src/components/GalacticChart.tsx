@@ -128,7 +128,11 @@ export default function GalacticChart({
   const BAND_A_Y = deck ? 300 : BASE_BAND_A_Y;
   const CLIP_BOTTOM = deck ? 556 : BASE_CLIP_BOTTOM;
   const BAND_B_Y = deck ? 654 : BASE_BAND_B_Y;
-  const fs = deck ? 0.9 : 1;
+  // Label scale. In deck mode the canvas width varies a lot with the hero's
+  // aspect; tie fs to W so on-screen label size stays roughly constant (a wide
+  // hero would otherwise shrink the text to unreadable). fs also drives the
+  // collision spacing, so the label room scales with it too.
+  const fs = deck ? Math.min(1.7, Math.max(0.95, W / 1750)) : 1;
 
   const C = usePalette();
   const router = useRouter();

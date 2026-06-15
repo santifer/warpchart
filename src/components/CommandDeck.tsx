@@ -286,33 +286,37 @@ export default function CommandDeck({
         </div>
       </div>
 
-      {/* body: the REAL console cards, relocated. hero on top, eight tiles below */}
-      <div className="deck-body relative min-h-0 flex-1">
-        <div className="deck-hero-wrap min-h-0">
-          <Panel
-            index="01"
-            title="Star race"
-            meta={bundle.apex ? `→ core ${shortName(bundle.apex.r)} · ${fmtCompact(bundle.apex.s)} stars` : undefined}
-          >
-            <div ref={heroHole} className="flex h-full min-h-0 items-center justify-center">
+      {/* body: the REAL console cards, relocated. the star race is a full-bleed
+          hero whose box matches the chart aspect (so it fills the width with no
+          side bands), and the eight telemetry cards keep their native readable
+          size in the grid below. */}
+      <div className="deck-body relative">
+        <div className="deck-hero-wrap">
+          <section className="hud relative overflow-hidden">
+            <div ref={heroHole} className="absolute inset-0 flex items-center justify-center px-2">
               {canvas ? (
                 <div className="w-full" style={{ maxWidth: canvas.maxPx }}>
                   <GalacticChart inputs={inputs} target={target} onPinTarget={onPinTarget} deck deckW={canvas.w} />
                 </div>
               ) : null}
             </div>
-          </Panel>
+            {bundle.apex ? (
+              <span className="numeral pointer-events-none absolute right-3 top-2 z-10 text-micro text-faint">
+                → core {shortName(bundle.apex.r)} · {fmtCompact(bundle.apex.s)} stars
+              </span>
+            ) : null}
+          </section>
         </div>
 
-        <div className="deck-grid min-h-0">
+        <div className="deck-grid">
           <Panel index="05" title="Velocity, stars per hour" meta="24h vs previous 24h">
-            <VelocityChart fill />
+            <VelocityChart />
           </Panel>
           <Panel index="02" title="Cumulative stars" meta={`since ${bundle.meta?.created_at?.slice(0, 10) ?? "launch"}`}>
-            <CumulativeChart bundle={bundle} fill />
+            <CumulativeChart bundle={bundle} />
           </Panel>
           <Panel index="09" title="World rank over time" meta="hourly snapshots">
-            <RankChart bundle={bundle} fill />
+            <RankChart bundle={bundle} />
           </Panel>
           <Panel index="08" title="Activity heatmap" meta={`${fmt(bundle.totalStars)} star events`}>
             <Heatmap bundle={bundle} />
@@ -320,7 +324,7 @@ export default function CommandDeck({
           <PulsePanel dossier={dossier} index="03" />
           <UsagePanel dossier={dossier} index="04" />
           <Panel index="07" title="Daily ladder" meta="30 days · night floor 00-05 UTC">
-            <DailyLadder bundle={bundle} fill />
+            <DailyLadder bundle={bundle} />
           </Panel>
           <Panel index="06" title="Milestone projections" meta={`own v7d ${fmt(Math.round(vOwn))}/day`}>
             <Projections bundle={bundle} compact />

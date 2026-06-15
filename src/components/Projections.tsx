@@ -12,7 +12,7 @@ export default function Projections({ bundle, compact }: { bundle: DashboardBund
   const vOwn = bundle.v7d;
 
   return (
-    <div className={`flex flex-col gap-3 ${compact ? "h-full justify-center" : ""}`}>
+    <div className="flex flex-col gap-3">
       {bundle.milestones.map((m) => {
         const e = milestoneEta(m.rank, m.threshold, live.stars, vOwn, m.drift);
         const pct = Math.min(100, (live.stars / m.threshold) * 100);
