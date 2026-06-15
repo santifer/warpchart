@@ -81,8 +81,12 @@ export default async function Home() {
       {/* no overflow-hidden here: the galaxy stage does its own clipping
           with a raised roof, so starlight can glow past the hero's top
           edge instead of cutting on an invisible line under the header */}
+      {/* z-20: the hero and the spotlight below are both persistent stacking
+          contexts (-translate-x-1/2), so by DOM order the later spotlight would
+          paint OVER the ASK dropdown that overflows down into it. Lift the hero
+          so its dropdown (z-30 within) stays on top; still under the nav (z-50). */}
       <section
-        className="gx-hero-sec rise relative left-1/2 w-screen -translate-x-1/2"
+        className="gx-hero-sec rise relative z-20 left-1/2 w-screen -translate-x-1/2"
         style={{ animationDelay: "80ms" }}
       >
         <div className="relative h-[560px] sm:h-[640px]">

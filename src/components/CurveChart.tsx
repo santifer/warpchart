@@ -92,6 +92,13 @@ export default function CurveChart({ repo }: { repo: string }) {
   const seam = curve.archiveFrom ?? null;
   const seamT = seam !== null ? (curve.pts[seam]?.t ?? null) : null;
   const exactT = exactStart !== null ? (curve.pts[exactStart]?.t ?? null) : null;
+  // Only signpost the exact-daily takeover once it spans a visible slice of the
+  // x-axis. A few recorded days on a multi-year repo sit on the right edge and
+  // the label clips to a bare arrow; the tail is exact regardless. Self-arms as
+  // the recorded window grows toward the 90-day cap.
+  const spanT = curve.pts.length > 1 ? curve.pts[curve.pts.length - 1].t - curve.pts[0].t : 0;
+  const exactWide =
+    exactT !== null && spanT > 0 && (curve.pts[curve.pts.length - 1].t - exactT) / spanT > 0.12;
   // The trustworthy stretch (exact api + normalized archive + our exact-recent
   // daily record) is ONE continuous filled series; only a genuinely estimated
   // middle (archive unavailable) draws dashed, and it is BOUNDED at exactStart
@@ -164,10 +171,10 @@ export default function CurveChart({ repo }: { repo: string }) {
                 }}
               />
             )}
-            {exactT !== null && (
+            {exactWide && (
               // where our own exact daily record takes over from the reconstruction
               <ReferenceLine
-                x={exactT}
+                x={exactT as number}
                 stroke={C.accent}
                 strokeOpacity={0.5}
                 strokeDasharray="2 5"
@@ -209,7 +216,7 @@ export default function CurveChart({ repo }: { repo: string }) {
       </div>
       <div className="flex flex-wrap items-center justify-between gap-2">
         <span className="numeral text-micro text-faint">
-          {exactStart !== null
+          {exactWide
             ? "exact api timestamps + the recent window recorded EXACTLY, daily — our own record beyond GitHub's 40K cap"
             : seam !== null
               ? "full real history: exact api timestamps + gh archive beyond the 40K cap (normalized to the live total)"
