@@ -172,8 +172,8 @@ export default function CurveChart({ repo }: { repo: string }) {
                 strokeOpacity={0.5}
                 strokeDasharray="2 5"
                 label={{
-                  value: "exact daily →",
-                  position: "insideTopRight",
+                  value: "← exact daily",
+                  position: "insideTopLeft",
                   fill: C.accent,
                   fontSize: 11,
                   fontFamily: "var(--font-jbmono)",

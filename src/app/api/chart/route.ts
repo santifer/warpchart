@@ -178,19 +178,25 @@ export async function GET(req: Request) {
   // 40K, so the dashed stretch is an estimate. Say so on the chart itself
   // (the market leader hides this; honesty is the brand).
   let capMark = "";
-  if (exactFrom !== null && pts[exactFrom]) {
-    // our own exact daily record takes over from the reconstruction here
-    const bp = pts[exactFrom];
-    const bx2 = x(bp.t).toFixed(1);
-    const by2 = y(bp.v).toFixed(1);
-    capMark = `<g class="ar"><line x1="${bx2}" y1="${(Number(by2) - 6).toFixed(1)}" x2="${bx2}" y2="${(Number(by2) + 6).toFixed(1)}" style="stroke:var(--ac)" stroke-width="1" opacity="0.7"/>
-<text x="${bx2}" y="${(Number(by2) - 11).toFixed(1)}" text-anchor="middle" font-family="${mono}" font-size="10" style="fill:var(--ac)" opacity="0.9">exact daily record</text></g>`;
-  } else if (archiveFrom !== null) {
+  // Only mark the exact-daily takeover once it spans a visible slice of the
+  // width; on a long-lived repo a few recorded days sit on the right edge and
+  // a label there just clutters the endpoint. The line is exact either way.
+  const exactX = exactFrom !== null && pts[exactFrom] ? x(pts[exactFrom].t) : null;
+  const exactWide = exactX !== null && padL + iw - exactX > iw * 0.12;
+  if (archiveFrom !== null) {
+    // the meaningful seam for repos beyond the cap: api-exact | reconstruction
     const bp = pts[archiveFrom];
     const bx2 = x(bp.t).toFixed(1);
     const by2 = y(bp.v).toFixed(1);
     capMark = `<g class="ar"><line x1="${bx2}" y1="${(Number(by2) - 6).toFixed(1)}" x2="${bx2}" y2="${(Number(by2) + 6).toFixed(1)}" style="stroke:var(--dm)" stroke-width="1" opacity="0.7"/>
 <text x="${bx2}" y="${(Number(by2) - 11).toFixed(1)}" text-anchor="middle" font-family="${mono}" font-size="10" style="fill:var(--dm)" opacity="0.85">api exact | gh archive (real, normalized)</text></g>`;
+  } else if (exactX !== null && exactWide) {
+    // small/younger repo: our exact daily record is the headline improvement
+    const bp = pts[exactFrom as number];
+    const bx2 = x(bp.t).toFixed(1);
+    const by2 = y(bp.v).toFixed(1);
+    capMark = `<g class="ar"><line x1="${bx2}" y1="${(Number(by2) - 6).toFixed(1)}" x2="${bx2}" y2="${(Number(by2) + 6).toFixed(1)}" style="stroke:var(--ac)" stroke-width="1" opacity="0.7"/>
+<text x="${bx2}" y="${(Number(by2) - 11).toFixed(1)}" text-anchor="middle" font-family="${mono}" font-size="10" style="fill:var(--ac)" opacity="0.9">exact daily record</text></g>`;
   } else if (dashedFrom !== null) {
     const bp = pts[dashedFrom];
     const bx2 = x(bp.t).toFixed(1);
