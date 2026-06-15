@@ -22,6 +22,7 @@ import TrafficPanel from "./TrafficPanel";
 import DailyBriefing from "./DailyBriefing";
 import TargetHud from "./TargetHud";
 import SoundController from "./SoundController";
+import StarFall from "./StarFall";
 import CapabilitiesBand from "./CapabilitiesBand";
 import type { DashboardBundle } from "@/lib/bundle";
 import type { ChartInputs } from "@/lib/types";
@@ -110,6 +111,7 @@ export default function Dashboard({
   return (
     <LiveProvider bundle={bundle} polling={polling}>
       <SoundController nextThreshold={next?.threshold ?? null} nextRank={next?.rank ?? null} />
+      <StarFall />
       <main className="mx-auto flex max-w-[1440px] flex-col gap-4 px-3 py-4 sm:px-6 sm:py-6">
         <SpaceBackdrop mode="scan" />
         <div className="px-1">
