@@ -19,6 +19,7 @@ interface CurveDto {
   pts: { t: number; v: number }[];
   dashedFrom: number | null;
   archiveFrom?: number | null;
+  exactFrom?: number | null;
 }
 
 interface Row {
@@ -87,16 +88,20 @@ export default function CurveChart({ repo }: { repo: string }) {
   }
 
   const boundary = curve.dashedFrom;
+  const exactStart = curve.exactFrom ?? null;
   const seam = curve.archiveFrom ?? null;
   const seamT = seam !== null ? (curve.pts[seam]?.t ?? null) : null;
-  // The whole REAL stretch (exact api samples + normalized archive) is ONE
-  // continuous filled series: splitting it in two left the archive tail
-  // without area fill and made REPLAY draw with two mismatched pens.
-  const rows: Row[] = curve.pts.map((p, i) => ({
-    t: p.t,
-    solid: boundary === null || i <= boundary ? p.v : null,
-    est: boundary !== null && i >= boundary ? p.v : null,
-  }));
+  const exactT = exactStart !== null ? (curve.pts[exactStart]?.t ?? null) : null;
+  // The trustworthy stretch (exact api + normalized archive + our exact-recent
+  // daily record) is ONE continuous filled series; only a genuinely estimated
+  // middle (archive unavailable) draws dashed, and it is BOUNDED at exactStart
+  // so the recent window we recorded never renders as a guess. Boundary and
+  // exactStart points belong to both series so the pens meet without a gap.
+  const rows: Row[] = curve.pts.map((p, i) => {
+    const inEst = boundary !== null && i >= boundary && (exactStart === null || i <= exactStart);
+    const inSolid = !inEst || i === boundary || i === exactStart;
+    return { t: p.t, solid: inSolid ? p.v : null, est: inEst ? p.v : null };
+  });
 
   return (
     <div ref={hostRef} className="flex flex-col gap-2">
@@ -135,10 +140,12 @@ export default function CurveChart({ repo }: { repo: string }) {
                 return [
                   `${fmt(Number(value))} ★`,
                   name === "est"
-                    ? "estimated (api cap)"
-                    : seamT !== null && at > seamT
-                      ? "gh archive (real, normalized)"
-                      : "stars",
+                    ? "estimated middle (api cap)"
+                    : exactT !== null && at >= exactT
+                      ? "exact daily · recorded"
+                      : seamT !== null && at > seamT
+                        ? "gh archive (real, normalized)"
+                        : "stars",
                 ];
               }}
               labelFormatter={(t) => new Date(Number(t)).toLocaleDateString("en-US", { dateStyle: "medium" })}
@@ -152,6 +159,22 @@ export default function CurveChart({ repo }: { repo: string }) {
                   value: "api | archive",
                   position: "insideTop",
                   fill: C.dim,
+                  fontSize: 11,
+                  fontFamily: "var(--font-jbmono)",
+                }}
+              />
+            )}
+            {exactT !== null && (
+              // where our own exact daily record takes over from the reconstruction
+              <ReferenceLine
+                x={exactT}
+                stroke={C.accent}
+                strokeOpacity={0.5}
+                strokeDasharray="2 5"
+                label={{
+                  value: "exact daily →",
+                  position: "insideTopRight",
+                  fill: C.accent,
                   fontSize: 11,
                   fontFamily: "var(--font-jbmono)",
                 }}
@@ -186,11 +209,13 @@ export default function CurveChart({ repo }: { repo: string }) {
       </div>
       <div className="flex flex-wrap items-center justify-between gap-2">
         <span className="numeral text-micro text-faint">
-          {seam !== null
-            ? "full real history: exact api timestamps + gh archive beyond the 40K cap (normalized to the live total)"
-            : boundary !== null
-              ? "solid = real stargazer timestamps · dashed = estimated beyond GitHub's 40K api cap"
-              : "every point is a real stargazer timestamp"}
+          {exactStart !== null
+            ? "exact api timestamps + the recent window recorded EXACTLY, daily — our own record beyond GitHub's 40K cap"
+            : seam !== null
+              ? "full real history: exact api timestamps + gh archive beyond the 40K cap (normalized to the live total)"
+              : boundary !== null
+                ? "solid = real stargazer timestamps · dashed = estimated beyond GitHub's 40K api cap"
+                : "every point is a real stargazer timestamp"}
         </span>
         <button
           onClick={() => setRun((r) => r + 1)}

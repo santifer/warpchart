@@ -26,6 +26,8 @@ interface Curve {
   pts: CurvePoint[];
   dashedFrom: number | null;
   archiveFrom?: number | null;
+  // recent window from our own exact daily record (rank-history moat)
+  exactFrom?: number | null;
 }
 interface Stats {
   repo: string;

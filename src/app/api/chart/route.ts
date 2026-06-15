@@ -98,8 +98,14 @@ export async function GET(req: Request) {
     exact = true;
   }
 
-  const { repo, total, pts, dashedFrom } = curve;
+  const { repo, total, pts } = curve;
   const archiveFrom = curve.archiveFrom ?? null;
+  const exactFrom = curve.exactFrom ?? null;
+  // The reveal is one continuous pen. An exact-recent tail (our own daily
+  // record beyond the 40K cap) makes the whole line trustworthy, so only a
+  // repo with NO recorded window ever draws a dashed estimate here; the
+  // interactive page chart renders the bounded estimated middle in detail.
+  const dashedFrom = exactFrom !== null ? null : curve.dashedFrom;
   const padL = 16;
   const padR = 78;
   const padT = 40;
@@ -172,7 +178,14 @@ export async function GET(req: Request) {
   // 40K, so the dashed stretch is an estimate. Say so on the chart itself
   // (the market leader hides this; honesty is the brand).
   let capMark = "";
-  if (archiveFrom !== null) {
+  if (exactFrom !== null && pts[exactFrom]) {
+    // our own exact daily record takes over from the reconstruction here
+    const bp = pts[exactFrom];
+    const bx2 = x(bp.t).toFixed(1);
+    const by2 = y(bp.v).toFixed(1);
+    capMark = `<g class="ar"><line x1="${bx2}" y1="${(Number(by2) - 6).toFixed(1)}" x2="${bx2}" y2="${(Number(by2) + 6).toFixed(1)}" style="stroke:var(--ac)" stroke-width="1" opacity="0.7"/>
+<text x="${bx2}" y="${(Number(by2) - 11).toFixed(1)}" text-anchor="middle" font-family="${mono}" font-size="10" style="fill:var(--ac)" opacity="0.9">exact daily record</text></g>`;
+  } else if (archiveFrom !== null) {
     const bp = pts[archiveFrom];
     const bx2 = x(bp.t).toFixed(1);
     const by2 = y(bp.v).toFixed(1);

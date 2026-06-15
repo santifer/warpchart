@@ -4,6 +4,7 @@
 import { unstable_cache } from "next/cache";
 import { loadTimestamps, loadMeta, lastSnapshot } from "@/lib/history";
 import { repoBasic, stargazerPageFirst, lowFuel } from "@/lib/github";
+import { repoRankTrajectory } from "@/lib/rank-history";
 import { reqLog } from "@/lib/log";
 
 export interface Curve {
@@ -11,12 +12,50 @@ export interface Curve {
   total: number;
   pts: { t: number; v: number }[];
   // points from this index on are extrapolated (REST caps stargazer
-  // pagination at 40K stars), rendered as a dashed/estimated tail
+  // pagination at 40K stars), rendered as a dashed/estimated tail. When an
+  // exact-recent tail exists (exactFrom), the dashed stretch is the BOUNDED
+  // middle [dashedFrom, exactFrom], not an open tail to "now".
   dashedFrom: number | null;
   // points from this index on come from the public event archive
-  // (GH Archive via OSS Insight, normalized to the live total): REAL
+  // (GH Archive via OSS Insight, anchored between two exact values): REAL
   // monthly history beyond the API cap, rendered solid with a seam label
   archiveFrom?: number | null;
+  // points from this index on are EXACT daily stars from our own rank-history
+  // record (top-10k worldwide snapshot, collector/route-history.mjs). This is
+  // the recent window every shared view emphasizes, and it has no per-share
+  // cost: the data is already collected daily for the rank moat. Rendered
+  // solid; also marks the END of any estimated/archive middle band.
+  exactFrom?: number | null;
+}
+
+// Place an archive's MONTHLY shape between two EXACT anchor points, rescaled so
+// the cumulative leaves `start` and arrives exactly at `end`. Anchoring BOTH
+// ends (not just the far one) cancels the velocity step the archive's burst-
+// undercounting leaves at a seam, and bounds its error to the interval between
+// two known truths. Returns only the strictly-interior months.
+function anchorArchiveBetween(
+  archive: { t: number; total: number }[],
+  start: { t: number; v: number },
+  end: { t: number; v: number }
+): { t: number; v: number }[] {
+  if (!archive.length || end.t <= start.t) return [];
+  const archAt = (tt: number) => {
+    if (tt <= archive[0].t) return 0;
+    const i = archive.findIndex((m) => m.t > tt);
+    if (i === -1) return archive[archive.length - 1].total;
+    if (i === 0) return 0;
+    const a = archive[i - 1];
+    const b = archive[i];
+    return a.total + ((b.total - a.total) * (tt - a.t)) / Math.max(1, b.t - a.t);
+  };
+  const aStart = archAt(start.t);
+  const span = archAt(end.t) - aStart;
+  if (span <= 0) return [];
+  const k = (end.v - start.v) / span;
+  return archive
+    .filter((m) => m.t > start.t && m.t < end.t)
+    .map((m) => ({ t: m.t, v: Math.round(start.v + (archAt(m.t) - aStart) * k) }))
+    .filter((m) => m.v > start.v && m.v < end.v);
 }
 
 // Monthly cumulative stars from the public event archive, by repo id (so
@@ -87,63 +126,87 @@ async function sampleCurve(owner: string, name: string): Promise<Curve> {
     .sort((a, b) => a.t - b.t);
   if (!pts.length) throw new Error("no stargazer data");
 
+  // ---- Tail reconstruction: the most authoritative source per era ----
+  //   [0 .. cap]            exact REST stargazer timestamps (truth, <=40K)
+  //   [cap .. exactFrom)    the unobservable middle: GH Archive shape anchored
+  //                         at BOTH ends to exact values, else a marked estimate
+  //   [exactFrom .. end]    exact DAILY stars from our own rank-history record
   let dashedFrom: number | null = null;
   let archiveFrom: number | null = null;
+  let exactFrom: number | null = null;
 
   if (basic.s > pts[pts.length - 1].v) {
-    // Beyond the API cap. Try the REAL archive first; only fall back to a
-    // dashed estimate when the archive cannot be trusted for this repo.
     const log = reqLog("curve", { repo: basic.r });
-    const archive = await fetchArchiveMonthly(basic.id);
-    const archiveTotal = archive?.[archive.length - 1]?.total ?? 0;
-    // coverage check: the archive misses suppressed viral bursts; require
-    // it to account for at least 85% of live stars before trusting it
-    const reliable = archive !== null && archiveTotal >= basic.s * 0.85;
-    let stitched = false;
-    if (reliable && archive) {
-      // Anchor the archive stretch at BOTH ends: it must start exactly at
-      // the last exact api point and end exactly at the live total. A
-      // uniform end-only scale left a velocity step at the seam (observed:
-      // tensorflow +9K in 16 days right after the 40K cap) that read as a
-      // kink in the chart and in the draw animation.
-      const lastExact = pts[pts.length - 1];
-      const after = archive.findIndex((m) => m.t > lastExact.t);
-      let archAtSeam = archiveTotal;
-      if (after === 0) archAtSeam = 0;
-      else if (after > 0) {
-        const a = archive[after - 1];
-        const b = archive[after];
-        archAtSeam = a.total + ((b.total - a.total) * (lastExact.t - a.t)) / Math.max(1, b.t - a.t);
+    const lastExact = pts[pts.length - 1];
+
+    // Exact daily stars we recorded ourselves, above the REST cap and within
+    // the live total (defensive against unstars / late corrections). Free:
+    // already collected daily for the worldwide-rank moat, zero GitHub cost.
+    const traj = await repoRankTrajectory(basic.r).catch(() => []);
+    const exactRecent = traj
+      .filter((p) => p.t > lastExact.t && p.stars > lastExact.v && p.stars <= basic.s + 50)
+      .map((p) => ({ t: p.t, v: p.stars }));
+
+    if (exactRecent.length >= 2) {
+      // We own the recent window exactly. Only the middle between the REST cap
+      // and the first recorded day is unobserved; fill it the best we can.
+      const recStart = exactRecent[0];
+      const gapDays = (recStart.t - lastExact.t) / 86_400_000;
+      const gapStars = recStart.v - lastExact.v;
+      let middle: { t: number; v: number }[] = [];
+      let middleEstimated = false;
+      if (gapDays > 45 && gapStars > 0) {
+        // a substantial unknown middle: prefer real archive SHAPE, bounded by
+        // the two exact anchors; a straight dashed ramp only if the archive is
+        // unavailable for this repo
+        const archive = await fetchArchiveMonthly(basic.id);
+        middle = archive ? anchorArchiveBetween(archive, lastExact, recStart) : [];
+        if (middle.length) archiveFrom = pts.length - 1;
+        else middleEstimated = true;
       }
-      const remainArch = archiveTotal - archAtSeam;
-      const remainLive = basic.s - lastExact.v;
-      if (remainArch > 0 && remainLive > 0) {
-        const k = remainLive / remainArch;
-        const middle = archive
-          .filter((m) => m.t > lastExact.t)
-          .map((m) => ({ t: m.t, v: Math.round(lastExact.v + (m.total - archAtSeam) * k) }))
-          .filter((m) => m.v > lastExact.v && m.v < basic.s);
-        archiveFrom = pts.length - 1;
-        pts.push(...middle, { t: Date.now(), v: basic.s });
-        stitched = true;
-        log.info("archive.used", { months: middle.length, archiveTotal,
-          anchor: Math.round(archAtSeam), k: Math.round(k * 100) / 100 });
+      if (middleEstimated) dashedFrom = pts.length - 1;
+      pts.push(...middle, ...exactRecent);
+      exactFrom = pts.length - exactRecent.length;
+      // carry the last recorded day up to the live count if it grew since
+      if (basic.s > pts[pts.length - 1].v) pts.push({ t: Date.now(), v: basic.s });
+      log.info("exact-recent.spliced", {
+        days: exactRecent.length, middle: middle.length,
+        middleEstimated, gapDays: Math.round(gapDays),
+      });
+    } else {
+      // No recorded window for this repo (outside the top 10k, or nothing
+      // recorded yet): fall back to the archive-to-now / dashed-to-now
+      // reconstruction. Coverage check: the archive misses suppressed viral
+      // bursts, so require it to account for >=85% of live stars before trust.
+      const archive = await fetchArchiveMonthly(basic.id);
+      const archiveTotal = archive?.[archive.length - 1]?.total ?? 0;
+      const reliable = archive !== null && archiveTotal >= basic.s * 0.85;
+      let stitched = false;
+      if (reliable && archive) {
+        const middle = anchorArchiveBetween(archive, lastExact, { t: Date.now(), v: basic.s });
+        if (middle.length) {
+          archiveFrom = pts.length - 1;
+          pts.push(...middle, { t: Date.now(), v: basic.s });
+          stitched = true;
+          log.info("archive.used", { months: middle.length, archiveTotal });
+        }
       }
-    }
-    if (!stitched) {
-      dashedFrom = pts.length - 1;
-      pts.push({ t: Date.now(), v: basic.s });
-      log.info("archive.skipped", { archiveTotal, live: basic.s, reliable });
+      if (!stitched) {
+        dashedFrom = pts.length - 1;
+        pts.push({ t: Date.now(), v: basic.s });
+        log.info("archive.skipped", { archiveTotal, live: basic.s, reliable });
+      }
     }
   }
-  return { repo: basic.r, total: basic.s, pts, dashedFrom, archiveFrom };
+  return { repo: basic.r, total: basic.s, pts, dashedFrom, archiveFrom, exactFrom };
 }
 
 // Version of the curve reconstruction. Bump on ANY change to the data shape
 // (sampling, normalization, stitching): the bump purges every cached curve
 // on its next request, so pre-fix curves never linger out their TTL.
 // v2: seam-anchored archive normalization. v3: per-repo tags + live total.
-const CURVE_VERSION = 3;
+// v4: exact daily recent tail spliced from the rank-history moat.
+const CURVE_VERSION = 4;
 
 export function curveTag(owner: string, name: string): string {
   return `curve:${owner.toLowerCase()}/${name.toLowerCase()}`;
@@ -165,7 +228,12 @@ export async function withLiveTotal(curve: Curve, owner: string, name: string): 
     const basic = await repoBasic(owner, name);
     const pts = [...curve.pts];
     const last = pts[pts.length - 1];
-    const syntheticTail = curve.dashedFrom !== null || (curve.archiveFrom ?? null) !== null;
+    // An exact-recent tail is REAL data: extend it with a fresh live point
+    // (append, don't overwrite the last recorded day). Only a purely synthetic
+    // tail (dashed/archive ending at "now") gets its endpoint overwritten.
+    const exactTail = (curve.exactFrom ?? null) !== null;
+    const syntheticTail =
+      !exactTail && (curve.dashedFrom !== null || (curve.archiveFrom ?? null) !== null);
     if (syntheticTail && basic.s >= last.v) {
       pts[pts.length - 1] = { t: Date.now(), v: basic.s };
       return { ...curve, total: basic.s, pts };
