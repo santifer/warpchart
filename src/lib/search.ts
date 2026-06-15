@@ -148,38 +148,12 @@ function termWeight(term: string, ix: Indexed): number {
   return w;
 }
 
-// "best" = relevant first, then most validated (stars) and rising (velocity)
+// "best" = relevant first, then most validated (stars) and rising (velocity).
+// We treat every repository as legitimate: warpchart reports what the data
+// says (stars and momentum), it does not judge a repo as "fake" or downrank it.
 function popularityFactor(p: CatalogRepo): number {
   const v = Math.max(0, p.v ?? 0);
   return 1 + Math.log10(p.s + 1) / 8 + Math.min(v, 600) / 2000;
-}
-
-// Anti-farm: a star is a human validation, but stars can be bought. Bought stars
-// almost never come with forks, so a high-star repo with a near-zero fork/star
-// ratio is very likely farmed. Demote it so the genuinely-adopted repos win.
-// This is the "separate validation from noise" mechanism the thesis rests on.
-function qualityFactor(p: CatalogRepo): number {
-  let q = 1;
-  // fork signal: bought stars rarely bring forks
-  const f = p.f ?? 0;
-  if (f > 0 && p.s >= 5000) {
-    const ratio = f / p.s;
-    if (ratio < 0.004) q *= 0.25;
-    else if (ratio < 0.008) q *= 0.55;
-    else if (ratio < 0.015) q *= 0.8;
-  }
-  // age signal: a six-figure star count earned in weeks is not real adoption.
-  // Genuine megarepos take years; an impossibly high lifetime star rate is the
-  // signature of a farmed repo. Degrades gracefully when created_at is absent.
-  if (p.c && p.s > 80000) {
-    const ageDays = (Date.now() - Date.parse(p.c)) / 864e5;
-    if (ageDays > 0) {
-      const lifetimeRate = p.s / ageDays;
-      if (lifetimeRate > 1500) q *= 0.2;
-      else if (lifetimeRate > 800) q *= 0.5;
-    }
-  }
-  return q;
 }
 
 export function searchRepos(query: string, limit = 15): { query: string; results: SearchEntry[] } {
@@ -205,7 +179,7 @@ export function searchRepos(query: string, limit = 15): { query: string; results
     // "agentic" and "memory" beats one matching only "memory")
     const coverage = matchedCount / terms.length;
     const r = relevance * (0.4 + 0.6 * coverage) * coverage;
-    const score = r * popularityFactor(ix.repo) * qualityFactor(ix.repo);
+    const score = r * popularityFactor(ix.repo);
     scored.push({
       repo: ix.repo.r,
       rank: ix.repo.rank,
