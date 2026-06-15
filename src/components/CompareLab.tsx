@@ -111,6 +111,8 @@ export default function CompareLab({
   const [items, setItems] = useState<SearchItem[]>([]);
   const [open, setOpen] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [zoom, setZoom] = useState(initialMetric === "cumulative");
+  const [zoomP, setZoomP] = useState(1); // 0 = full view, 1 = zoomed to crossover
   const fetched = useRef<Set<string>>(new Set());
 
   // fetch each repo's curve once (cached server-side)
@@ -224,40 +226,160 @@ export default function CompareLab({
     return keys.map((k) => repoColor(map[k]));
   }, [repos]);
 
-  // build the merged chart data
-  const { data, refDots, xDomain, yDomain, anyLoading } = useMemo(() => {
-    const series = repos
+  // build the merged chart data (+ forecast projection + crossover zoom frame)
+  const view = useMemo(() => {
+    type S = { repo: string; i: number; c: Curve; rows: { x: number; y: number }[] };
+    const series: S[] = repos
       .map((repo, i) => {
         const c = curves[repo.toLowerCase()];
-        return c ? { repo, i, rows: seriesRows(c, metric, align) } : null;
+        return c ? { repo, i, c, rows: seriesRows(c, metric, align) } : null;
       })
-      .filter((s): s is { repo: string; i: number; rows: { x: number; y: number }[] } => !!s && s.rows.length > 0);
+      .filter((s): s is S => !!s && s.rows.length > 0);
 
     const xs = new Set<number>();
-    let yMax = metric === "growth" ? 1 : 1;
+    let yMax = 1;
+    let yMin = Infinity;
     for (const s of series) for (const r of s.rows) {
       xs.add(r.x);
       if (r.y > yMax) yMax = r.y;
+      if (r.y < yMin) yMin = r.y;
     }
+
+    // zoom-to-crossover only makes sense on the calendar cumulative view
+    const zoomable = zoom && metric === "cumulative" && !align && series.length >= 1;
+    const velOf = (s: S) => {
+      const st = stats[s.repo.toLowerCase()];
+      if (st && st.velocityPerDay != null) return st.velocityPerDay;
+      return rateAt(s.c.pts, s.c.pts[s.c.pts.length - 1].t);
+    };
+
+    let focus: { t: number; val: number } | null = null;
+    const projByI: Record<number, { x: number; y: number }[]> = {};
+    if (zoomable) {
+      const nowMs = Math.max(...series.map((s) => s.rows[s.rows.length - 1].x));
+      const cur = series.map((s) => ({
+        i: s.i,
+        x: s.rows[s.rows.length - 1].x,
+        y: s.rows[s.rows.length - 1].y,
+        v: velOf(s),
+      }));
+      const cands: { t: number; val: number }[] = [];
+      for (let a = 0; a < series.length; a++)
+        for (let b = a + 1; b < series.length; b++) {
+          const A = cur[a];
+          const B = cur[b];
+          const dv = A.v - B.v;
+          if (Math.abs(dv) > 1e-6) {
+            const days = (B.y - A.y) / dv; // days from now to forecast crossover
+            if (days > 0 && days < 140) cands.push({ t: nowMs + days * DAY, val: A.y + A.v * days });
+          }
+          const hc = lastCrossover(series[a].c.pts, series[b].c.pts);
+          if (hc) cands.push({ t: hc.t, val: interpAtX(series[a].rows, hc.t) ?? A.y });
+        }
+      focus = cands.length
+        ? cands.sort((p, q) => Math.abs(p.t - nowMs) - Math.abs(q.t - nowMs))[0]
+        : { t: nowMs, val: cur[0].y };
+      const focusDays = (focus.t - nowMs) / DAY;
+      const horizon = nowMs + Math.max(focusDays > 0 ? focusDays * 1.25 : 7, 3) * DAY;
+      for (const c of cur) {
+        projByI[c.i] = [
+          { x: c.x, y: c.y },
+          { x: horizon, y: c.y + (c.v * (horizon - c.x)) / DAY },
+        ];
+        xs.add(c.x);
+        xs.add(horizon);
+      }
+      xs.add(focus.t);
+    }
+
     const masterX = [...xs].sort((a, b) => a - b);
     const rows = masterX.map((x) => {
       const row: Record<string, number | null> = { x };
       for (const s of series) row[`r${s.i}`] = interpAtX(s.rows, x);
+      if (zoomable) for (const s of series) row[`p${s.i}`] = projByI[s.i] ? interpAtX(projByI[s.i], x) : null;
       return row;
     });
-    const dots = series.map((s) => {
+    const refDots = series.map((s) => {
       const last = s.rows[s.rows.length - 1];
-      return { i: s.i, x: last.x, y: log && metric === "cumulative" ? Math.max(1, last.y) : last.y };
+      return { i: s.i, x: last.x, y: log && metric === "cumulative" && !zoom ? Math.max(1, last.y) : last.y };
     });
-    const loading = repos.some((r) => status[r.toLowerCase()] === "loading");
+
+    const minX = series.length ? series.reduce((m, s) => Math.min(m, s.rows[0].x), Infinity) : 0;
+    const maxX = series.length ? Math.max(...series.map((s) => s.rows[s.rows.length - 1].x)) : 1;
+    const fullX: [number, number] = [minX, maxX];
+    const fullY: [number, number] = [log && metric === "cumulative" && !zoom ? Math.max(1, yMin) : 0, Math.max(yMax, 1)];
+
+    let zoomX: [number, number] | null = null;
+    let zoomY: [number, number] | null = null;
+    if (zoomable && focus) {
+      const nowMs = maxX;
+      const focusDays = Math.abs((focus.t - nowMs) / DAY);
+      const hist = Math.min(120, Math.max(30, focusDays * 2.5)) * DAY;
+      const proj = Math.min(45, Math.max(6, focusDays * 0.5 + 7)) * DAY;
+      const x0 = focus.t - hist;
+      const x1 = focus.t + proj;
+      zoomX = [x0, x1];
+      let lo = Infinity;
+      let hi = -Infinity;
+      for (const row of rows) {
+        if (row.x! < x0 || row.x! > x1) continue;
+        for (const s of series) for (const k of [`r${s.i}`, `p${s.i}`]) {
+          const v = row[k];
+          if (v != null) {
+            if (v < lo) lo = v;
+            if (v > hi) hi = v;
+          }
+        }
+      }
+      if (lo === Infinity) {
+        lo = fullY[0];
+        hi = fullY[1];
+      }
+      const pad = (hi - lo) * 0.08 || 1;
+      zoomY = [Math.max(0, lo - pad), hi + pad];
+    }
+
     return {
       data: rows,
-      refDots: dots,
-      xDomain: masterX.length ? ([masterX[0], masterX[masterX.length - 1]] as [number, number]) : ([0, 1] as [number, number]),
-      yDomain: (log && metric === "cumulative" ? [1, "auto"] : [0, "auto"]) as [number | string, number | string],
-      anyLoading: loading,
+      refDots,
+      focus: zoomable ? focus : null,
+      fullX,
+      fullY,
+      zoomX,
+      zoomY,
+      projRepos: zoomable ? series.map((s) => s.i) : [],
+      hasZoom: !!(zoomable && zoomX),
+      anyLoading: repos.some((r) => status[r.toLowerCase()] === "loading"),
     };
-  }, [repos, curves, metric, align, log, status]);
+  }, [repos, curves, metric, align, log, status, stats, zoom]);
+
+  // camera: the lines draw in the full view, then (after ~1.1s) the frame
+  // animates a zoom into the crossover. Re-runs when the comparison or its
+  // loaded data changes, and when the zoom toggle flips.
+  const loadedKey = repos.map((r) => (curves[r.toLowerCase()] ? "1" : "0")).join("") + metric + align;
+  useEffect(() => {
+    if (!zoom || !view.hasZoom) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setZoomP(1);
+      return;
+    }
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setZoomP(0);
+    let raf = 0;
+    const delay = setTimeout(() => {
+      const start = performance.now();
+      const tick = (now: number) => {
+        const k = Math.min(1, (now - start) / 1000);
+        setZoomP(1 - Math.pow(1 - k, 3)); // ease-out cubic
+        if (k < 1) raf = requestAnimationFrame(tick);
+      };
+      raf = requestAnimationFrame(tick);
+    }, 1150);
+    return () => {
+      clearTimeout(delay);
+      if (raf) cancelAnimationFrame(raf);
+    };
+  }, [zoom, view.hasZoom, loadedKey]);
 
   // auto-insight: biggest, fastest, most recent overtake
   const insight = useMemo(() => {
@@ -342,6 +464,16 @@ export default function CompareLab({
 
   const btn = "numeral border border-grid px-3 py-1.5 text-micro tracking-[0.2em] text-dim transition-colors hover:border-accent/50 hover:text-accent";
 
+  // camera frame: lerp between the full view and the crossover zoom by zoomP
+  const lerp = (a: number, b: number, p: number) => a + (b - a) * p;
+  const useZoom = zoom && view.hasZoom && view.zoomX != null && view.zoomY != null;
+  const xDomain: [number, number] = useZoom
+    ? [lerp(view.fullX[0], view.zoomX![0], zoomP), lerp(view.fullX[1], view.zoomX![1], zoomP)]
+    : view.fullX;
+  const yDomain: [number, number] = useZoom
+    ? [lerp(view.fullY[0], view.zoomY![0], zoomP), lerp(view.fullY[1], view.zoomY![1], zoomP)]
+    : view.fullY;
+
   return (
     <div className="flex flex-col gap-4">
       {/* add bar */}
@@ -424,7 +556,12 @@ export default function CompareLab({
               key={m}
               onClick={() => {
                 setMetric(m);
-                if (m === "growth") setLog(false);
+                if (m === "growth") {
+                  setLog(false);
+                  setZoom(false);
+                } else {
+                  setZoom(true);
+                }
               }}
               className={`numeral px-3 py-1.5 text-micro tracking-[0.2em] transition-colors ${
                 metric === m ? "bg-accent/15 text-accent" : "text-dim hover:text-ink"
@@ -435,12 +572,45 @@ export default function CompareLab({
           ))}
         </div>
         <div className="flex flex-wrap items-center gap-4">
+          <label className={`numeral flex items-center gap-2 text-micro tracking-[0.15em] ${metric === "growth" ? "text-faint/50" : "cursor-pointer text-accent"}`}>
+            <input
+              type="checkbox"
+              disabled={metric === "growth"}
+              checked={zoom}
+              onChange={(e) => {
+                setZoom(e.target.checked);
+                if (e.target.checked) {
+                  setAlign(false);
+                  setLog(false);
+                }
+              }}
+              className="accent-[var(--accent)]"
+            />
+            CROSSOVER ZOOM
+          </label>
           <label className="numeral flex cursor-pointer items-center gap-2 text-micro tracking-[0.15em] text-dim">
-            <input type="checkbox" checked={align} onChange={(e) => setAlign(e.target.checked)} className="accent-[var(--accent)]" />
+            <input
+              type="checkbox"
+              checked={align}
+              onChange={(e) => {
+                setAlign(e.target.checked);
+                if (e.target.checked) setZoom(false);
+              }}
+              className="accent-[var(--accent)]"
+            />
             ALIGN AT DAY 0
           </label>
           <label className={`numeral flex items-center gap-2 text-micro tracking-[0.15em] ${metric === "growth" ? "text-faint/50" : "cursor-pointer text-dim"}`}>
-            <input type="checkbox" disabled={metric === "growth"} checked={log} onChange={(e) => setLog(e.target.checked)} className="accent-[var(--accent)]" />
+            <input
+              type="checkbox"
+              disabled={metric === "growth"}
+              checked={log}
+              onChange={(e) => {
+                setLog(e.target.checked);
+                if (e.target.checked) setZoom(false);
+              }}
+              className="accent-[var(--accent)]"
+            />
             LOG SCALE
           </label>
         </div>
@@ -456,7 +626,7 @@ export default function CompareLab({
         ) : (
           <div className="h-[440px] w-full">
             <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={data} margin={{ top: 10, right: 18, bottom: 0, left: 4 }}>
+              <LineChart data={view.data} margin={{ top: 10, right: 18, bottom: 0, left: 4 }}>
                 <CartesianGrid stroke={C.grid} strokeDasharray="2 6" vertical={false} />
                 <XAxis
                   dataKey="x"
@@ -473,7 +643,7 @@ export default function CompareLab({
                 <YAxis
                   domain={yDomain}
                   allowDataOverflow
-                  scale={log && metric === "cumulative" ? "log" : "linear"}
+                  scale={log && metric === "cumulative" && !zoom ? "log" : "linear"}
                   tickFormatter={(v: number) => (metric === "growth" ? `${fmtCompact(v)}/d` : fmtCompact(v))}
                   tick={{ fill: C.dim, fontSize: 12, fontFamily: "var(--font-jbmono)" }}
                   tickLine={false}
@@ -516,10 +686,27 @@ export default function CompareLab({
                     type="monotone"
                     connectNulls={false}
                     isAnimationActive
-                    animationDuration={1100}
+                    animationDuration={1000}
                   />
                 ))}
-                {refDots.map((d) => (
+                {/* forecast projection at current velocity (dashed) */}
+                {useZoom
+                  ? view.projRepos.map((i) => (
+                      <Line
+                        key={`p${i}`}
+                        dataKey={`p${i}`}
+                        stroke={colors[i]}
+                        strokeWidth={2}
+                        strokeDasharray="3 6"
+                        strokeOpacity={0.85}
+                        dot={false}
+                        type="linear"
+                        connectNulls={false}
+                        isAnimationActive={false}
+                      />
+                    ))
+                  : null}
+                {view.refDots.map((d) => (
                   <ReferenceDot
                     key={d.i}
                     x={d.x}
@@ -530,6 +717,16 @@ export default function CompareLab({
                     strokeWidth={1.5}
                   />
                 ))}
+                {useZoom && view.focus ? (
+                  <ReferenceDot
+                    x={view.focus.t}
+                    y={view.focus.val}
+                    r={6}
+                    fill="#ffffff"
+                    stroke={C.void}
+                    strokeWidth={2}
+                  />
+                ) : null}
               </LineChart>
             </ResponsiveContainer>
           </div>
@@ -589,7 +786,7 @@ export default function CompareLab({
                 )}
               </div>
             ) : (
-              <p className="numeral text-micro text-faint">{anyLoading ? "reconstructing trajectories…" : "add repos to see the readout"}</p>
+              <p className="numeral text-micro text-faint">{view.anyLoading ? "reconstructing trajectories…" : "add repos to see the readout"}</p>
             )}
           </div>
         </div>
