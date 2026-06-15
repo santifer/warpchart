@@ -711,6 +711,9 @@ export default function CompareLab({
 
       {/* toolbar */}
       <div className="flex flex-wrap items-center justify-between gap-3">
+        {/* metric tabs: hidden when embedded (the panel is already titled
+            "Cumulative stars"; growth-over-time lives on the full /compare) */}
+        {!embedded ? (
         <div className="flex items-center gap-1 border border-grid p-1">
           {(["cumulative", "growth"] as Metric[]).map((m) => (
             <button
@@ -732,6 +735,7 @@ export default function CompareLab({
             </button>
           ))}
         </div>
+        ) : null}
         <div className="flex flex-wrap items-center gap-4">
           <label className={`numeral flex items-center gap-2 text-micro tracking-[0.15em] ${metric === "growth" ? "text-faint/50" : "cursor-pointer text-accent"}`}>
             <input
