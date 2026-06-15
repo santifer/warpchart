@@ -706,6 +706,23 @@ svg text {
   inset: calc(-1 * var(--ghx-roof)) 0 0 0;
   overflow: hidden;
   pointer-events: none;
+  /* scale the whole galaxy from the core corner (top-right) so the SVG layers
+     AND the interactive markers stay in sync */
+  transform-origin: 100% 0;
+}
+/* On wide / ultrawide screens the right-anchored plane leaves the hero copy over
+   empty space. Zoom the galaxy up from the core so its outer arms reach across
+   to the text and those distant systems become reachable. The hero section
+   clips the extra so it never spills into the spotlight below. Tune the factors. */
+@media (min-width: 1800px) {
+  .gx-hero-sec { overflow: hidden; }
+  .ghx-stage { transform: scale(1.16); }
+}
+@media (min-width: 2200px) {
+  .ghx-stage { transform: scale(1.3); }
+}
+@media (min-width: 2700px) {
+  .ghx-stage { transform: scale(1.46); }
 }
 .ghx-plane {
   position: absolute;
