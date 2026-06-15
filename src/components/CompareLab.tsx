@@ -849,7 +849,9 @@ export default function CompareLab({
                               <span className="inline-block h-2 w-2 shrink-0" style={{ background: colors[i] }} />
                               <span className="text-ink">{shortRepo(repos[i])}</span>
                               <span className="text-faint">
-                                {metric === "growth" ? `${fmt(d.v)}/day` : `${fmt(d.v)} ★`}
+                                {/* values are interpolated between points → round,
+                                    never show decimals on a star count */}
+                                {metric === "growth" ? `${fmt(Math.round(d.v))}/day` : `${fmt(Math.round(d.v))} ★`}
                                 {d.proj ? " · proj" : ""}
                               </span>
                             </div>
