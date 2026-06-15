@@ -47,20 +47,43 @@ export default function ExploreSearch({ catalog }: { catalog: CatalogEntry[] }) 
     if (m === "ask") setTimeout(() => askRef.current?.focus(), 0);
   };
 
-  const ask = async () => {
-    const query = q.trim();
-    if (query.length < 2) return;
+  const askAbort = useRef<AbortController | null>(null);
+  const runAsk = async (raw: string) => {
+    const query = raw.trim();
+    if (query.length < 2) {
+      setResults(null);
+      return;
+    }
+    askAbort.current?.abort();
+    const ctrl = new AbortController();
+    askAbort.current = ctrl;
     setBusy(true);
     try {
-      const res = await fetch(`/api/v1/find?q=${encodeURIComponent(query)}`);
+      const res = await fetch(`/api/v1/find?q=${encodeURIComponent(query)}`, { signal: ctrl.signal });
       const data = (await res.json()) as { results?: AskEntry[] };
-      setResults(data.results ?? []);
+      if (!ctrl.signal.aborted) setResults(data.results ?? []);
     } catch {
-      setResults([]);
+      if (!ctrl.signal.aborted) setResults([]);
     } finally {
-      setBusy(false);
+      if (!ctrl.signal.aborted) setBusy(false);
     }
   };
+  const ask = () => runAsk(q);
+
+  // ASK searches as you type (debounced) so there is no need to press Enter;
+  // Enter and the button still trigger it immediately.
+  useEffect(() => {
+    if (mode !== "ask") return;
+    const query = q.trim();
+    if (query.length < 2) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setResults(null);
+      return;
+    }
+    const t = setTimeout(() => runAsk(query), 450);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [q, mode]);
 
   return (
     <div className="flex w-full flex-col gap-3">
@@ -121,14 +144,15 @@ export default function ExploreSearch({ catalog }: { catalog: CatalogEntry[] }) 
                 if (e.key === "Enter") ask();
               }}
               placeholder="agentic memory, vector db, a react alternative…"
-              className="numeral w-full bg-transparent text-lg text-ink outline-none placeholder:text-faint"
+              className="numeral min-w-0 flex-1 bg-transparent text-lg text-ink outline-none placeholder:text-faint"
               aria-label="ask for a technology"
             />
+            {busy ? <span className="pulse-dot shrink-0" aria-label="thinking" /> : null}
             <button
               onClick={ask}
               className="numeral shrink-0 border border-grid px-3 py-1.5 text-micro tracking-[0.2em] text-dim transition-colors hover:border-accent/50 hover:text-accent"
             >
-              {busy ? "…" : "ASK →"}
+              ASK →
             </button>
           </div>
 
