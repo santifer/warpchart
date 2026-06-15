@@ -715,7 +715,10 @@ export default function CompareLab({
             <span className="text-micro text-faint">add two or more repos to chart their climb side by side</span>
           </div>
         ) : (
-          <div className={embedded ? "h-full min-h-0 w-full" : "h-[440px] w-full"}>
+          // embedded: fill a stretched grid cell on desktop, but keep a height
+          // floor (min-h) so it never collapses to 0 in a single mobile column
+          // where no sibling stretches the cell.
+          <div className={embedded ? "h-full min-h-[320px] w-full" : "h-[440px] w-full"}>
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={view.data} margin={{ top: 10, right: 18, bottom: 0, left: 4 }}>
                 <CartesianGrid stroke={C.grid} strokeDasharray="2 6" vertical={false} />
