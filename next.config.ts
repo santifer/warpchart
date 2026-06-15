@@ -39,6 +39,7 @@ const nextConfig: NextConfig = {
     "/c": ["./data/**"],
     "/c/*": ["./data/**"],
     "/c/[topic]": ["./data/**"],
+    "/find": ["./data/**"],
   },
 };
 

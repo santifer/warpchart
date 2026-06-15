@@ -22,6 +22,7 @@ import TrafficPanel from "./TrafficPanel";
 import DailyBriefing from "./DailyBriefing";
 import TargetHud from "./TargetHud";
 import SoundController from "./SoundController";
+import CapabilitiesBand from "./CapabilitiesBand";
 import type { DashboardBundle } from "@/lib/bundle";
 import type { ChartInputs } from "@/lib/types";
 import { fmt } from "@/lib/format";
@@ -170,6 +171,8 @@ export default function Dashboard({
             node: <MissionLog events={bundle.events} captain={bundle.captain} />,
           }}
         />
+
+        <CapabilitiesBand />
 
         <footer className="flex flex-wrap items-center justify-between gap-2 px-1 pb-4 pt-2">
           <span className="numeral text-micro tracking-[0.15em] text-faint">

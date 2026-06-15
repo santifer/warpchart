@@ -11,9 +11,10 @@ import SoundToggle from "./SoundToggle";
 import ThemeToggle from "./ThemeToggle";
 
 const LINKS = [
-  { href: "/velocity", label: "WARP INDEX" },
+  { href: "/find", label: "ASK" },
   { href: "/c", label: "RISING" },
-  { href: "/codex", label: "CODEX" },
+  { href: "/velocity", label: "WARP INDEX" },
+  { href: "/docs", label: "DOCS" },
   { href: "/pricing", label: "PRICING" },
 ];
 
