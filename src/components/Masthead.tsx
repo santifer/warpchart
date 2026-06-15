@@ -35,16 +35,32 @@ function LogoMark() {
 // must have an obvious way to scan their own repo), controls on the right.
 export default function Masthead({ demo }: { demo?: string | null }) {
   return (
-    <div className="flex flex-wrap items-center justify-between gap-3">
-      <Link
-        prefetch={false}
-        href="/"
-        className="font-display flex items-center gap-2.5 text-sm tracking-[0.3em] text-star transition-colors hover:text-accent"
-      >
-        <LogoMark />
-        WARPCHART
-      </Link>
-      <Nav demo={demo} />
+    <div className="flex flex-col gap-2">
+      {/* row 1: brand on the left, all menus right-aligned */}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <Link
+          prefetch={false}
+          href="/"
+          className="font-display flex items-center gap-2.5 text-sm tracking-[0.3em] text-star transition-colors hover:text-accent"
+        >
+          <LogoMark />
+          WARPCHART
+        </Link>
+        <Nav demo={demo} />
+      </div>
+      {/* row 2 (desktop): the live demo mission on its own line, right-aligned,
+          so the top strip stays one tidy menu row instead of cramming */}
+      {demo ? (
+        <div className="hidden justify-end md:flex">
+          <Link
+            prefetch={false}
+            href={`/r/${demo}`}
+            className="numeral border border-grid px-3 py-1.5 text-micro tracking-[0.18em] text-dim transition-colors hover:border-accent/50 hover:text-accent"
+          >
+            LIVE DEMO MISSION: {demo} →
+          </Link>
+        </div>
+      ) : null}
     </div>
   );
 }

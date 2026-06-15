@@ -56,15 +56,8 @@ export default function Nav({ demo }: { demo?: string | null }) {
         ))}
         <SoundToggle />
         <ThemeToggle />
-        {demo ? (
-          <Link
-            prefetch={false}
-            href={`/r/${demo}`}
-            className="numeral border border-grid px-3 py-1.5 text-micro tracking-[0.18em] text-dim transition-colors hover:border-accent/50 hover:text-accent"
-          >
-            LIVE DEMO MISSION: {demo} →
-          </Link>
-        ) : null}
+        {/* LIVE DEMO MISSION moved to its own right-aligned second row in the
+            Masthead so the desktop menu stays a single tidy line */}
       </div>
 
       {/* mobile: hamburger */}
