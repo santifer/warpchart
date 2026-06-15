@@ -156,31 +156,42 @@ export default function VelocityBoard({
         </div>
       ) : (
         <div className="hud px-2 py-1 sm:px-4">
-          {hunts.map((h, i) => (
-            <Link
-              key={`${h.hunter}-${h.victim}`}
-              prefetch={false}
-              href={`/r/${h.victim}`}
-              className="group flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 border-b border-grid/60 px-2 py-2.5 transition-colors hover:bg-accent/5"
-            >
-              <span className="numeral min-w-0 text-data">
-                <span className="text-faint">{i + 1}</span>{" "}
-                <span className="text-ink group-hover:text-accent">{shortName(h.hunter)}</span>
-                <span className="text-dim"> overtakes </span>
-                <span className="text-ink">{shortName(h.victim)}</span>
-                <span className="text-dim"> (#{h.victimRank})</span>
-              </span>
-              <span className="numeral text-label">
-                <span style={{ color: dopplerTilt(h.hunterV / Math.max(medianV, 0.5), C) }}>
-                  {fmt(h.hunterV)}/day
+          {hunts.map((h, i) => {
+            const race = `/compare?repos=${encodeURIComponent(`${h.hunter},${h.victim}`)}`;
+            return (
+              <div
+                key={`${h.hunter}-${h.victim}`}
+                className="group flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 border-b border-grid/60 px-2 py-2.5 transition-colors hover:bg-accent/5"
+              >
+                <Link prefetch={false} href={race} className="numeral min-w-0 text-data">
+                  <span className="text-faint">{i + 1}</span>{" "}
+                  <span className="text-ink group-hover:text-accent">{shortName(h.hunter)}</span>
+                  <span className="text-dim"> overtakes </span>
+                  <span className="text-ink">{shortName(h.victim)}</span>
+                  <span className="text-dim"> (#{h.victimRank})</span>
+                </Link>
+                <span className="numeral flex items-center gap-3 text-label">
+                  <span>
+                    <span style={{ color: dopplerTilt(h.hunterV / Math.max(medianV, 0.5), C) }}>
+                      {fmt(h.hunterV)}/day
+                    </span>
+                    <span className="text-dim"> · gap {fmt(h.gap)} · </span>
+                    <span className="text-accent">in {h.eta}</span>
+                  </span>
+                  <Link
+                    prefetch={false}
+                    href={race}
+                    className="numeral shrink-0 border border-accent/40 px-2 py-1 text-micro tracking-[0.18em] text-accent transition-colors hover:bg-accent/10"
+                  >
+                    ▸ RACE LIVE
+                  </Link>
                 </span>
-                <span className="text-dim"> · gap {fmt(h.gap)} · </span>
-                <span className="text-accent">in {h.eta}</span>
-              </span>
-            </Link>
-          ))}
+              </div>
+            );
+          })}
           <p className="numeral px-2 py-2 text-micro text-faint">
-            watch any of them live: the orange system on the victim&apos;s chart is the hunter
+            open the live race for any of them: both repos charted side by side, with the projected
+            overtake date
           </p>
         </div>
       )}
