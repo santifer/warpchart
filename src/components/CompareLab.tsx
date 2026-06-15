@@ -874,6 +874,7 @@ export default function CompareLab({
                   <span className={view.crossovers[0].future ? "text-accent" : "text-faint"}>
                     {view.crossovers[0].future ? "~ " : ""}
                     {new Date(view.crossovers[0].t).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                    {view.crossovers[0].future ? " est." : ""}
                   </span>
                   {view.crossovers.length > 1 ? (
                     <span className="text-faint"> · +{view.crossovers.length - 1} more</span>
@@ -938,19 +939,29 @@ export default function CompareLab({
                 </p>
                 {view.crossovers.length ? (
                   <div className="flex flex-col gap-1.5">
-                    <span className="text-dim">Crossovers</span>
-                    {view.crossovers.map((e, idx) => (
-                      <p key={idx} className="flex flex-wrap items-center gap-x-1.5 text-label">
-                        <span className="inline-block h-2 w-2 shrink-0" style={{ background: colors[e.winner] }} />
-                        <span className="text-ink">{shortRepo(repos[e.winner])}</span>
-                        <span className="text-dim">{e.future ? "passes" : "passed"}</span>
-                        <span className="text-ink">{shortRepo(repos[e.loser])}</span>
-                        <span className={`numeral text-micro ${e.future ? "text-accent" : "text-faint"}`}>
-                          {e.future ? "~ " : ""}
-                          {new Date(e.t).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "2-digit" })}
-                        </span>
-                      </p>
-                    ))}
+                    <span className="text-dim">
+                      Crossovers{" "}
+                      <span className="numeral text-micro text-faint">· in order · ~ projected estimate</span>
+                    </span>
+                    {/* chronological (a timeline): what already happened first,
+                        the projected estimates last */}
+                    {[...view.crossovers]
+                      .sort((a, b) => a.t - b.t)
+                      .map((e, idx) => (
+                        <p key={idx} className="flex flex-wrap items-center gap-x-1.5 text-label">
+                          <span className="inline-block h-2 w-2 shrink-0" style={{ background: colors[e.winner] }} />
+                          <span className="text-ink">{shortRepo(repos[e.winner])}</span>
+                          <span className="text-dim">{e.future ? "passes" : "passed"}</span>
+                          <span className="text-ink">{shortRepo(repos[e.loser])}</span>
+                          <span className={`numeral text-micro ${e.future ? "text-accent" : "text-faint"}`}>
+                            {e.future ? "~ " : ""}
+                            {new Date(e.t).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "2-digit" })}
+                          </span>
+                          {e.future ? (
+                            <span className="numeral text-micro text-accent/70">est.</span>
+                          ) : null}
+                        </p>
+                      ))}
                   </div>
                 ) : insight.cross ? (
                   <p className="text-dim">
