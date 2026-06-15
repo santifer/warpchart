@@ -34,6 +34,14 @@ export default async function LockedRankPreview({ repo, name }: { repo: string; 
   const last = pts[pts.length - 1];
   const best = `#${rankMin}`;
 
+  // Reveal a fragment: the most recent ~30% is drawn SHARP (proof we already
+  // hold a real record on this repo), while the older history stays blurred =
+  // locked. Intrigue beats frustration.
+  const cut = Math.max(0, pts.length - Math.max(2, Math.ceil(pts.length * 0.3)));
+  const recent = pts.slice(cut);
+  const recentLine = recent.map((p) => `${xFor(p.t).toFixed(1)},${yFor(p.rank).toFixed(1)}`).join(" ");
+  const recentX0 = xFor(recent[0].t);
+
   return (
     <div className="hud relative overflow-hidden px-4 py-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -46,11 +54,12 @@ export default async function LockedRankPreview({ repo, name }: { repo: string; 
       </div>
 
       <div className="relative mt-3">
+        {/* full trajectory, blurred = the locked history */}
         <svg
           viewBox={`0 0 ${W} ${H}`}
           preserveAspectRatio="none"
           className="h-[132px] w-full text-accent"
-          style={{ filter: "blur(1.7px)", opacity: 0.72 }}
+          style={{ filter: "blur(1.7px)", opacity: 0.6 }}
           aria-hidden
         >
           <polygon points={area} fill="currentColor" fillOpacity={0.07} />
@@ -62,12 +71,36 @@ export default async function LockedRankPreview({ repo, name }: { repo: string; 
             strokeLinejoin="round"
             strokeLinecap="round"
           />
-          <circle cx={xFor(last.t)} cy={yFor(last.rank)} r={3} fill="currentColor" />
         </svg>
 
-        <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+        {/* recent fragment, SHARP = the proof we already have a real record */}
+        <svg
+          viewBox={`0 0 ${W} ${H}`}
+          preserveAspectRatio="none"
+          className="pointer-events-none absolute inset-0 h-[132px] w-full text-accent"
+          aria-hidden
+        >
+          <line x1={recentX0} y1={PT - 2} x2={recentX0} y2={H - PB} stroke="currentColor" strokeOpacity={0.35} strokeDasharray="2 4" />
+          <polyline
+            points={recentLine}
+            fill="none"
+            stroke="currentColor"
+            strokeWidth={2}
+            strokeLinejoin="round"
+            strokeLinecap="round"
+          />
+          <circle cx={xFor(last.t)} cy={yFor(last.rank)} r={3.4} fill="currentColor" />
+        </svg>
+
+        {/* "exact" tag near the revealed fragment */}
+        <span className="numeral pointer-events-none absolute right-3 top-1 text-micro tracking-[0.15em] text-accent">
+          ✓ exact · live
+        </span>
+
+        {/* unlock prompt sits over the OLDER, blurred history, not the reveal */}
+        <div className="pointer-events-none absolute inset-y-0 left-0 right-[36%] flex items-center justify-center">
           <span className="numeral border border-accent/50 bg-void/75 px-3 py-1.5 text-label tracking-[0.2em] text-accent">
-            ◈ UNLOCK {name.toUpperCase()}&apos;S TRAJECTORY
+            ◈ UNLOCK THE FULL TRAJECTORY
           </span>
         </div>
       </div>

@@ -6,14 +6,23 @@
 // links when the API token is absent (self-hosters without payments).
 import { NextRequest, NextResponse } from "next/server";
 
+// Plan aliases map to the SAME Polar product IDs, so re-pricing a product in the
+// Polar dashboard (Hosted $19 -> Pro $29, Fleet $79 -> Team $149) changes what
+// the checkout charges with NO code change. `pro` == hosted product, `team` ==
+// fleet product. Business is concierge (a mailto on the pricing page), no
+// self-serve product yet.
 const PRODUCTS: Record<string, string> = {
   hosted: "c5042243-2e00-4c49-9681-85f4e4911c52",
+  pro: "c5042243-2e00-4c49-9681-85f4e4911c52",
   fleet: "db196832-bbef-4e8b-b254-fe9c4686f50e",
+  team: "db196832-bbef-4e8b-b254-fe9c4686f50e",
 };
 
 const STATIC_LINKS: Record<string, string> = {
   hosted: "https://buy.polar.sh/polar_cl_8CDF8qOQrPcZbpqOc8RPnCH9QF18kiKrIPUyh3cPbnU",
+  pro: "https://buy.polar.sh/polar_cl_8CDF8qOQrPcZbpqOc8RPnCH9QF18kiKrIPUyh3cPbnU",
   fleet: "https://buy.polar.sh/polar_cl_6CaoF5JYYrFq3Jnwypr8BNqLhDKJfr7vz53Ti2Te5Si",
+  team: "https://buy.polar.sh/polar_cl_6CaoF5JYYrFq3Jnwypr8BNqLhDKJfr7vz53Ti2Te5Si",
 };
 
 export async function GET(req: NextRequest) {

@@ -1,5 +1,5 @@
 // Mission plans. Two modes:
-//   /pricing            -> the generic offer (self-host vs hosted vs fleet)
+//   /pricing            -> the generic offer (free / pro / team / business)
 //   /pricing?repo=o/n   -> the SAME offer, re-told around one repo: its live
 //                          rank, velocity, the gap to its next gate, the repos
 //                          hunting it, and what its hourly history is worth.
@@ -7,6 +7,11 @@
 // /r/owner/name (loadExplorerData: shared cache, matching numbers, ~zero extra
 // GitHub cost), so the plan feels measured for them, not pitched at them. The
 // data is never for sale at any price; money buys operations.
+//
+// Conversion architecture (Claude x Gemini synthesis, jun-2026): lead with the
+// loss frame (history can't be backfilled + GitHub erases traffic every 14
+// days), prove it with a LIVE mission, anchor Team as the default, kill the
+// objections with an FAQ, and keep the integrity contract loud.
 import type { Metadata } from "next";
 import Link from "next/link";
 import { loadMeta } from "@/lib/history";
@@ -62,53 +67,68 @@ export async function generateMetadata({
   return {
     title: "Pricing · Warpchart",
     description:
-      "Self-host Warpchart free, or get your repository tracked with exact hourly history, alerts and zero ops. The public explorer stays free forever; the data is never for sale.",
+      "Self-host Warpchart free, or get your repository tracked with exact hourly history, the traffic GitHub erases every 14 days, alerts and zero ops. The public explorer stays free forever; the data is never for sale.",
   };
 }
+
+const BUSINESS_MAILTO =
+  "mailto:hi@warpchart.dev?subject=Warpchart%20Business&body=Repos%20to%20track%3A%0AOrg%3A%0A";
 
 // ---- generic offer (no ?repo=) -------------------------------------------
 const GENERIC_PLANS: Plan[] = [
   {
-    name: "SELF-HOST",
-    price: "FREE",
+    name: "FREE",
+    price: "$0",
     cadence: "forever",
     perks: [
-      "The full console: chart, replay, sound, deck",
-      "MIT template, deploy on your own Vercel",
+      "The public explorer for any repo: live world rank, velocity, the race",
+      "Self-host the full console — MIT, deploy in ~5 minutes",
       "Your collector, your GitHub quota, your data",
-      "Community support",
     ],
     cta: { label: "USE THE TEMPLATE →", href: "https://github.com/santifer/warpchart" },
-    note: "DIY: you run the ops.",
+    note: "Browse anything, or run it yourself.",
   },
   {
-    name: "HOSTED MISSION",
-    price: "$19",
-    cadence: "per repo / month",
+    name: "PRO",
+    price: "$29",
+    cadence: "/ month",
+    perks: [
+      "Track up to 3 repos with exact hourly history, from the second you start",
+      "Traffic Vault: clones, views & referrers kept past GitHub's 14-day wipe",
+      "Live console + replay · alerts on incoming hunters and gate crossings",
+      "Exact live counter on your README badge",
+      "Zero ops — we run the collector for you",
+    ],
+    cta: { label: "START PRO →", href: "/api/checkout?plan=pro" },
+    note: "For the solo maintainer.",
+  },
+  {
+    name: "TEAM",
+    price: "$149",
+    cadence: "/ month",
     accent: true,
+    tag: "MOST TEAMS START HERE",
     perks: [
-      "Exact hourly history from the second you pay (it cannot be backfilled later: GitHub caps history and archives miss viral bursts)",
-      "Unlocked live console at warpchart.dev/r/your/repo",
-      "Live replay with the synthesized soundtrack",
-      "Alerts: gate crossings and incoming hunters (Discord, Slack, RSS)",
-      "Exact live counter on your README embed and badge",
-      "Zero ops: we run the collector on your repo's own App quota",
+      "Everything in Pro, across up to 10 repos",
+      "3 seats — your whole fleet on one wall",
+      "Slack & webhook alerts for the team",
+      "Priority support",
     ],
-    cta: { label: "TRACK THIS REPO →", href: "/api/checkout?plan=hosted" },
-    note: "Live in minutes, not days.",
+    cta: { label: "START TEAM →", href: "/api/checkout?plan=team" },
+    note: "The employer pays. Maintainers never do.",
   },
   {
-    name: "FLEET",
-    price: "$79",
-    cadence: "up to 10 repos / month",
+    name: "BUSINESS",
+    price: "$399",
+    cadence: "/ month",
     perks: [
-      "Everything in Hosted Mission, for your org's fleet",
-      "All your missions on one wall",
-      "Priority support",
-      "Direct line for feature requests (heard, never sold)",
+      "Everything in Team, across up to 30 repos",
+      "SSO and centralized billing",
+      "Your entire open-source portfolio on one wall",
+      "A direct line for the features you need",
     ],
-    cta: { label: "ASSEMBLE YOUR FLEET →", href: "/api/checkout?plan=fleet" },
-    note: "For orgs: the employer pays, maintainers never do.",
+    cta: { label: "TALK TO US →", href: BUSINESS_MAILTO },
+    note: "For OSS-heavy companies.",
   },
 ];
 
@@ -117,7 +137,6 @@ function personalizedPlans(d: NonNullable<ExplorerData>): Plan[] {
   const repoLabel = d.inputs.repo;
   const owner = repoLabel.split("/")[0] ?? repoLabel;
   const name = repoLabel.split("/")[1] ?? repoLabel;
-  const NAME = name.toUpperCase().slice(0, 22);
   const OWNER = owner.toUpperCase().slice(0, 22);
   const next = d.inputs.milestones[0] ?? null;
 
@@ -131,79 +150,136 @@ function personalizedPlans(d: NonNullable<ExplorerData>): Plan[] {
     ? `Who's hunting ${name}: live gaps and ETAs on ${hunters.join(" and ")}, and every repo closing in`
     : `Live gaps and ETAs on every repo closing in on ${name}`;
   const gatePerk = next
-    ? `Alerts the moment a hunter closes in or ${name} breaks into the top ${fmt(next.rank)} (Discord, Slack, RSS)`
-    : `Alerts the moment a hunter closes in or ${name} crosses its next gate (Discord, Slack, RSS)`;
+    ? `Alerts the moment a hunter closes in or ${name} breaks into the top ${fmt(next.rank)} (Slack, Discord, RSS)`
+    : `Alerts the moment a hunter closes in or ${name} crosses its next gate (Slack, Discord, RSS)`;
 
   return [
     {
-      name: "SELF-HOST",
-      price: "FREE",
+      name: "FREE",
+      price: "$0",
       cadence: "forever · MIT",
       perks: [
-        `Run the full ${name} console yourself: chart, replay, sound, deck`,
+        `Run the full ${name} console yourself: chart, replay, the race`,
         "MIT template, deploy on your own Vercel in ~5 min",
-        "Your collector, your GitHub quota, your data",
         `Or just keep the free public snapshot of ${name} you see now`,
       ],
       cta: { label: "USE THE TEMPLATE →", href: "https://github.com/santifer/warpchart" },
       note: "DIY: you run the ops, forever free.",
     },
     {
-      name: "HOSTED MISSION",
-      price: "$19",
-      cadence: "per month",
-      accent: true,
-      tag: `RECOMMENDED FOR ${NAME}`,
+      name: "PRO",
+      price: "$29",
+      cadence: "/ month",
       perks: [
-        `Exact hourly history of ${name} from the second you pay (GitHub caps history and archives miss viral bursts: it cannot be backfilled later)`,
-        `${name}'s full console unlocked: world-rank trajectory, daily ladder, heatmap and spike forensics`,
+        `Exact hourly history of ${name} from the second you pay (it cannot be backfilled)`,
+        `${name}'s full console unlocked: rank trajectory, daily ladder, heatmap, spike forensics`,
         huntersPerk,
-        `Milestone log: every gate ${name} crosses, timestamped forever`,
+        `Traffic Vault: ${name}'s clones, views and referrers, kept past GitHub's 14-day wipe`,
         `Exact live star counter on ${name}'s README badge and embed`,
         gatePerk,
-        "Live replay with the synthesized soundtrack · zero ops, we run it",
       ],
       cta: {
-        label: `TRACK ${NAME} · $19/MO →`,
-        href: `/api/checkout?repo=${encodeURIComponent(repoLabel)}&plan=hosted`,
+        label: `TRACK ${name.toUpperCase().slice(0, 16)} →`,
+        href: `/api/checkout?repo=${encodeURIComponent(repoLabel)}&plan=pro`,
       },
-      note: "Charting starts the second you pay · live in minutes",
+      note: "Up to 3 repos · charting starts the second you pay.",
     },
     {
-      name: "FLEET",
-      price: "$79",
-      cadence: "up to 10 repos / month",
+      name: "TEAM",
+      price: "$149",
+      cadence: "/ month",
+      accent: true,
+      tag: `RECOMMENDED FOR ${OWNER}`,
       perks: [
-        `Everything in Hosted Mission, for all of ${owner}'s repos`,
-        "The whole fleet on one wall",
-        "Traffic Vault: clones, views and referrers snapshotted before GitHub erases them every 14 days",
-        "Priority support and a direct line for feature requests",
+        `Everything in Pro, across up to 10 of ${owner}'s repos`,
+        "3 seats — the whole fleet on one wall",
+        "Slack & webhook alerts for the team",
+        "Priority support",
       ],
       cta: {
-        label: `ASSEMBLE ${OWNER}'S FLEET →`,
-        href: `/api/checkout?repo=${encodeURIComponent(repoLabel)}&plan=fleet`,
+        label: `TRACK ${OWNER}'S FLEET →`,
+        href: `/api/checkout?repo=${encodeURIComponent(repoLabel)}&plan=team`,
       },
-      note: "For orgs: the employer pays, maintainers never do.",
+      note: "The employer pays. Maintainers never do.",
+    },
+    {
+      name: "BUSINESS",
+      price: "$399",
+      cadence: "/ month",
+      perks: [
+        `Everything in Team, across up to 30 of ${owner}'s repos`,
+        "SSO and centralized billing",
+        "Your entire open-source portfolio, tracked",
+        "A direct line for the features you need",
+      ],
+      cta: { label: "TALK TO US →", href: BUSINESS_MAILTO },
+      note: "For OSS-heavy companies.",
     },
   ];
 }
 
-function PlanCard({ p }: { p: Plan }) {
-  const external = p.cta.href.startsWith("http");
+// The loss frame, made visual: GitHub's traffic data is a sawtooth that resets
+// to zero every 14 days; the Vault is one continuous, accumulating line. The
+// divergence sells itself.
+function VaultDivergence() {
   return (
-    <div className={`hud flex flex-col gap-4 px-5 py-5 ${p.accent ? "border-accent/60" : ""}`}>
+    <svg
+      viewBox="0 0 560 132"
+      preserveAspectRatio="none"
+      className="h-[120px] w-full sm:h-[148px]"
+      role="img"
+      aria-label="GitHub erases your traffic data every 14 days; the Warpchart Vault keeps it"
+    >
+      <line x1="0" y1="104" x2="560" y2="104" stroke="var(--grid)" strokeWidth="1" />
+      {[140, 280, 420].map((x) => (
+        <g key={x}>
+          <line x1={x} y1="18" x2={x} y2="104" stroke="var(--grid)" strokeDasharray="2 6" />
+          <text x={x} y="120" textAnchor="middle" fontFamily="var(--font-jbmono)" fontSize="9" fill="var(--faint)">
+            day {((x / 140) * 14).toFixed(0)}
+          </text>
+        </g>
+      ))}
+      {/* GitHub: rises then is wiped to zero every 14 days */}
+      <path
+        d="M 0 104 L 120 58 L 140 104 L 260 58 L 280 104 L 400 58 L 420 104 L 540 58 L 560 104"
+        fill="none"
+        stroke="var(--warn)"
+        strokeWidth="1.6"
+        strokeOpacity="0.85"
+      />
+      {/* Warpchart Vault: one continuous, accumulating record */}
+      <path d="M 0 104 C 170 96 300 60 556 24" fill="none" stroke="var(--accent)" strokeWidth="2.4" />
+      <circle cx="556" cy="24" r="3.6" fill="var(--accent)" />
+      <text x="6" y="14" fontFamily="var(--font-jbmono)" fontSize="10" fill="var(--warn)" opacity="0.95">
+        GITHUB · wiped every 14 days
+      </text>
+      <text x="554" y="42" textAnchor="end" fontFamily="var(--font-jbmono)" fontSize="10" fill="var(--accent)">
+        WARPCHART VAULT · kept forever
+      </text>
+    </svg>
+  );
+}
+
+function PlanCard({ p }: { p: Plan }) {
+  const external = p.cta.href.startsWith("http") || p.cta.href.startsWith("mailto");
+  return (
+    <div
+      className={`hud relative flex flex-col gap-4 px-5 py-5 ${
+        p.accent ? "border-accent/70 lg:-my-2 lg:py-7" : ""
+      }`}
+    >
+      {p.tag ? (
+        <div className="absolute -top-2.5 left-5 numeral border border-accent/60 bg-void px-2 py-0.5 text-micro tracking-[0.18em] text-accent">
+          {p.tag}
+        </div>
+      ) : null}
       <div>
-        {p.tag ? (
-          <div className="numeral mb-2 inline-block border border-accent/50 bg-accent/10 px-2 py-0.5 text-micro tracking-[0.18em] text-accent">
-            {p.tag}
-          </div>
-        ) : null}
         <div className={`numeral text-label tracking-[0.25em] ${p.accent ? "text-accent" : "text-dim"}`}>
           {p.name}
         </div>
-        <div className="mt-2 flex items-baseline gap-2">
+        <div className="mt-2 flex items-baseline gap-1.5">
           <span className="numeral text-2xl font-semibold text-ink">{p.price}</span>
-          <span className="numeral text-micro tracking-[0.15em] text-faint">{p.cadence}</span>
+          <span className="numeral text-micro tracking-[0.12em] text-faint">{p.cadence}</span>
         </div>
       </div>
       <ul className="flex flex-col gap-2">
@@ -214,14 +290,14 @@ function PlanCard({ p }: { p: Plan }) {
           </li>
         ))}
       </ul>
-      <div className="mt-auto flex flex-col gap-2">
+      <div className="mt-auto flex flex-col gap-2 pt-1">
         <a
           href={p.cta.href}
           target={external ? "_blank" : undefined}
           rel={external ? "noopener noreferrer" : undefined}
           className={`numeral border px-4 py-2.5 text-center text-label tracking-[0.18em] transition-colors ${
             p.accent
-              ? "border-accent/60 text-accent hover:bg-accent/10"
+              ? "border-accent/70 bg-accent/10 text-accent hover:bg-accent/20"
               : "border-grid text-dim hover:border-accent/50 hover:text-accent"
           }`}
         >
@@ -244,6 +320,29 @@ function Stat({ label, value, accent }: { label: string; value: string; accent?:
   );
 }
 
+const FAQ: { q: string; a: string }[] = [
+  {
+    q: "Can't I just self-host it for free?",
+    a: "Yes — it is MIT and deploys in about five minutes. You run the collector, manage the GitHub quota and keep it alive. Hosted is the same product with zero ops, and it starts recording the second you click, not the day you finish a deploy.",
+  },
+  {
+    q: "Why can't you backfill my history?",
+    a: "GitHub caps how far back its API goes, and the public archives miss viral bursts. The hour-by-hour truth of how a repo grew only exists from the moment tracking starts. Every day you wait is gone for good.",
+  },
+  {
+    q: "Do you sell my data, or move my position?",
+    a: "Never. It is public GitHub data, never for sale, and paying never moves a single pixel of any chart — not yours, not anyone's. You buy the operation and your own record, never position.",
+  },
+  {
+    q: "Can I cancel? Is the history mine?",
+    a: "Cancel anytime. Every day you recorded is yours to export and keep — paying buys the operation, not a hostage.",
+  },
+  {
+    q: "Who pays — me, or my employer?",
+    a: "Team and Business are built for the company to pay. A maintainer should never pay out of pocket to track the repo they keep alive for their employer.",
+  },
+];
+
 export default async function Pricing({
   searchParams,
 }: {
@@ -252,6 +351,7 @@ export default async function Pricing({
   const { repo } = await searchParams;
   const data = await resolveRepo(repo);
   const meta = loadMeta();
+  const demoRepo = meta?.repo ?? null;
 
   // ----- personalized numbers (only when a repo resolved) -----
   let repoLabel = "";
@@ -281,7 +381,7 @@ export default async function Pricing({
   }
 
   return (
-    <main className="mx-auto flex min-h-screen max-w-[1000px] flex-col gap-10 px-4 py-10 sm:px-6">
+    <main className="mx-auto flex min-h-screen max-w-[1080px] flex-col gap-14 px-4 py-10 sm:px-6">
       <SpaceBackdrop mode="launch" />
 
       <header className="rise flex items-center justify-between" style={{ animationDelay: "0ms" }}>
@@ -289,10 +389,7 @@ export default async function Pricing({
           WARPCHART
         </Link>
         {data ? (
-          <Link
-            href={`/r/${repoLabel}`}
-            className="numeral text-micro tracking-[0.18em] text-dim hover:text-accent"
-          >
+          <Link href={`/r/${repoLabel}`} className="numeral text-micro tracking-[0.18em] text-dim hover:text-accent">
             ← {repoLabel}
           </Link>
         ) : (
@@ -300,160 +397,195 @@ export default async function Pricing({
         )}
       </header>
 
+      {/* ===== HERO: the loss frame, up front ===== */}
       {data ? (
-        <>
-          {/* personalized hero */}
-          <section className="rise flex flex-col gap-5" style={{ animationDelay: "80ms" }}>
-            <div className="flex items-start gap-4">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={`https://github.com/${repoOwner}.png?size=96`}
-                alt=""
-                width={48}
-                height={48}
-                className="h-12 w-12 shrink-0 border border-grid"
-              />
-              <div className="min-w-0">
-                <span className="numeral inline-block border border-grid px-2 py-0.5 text-micro tracking-[0.28em] text-faint">
-                  ◌ CURRENTLY UNCHARTED
-                </span>
-                <h1 className="mt-2 font-display text-xl leading-snug tracking-[0.08em] text-ink sm:text-2xl">
-                  CHART {repoName.toUpperCase()}
-                </h1>
-              </div>
+        <section className="rise flex flex-col gap-5" style={{ animationDelay: "80ms" }}>
+          <div className="flex items-start gap-4">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={`https://github.com/${repoOwner}.png?size=96`}
+              alt=""
+              width={48}
+              height={48}
+              className="h-12 w-12 shrink-0 border border-grid"
+            />
+            <div className="min-w-0">
+              <span className="numeral inline-block border border-grid px-2 py-0.5 text-micro tracking-[0.28em] text-faint">
+                ◌ CURRENTLY UNCHARTED
+              </span>
+              <h1 className="mt-2 font-display text-xl leading-snug tracking-[0.07em] text-ink sm:text-2xl">
+                START {repoName.toUpperCase()}&apos;S PERMANENT RECORD
+              </h1>
             </div>
-
-            <div className="hud flex flex-wrap gap-x-8 gap-y-4 px-4 py-3">
-              <Stat label="Stars" value={starsStr} accent />
-              <Stat label="World rank" value={rankStr} />
-              <Stat label="Velocity" value={`${fmt(vDay)}/day`} />
-              {next && gap !== null && gap > 0 ? (
-                <Stat label={`Gap to top ${fmt(next.rank)}`} value={fmt(gap)} />
-              ) : null}
-            </div>
-
-            <p className="max-w-[680px] text-sm font-light leading-relaxed text-dim">
-              <span className="text-ink">{repoName}</span>{" "}
-              {data.inputs.rank !== null ? (
-                <>
-                  sits <span className="text-accent">{rankStr}</span> of every public repository
-                </>
-              ) : (
-                <>is on the board</>
-              )}
-              {vDay > 0 ? (
-                <>
-                  , climbing <span className="text-accent">{fmt(vDay)}★/day</span>
-                </>
-              ) : null}
-              {eta && next ? (
-                <>
-                  {" "}
-                  and <span className="text-accent">~{eta}</span> from the top {fmt(next.rank)}
-                </>
-              ) : null}
-              . Right now that is a snapshot. The hour-by-hour record of how it got here, and where it
-              is heading, only exists from the moment you start charting it.
-            </p>
-          </section>
-
-          {/* the loss frame: what is being erased, with their own numbers */}
-          <section className="rise" style={{ animationDelay: "140ms" }}>
-            <div className="hud flex flex-col gap-2 border-accent/40 px-4 py-3">
-              <p className="numeral text-data leading-relaxed text-ink">
-                STAR HISTORY CANNOT BE BACKFILLED. GitHub caps how far back it goes and the public
-                archives miss viral bursts, so the hour-by-hour truth about {repoName} only exists from
-                the day tracking starts.
-              </p>
-              <p className="text-data font-light leading-relaxed text-dim">
-                And GitHub erases your traffic, clones, views and referrers, every 14 days. The Fleet
-                vault snapshots them before they are gone.
-                {weekly > 0 ? (
-                  <>
-                    {" "}
-                    <span className="text-ink">{repoName}</span> added{" "}
-                    <span className="text-accent">~{fmt(weekly)} stars</span> in the last 7 days alone,
-                    none of it on a forensic record yet.
-                  </>
-                ) : null}
-              </p>
-            </div>
-          </section>
-
-          {/* the locked treasure: a real, blurred preview of the rank history we
-              have already been recording for this repo (renders only when we
-              have >=2 days on record) */}
-          <section className="rise" style={{ animationDelay: "180ms" }}>
-            <LockedRankPreview repo={repoLabel} name={repoName} />
-          </section>
-        </>
-      ) : (
-        // generic hero
-        <section className="rise flex flex-col gap-4" style={{ animationDelay: "80ms" }}>
-          <h1 className="font-display text-xl leading-snug tracking-[0.08em] text-ink sm:text-2xl">
-            RUN YOUR OWN MISSION
-          </h1>
-          <p className="max-w-[680px] text-sm font-light leading-relaxed text-dim">
-            The public explorer is free for any repo, forever. The software is MIT and self-hostable,
-            forever. What costs money is the operation we run for you, and the one thing nobody can
-            backfill later: your exact history, collected hour by hour from the day your mission starts.
-          </p>
-          <div className="hud max-w-[680px] px-4 py-3">
-            <p className="numeral text-data leading-relaxed text-ink">
-              THE DATA IS NEVER FOR SALE. Paying never moves a pixel of any chart: not yours, not
-              anyone&apos;s. You buy operations and convenience, not position.
-            </p>
           </div>
+
+          <div className="hud flex flex-wrap gap-x-8 gap-y-4 px-4 py-3">
+            <Stat label="Stars" value={starsStr} accent />
+            <Stat label="World rank" value={rankStr} />
+            <Stat label="Velocity" value={`${fmt(vDay)}/day`} />
+            {next && gap !== null && gap > 0 ? (
+              <Stat label={`Gap to top ${fmt(next.rank)}`} value={fmt(gap)} />
+            ) : null}
+          </div>
+
+          <p className="max-w-[720px] text-data font-light leading-relaxed text-dim">
+            <span className="text-ink">{repoName}</span>{" "}
+            {data.inputs.rank !== null ? (
+              <>
+                sits <span className="text-accent">{rankStr}</span> of every public repository
+              </>
+            ) : (
+              <>is on the board</>
+            )}
+            {vDay > 0 ? (
+              <>
+                , climbing <span className="text-accent">{fmt(vDay)}★/day</span>
+              </>
+            ) : null}
+            {eta && next ? (
+              <>
+                {" "}
+                and <span className="text-accent">~{eta}</span> from the top {fmt(next.rank)}
+              </>
+            ) : null}
+            . Right now that is a snapshot. The hour-by-hour record of how it got here, and where it is
+            heading, <span className="text-ink">only exists from the moment you start charting it</span>.
+          </p>
+        </section>
+      ) : (
+        <section className="rise flex flex-col gap-5" style={{ animationDelay: "80ms" }}>
+          <h1 className="font-display text-2xl leading-[1.15] tracking-[0.06em] text-star glow-star sm:text-[2.4rem]">
+            OWN THE GROWTH RECORD
+            <br className="hidden sm:block" /> YOU CAN&apos;T GET BACK.
+          </h1>
+          <p className="max-w-[720px] text-base font-light leading-relaxed text-dim">
+            The public explorer is free for any repo, forever. The software is MIT and self-hostable,
+            forever. What money buys is the operation we run for you and the{" "}
+            <span className="text-ink">one thing nobody can backfill later</span>: your exact history,
+            collected hour by hour from the day your mission starts.
+          </p>
         </section>
       )}
 
-      <section className="rise grid grid-cols-1 gap-3 md:grid-cols-3" style={{ animationDelay: "200ms" }}>
-        {plans.map((p) => (
-          <PlanCard key={p.name} p={p} />
-        ))}
+      {/* ===== THE LOSS FRAME, made visual ===== */}
+      <section className="rise flex flex-col gap-4" style={{ animationDelay: "130ms" }}>
+        <div className="hud flex flex-col gap-4 border-accent/30 px-4 py-4 sm:px-5">
+          <div className="flex flex-wrap items-baseline justify-between gap-2">
+            <h2 className="module-title">GITHUB IS ERASING YOUR EVIDENCE</h2>
+            <span className="numeral text-micro tracking-[0.15em] text-faint">two clocks running against you</span>
+          </div>
+          <VaultDivergence />
+          <p className="text-data font-light leading-relaxed text-dim">
+            GitHub deletes your traffic — clones, views and referrers — <span className="text-warn">every 14 days</span>,
+            and star history <span className="text-ink">cannot be backfilled</span>. The forensic truth about{" "}
+            {data ? <span className="text-ink">{repoName}</span> : "your repo"} only exists from the day tracking starts.
+            {weekly > 0 ? (
+              <>
+                {" "}
+                <span className="text-ink">{repoName}</span> added{" "}
+                <span className="text-accent">~{fmt(weekly)} stars</span> in the last 7 days alone — none of it on a
+                record yet.
+              </>
+            ) : null}
+          </p>
+        </div>
       </section>
 
-      {/* soft conversion: the visitor who will not pay today still leaves with a
-          live badge installed (recurring brand impressions + a foot in the door) */}
-      <section className="rise" style={{ animationDelay: "240ms" }}>
+      {/* ===== LIVE PROOF: a real mission, animated, on the page ===== */}
+      {demoRepo ? (
+        <section className="rise flex flex-col gap-3" style={{ animationDelay: "170ms" }}>
+          <div className="flex flex-wrap items-baseline justify-between gap-2">
+            <h2 className="module-title">
+              {data ? `THIS IS WHAT TRACKING ${repoName.toUpperCase()} LOOKS LIKE` : "A LIVE MISSION, RIGHT NOW"}
+            </h2>
+            <span className="numeral text-micro tracking-[0.15em] text-faint">no mockups · real data</span>
+          </div>
+          <Link
+            href={`/r/${demoRepo}`}
+            className="hud group block overflow-hidden p-3 transition-colors hover:border-accent/50"
+          >
+            {/* the animated SVG embed IS the product — it draws itself live */}
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={`/api/chart?repo=${encodeURIComponent(demoRepo)}`}
+              alt={`Live animated star chart of ${demoRepo}`}
+              className="h-auto w-full"
+              loading="lazy"
+            />
+            <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
+              <span className="text-data font-light text-dim">
+                <span className="text-ink">{demoRepo}</span> · a live console running on the exact Hosted plan.
+              </span>
+              <span className="numeral shrink-0 text-label tracking-[0.18em] text-accent group-hover:underline underline-offset-4">
+                OPEN THE LIVE CONSOLE →
+              </span>
+            </div>
+          </Link>
+        </section>
+      ) : null}
+
+      {/* the locked treasure: the real rank-history we have already recorded
+          for this repo (renders only when we have >= 2 days on record) */}
+      {data ? (
+        <section className="rise" style={{ animationDelay: "200ms" }}>
+          <LockedRankPreview repo={repoLabel} name={repoName} />
+        </section>
+      ) : null}
+
+      {/* ===== THE PLANS ===== */}
+      <section className="rise flex flex-col gap-4" style={{ animationDelay: "230ms" }}>
+        <div className="flex flex-wrap items-baseline justify-between gap-2">
+          <h2 className="font-display text-title tracking-[0.12em] text-ink">CHOOSE YOUR MISSION</h2>
+          <span className="numeral text-micro tracking-[0.15em] text-faint">cancel anytime · your history stays yours</span>
+        </div>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4 lg:items-start">
+          {plans.map((p) => (
+            <PlanCard key={p.name} p={p} />
+          ))}
+        </div>
+      </section>
+
+      {/* ===== INTEGRITY CONTRACT ===== */}
+      <section className="rise" style={{ animationDelay: "270ms" }}>
+        <div className="hud px-4 py-3 sm:px-5">
+          <p className="numeral text-data leading-relaxed text-ink">
+            THE DATA IS NEVER FOR SALE. Paying never moves a pixel of {data ? `${repoName}'s chart` : "any chart"}, or
+            anyone&apos;s. You buy the operation and your own history — never position.
+          </p>
+        </div>
+      </section>
+
+      {/* ===== FAQ: kill the objections ===== */}
+      <section className="rise flex flex-col gap-4" style={{ animationDelay: "300ms" }}>
+        <h2 className="font-display text-title tracking-[0.12em] text-ink">STRAIGHT ANSWERS</h2>
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+          {FAQ.map((f) => (
+            <div key={f.q} className="hud flex flex-col gap-1.5 px-4 py-3.5">
+              <h3 className="numeral text-label tracking-[0.08em] text-accent">{f.q}</h3>
+              <p className="text-data font-light leading-relaxed text-dim">{f.a}</p>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* ===== SOFT CONVERSION: the free badge ===== */}
+      <section className="rise" style={{ animationDelay: "330ms" }}>
         <a
           href={data ? `/#embed=${encodeURIComponent(repoLabel)}` : "/#embed"}
           className="hud flex flex-wrap items-center justify-between gap-3 border-dashed px-4 py-3 transition-colors hover:border-accent/50"
         >
           <span className="text-data font-light leading-relaxed text-dim">
-            {data ? (
-              <>
-                Not ready to track? Put a <span className="text-ink">live stars + rank badge</span> on{" "}
-                {repoName}&apos;s README, free, and decide later.
-              </>
-            ) : (
-              <>
-                Not ready to track? Put a <span className="text-ink">live stars + rank badge</span> on
-                your README, free, and decide later.
-              </>
-            )}
+            Not ready to track? Put a <span className="text-ink">live stars + rank badge</span> on{" "}
+            {data ? `${repoName}'s` : "your"} README, free, and decide later.
           </span>
-          <span className="numeral shrink-0 text-label tracking-[0.18em] text-accent">
-            GET THE FREE BADGE →
-          </span>
+          <span className="numeral shrink-0 text-label tracking-[0.18em] text-accent">GET THE FREE BADGE →</span>
         </a>
       </section>
 
-      {/* the integrity contract: shown personalized too, where it reassures most */}
-      {data ? (
-        <section className="rise" style={{ animationDelay: "260ms" }}>
-          <div className="hud px-4 py-3">
-            <p className="numeral text-data leading-relaxed text-ink">
-              THE DATA IS NEVER FOR SALE. Paying never moves a pixel of {repoName}&apos;s chart, or
-              anyone&apos;s. You buy the operation and your own history, never position.
-            </p>
-          </div>
-        </section>
-      ) : null}
-
-      <section className="rise flex flex-col gap-3" style={{ animationDelay: "300ms" }}>
+      {/* ===== PATRON: a separate funnel ===== */}
+      <section className="rise flex flex-col gap-3" style={{ animationDelay: "360ms" }}>
         <h2 className="module-title">NOT A CUSTOMER, A PATRON?</h2>
-        <p className="max-w-[680px] text-data font-light leading-relaxed text-dim">
+        <p className="max-w-[700px] text-data font-light leading-relaxed text-dim">
           If you just want the public telemetry to stay free and independent, that path exists too:
           sponsorship funds the mission and buys exactly zero influence.
         </p>
@@ -461,7 +593,7 @@ export default async function Pricing({
           href="https://github.com/sponsors/santifer"
           target="_blank"
           rel="noopener noreferrer"
-          className="hud flex max-w-[680px] items-center justify-center border-dashed px-4 py-3 transition-colors hover:border-accent/50"
+          className="hud flex max-w-[700px] items-center justify-center border-dashed px-4 py-3 transition-colors hover:border-accent/50"
         >
           <span className="numeral text-label tracking-[0.2em] text-accent">
             BECOME A MISSION PATRON · from $5/mo →
@@ -469,20 +601,9 @@ export default async function Pricing({
         </a>
       </section>
 
-      {meta ? (
-        <section className="rise flex flex-col gap-2" style={{ animationDelay: "360ms" }}>
-          <h2 className="module-title">
-            {data ? `THIS IS WHAT TRACKING ${repoName.toUpperCase()} LOOKS LIKE` : "SEE A LIVE HOSTED MISSION"}
-          </h2>
-          <Link href={`/r/${meta.repo}`} className="numeral text-data text-accent/90 hover:text-accent">
-            {meta.repo} · a live console running on the exact Hosted Mission plan →
-          </Link>
-        </section>
-      ) : null}
-
       <footer
         className="rise mt-auto flex flex-wrap items-center justify-between gap-2 border-t border-grid pt-4"
-        style={{ animationDelay: "420ms" }}
+        style={{ animationDelay: "400ms" }}
       >
         <span className="numeral text-micro tracking-[0.15em] text-faint">
           WARPCHART · open telemetry over public GitHub data
