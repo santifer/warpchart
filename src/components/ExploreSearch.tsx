@@ -157,7 +157,12 @@ export default function ExploreSearch({ catalog }: { catalog: CatalogEntry[] }) 
           </div>
 
           {results !== null ? (
-            <div className="hud absolute left-0 right-0 top-full z-30 mt-1 flex max-h-[min(62vh,460px)] flex-col divide-y divide-grid/60 overflow-y-auto bg-void p-1 text-left">
+            // .hud sets position:relative (un-layered, beats Tailwind's
+            // .absolute), so put the positioning on a plain wrapper and the
+            // hud styling on the inner box — otherwise the results stay in flow
+            // and cover the next section.
+            <div className="absolute left-0 right-0 top-full z-30 mt-1">
+              <div className="hud flex max-h-[min(62vh,460px)] flex-col divide-y divide-grid/60 overflow-y-auto bg-void p-1 text-left">
               {results.length === 0 ? (
                 <div className="numeral px-4 py-3 text-label text-faint">
                   {busy ? "searching…" : "no matches. try different words."}
@@ -195,6 +200,7 @@ export default function ExploreSearch({ catalog }: { catalog: CatalogEntry[] }) 
                   </Link>
                 ))
               )}
+              </div>
             </div>
           ) : null}
         </div>
