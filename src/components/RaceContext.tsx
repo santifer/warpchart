@@ -15,6 +15,9 @@ interface OvertakeLite {
   victim: { repo: string };
   etaDays: number;
 }
+interface NeighborLite {
+  repo: string;
+}
 interface RaceState {
   enabled: boolean; // there is at least one rival to race against
   raceOn: boolean;
@@ -43,17 +46,28 @@ export function RaceProvider({ repo, children }: { repo: string; children: React
     let stop = false;
     (async () => {
       try {
-        const res = await fetch(`/api/v1/overtakes?repo=${encodeURIComponent(repo)}`);
-        if (!res.ok) return;
-        const d = (await res.json()) as { hunters?: OvertakeLite[]; targets?: OvertakeLite[] };
-        const hunters = (d.hunters ?? []).slice().sort((a, b) => a.etaDays - b.etaDays);
-        const targets = (d.targets ?? []).slice().sort((a, b) => a.etaDays - b.etaDays);
+        // Imminent overtakes give the dramatic threat (with a countdown); the
+        // ranking neighbours guarantee a race for repos with NO imminent
+        // crossover (e.g. a big, stable repo whose gaps are huge). Both are
+        // cache-only — zero GitHub cost.
+        const [ovR, rpR] = await Promise.all([
+          fetch(`/api/v1/overtakes?repo=${encodeURIComponent(repo)}`),
+          fetch(`/api/v1/repo?repo=${encodeURIComponent(repo)}`),
+        ]);
+        const ov = ovR.ok ? ((await ovR.json()) as { hunters?: OvertakeLite[]; targets?: OvertakeLite[] }) : {};
+        const rp = rpR.ok ? ((await rpR.json()) as { ahead?: NeighborLite[]; behind?: NeighborLite[] }) : {};
+        const hunters = (ov.hunters ?? []).slice().sort((a, b) => a.etaDays - b.etaDays);
+        const targets = (ov.targets ?? []).slice().sort((a, b) => a.etaDays - b.etaDays);
         const seen = new Set([repo.toLowerCase()]);
         const list: string[] = [];
-        // the nearest threat first, then the repos it is catching
+        // nearest threat first, then the repos it is catching, then fill with
+        // the closest ranking neighbours (behind = on your heels, ahead = your
+        // next target) so EVERY ranked repo can race
         for (const r of [
           ...hunters.slice(0, 2).map((h) => h.hunter.repo),
           ...targets.slice(0, 2).map((t) => t.victim.repo),
+          ...(rp.behind ?? []).slice(0, 2).map((n) => n.repo),
+          ...(rp.ahead ?? []).slice(0, 2).map((n) => n.repo),
         ]) {
           const k = r.toLowerCase();
           if (!seen.has(k)) {
