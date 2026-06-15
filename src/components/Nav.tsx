@@ -10,8 +10,9 @@ import Link from "next/link";
 import SoundToggle from "./SoundToggle";
 import ThemeToggle from "./ThemeToggle";
 
+// ASK lives on the home now (the SCAN/ASK toggle on the hero search), so it is
+// no longer a separate nav destination.
 const LINKS = [
-  { href: "/find", label: "ASK" },
   { href: "/compare", label: "COMPARE" },
   { href: "/c", label: "RISING" },
   { href: "/velocity", label: "WARP INDEX" },

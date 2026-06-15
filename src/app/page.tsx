@@ -98,7 +98,7 @@ export default async function Home() {
               <p className="max-w-[620px] text-lg font-light leading-relaxed text-dim">
                 See any GitHub repository&apos;s worldwide rank, how fast it is climbing, and the
                 repos closing in on it. Live and free, with the one history nobody else keeps.
-                Pick a system.
+                Pick a system, <span className="text-accent">or ask for any tech.</span>
               </p>
               <div className="w-full max-w-[640px]">
                 <ExploreSearch catalog={catalog} />
