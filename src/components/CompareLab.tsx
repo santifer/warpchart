@@ -254,7 +254,9 @@ export default function CompareLab({
       return rateAt(s.c.pts, s.c.pts[s.c.pts.length - 1].t);
     };
 
+    type Cross = { t: number; val: number; winner: number; loser: number; future: boolean };
     let focus: { t: number; val: number } | null = null;
+    let crossovers: Cross[] = [];
     const projByI: Record<number, { x: number; y: number }[]> = {};
     if (zoomable) {
       const nowMs = Math.max(...series.map((s) => s.rows[s.rows.length - 1].x));
@@ -264,22 +266,42 @@ export default function CompareLab({
         y: s.rows[s.rows.length - 1].y,
         v: velOf(s),
       }));
-      const cands: { t: number; val: number }[] = [];
+      // every pair can cross: a forecast crossover (faster repo catching up) or
+      // a historical one (they already swapped). Collect them all.
+      const ev: Cross[] = [];
       for (let a = 0; a < series.length; a++)
         for (let b = a + 1; b < series.length; b++) {
           const A = cur[a];
           const B = cur[b];
           const dv = A.v - B.v;
           if (Math.abs(dv) > 1e-6) {
-            const days = (B.y - A.y) / dv; // days from now to forecast crossover
-            if (days > 0 && days < 140) cands.push({ t: nowMs + days * DAY, val: A.y + A.v * days });
+            const days = (B.y - A.y) / dv; // days from now to the forecast crossover
+            if (days > 0 && days < 140) {
+              const faster = A.v > B.v ? series[a].i : series[b].i;
+              const slower = A.v > B.v ? series[b].i : series[a].i;
+              ev.push({ t: nowMs + days * DAY, val: A.y + A.v * days, winner: faster, loser: slower, future: true });
+            }
           }
           const hc = lastCrossover(series[a].c.pts, series[b].c.pts);
-          if (hc) cands.push({ t: hc.t, val: interpAtX(series[a].rows, hc.t) ?? A.y });
+          if (hc) {
+            ev.push({
+              t: hc.t,
+              val: interpAtX(series[a].rows, hc.t) ?? A.y,
+              winner: hc.leader === "a" ? series[a].i : series[b].i,
+              loser: hc.leader === "a" ? series[b].i : series[a].i,
+              future: false,
+            });
+          }
         }
-      focus = cands.length
-        ? cands.sort((p, q) => Math.abs(p.t - nowMs) - Math.abs(q.t - nowMs))[0]
-        : { t: nowMs, val: cur[0].y };
+      // one event per pair (the one nearest to now), nearest first, capped
+      const byPair = new Map<string, Cross>();
+      for (const e of ev) {
+        const key = [Math.min(e.winner, e.loser), Math.max(e.winner, e.loser)].join("-");
+        const prev = byPair.get(key);
+        if (!prev || Math.abs(e.t - nowMs) < Math.abs(prev.t - nowMs)) byPair.set(key, e);
+      }
+      crossovers = [...byPair.values()].sort((p, q) => Math.abs(p.t - nowMs) - Math.abs(q.t - nowMs)).slice(0, 6);
+      focus = crossovers.length ? { t: crossovers[0].t, val: crossovers[0].val } : { t: nowMs, val: cur[0].y };
       const focusDays = (focus.t - nowMs) / DAY;
       const horizon = nowMs + Math.max(focusDays > 0 ? focusDays * 1.25 : 7, 3) * DAY;
       for (const c of cur) {
@@ -290,7 +312,7 @@ export default function CompareLab({
         xs.add(c.x);
         xs.add(horizon);
       }
-      xs.add(focus.t);
+      for (const e of crossovers) xs.add(e.t);
     }
 
     const masterX = [...xs].sort((a, b) => a - b);
@@ -344,6 +366,7 @@ export default function CompareLab({
       data: rows,
       refDots,
       focus: zoomable ? focus : null,
+      crossovers: zoomable ? crossovers : [],
       fullX,
       fullY,
       zoomX,
@@ -755,23 +778,30 @@ export default function CompareLab({
                     strokeWidth={1.5}
                   />
                 ))}
-                {useZoom && view.focus ? (
-                  <ReferenceDot
-                    x={view.focus.t}
-                    y={view.focus.val}
-                    r={6}
-                    fill="#ffffff"
-                    stroke={C.void}
-                    strokeWidth={2}
-                    label={{
-                      value: focusLabel,
-                      position: "top",
-                      fill: "#f5fbff",
-                      fontSize: 12,
-                      fontFamily: "var(--font-jbmono)",
-                    }}
-                  />
-                ) : null}
+                {useZoom
+                  ? view.crossovers.map((e, idx) => (
+                      <ReferenceDot
+                        key={`x${idx}`}
+                        x={e.t}
+                        y={e.val}
+                        r={idx === 0 ? 6 : 4.5}
+                        fill={colors[e.winner] ?? "#ffffff"}
+                        stroke={C.void}
+                        strokeWidth={2}
+                        label={
+                          idx === 0
+                            ? {
+                                value: focusLabel,
+                                position: "top",
+                                fill: "#f5fbff",
+                                fontSize: 12,
+                                fontFamily: "var(--font-jbmono)",
+                              }
+                            : undefined
+                        }
+                      />
+                    ))
+                  : null}
               </LineChart>
             </ResponsiveContainer>
           </div>
@@ -817,7 +847,23 @@ export default function CompareLab({
                   Fastest now: <span className="text-accent">{shortRepo(insight.fastest)}</span>
                   <span className="numeral text-micro text-faint"> · {fmt(insight.fastestRate)}/day</span>
                 </p>
-                {insight.cross ? (
+                {view.crossovers.length ? (
+                  <div className="flex flex-col gap-1.5">
+                    <span className="text-dim">Crossovers</span>
+                    {view.crossovers.map((e, idx) => (
+                      <p key={idx} className="flex flex-wrap items-center gap-x-1.5 text-label">
+                        <span className="inline-block h-2 w-2 shrink-0" style={{ background: colors[e.winner] }} />
+                        <span className="text-ink">{shortRepo(repos[e.winner])}</span>
+                        <span className="text-dim">{e.future ? "passes" : "passed"}</span>
+                        <span className="text-ink">{shortRepo(repos[e.loser])}</span>
+                        <span className={`numeral text-micro ${e.future ? "text-accent" : "text-faint"}`}>
+                          {e.future ? "~ " : ""}
+                          {new Date(e.t).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "2-digit" })}
+                        </span>
+                      </p>
+                    ))}
+                  </div>
+                ) : insight.cross ? (
                   <p className="text-dim">
                     Last overtake: <span className="text-ink">{shortRepo(insight.cross.a)}</span> passed{" "}
                     <span className="text-ink">{shortRepo(insight.cross.b)}</span>
