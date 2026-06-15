@@ -133,7 +133,7 @@ export default function ExploreSearch({ catalog }: { catalog: CatalogEntry[] }) 
           }}
         />
       ) : (
-        <>
+        <div className="relative">
           <div className="hud flex items-center gap-3 px-5 py-4 transition-colors focus-within:border-accent/60">
             <span className="numeral shrink-0 text-label tracking-[0.25em] text-accent">ASK</span>
             <input
@@ -157,7 +157,7 @@ export default function ExploreSearch({ catalog }: { catalog: CatalogEntry[] }) 
           </div>
 
           {results !== null ? (
-            <div className="hud flex flex-col divide-y divide-grid/60 p-1 text-left">
+            <div className="hud absolute left-0 right-0 top-full z-30 mt-1 flex max-h-[min(62vh,460px)] flex-col divide-y divide-grid/60 overflow-y-auto bg-void p-1 text-left">
               {results.length === 0 ? (
                 <div className="numeral px-4 py-3 text-label text-faint">
                   {busy ? "searching…" : "no matches. try different words."}
@@ -197,7 +197,7 @@ export default function ExploreSearch({ catalog }: { catalog: CatalogEntry[] }) 
               )}
             </div>
           ) : null}
-        </>
+        </div>
       )}
     </div>
   );
