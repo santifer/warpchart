@@ -157,12 +157,14 @@ export default function ExploreSearch({ catalog }: { catalog: CatalogEntry[] }) 
           </div>
 
           {results !== null ? (
-            // .hud sets position:relative (un-layered, beats Tailwind's
-            // .absolute), so put the positioning on a plain wrapper and the
-            // hud styling on the inner box — otherwise the results stay in flow
-            // and cover the next section.
-            <div className="absolute left-0 right-0 top-full z-30 mt-1">
-              <div className="hud flex max-h-[min(62vh,460px)] flex-col divide-y divide-grid/60 overflow-y-auto bg-void p-1 text-left">
+            // NO .hud here: .hud is un-layered so it beats Tailwind's .absolute
+            // (position) AND .bg-void (its translucent gradient). A plain div
+            // with .absolute floats correctly, and an inline opaque background
+            // can't be overridden — so the dropdown overlays cleanly and opaque.
+            <div
+              className="absolute left-0 right-0 top-full z-30 mt-1 flex max-h-[min(62vh,460px)] flex-col divide-y divide-grid/60 overflow-y-auto border border-grid p-1 text-left"
+              style={{ background: "var(--void)" }}
+            >
               {results.length === 0 ? (
                 <div className="numeral px-4 py-3 text-label text-faint">
                   {busy ? "searching…" : "no matches. try different words."}
