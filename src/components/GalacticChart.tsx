@@ -134,6 +134,20 @@ export default function GalacticChart({
   const router = useRouter();
   const [scan, setScan] = useState<Scan | null>(null);
   const [view, setView] = useState<{ lo: number; hi: number } | null>(null);
+  // AUTO-ZOOM: on load, tighten the default frame until the nearest labelled
+  // neighbours read clearly (a dense system fills the screen instead of crowding
+  // the centre). Suspended while the viewer pans (view != null). Toggleable.
+  const [autoZoom, setAutoZoom] = useState(true);
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    try { setAutoZoom(localStorage.getItem("mc_autozoom") !== "off"); } catch { /* private mode */ }
+  }, []);
+  const toggleAutoZoom = () =>
+    setAutoZoom((v) => {
+      const nv = !v;
+      try { localStorage.setItem("mc_autozoom", nv ? "on" : "off"); } catch { /* private mode */ }
+      return nv;
+    });
   const svgRef = useRef<SVGSVGElement | null>(null);
 
   // REAL-TIME ANCHOR (hot scenes only): re-sync every local ship's exact
@@ -206,6 +220,7 @@ export default function GalacticChart({
     const hit =
       inputs.neighbors.find((n) => n.r.toLowerCase() === from.toLowerCase()) ??
       inputs.routeAll.find((p) => p.r.toLowerCase() === from.toLowerCase());
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (hit) setOrigin({ r: hit.r, s: hit.s });
   }, [inputs.repo, inputs.routeAll, inputs.neighbors]);
 
@@ -437,8 +452,45 @@ export default function GalacticChart({
 
   const defLo = Math.max(bMin, log10(aMinDefault));
   const defHi = Math.min(bMax, log10(aMaxDefault));
-  const logLo = view?.lo ?? defLo;
-  const logHi = view?.hi ?? defHi;
+
+  // AUTO-ZOOM frame: tighten the default window until the nearest labelled
+  // neighbours deconflict. The binding constraint is the TIGHTEST adjacent gap
+  // among the salient ships (hero + a few closest each side); we shrink the
+  // window so that gap maps to >= TARGET_PX, then clamp so we never over-zoom a
+  // sparse neighbourhood. The hero stays anchored at its current screen
+  // fraction. Off -> the wide count-based default. Suspended while panning.
+  let azLo = defLo;
+  let azHi = defHi;
+  if (autoZoom) {
+    const salient = Array.from(
+      new Set([stars, ...ahead.slice(0, 4).map((n) => n.s), ...behind.slice(0, 2).map((n) => n.s)]),
+    ).sort((a, b) => a - b);
+    if (salient.length >= 2) {
+      let minGap = Infinity;
+      for (let i = 1; i < salient.length; i++) minGap = Math.min(minGap, log10(salient[i]) - log10(salient[i - 1]));
+      const TARGET_PX = 165 * fs; // room for a label between two adjacent ships
+      const plotPx = W - 80;
+      const defSpan = defHi - defLo;
+      const wantSpan = minGap > 0 && minGap < Infinity ? (minGap * plotPx) / TARGET_PX : defSpan;
+      // floor: still show the hero plus its two nearest with margin
+      const nearD = salient
+        .filter((s) => s !== stars)
+        .map((s) => Math.abs(log10(s) - log10(stars)))
+        .sort((a, b) => a - b);
+      const floorSpan = Math.max((nearD[1] ?? nearD[0] ?? 0.02) * 2.2, 0.012);
+      const newSpan = Math.max(floorSpan, Math.min(defSpan, wantSpan));
+      if (newSpan < defSpan - 1e-6) {
+        const frac = defSpan > 0 ? (log10(stars) - defLo) / defSpan : 0.5;
+        azLo = log10(stars) - frac * newSpan;
+        azHi = azLo + newSpan;
+        if (azHi > bMax) { azHi = bMax; azLo = azHi - newSpan; }
+        if (azLo < 0) azLo = 0;
+      }
+    }
+  }
+
+  const logLo = view?.lo ?? azLo;
+  const logHi = view?.hi ?? azHi;
   const span = logHi - logLo;
 
   const ax = (s: number) => 40 + ((log10(s) - logLo) / span) * (W - 80);
@@ -513,8 +565,10 @@ export default function GalacticChart({
   }, [travelT]);
   const layerOffset = (f: number) => -((((worldX * f) % W) + W) % W);
 
-  const geom = useRef({ defLo, defHi, bMin, bMax });
-  geom.current = { defLo, defHi, bMin, bMax };
+  // "home"/reset return to the AUTO-ZOOM frame, so double-click and flyHome
+  // settle on the legible neighbourhood, not the wide count-based default.
+  const geom = useRef({ defLo: azLo, defHi: azHi, bMin, bMax });
+  geom.current = { defLo: azLo, defHi: azHi, bMin, bMax };
   useEffect(() => {
     const el = svgRef.current;
     if (!el) return;
@@ -906,8 +960,21 @@ export default function GalacticChart({
           <text x={40} y={47} fill={C.faint} fontSize={10.5 * fs}>
             scroll sideways to pan · pinch to zoom · doppler tails: length = speed gap · blue = you gain the duel, red = it outruns you
           </text>
+          {/* AUTO-ZOOM toggle: frames the local system for legibility on load */}
+          <text
+            x={W - 40}
+            y={30}
+            textAnchor="end"
+            fontSize={11 * fs}
+            fill={autoZoom ? C.accent : C.faint}
+            opacity={0.85}
+            style={{ cursor: "pointer" }}
+            onClick={toggleAutoZoom}
+          >
+            {autoZoom ? "◉" : "○"} AUTO-ZOOM
+          </text>
           {!isDefaultView ? (
-            <text x={W - 40} y={30} fill={C.accent} fontSize={11 * fs} textAnchor="end" opacity={0.8}>
+            <text x={W - 40} y={48} fill={C.accent} fontSize={11 * fs} textAnchor="end" opacity={0.8}>
               window {fmtCompact(Math.round(Math.pow(10, logLo)))} .. {fmtCompact(Math.round(Math.pow(10, logHi)))} ★
             </text>
           ) : null}
