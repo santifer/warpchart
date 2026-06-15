@@ -100,7 +100,10 @@ export default async function Home() {
                 repos closing in on it. Live and free, with the one history nobody else keeps.
                 Pick a system, <span className="text-accent">or ask for any tech.</span>
               </p>
-              <div className="w-full max-w-[640px]">
+              {/* a DEFINITE width (not max-w inside the w-fit hero column):
+                  ASK results have long text, and fit-content would size to
+                  their max-content and overflow the phone. Cap to the viewport. */}
+              <div className="w-[min(640px,88vw)]">
                 <ExploreSearch catalog={catalog} />
               </div>
               <p className="numeral text-label tracking-[0.18em] text-faint">
