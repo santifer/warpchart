@@ -7,6 +7,7 @@ import StatusBar from "./StatusBar";
 import Masthead from "./Masthead";
 import SpaceBackdrop from "./SpaceBackdrop";
 import ConsoleLayout from "./ConsoleLayout";
+import { RaceProvider, RaceToggle } from "./RaceContext";
 import type { Dossier } from "@/lib/explorer";
 import GalacticChart from "./GalacticChart";
 import VerticalChart from "./VerticalChart";
@@ -133,6 +134,7 @@ export default function Dashboard({
           />
         ) : null}
 
+        <RaceProvider repo={repo ?? ""}>
         <ConsoleLayout
           dossier={dossier}
           starChart={{
@@ -155,6 +157,7 @@ export default function Dashboard({
           }}
           cumulative={{
             meta: "the race",
+            action: <RaceToggle />,
             node: <CompareLab initialRepos={[repo ?? ""]} embedded />,
           }}
           velocity={{ meta: "24h vs previous 24h", node: <VelocityChart /> }}
@@ -174,6 +177,7 @@ export default function Dashboard({
             node: <MissionLog events={bundle.events} captain={bundle.captain} />,
           }}
         />
+        </RaceProvider>
 
         <CapabilitiesBand />
 

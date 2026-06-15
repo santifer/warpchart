@@ -19,6 +19,7 @@ import { fmt, fmtCompact } from "@/lib/format";
 import {
   DAY, repoColor, rateAt, lastCrossover, shortRepo, type CurvePoint,
 } from "@/lib/compare";
+import { useRace } from "./RaceContext";
 
 interface Curve {
   repo: string;
@@ -90,13 +91,6 @@ function interpAtX(rows: { x: number; y: number }[], x: number): number | null {
   return a.y + (b.y - a.y) * k;
 }
 
-// minimal shape of /api/v1/overtakes?repo= for the embedded rival fetch
-interface OvertakeLite {
-  hunter: { repo: string };
-  victim: { repo: string };
-  etaDays: number;
-}
-
 export default function CompareLab({
   initialRepos,
   initialMetric = "cumulative",
@@ -133,62 +127,24 @@ export default function CompareLab({
   const fetched = useRef<Set<string>>(new Set());
 
   // ---- embedded race-in-place ----
-  // The chart starts as ONE repo (the page's own) and a threat-alert toggle
-  // injects its rivals: the hunters closing on it + the repos it is catching.
+  // The chart is the page's own repo; the race state (and the threat-alert
+  // toggle, which lives in the panel HEADER next to the title) is held by
+  // RaceContext above us, so the controls leave the whole body for the chart.
+  // Embedded mirrors the controlled repos: solo = [main], race = [main,
+  // ...rivals], with the crossover zoom auto-armed in race mode. /compare has
+  // no provider, so useRace() is inert there.
   const mainRepo = initialRepos[0] ?? "";
-  const [raceOn, setRaceOn] = useState(false);
-  const [rivals, setRivals] = useState<string[]>([]);
-  const [threat, setThreat] = useState<{ repo: string; etaDays: number } | null>(null);
-
-  // fetch the rivals once (cache-only overtakes endpoint, zero GitHub cost): the
-  // threat label can show before the user clicks, which is the whole invitation.
+  const race = useRace();
+  const raceOn = embedded && race.raceOn;
+  const rivalsKey = race.rivals.join(",");
   useEffect(() => {
-    if (!embedded || !mainRepo) return;
-    let stop = false;
-    (async () => {
-      try {
-        const res = await fetch(`/api/v1/overtakes?repo=${encodeURIComponent(mainRepo)}`);
-        if (!res.ok) return;
-        const d = (await res.json()) as { hunters?: OvertakeLite[]; targets?: OvertakeLite[] };
-        const hunters = (d.hunters ?? []).slice().sort((a, b) => a.etaDays - b.etaDays);
-        const targets = (d.targets ?? []).slice().sort((a, b) => a.etaDays - b.etaDays);
-        const seen = new Set([mainRepo.toLowerCase()]);
-        const list: string[] = [];
-        // guarantee the nearest threat goes first, then alternate threats/targets
-        for (const r of [
-          ...hunters.slice(0, 2).map((h) => h.hunter.repo),
-          ...targets.slice(0, 2).map((t) => t.victim.repo),
-        ]) {
-          const k = r.toLowerCase();
-          if (!seen.has(k)) { seen.add(k); list.push(r); }
-        }
-        if (stop) return;
-        setRivals(list.slice(0, 4));
-        setThreat(
-          hunters.length
-            ? { repo: hunters[0].hunter.repo, etaDays: Math.max(1, Math.round(hunters[0].etaDays)) }
-            : null
-        );
-      } catch { /* rivals are optional */ }
-    })();
-    return () => { stop = true; };
-  }, [embedded, mainRepo]);
-
-  const toggleRace = () => {
-    if (raceOn) {
-      setRepos([mainRepo]);
-      setRaceOn(false);
-      setZoom(false);
-    } else {
-      if (!rivals.length) return;
-      setRepos([mainRepo, ...rivals]);
-      setRaceOn(true);
-      setMetric("cumulative");
-      setAlign(false);
-      setLog(false);
-      setZoom(true);
-    }
-  };
+    if (!embedded) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setRepos(raceOn ? [mainRepo, ...race.rivals] : [mainRepo]);
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setZoom(raceOn);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [embedded, raceOn, mainRepo, rivalsKey]);
 
   // fetch each repo's curve once (cached server-side)
   useEffect(() => {
@@ -603,36 +559,6 @@ export default function CompareLab({
           ? "solid = real stargazer timestamps · dashed = estimated beyond the 40K cap"
           : "every point is a real stargazer timestamp";
 
-  // The threat-alert toggle that turns the star chart into the live race.
-  const raceToggle =
-    embedded && rivals.length ? (
-      <button
-        onClick={toggleRace}
-        className={`numeral flex items-center gap-2 border px-3 py-1.5 text-micro tracking-[0.16em] transition-colors ${
-          raceOn
-            ? "border-grid text-dim hover:border-accent/50 hover:text-accent"
-            : "race-invite border-warn/50 text-warn hover:border-warn"
-        }`}
-        aria-label={raceOn ? "back to solo chart" : "see the race"}
-      >
-        {raceOn ? (
-          "◂ SOLO"
-        ) : threat ? (
-          <>
-            <span className="race-pulse h-2 w-2 shrink-0 rounded-full bg-warn" aria-hidden />
-            <span className="text-ink">{shortRepo(threat.repo)}</span>
-            <span className="text-warn">· {threat.etaDays}d</span>
-            <span className="text-accent">▸ RACE</span>
-          </>
-        ) : (
-          <>
-            <span className="race-pulse h-2 w-2 shrink-0 rounded-full bg-accent" aria-hidden />
-            <span className="text-accent">SEE THE RACE ▸</span>
-          </>
-        )}
-      </button>
-    ) : null;
-
   return (
     <div className={embedded ? "flex h-full min-h-0 flex-col gap-2" : "flex flex-col gap-4"}>
       {/* add bar (manual repo picker) — hidden when embedded in a repo/console panel */}
@@ -709,11 +635,11 @@ export default function CompareLab({
       </div>
       ) : null}
 
-      {/* toolbar */}
+      {/* toolbar — entirely hidden when embedded: the only control there is the
+          header race toggle, and the crossover zoom auto-arms with the race.
+          The full lab (/compare) keeps the tabs + zoom/align/log. */}
+      {!embedded ? (
       <div className="flex flex-wrap items-center justify-between gap-3">
-        {/* metric tabs: hidden when embedded (the panel is already titled
-            "Cumulative stars"; growth-over-time lives on the full /compare) */}
-        {!embedded ? (
         <div className="flex items-center gap-1 border border-grid p-1">
           {(["cumulative", "growth"] as Metric[]).map((m) => (
             <button
@@ -735,7 +661,6 @@ export default function CompareLab({
             </button>
           ))}
         </div>
-        ) : null}
         <div className="flex flex-wrap items-center gap-4">
           <label className={`numeral flex items-center gap-2 text-micro tracking-[0.15em] ${metric === "growth" ? "text-faint/50" : "cursor-pointer text-accent"}`}>
             <input
@@ -778,9 +703,9 @@ export default function CompareLab({
             />
             LOG SCALE
           </label>
-          {raceToggle}
         </div>
       </div>
+      ) : null}
 
       {/* chart */}
       <div className={embedded ? "min-h-0 flex-1" : "hud px-3 py-4 sm:px-5"}>
@@ -964,9 +889,9 @@ export default function CompareLab({
           {raceOn ? (
             <Link
               href={`/compare?repos=${encodeURIComponent(repos.join(","))}`}
-              className="numeral text-micro tracking-[0.18em] text-accent hover:underline underline-offset-4"
+              className="numeral inline-flex shrink-0 items-center gap-1.5 border border-accent/60 bg-accent/10 px-3.5 py-1.5 text-label tracking-[0.16em] text-accent transition-colors hover:bg-accent/20"
             >
-              ▸ full race
+              OPEN THE FULL RACE ▸
             </Link>
           ) : null}
         </div>

@@ -13,6 +13,8 @@ import type { ReactNode } from "react";
 
 export interface ConsoleSlot {
   meta?: string;
+  // optional header-right control (the race toggle on the cumulative panel)
+  action?: ReactNode;
   node: ReactNode;
 }
 
@@ -49,7 +51,7 @@ export default function ConsoleLayout({
           the star chart (cumulative anchors the left column, the dossier
           stacks on the right); deeper panels follow once the visitor is in */}
       <div className="grid grid-cols-1 items-stretch gap-4 lg:grid-cols-2">
-        <Panel index="02" title="Cumulative stars" meta={cumulative.meta} delay={160}>
+        <Panel index="02" title="Cumulative stars" meta={cumulative.meta} action={cumulative.action} delay={160}>
           {cumulative.node}
         </Panel>
         <div className="flex flex-col gap-4">

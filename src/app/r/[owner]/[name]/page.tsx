@@ -4,6 +4,7 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import ConsoleLayout from "@/components/ConsoleLayout";
+import { RaceProvider, RaceToggle } from "@/components/RaceContext";
 import GalacticChart from "@/components/GalacticChart";
 import VerticalChart from "@/components/VerticalChart";
 import LiveProvider from "@/components/LiveProvider";
@@ -302,6 +303,7 @@ export default async function ExplorerPage({
       </header>
 
       <LiveProvider bundle={demoBundle} polling={false}>
+        <RaceProvider repo={repoLabel}>
         <ConsoleLayout
           dossier={data.dossier}
           starChart={{
@@ -330,6 +332,7 @@ export default async function ExplorerPage({
           }}
           cumulative={{
             meta: "the race",
+            action: <RaceToggle />,
             node: (
               <div className="flex h-full flex-col gap-2">
                 {/* The star chart IS the race: CompareLab embedded starts as this
@@ -405,6 +408,7 @@ export default async function ExplorerPage({
             ),
           }}
         />
+        </RaceProvider>
       </LiveProvider>
 
       <div className="hud flex flex-wrap items-center justify-between gap-3 px-4 py-3">
