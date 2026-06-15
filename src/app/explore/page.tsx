@@ -9,6 +9,7 @@ import EmbedGenerator from "@/components/EmbedGenerator";
 import GalaxyHero from "@/components/GalaxyHero";
 import SpaceBackdrop from "@/components/SpaceBackdrop";
 import Masthead from "@/components/Masthead";
+import CapabilitiesBand from "@/components/CapabilitiesBand";
 import SpotlightChart from "@/components/SpotlightChart";
 import VerticalChart from "@/components/VerticalChart";
 import { buildDemoSpotlight } from "@/lib/demo";
@@ -146,6 +147,10 @@ export default async function Explore() {
           </div>
         </section>
       ) : null}
+
+      <section className="rise" style={{ animationDelay: "130ms" }}>
+        <CapabilitiesBand />
+      </section>
 
       {fastest.length ? (
         <section
