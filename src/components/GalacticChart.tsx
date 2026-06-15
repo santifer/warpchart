@@ -480,15 +480,16 @@ export default function GalacticChart({
       const defSpan = defHi - defLo;
       let span = Math.max(spanLegible, spanRange);
       span = Math.max(0.004, Math.min(span, defSpan * 3)); // tiny floor, generous cap
-      const mid = (log10(set[0]) + log10(set[set.length - 1])) / 2;
-      azLo = mid - span / 2;
-      azHi = mid + span / 2;
-      // keep the hero in frame with headroom
+      // Anchor the hero at ~33% from the left so its ring, wake and any trailing
+      // neighbours always have room and NEVER clip the left edge; the chase ahead
+      // fills the right. (Centring on the set midpoint shoved the hero to the
+      // edge whenever every salient neighbour was ahead of it.)
+      const HERO_FRAC = 0.33;
       const hl = log10(stars);
-      if (hl < azLo + 0.004) { azLo = hl - 0.004; azHi = azLo + span; }
-      if (hl > azHi - 0.004) { azHi = hl + 0.004; azLo = azHi - span; }
-      azLo = Math.max(bMin, azLo);
-      azHi = Math.min(bMax, azHi);
+      azLo = hl - HERO_FRAC * span;
+      azHi = azLo + span;
+      if (azLo < bMin) { azLo = bMin; azHi = bMin + span; } // shifts hero right, never clips
+      if (azHi > bMax) azHi = bMax;
     }
   }
 
