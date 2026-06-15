@@ -124,6 +124,7 @@ export default function Dashboard({
         {deck ? (
           <CommandDeck
             bundle={bundle}
+            dossier={dossier}
             target={target}
             onPinTarget={pinTarget}
             onExit={() => setDeck(false)}
