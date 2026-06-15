@@ -1,0 +1,589 @@
+"use client";
+
+// THE RACE: an interactive multi-repo comparison. Reuses /api/curve (the cached
+// reconstruction that also feeds the embed and the OG card), so adding repos
+// never multiplies GitHub cost. What it does that star-history cannot:
+//   - two metrics: cumulative stars AND growth rate (stars/day over time)
+//   - align by day-0 (compare trajectories from birth, not calendar date)
+//   - a rich legend (live stars, world rank, velocity per repo)
+//   - an auto-written readout: who is biggest, who is fastest, who overtook whom
+//   - a shareable OG card baked from the same data (the viral loop)
+// Mission-control aesthetic, URL-stateful, sound-free.
+import { useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
+import {
+  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceDot,
+} from "recharts";
+import { usePalette } from "@/lib/usePalette";
+import { fmt, fmtCompact } from "@/lib/format";
+import {
+  DAY, repoColor, rateAt, lastCrossover, shortRepo, type CurvePoint,
+} from "@/lib/compare";
+
+interface Curve {
+  repo: string;
+  total: number;
+  pts: CurvePoint[];
+  dashedFrom: number | null;
+  archiveFrom?: number | null;
+}
+interface Stats {
+  repo: string;
+  rank: number;
+  stars: number;
+  velocityPerDay: number | null;
+}
+interface SearchItem {
+  r: string;
+  s: number;
+  d: string | null;
+}
+type Metric = "cumulative" | "growth";
+
+const REPO_RE = /^[\w.-]+\/[\w.-]+$/;
+const MAX = 8;
+const SUGGEST = ["ollama/ollama", "tinygrad/tinygrad", "simonw/llm"];
+
+function downsample<T>(arr: T[], max: number): T[] {
+  if (arr.length <= max) return arr;
+  const step = Math.ceil(arr.length / max);
+  const out = arr.filter((_, i) => i % step === 0);
+  if (out[out.length - 1] !== arr[arr.length - 1]) out.push(arr[arr.length - 1]);
+  return out;
+}
+
+// transformed rows [{x,y}] for one repo under the current metric/align
+function seriesRows(curve: Curve, metric: Metric, align: boolean): { x: number; y: number }[] {
+  const pts = curve.pts;
+  if (pts.length < 2) return [];
+  const t0 = pts[0].t;
+  if (metric === "cumulative") {
+    return downsample(pts, 160).map((p) => ({ x: align ? (p.t - t0) / DAY : p.t, y: p.v }));
+  }
+  // growth: trailing 7-day rate sampled across the lifespan
+  const t1 = pts[pts.length - 1].t;
+  const days = Math.max(1, (t1 - t0) / DAY);
+  const N = Math.min(180, Math.max(8, Math.round(days)));
+  const rows: { x: number; y: number }[] = [];
+  for (let i = 0; i <= N; i++) {
+    const t = t0 + ((t1 - t0) * i) / N;
+    rows.push({ x: align ? (t - t0) / DAY : t, y: Math.round(rateAt(pts, t)) });
+  }
+  return rows;
+}
+
+function interpAtX(rows: { x: number; y: number }[], x: number): number | null {
+  if (!rows.length || x < rows[0].x || x > rows[rows.length - 1].x) return null;
+  let lo = 0;
+  let hi = rows.length - 1;
+  while (lo < hi) {
+    const mid = (lo + hi) >> 1;
+    if (rows[mid].x < x) lo = mid + 1;
+    else hi = mid;
+  }
+  if (rows[lo].x === x) return rows[lo].y;
+  const b = rows[lo];
+  const a = rows[lo - 1];
+  const k = (x - a.x) / Math.max(1e-9, b.x - a.x);
+  return a.y + (b.y - a.y) * k;
+}
+
+export default function CompareLab({
+  initialRepos,
+  initialMetric = "cumulative",
+  initialAlign = false,
+  initialLog = false,
+}: {
+  initialRepos: string[];
+  initialMetric?: Metric;
+  initialAlign?: boolean;
+  initialLog?: boolean;
+}) {
+  const C = usePalette();
+  const [repos, setRepos] = useState<string[]>(initialRepos);
+  const [curves, setCurves] = useState<Record<string, Curve>>({});
+  const [status, setStatus] = useState<Record<string, "loading" | "ok" | "error">>({});
+  const [stats, setStats] = useState<Record<string, Stats>>({});
+  const [metric, setMetric] = useState<Metric>(initialMetric);
+  const [align, setAlign] = useState(initialAlign);
+  const [log, setLog] = useState(initialLog && initialMetric === "cumulative");
+  const [query, setQuery] = useState("");
+  const [items, setItems] = useState<SearchItem[]>([]);
+  const [open, setOpen] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const fetched = useRef<Set<string>>(new Set());
+
+  // fetch each repo's curve once (cached server-side)
+  useEffect(() => {
+    for (const repo of repos) {
+      const key = repo.toLowerCase();
+      if (fetched.current.has(key)) continue;
+      fetched.current.add(key);
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setStatus((s) => ({ ...s, [key]: "loading" }));
+      (async () => {
+        try {
+          const res = await fetch(`/api/curve?repo=${encodeURIComponent(repo)}`);
+          if (!res.ok) throw new Error(String(res.status));
+          const data = (await res.json()) as Curve;
+          setCurves((c) => ({ ...c, [key]: data }));
+          setStatus((s) => ({ ...s, [key]: "ok" }));
+        } catch {
+          setStatus((s) => ({ ...s, [key]: "error" }));
+        }
+      })();
+    }
+  }, [repos]);
+
+  // live stats (rank/velocity) from the cache-only compare endpoint
+  useEffect(() => {
+    if (!repos.length) return;
+    const ctrl = new AbortController();
+    const id = setTimeout(async () => {
+      try {
+        const res = await fetch(`/api/v1/compare?repos=${encodeURIComponent(repos.join(","))}`, {
+          signal: ctrl.signal,
+        });
+        if (!res.ok) return;
+        const body = (await res.json()) as { results: { repo: string; stats: Stats | null }[] };
+        const map: Record<string, Stats> = {};
+        for (const r of body.results) if (r.stats) map[r.repo.toLowerCase()] = r.stats;
+        // eslint-disable-next-line react-hooks/set-state-in-effect
+        setStats(map);
+      } catch { /* stats are optional */ }
+    }, 250);
+    return () => {
+      clearTimeout(id);
+      ctrl.abort();
+    };
+  }, [repos]);
+
+  // URL state (shareable, SSR-able for the OG card)
+  useEffect(() => {
+    const p = new URLSearchParams();
+    if (repos.length) p.set("repos", repos.join(","));
+    if (metric !== "cumulative") p.set("metric", metric);
+    if (align) p.set("align", "1");
+    if (log) p.set("log", "1");
+    const qs = p.toString();
+    window.history.replaceState(null, "", qs ? `/compare?${qs}` : "/compare");
+  }, [repos, metric, align, log]);
+
+  // autocomplete
+  useEffect(() => {
+    const q = query.trim();
+    if (q.length < 2) {
+      setItems([]);
+      return;
+    }
+    const ctrl = new AbortController();
+    const id = setTimeout(async () => {
+      try {
+        const res = await fetch(`/api/search?q=${encodeURIComponent(q)}`, { signal: ctrl.signal });
+        const body = (await res.json()) as { items: SearchItem[] };
+        // eslint-disable-next-line react-hooks/set-state-in-effect
+        setItems(body.items ?? []);
+      } catch { /* ignore */ }
+    }, 200);
+    return () => {
+      clearTimeout(id);
+      ctrl.abort();
+    };
+  }, [query]);
+
+  const addRepo = (raw: string) => {
+    const r = raw.trim().replace(/^https?:\/\/github\.com\//i, "").replace(/\/$/, "");
+    if (!REPO_RE.test(r)) return;
+    if (repos.some((x) => x.toLowerCase() === r.toLowerCase())) return;
+    if (repos.length >= MAX) return;
+    setRepos([...repos, r]);
+    setQuery("");
+    setItems([]);
+    setOpen(false);
+  };
+  const removeRepo = (r: string) =>
+    setRepos(repos.filter((x) => x.toLowerCase() !== r.toLowerCase()));
+
+  // build the merged chart data
+  const { data, refDots, xDomain, yDomain, anyLoading } = useMemo(() => {
+    const series = repos
+      .map((repo, i) => {
+        const c = curves[repo.toLowerCase()];
+        return c ? { repo, i, rows: seriesRows(c, metric, align) } : null;
+      })
+      .filter((s): s is { repo: string; i: number; rows: { x: number; y: number }[] } => !!s && s.rows.length > 0);
+
+    const xs = new Set<number>();
+    let yMax = metric === "growth" ? 1 : 1;
+    for (const s of series) for (const r of s.rows) {
+      xs.add(r.x);
+      if (r.y > yMax) yMax = r.y;
+    }
+    const masterX = [...xs].sort((a, b) => a - b);
+    const rows = masterX.map((x) => {
+      const row: Record<string, number | null> = { x };
+      for (const s of series) row[`r${s.i}`] = interpAtX(s.rows, x);
+      return row;
+    });
+    const dots = series.map((s) => {
+      const last = s.rows[s.rows.length - 1];
+      return { i: s.i, x: last.x, y: log && metric === "cumulative" ? Math.max(1, last.y) : last.y };
+    });
+    const loading = repos.some((r) => status[r.toLowerCase()] === "loading");
+    return {
+      data: rows,
+      refDots: dots,
+      xDomain: masterX.length ? ([masterX[0], masterX[masterX.length - 1]] as [number, number]) : ([0, 1] as [number, number]),
+      yDomain: (log && metric === "cumulative" ? [1, "auto"] : [0, "auto"]) as [number | string, number | string],
+      anyLoading: loading,
+    };
+  }, [repos, curves, metric, align, log, status]);
+
+  // auto-insight: biggest, fastest, most recent overtake
+  const insight = useMemo(() => {
+    const ready = repos
+      .map((repo) => ({ repo, c: curves[repo.toLowerCase()] }))
+      .filter((x): x is { repo: string; c: Curve } => !!x.c && x.c.pts.length > 1);
+    if (ready.length < 1) return null;
+    const biggest = [...ready].sort((a, b) => b.c.total - a.c.total)[0];
+    const fastest = [...ready]
+      .map((x) => ({ repo: x.repo, rate: rateAt(x.c.pts, x.c.pts[x.c.pts.length - 1].t) }))
+      .sort((a, b) => b.rate - a.rate)[0];
+    let cross: { a: string; b: string; t: number } | null = null;
+    for (let i = 0; i < ready.length; i++)
+      for (let j = i + 1; j < ready.length; j++) {
+        const x = lastCrossover(ready[i].c.pts, ready[j].c.pts);
+        if (x && (!cross || x.t > cross.t)) {
+          const leader = x.leader === "a" ? ready[i].repo : ready[j].repo;
+          const trailer = x.leader === "a" ? ready[j].repo : ready[i].repo;
+          cross = { a: leader, b: trailer, t: x.t };
+        }
+      }
+    return {
+      biggest: biggest.repo,
+      fastest: fastest.repo,
+      fastestRate: Math.round(fastest.rate),
+      cross,
+    };
+  }, [repos, curves]);
+
+  const fmtX = (x: number) => {
+    if (align) {
+      if (x < 60) return `${Math.round(x)}d`;
+      if (x < 730) return `${Math.round(x / 30.44)}mo`;
+      return `${(x / 365.25).toFixed(1)}y`;
+    }
+    return new Date(x).toLocaleDateString("en-US", { month: "short", year: "2-digit" });
+  };
+
+  const shareUrl = useMemo(() => {
+    const base = typeof window !== "undefined" ? window.location.origin : "https://warpchart.dev";
+    const p = new URLSearchParams({ repos: repos.join(",") });
+    if (metric !== "cumulative") p.set("metric", metric);
+    if (align) p.set("align", "1");
+    return `${base}/compare?${p.toString()}`;
+  }, [repos, metric, align]);
+  const ogUrl = useMemo(() => {
+    const base = typeof window !== "undefined" ? window.location.origin : "https://warpchart.dev";
+    return `${base}/api/og?compare=${encodeURIComponent(repos.join(","))}`;
+  }, [repos]);
+
+  const copyLink = async () => {
+    try {
+      await navigator.clipboard.writeText(shareUrl);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1600);
+    } catch { /* ignore */ }
+  };
+  const share = async () => {
+    if (navigator.share) {
+      try {
+        await navigator.share({ title: "Star race · Warpchart", url: shareUrl });
+        return;
+      } catch { /* fell through to copy */ }
+    }
+    copyLink();
+  };
+  const downloadCsv = () => {
+    const lines = ["repo,date,stars"];
+    for (const repo of repos) {
+      const c = curves[repo.toLowerCase()];
+      if (!c) continue;
+      for (const p of c.pts) lines.push(`${repo},${new Date(p.t).toISOString().slice(0, 10)},${Math.round(p.v)}`);
+    }
+    const blob = new Blob([lines.join("\n")], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `warpchart-race-${repos.map(shortRepo).join("-").slice(0, 60)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const btn = "numeral border border-grid px-3 py-1.5 text-micro tracking-[0.2em] text-dim transition-colors hover:border-accent/50 hover:text-accent";
+
+  return (
+    <div className="flex flex-col gap-4">
+      {/* add bar */}
+      <div className="hud relative px-4 py-3">
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="relative min-w-[240px] flex-1">
+            <input
+              value={query}
+              onChange={(e) => {
+                setQuery(e.target.value);
+                setOpen(true);
+              }}
+              onFocus={() => setOpen(true)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") addRepo(items[0]?.r ?? query);
+                if (e.key === "Escape") setOpen(false);
+              }}
+              placeholder="add a repo to the race — owner/name"
+              className="numeral w-full border border-grid bg-void/60 px-3 py-2 text-label text-ink outline-none placeholder:text-faint focus:border-accent/60"
+            />
+            {open && items.length > 0 ? (
+              <div className="hud absolute left-0 right-0 top-full z-20 mt-1 max-h-[280px] overflow-auto bg-void/95 p-1 backdrop-blur">
+                {items.map((it) => (
+                  <button
+                    key={it.r}
+                    onClick={() => addRepo(it.r)}
+                    className="flex w-full items-center justify-between gap-3 px-3 py-2 text-left transition-colors hover:bg-accent/10"
+                  >
+                    <span className="numeral truncate text-label text-ink">{it.r}</span>
+                    <span className="numeral shrink-0 text-micro text-faint">{fmtCompact(it.s)}</span>
+                  </button>
+                ))}
+              </div>
+            ) : null}
+          </div>
+          <button onClick={() => addRepo(items[0]?.r ?? query)} className={btn}>
+            + ADD
+          </button>
+          {repos.length ? (
+            <button onClick={() => setRepos([])} className={btn}>
+              CLEAR
+            </button>
+          ) : null}
+        </div>
+        {/* chips */}
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          {repos.map((repo, i) => (
+            <span
+              key={repo}
+              className="flex items-center gap-2 border px-2.5 py-1"
+              style={{ borderColor: `${repoColor(i)}66` }}
+            >
+              <span className="h-2.5 w-2.5 shrink-0" style={{ background: repoColor(i) }} />
+              <span className="numeral text-label text-ink">{repo}</span>
+              {status[repo.toLowerCase()] === "loading" ? (
+                <span className="numeral text-micro text-faint">scanning…</span>
+              ) : status[repo.toLowerCase()] === "error" ? (
+                <span className="numeral text-micro text-warn">failed</span>
+              ) : null}
+              <button onClick={() => removeRepo(repo)} className="text-dim transition-colors hover:text-warn" aria-label={`remove ${repo}`}>
+                ✕
+              </button>
+            </span>
+          ))}
+          {repos.length === 0
+            ? SUGGEST.map((s) => (
+                <button key={s} onClick={() => addRepo(s)} className="numeral border border-grid px-2.5 py-1 text-micro text-faint transition-colors hover:border-accent/50 hover:text-accent">
+                  + {s}
+                </button>
+              ))
+            : null}
+        </div>
+      </div>
+
+      {/* toolbar */}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-1 border border-grid p-1">
+          {(["cumulative", "growth"] as Metric[]).map((m) => (
+            <button
+              key={m}
+              onClick={() => {
+                setMetric(m);
+                if (m === "growth") setLog(false);
+              }}
+              className={`numeral px-3 py-1.5 text-micro tracking-[0.2em] transition-colors ${
+                metric === m ? "bg-accent/15 text-accent" : "text-dim hover:text-ink"
+              }`}
+            >
+              {m === "cumulative" ? "CUMULATIVE STARS" : "GROWTH · STARS/DAY"}
+            </button>
+          ))}
+        </div>
+        <div className="flex flex-wrap items-center gap-4">
+          <label className="numeral flex cursor-pointer items-center gap-2 text-micro tracking-[0.15em] text-dim">
+            <input type="checkbox" checked={align} onChange={(e) => setAlign(e.target.checked)} className="accent-[var(--accent)]" />
+            ALIGN AT DAY 0
+          </label>
+          <label className={`numeral flex items-center gap-2 text-micro tracking-[0.15em] ${metric === "growth" ? "text-faint/50" : "cursor-pointer text-dim"}`}>
+            <input type="checkbox" disabled={metric === "growth"} checked={log} onChange={(e) => setLog(e.target.checked)} className="accent-[var(--accent)]" />
+            LOG SCALE
+          </label>
+        </div>
+      </div>
+
+      {/* chart */}
+      <div className="hud px-3 py-4 sm:px-5">
+        {repos.length === 0 ? (
+          <div className="numeral flex h-[440px] flex-col items-center justify-center gap-2 text-center text-dim">
+            <span className="font-display text-label tracking-[0.3em] text-dim">THE RACE IS EMPTY</span>
+            <span className="text-micro text-faint">add two or more repos to chart their climb side by side</span>
+          </div>
+        ) : (
+          <div className="h-[440px] w-full">
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={data} margin={{ top: 10, right: 18, bottom: 0, left: 4 }}>
+                <CartesianGrid stroke={C.grid} strokeDasharray="2 6" vertical={false} />
+                <XAxis
+                  dataKey="x"
+                  type="number"
+                  domain={xDomain}
+                  scale={align ? "linear" : "time"}
+                  tickFormatter={fmtX}
+                  tick={{ fill: C.dim, fontSize: 12, fontFamily: "var(--font-jbmono)" }}
+                  tickLine={false}
+                  axisLine={{ stroke: C.grid }}
+                  minTickGap={48}
+                  allowDataOverflow
+                />
+                <YAxis
+                  domain={yDomain}
+                  allowDataOverflow
+                  scale={log && metric === "cumulative" ? "log" : "linear"}
+                  tickFormatter={(v: number) => (metric === "growth" ? `${fmtCompact(v)}/d` : fmtCompact(v))}
+                  tick={{ fill: C.dim, fontSize: 12, fontFamily: "var(--font-jbmono)" }}
+                  tickLine={false}
+                  axisLine={false}
+                  width={56}
+                />
+                <Tooltip
+                  contentStyle={{
+                    background: C.hull,
+                    border: `1px solid ${C.grid}`,
+                    fontFamily: "var(--font-jbmono)",
+                    fontSize: 13,
+                  }}
+                  labelStyle={{ color: C.dim }}
+                  labelFormatter={(x) =>
+                    align
+                      ? `day ${Math.round(Number(x))}`
+                      : new Date(Number(x)).toLocaleDateString("en-US", { dateStyle: "medium" })
+                  }
+                  formatter={(value, key) => {
+                    const i = Number(String(key).slice(1));
+                    const repo = repos[i];
+                    return [
+                      metric === "growth" ? `${fmt(Number(value))}/day` : `${fmt(Number(value))} ★`,
+                      repo ? shortRepo(repo) : String(key),
+                    ];
+                  }}
+                />
+                {repos.map((repo, i) => (
+                  <Line
+                    key={repo}
+                    dataKey={`r${i}`}
+                    name={shortRepo(repo)}
+                    stroke={repoColor(i)}
+                    strokeWidth={2}
+                    dot={false}
+                    type="monotone"
+                    connectNulls={false}
+                    isAnimationActive
+                    animationDuration={1100}
+                  />
+                ))}
+                {refDots.map((d) => (
+                  <ReferenceDot
+                    key={d.i}
+                    x={d.x}
+                    y={d.y}
+                    r={4}
+                    fill={repoColor(d.i)}
+                    stroke={C.void}
+                    strokeWidth={1.5}
+                  />
+                ))}
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+        )}
+      </div>
+
+      {/* legend + insight */}
+      {repos.length > 0 ? (
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+          <div className="hud px-4 py-3 lg:col-span-2">
+            <div className="module-title !text-micro mb-2">Contenders</div>
+            <div className="flex flex-col gap-2">
+              {repos.map((repo, i) => {
+                const st = stats[repo.toLowerCase()];
+                const c = curves[repo.toLowerCase()];
+                const total = c?.total ?? st?.stars ?? null;
+                return (
+                  <div key={repo} className="flex flex-wrap items-center gap-x-4 gap-y-1">
+                    <span className="h-3 w-3 shrink-0" style={{ background: repoColor(i) }} />
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={`https://github.com/${repo.split("/")[0]}.png?size=40`} alt="" width={18} height={18} className="shrink-0 border border-grid" />
+                    <Link href={`/r/${repo}`} className="numeral text-label text-ink transition-colors hover:text-accent">
+                      {repo}
+                    </Link>
+                    <span className="numeral text-micro text-faint">
+                      {total !== null ? `${fmt(total)} ★` : "—"}
+                      {st ? ` · #${fmt(st.rank)}` : ""}
+                      {st?.velocityPerDay != null ? ` · ${fmt(Math.round(st.velocityPerDay))}/d` : ""}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+          <div className="hud px-4 py-3">
+            <div className="module-title !text-micro mb-2">Race readout</div>
+            {insight ? (
+              <div className="flex flex-col gap-2 text-label">
+                <p className="text-dim">
+                  Biggest: <span className="text-ink">{shortRepo(insight.biggest)}</span>
+                </p>
+                <p className="text-dim">
+                  Fastest now: <span className="text-accent">{shortRepo(insight.fastest)}</span>
+                  <span className="numeral text-micro text-faint"> · {fmt(insight.fastestRate)}/day</span>
+                </p>
+                {insight.cross ? (
+                  <p className="text-dim">
+                    Last overtake: <span className="text-ink">{shortRepo(insight.cross.a)}</span> passed{" "}
+                    <span className="text-ink">{shortRepo(insight.cross.b)}</span>
+                    <span className="numeral text-micro text-faint">
+                      {" "}
+                      · {new Date(insight.cross.t).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "2-digit" })}
+                    </span>
+                  </p>
+                ) : (
+                  <p className="numeral text-micro text-faint">no overtakes in the overlapping window yet</p>
+                )}
+              </div>
+            ) : (
+              <p className="numeral text-micro text-faint">{anyLoading ? "reconstructing trajectories…" : "add repos to see the readout"}</p>
+            )}
+          </div>
+        </div>
+      ) : null}
+
+      {/* actions */}
+      {repos.length > 0 ? (
+        <div className="flex flex-wrap items-center gap-2">
+          <button onClick={copyLink} className={btn}>{copied ? "✓ COPIED" : "COPY LINK"}</button>
+          <button onClick={share} className={btn}>SHARE</button>
+          <a href={ogUrl} target="_blank" rel="noopener noreferrer" className={btn}>SHARE CARD ↗</a>
+          <button onClick={downloadCsv} className={btn}>CSV</button>
+          <span className="numeral ml-auto text-micro text-faint">
+            real stargazer timestamps · reconstructed & cached · {repos.length}/{MAX}
+          </span>
+        </div>
+      ) : null}
+    </div>
+  );
+}

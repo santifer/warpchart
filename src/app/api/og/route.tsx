@@ -9,6 +9,7 @@ import { velocity7d } from "@/lib/series";
 import { worldwideRank, repoLite } from "@/lib/github";
 import { cachedSampleCurve, tenantCurve, isTenantRepo, withLiveTotal, type Curve } from "@/lib/curve";
 import { fmt } from "@/lib/format";
+import { parseRepos, repoColor, shortRepo } from "@/lib/compare";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -136,8 +137,128 @@ function specks(repo: string, n: number) {
   }));
 }
 
+async function fetchCurveFor(repo: string): Promise<Curve | null> {
+  try {
+    if (isTenantRepo(repo)) return tenantCurve(160);
+    const [owner, name] = repo.split("/");
+    return await withLiveTotal(await cachedSampleCurve(owner, name), owner, name);
+  } catch {
+    return null;
+  }
+}
+
+// Overlay share card for /compare: the same reconstructed curves, raced on a
+// single axis. Drawing it warms each repo's cached curve for the embed too.
+async function compareCard(param: string): Promise<Response> {
+  const repos = parseRepos(param, 6);
+  if (!repos.length) {
+    return new Response("not found", { status: 404, headers: { "Cache-Control": "no-store" } });
+  }
+  const fetched = await Promise.all(
+    repos.map(async (r) => ({ repo: r, curve: await fetchCurveFor(r) }))
+  );
+  const curves = fetched.filter((x): x is { repo: string; curve: Curve } => !!x.curve && x.curve.pts.length > 1);
+  if (!curves.length) {
+    return new Response("not found", { status: 404, headers: { "Cache-Control": "no-store" } });
+  }
+
+  const [michroma, jbmono] = await Promise.all([googleFont("Michroma"), googleFont("JetBrains Mono")]);
+  const fonts: { name: string; data: ArrayBuffer; style: "normal" }[] = [];
+  if (michroma) fonts.push({ name: "Michroma", data: michroma, style: "normal" });
+  if (jbmono) fonts.push({ name: "JetBrains Mono", data: jbmono, style: "normal" });
+  const mono = jbmono ? "JetBrains Mono" : "monospace";
+  const display = michroma ? "Michroma" : mono;
+
+  const CW = 1104;
+  const CH = 280;
+  const t0 = Math.min(...curves.map((c) => c.curve.pts[0].t));
+  const t1 = Math.max(...curves.map((c) => c.curve.pts[c.curve.pts.length - 1].t));
+  const vMax = Math.max(...curves.map((c) => Math.max(c.curve.total, c.curve.pts[c.curve.pts.length - 1].v)), 1);
+  const px = (t: number) => ((t - t0) / Math.max(1, t1 - t0)) * (CW - 16);
+  const py = (v: number) => CH - 6 - (v / vMax) * (CH - 18);
+  const pathFor = (c: Curve) =>
+    c.pts.map((p, i) => `${i ? "L" : "M"} ${px(p.t).toFixed(1)} ${py(p.v).toFixed(1)}`).join(" ");
+
+  const title = curves.map((c) => shortRepo(c.repo)).join("  vs  ");
+  const titleSize = title.length > 52 ? 28 : title.length > 34 ? 34 : 42;
+
+  return new ImageResponse(
+    (
+      <div
+        style={{
+          width: "100%",
+          height: "100%",
+          display: "flex",
+          flexDirection: "column",
+          background: C.void,
+          padding: 48,
+          fontFamily: mono,
+          color: C.ink,
+          border: `2px solid ${C.grid}`,
+        }}
+      >
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <div style={{ display: "flex", fontFamily: display, fontSize: 20, letterSpacing: 10, color: C.dim }}>
+            WARPCHART
+          </div>
+          <div style={{ display: "flex", fontSize: 17, color: C.dim }}>the open source race</div>
+        </div>
+
+        <div style={{ display: "flex", fontFamily: display, fontSize: titleSize, color: "#f5fbff", marginTop: 20 }}>
+          {title}
+        </div>
+
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 22, marginTop: 14 }}>
+          {curves.map((c, i) => (
+            <div key={c.repo} style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <div style={{ display: "flex", width: 14, height: 14, background: repoColor(i) }} />
+              <div style={{ display: "flex", fontSize: 18, color: C.ink }}>{shortRepo(c.repo)}</div>
+              <div style={{ display: "flex", fontSize: 18, color: C.dim }}>{fmt(c.curve.total)}</div>
+            </div>
+          ))}
+        </div>
+
+        <div style={{ display: "flex", marginTop: "auto" }}>
+          <svg width={CW} height={CH} viewBox={`0 0 ${CW} ${CH}`}>
+            {curves.map((c, i) => (
+              <path key={c.repo} d={pathFor(c.curve)} fill="none" stroke={repoColor(i)} strokeWidth={3} />
+            ))}
+            {curves.map((c, i) => {
+              const last = c.curve.pts[c.curve.pts.length - 1];
+              return <circle key={c.repo} cx={px(last.t)} cy={py(last.v)} r={6} fill={repoColor(i)} />;
+            })}
+          </svg>
+        </div>
+
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            marginTop: 10,
+            paddingTop: 14,
+            borderTop: `1px solid ${C.grid}`,
+            fontSize: 16,
+            color: C.dim,
+          }}
+        >
+          <div style={{ display: "flex" }}>cumulative stars · real timestamps</div>
+          <div style={{ display: "flex", color: C.accent }}>warpchart.dev/compare</div>
+        </div>
+      </div>
+    ),
+    {
+      width: 1200,
+      height: 630,
+      fonts: fonts.length ? fonts : undefined,
+      headers: { "Cache-Control": "public, s-maxage=1800, stale-while-revalidate=86400" },
+    }
+  );
+}
+
 export async function GET(req: Request) {
   const url = new URL(req.url);
+  const compareParam = url.searchParams.get("compare");
+  if (compareParam) return compareCard(compareParam);
   const repoParam = url.searchParams.get("repo");
 
   let data: CardData | null = null;
