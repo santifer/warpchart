@@ -28,7 +28,7 @@ interface Row {
   est: number | null;
 }
 
-export default function CurveChart({ repo }: { repo: string }) {
+export default function CurveChart({ repo, fill }: { repo: string; fill?: boolean }) {
   const C = usePalette();
   const hostRef = useRef<HTMLDivElement | null>(null);
   const [visible, setVisible] = useState(false);
@@ -73,7 +73,7 @@ export default function CurveChart({ repo }: { repo: string }) {
 
   if (failed) {
     return (
-      <div ref={hostRef} className="numeral flex h-[260px] items-center justify-center text-label text-warn">
+      <div ref={hostRef} className={`numeral flex items-center justify-center text-label text-warn ${fill ? "h-full min-h-[180px]" : "h-[260px]"}`}>
         TRAJECTORY SCAN FAILED · retry on next visit
       </div>
     );
@@ -81,7 +81,7 @@ export default function CurveChart({ repo }: { repo: string }) {
 
   if (!curve) {
     return (
-      <div ref={hostRef} className="numeral flex h-[260px] items-center justify-center text-label text-dim">
+      <div ref={hostRef} className={`numeral flex items-center justify-center text-label text-dim ${fill ? "h-full min-h-[180px]" : "h-[260px]"}`}>
         {visible ? "RECONSTRUCTING TRAJECTORY… first scan can take ~20s" : "…"}
       </div>
     );
@@ -111,8 +111,8 @@ export default function CurveChart({ repo }: { repo: string }) {
   });
 
   return (
-    <div ref={hostRef} className="flex flex-col gap-2">
-      <div className="h-[280px] w-full">
+    <div ref={hostRef} className={`flex flex-col gap-2 ${fill ? "h-full min-h-0" : ""}`}>
+      <div className={`w-full ${fill ? "min-h-0 flex-1" : "h-[280px]"}`}>
         <ResponsiveContainer width="100%" height="100%">
           <ComposedChart key={run} data={rows} margin={{ top: 8, right: 12, bottom: 0, left: 0 }}>
             <CartesianGrid stroke={C.grid} strokeDasharray="2 6" vertical={false} />

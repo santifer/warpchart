@@ -14,7 +14,7 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import NumberFlow from "@number-flow/react";
 import GalacticChart from "./GalacticChart";
 import Panel from "./Panel";
-import CumulativeChart from "./CumulativeChart";
+import CurveChart from "./CurveChart";
 import VelocityChart from "./VelocityChart";
 import DailyLadder from "./DailyLadder";
 import Heatmap from "./Heatmap";
@@ -313,7 +313,7 @@ export default function CommandDeck({
             <VelocityChart />
           </Panel>
           <Panel index="02" title="Cumulative stars" meta={`since ${bundle.meta?.created_at?.slice(0, 10) ?? "launch"}`}>
-            <CumulativeChart bundle={bundle} />
+            <CurveChart repo={repo} fill />
           </Panel>
           <Panel index="09" title="World rank over time" meta="hourly snapshots">
             <RankChart bundle={bundle} />

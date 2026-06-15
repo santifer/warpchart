@@ -13,7 +13,7 @@ import VerticalChart from "./VerticalChart";
 import CommandDeck from "./CommandDeck";
 import VelocityChart from "./VelocityChart";
 import DailyLadder from "./DailyLadder";
-import CumulativeChart from "./CumulativeChart";
+import CurveChart from "./CurveChart";
 import Projections from "./Projections";
 import Heatmap from "./Heatmap";
 import RankChart from "./RankChart";
@@ -154,8 +154,8 @@ export default function Dashboard({
             ),
           }}
           cumulative={{
-            meta: `since ${bundle.meta?.created_at?.slice(0, 10) ?? "launch"} · replay available`,
-            node: <CumulativeChart bundle={bundle} />,
+            meta: `since ${bundle.meta?.created_at?.slice(0, 10) ?? "launch"} · live`,
+            node: <CurveChart repo={repo ?? ""} fill />,
           }}
           velocity={{ meta: "24h vs previous 24h", node: <VelocityChart /> }}
           projections={{
