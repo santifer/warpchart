@@ -453,39 +453,42 @@ export default function GalacticChart({
   const defLo = Math.max(bMin, log10(aMinDefault));
   const defHi = Math.min(bMax, log10(aMaxDefault));
 
-  // AUTO-ZOOM frame: tighten the default window until the nearest labelled
-  // neighbours deconflict. The binding constraint is the TIGHTEST adjacent gap
-  // among the salient ships (hero + a few closest each side); we shrink the
-  // window so that gap maps to >= TARGET_PX, then clamp so we never over-zoom a
-  // sparse neighbourhood. The hero stays anchored at its current screen
-  // fraction. Off -> the wide count-based default. Suspended while panning.
+  // AUTO-ZOOM frame: don't reuse the count-based default; FRAME the salient set
+  // (hero + the nearest neighbours) directly, choosing the LARGEST K whose
+  // framing keeps adjacent labels >= TARGET_PX apart. Dense clusters drop to a
+  // few ships and zoom IN so they read; sparse systems keep the nearest rival in
+  // view so the screen is never empty. The frame = the set's star range + a
+  // margin. Off -> the wide default. Suspended while panning (view wins).
   let azLo = defLo;
   let azHi = defHi;
   if (autoZoom) {
-    const salient = Array.from(
-      new Set([stars, ...ahead.slice(0, 4).map((n) => n.s), ...behind.slice(0, 2).map((n) => n.s)]),
-    ).sort((a, b) => a - b);
-    if (salient.length >= 2) {
-      let minGap = Infinity;
-      for (let i = 1; i < salient.length; i++) minGap = Math.min(minGap, log10(salient[i]) - log10(salient[i - 1]));
-      const TARGET_PX = 165 * fs; // room for a label between two adjacent ships
+    // the salient set = hero + the nearest few neighbours that carry labels
+    const nbrs = [...ahead, ...behind]
+      .sort((a, b) => Math.abs(a.s - stars) - Math.abs(b.s - stars))
+      .slice(0, 4);
+    if (nbrs.length) {
+      const set = Array.from(new Set([stars, ...nbrs.map((n) => n.s)])).sort((a, b) => a - b);
       const plotPx = W - 80;
+      const TARGET_PX = 165 * fs; // label room between the two TIGHTEST ships
+      let minGap = Infinity;
+      for (let i = 1; i < set.length; i++) minGap = Math.min(minGap, log10(set[i]) - log10(set[i - 1]));
+      // span that puts the tightest adjacent pair exactly TARGET_PX apart (zoom
+      // IN on dense clusters), but at least wide enough to FIT the whole set
+      // (zoom OUT on sparse so the nearest rival stays in view).
+      const spanLegible = minGap > 0 && minGap < Infinity ? (minGap * plotPx) / TARGET_PX : 0;
+      const spanRange = (log10(set[set.length - 1]) - log10(set[0])) * 1.18;
       const defSpan = defHi - defLo;
-      const wantSpan = minGap > 0 && minGap < Infinity ? (minGap * plotPx) / TARGET_PX : defSpan;
-      // floor: still show the hero plus its two nearest with margin
-      const nearD = salient
-        .filter((s) => s !== stars)
-        .map((s) => Math.abs(log10(s) - log10(stars)))
-        .sort((a, b) => a - b);
-      const floorSpan = Math.max((nearD[1] ?? nearD[0] ?? 0.02) * 2.2, 0.012);
-      const newSpan = Math.max(floorSpan, Math.min(defSpan, wantSpan));
-      if (newSpan < defSpan - 1e-6) {
-        const frac = defSpan > 0 ? (log10(stars) - defLo) / defSpan : 0.5;
-        azLo = log10(stars) - frac * newSpan;
-        azHi = azLo + newSpan;
-        if (azHi > bMax) { azHi = bMax; azLo = azHi - newSpan; }
-        if (azLo < 0) azLo = 0;
-      }
+      let span = Math.max(spanLegible, spanRange);
+      span = Math.max(0.004, Math.min(span, defSpan * 3)); // tiny floor, generous cap
+      const mid = (log10(set[0]) + log10(set[set.length - 1])) / 2;
+      azLo = mid - span / 2;
+      azHi = mid + span / 2;
+      // keep the hero in frame with headroom
+      const hl = log10(stars);
+      if (hl < azLo + 0.004) { azLo = hl - 0.004; azHi = azLo + span; }
+      if (hl > azHi - 0.004) { azHi = hl + 0.004; azLo = azHi - span; }
+      azLo = Math.max(bMin, azLo);
+      azHi = Math.min(bMax, azHi);
     }
   }
 
