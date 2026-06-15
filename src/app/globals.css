@@ -1292,6 +1292,17 @@ body.gx-warping .ghx-lore {
   }
 }
 
+/* iOS Safari zooms the whole page when a focused text input has font-size < 16px.
+   Force every text input to >=16px on phones so typing never zooms/cuts the
+   layout. The :not() chain raises specificity above Tailwind's text-* utilities
+   so no !important is needed; pinch-zoom stays enabled (accessibility intact). */
+@media (max-width: 767px) {
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
+  textarea:not([readonly]) {
+    font-size: 16px;
+  }
+}
+
 /* SCAN/ASK toggle: a one-shot pulse hint so visitors notice they can switch */
 .mode-toggle-hint {
   animation: mode-toggle-hint 1.5s ease-in-out 3;
