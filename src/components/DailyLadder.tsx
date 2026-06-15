@@ -28,7 +28,7 @@ interface Row {
 
 const VISIBLE = 31; // ~1 month on screen; pan over the full ~2 months
 
-export default function DailyLadder({ bundle }: { bundle: DashboardBundle }) {
+export default function DailyLadder({ bundle, fill }: { bundle: DashboardBundle; fill?: boolean }) {
   const live = useLive();
   const C = usePalette();
 
@@ -75,7 +75,7 @@ export default function DailyLadder({ bundle }: { bundle: DashboardBundle }) {
   const canPan = all.length > visible;
 
   return (
-    <div ref={ref} className="h-[250px] w-full touch-pan-y" style={{ cursor: canPan ? "ew-resize" : undefined }}>
+    <div ref={ref} className={`w-full touch-pan-y ${fill ? "h-full min-h-0" : "h-[250px]"}`} style={{ cursor: canPan ? "ew-resize" : undefined }}>
       <ResponsiveContainer width="100%" height="100%">
         <ComposedChart data={view} margin={{ top: 6, right: 4, left: -14, bottom: 0 }}>
           <CartesianGrid stroke={C.grid} strokeDasharray="2 6" vertical={false} />

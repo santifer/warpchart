@@ -20,7 +20,7 @@ interface Row {
   prev: number;
 }
 
-export default function VelocityChart() {
+export default function VelocityChart({ fill }: { fill?: boolean }) {
   const live = useLive();
   const C = usePalette();
 
@@ -45,7 +45,7 @@ export default function VelocityChart() {
   }, [live.merged, live.nowMs]);
 
   return (
-    <div className="h-[230px] w-full">
+    <div className={fill ? "h-full min-h-0 w-full" : "h-[230px] w-full"}>
       <ResponsiveContainer width="100%" height="100%">
         <ComposedChart data={data} margin={{ top: 6, right: 4, left: -18, bottom: 0 }}>
           <CartesianGrid stroke={C.grid} strokeDasharray="2 6" vertical={false} />

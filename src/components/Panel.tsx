@@ -27,7 +27,7 @@ export default function Panel({
         </div>
         {meta ? <div className="numeral hidden shrink-0 text-label text-dim sm:block">{meta}</div> : null}
       </header>
-      <div className="flex-1 px-4 py-4 sm:px-5">{children}</div>
+      <div className="min-h-0 flex-1 px-4 py-4 sm:px-5">{children}</div>
     </section>
   );
 }

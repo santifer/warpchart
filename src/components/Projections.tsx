@@ -7,12 +7,12 @@ import type { DashboardBundle } from "@/lib/bundle";
 import { fmt, fmtEtaDays, etaDate } from "@/lib/format";
 import { milestoneEta } from "@/lib/projections";
 
-export default function Projections({ bundle }: { bundle: DashboardBundle }) {
+export default function Projections({ bundle, compact }: { bundle: DashboardBundle; compact?: boolean }) {
   const live = useLive();
   const vOwn = bundle.v7d;
 
   return (
-    <div className="flex flex-col gap-3">
+    <div className={`flex flex-col gap-3 ${compact ? "h-full justify-center" : ""}`}>
       {bundle.milestones.map((m) => {
         const e = milestoneEta(m.rank, m.threshold, live.stars, vOwn, m.drift);
         const pct = Math.min(100, (live.stars / m.threshold) * 100);
@@ -47,11 +47,13 @@ export default function Projections({ bundle }: { bundle: DashboardBundle }) {
           </div>
         );
       })}
-      <p className="numeral text-micro leading-relaxed text-faint">
-        eta = gap / (own v7d - threshold drift). Thresholds are the star count
-        of the repo holding each rank; they move up daily. Drift is measured
-        from hourly history.
-      </p>
+      {!compact ? (
+        <p className="numeral text-micro leading-relaxed text-faint">
+          eta = gap / (own v7d - threshold drift). Thresholds are the star count
+          of the repo holding each rank; they move up daily. Drift is measured
+          from hourly history.
+        </p>
+      ) : null}
     </div>
   );
 }

@@ -15,7 +15,7 @@ import { useChartPan } from "@/lib/useChartPan";
 
 const WINDOW_MS = 62 * 24 * 3600 * 1000; // ~2 months
 
-export default function RankChart({ bundle }: { bundle: DashboardBundle }) {
+export default function RankChart({ bundle, fill }: { bundle: DashboardBundle; fill?: boolean }) {
   const live = useLive();
   const C = usePalette();
 
@@ -57,7 +57,7 @@ export default function RankChart({ bundle }: { bundle: DashboardBundle }) {
 
   if (data.length < 5) {
     return (
-      <div className="flex h-[230px] flex-col items-center justify-center gap-2">
+      <div className={`flex flex-col items-center justify-center gap-2 ${fill ? "h-full min-h-0" : "h-[230px]"}`}>
         <span className="font-display text-label tracking-[0.3em] text-dim">ACCUMULATING HISTORY</span>
         <span className="numeral text-label text-faint">
           {data.length} snapshot{data.length === 1 ? "" : "s"} · one per hour from now on
@@ -69,7 +69,7 @@ export default function RankChart({ bundle }: { bundle: DashboardBundle }) {
   const canPan = tMax - tMin > W + 1;
 
   return (
-    <div ref={ref} className="h-[230px] w-full touch-pan-y" style={{ cursor: canPan ? "ew-resize" : undefined }}>
+    <div ref={ref} className={`w-full touch-pan-y ${fill ? "h-full min-h-0" : "h-[230px]"}`} style={{ cursor: canPan ? "ew-resize" : undefined }}>
       <ResponsiveContainer width="100%" height="100%">
         <LineChart data={data} margin={{ top: 10, right: 8, left: -14, bottom: 0 }}>
           <CartesianGrid stroke={C.grid} strokeDasharray="2 6" vertical={false} />

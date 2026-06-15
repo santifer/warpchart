@@ -1206,53 +1206,56 @@ body.gx-warping .ghx-lore {
   border-left: 2px solid rgba(83, 214, 232, 0.3);
 }
 
-/* ── COMMAND DECK bento: a one-screen mission-control grid ──
-   Desktop (>=1024px) fills the viewport with no scroll: 12 columns, the star
-   race as a 6-wide x 2-tall hero, growth tiles down the left, health tiles down
-   the right, rank + heatmap under the hero. Below 1024px the no-scroll rule is
-   sacrificed to preserve hierarchy: it stacks (hero first) and scrolls. The
-   tiles fill their cells, so sparklines/heatmap grow to whatever height the
-   grid hands them. */
+/* ── COMMAND DECK: the real console cards relocated into a fullscreen layout ──
+   Hero star race on top, the eight telemetry cards in a grid below. Desktop
+   (>=1024px) fills the viewport with no scroll (hero ~46% of the height, the
+   grid a 4x2 that fills the rest); the recharts cards take a `fill` prop so
+   they grow to the cell. Below lg the no-scroll rule is sacrificed to keep the
+   hierarchy: it stacks (hero first) and scrolls. */
 .deck-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  min-height: 0;
+}
+.deck-hero-wrap > section {
+  height: 100%;
+}
+.deck-grid {
   display: grid;
   gap: 0.6rem;
   grid-template-columns: 1fr;
-  grid-auto-rows: minmax(190px, auto);
-  overflow-y: auto;
+  min-height: 0;
 }
-@media (min-width: 640px) and (max-width: 1023px) {
-  .deck-body {
-    grid-template-columns: 1fr 1fr;
-  }
-  .deck-hero {
-    grid-column: 1 / -1;
-    aspect-ratio: 16 / 9;
-  }
+.deck-grid > section {
+  min-height: 0;
+  overflow: hidden;
 }
 @media (max-width: 1023px) {
-  .deck-hero {
+  .deck-body {
+    overflow-y: auto;
+  }
+  .deck-hero-wrap {
     min-height: 56vh;
+  }
+}
+@media (min-width: 640px) and (max-width: 1023px) {
+  .deck-grid {
+    grid-template-columns: 1fr 1fr;
+    grid-auto-rows: minmax(230px, auto);
   }
 }
 @media (min-width: 1024px) {
   .deck-body {
-    min-height: 0; /* fill the flex parent and let cells shrink */
     overflow: hidden;
-    grid-template-columns: repeat(12, 1fr);
-    grid-template-rows: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 0.92fr);
-    grid-auto-rows: auto;
-    grid-template-areas:
-      "vel    vel    vel    hero hero hero hero hero hero maint maint maint"
-      "ladder ladder ladder hero hero hero hero hero hero usage usage usage"
-      "cum    cum    cum    rank rank rank heat heat heat gates gates gates";
   }
-  .deck-hero { grid-area: hero; }
-  .deck-vel { grid-area: vel; }
-  .deck-ladder { grid-area: ladder; }
-  .deck-cum { grid-area: cum; }
-  .deck-rank { grid-area: rank; }
-  .deck-heat { grid-area: heat; }
-  .deck-maint { grid-area: maint; }
-  .deck-usage { grid-area: usage; }
-  .deck-gates { grid-area: gates; }
+  .deck-hero-wrap {
+    flex: 0 0 46%;
+  }
+  .deck-grid {
+    flex: 1 1 0;
+    overflow: hidden;
+    grid-template-columns: repeat(4, 1fr);
+    grid-template-rows: repeat(2, 1fr);
+  }
 }

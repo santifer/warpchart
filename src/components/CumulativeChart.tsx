@@ -25,7 +25,7 @@ function downsample<T>(arr: T[], maxPoints = 700): T[] {
   return out;
 }
 
-export default function CumulativeChart({ bundle }: { bundle: DashboardBundle }) {
+export default function CumulativeChart({ bundle, fill }: { bundle: DashboardBundle; fill?: boolean }) {
   const live = useLive();
   const C = usePalette();
   const [replayIdx, setReplayIdx] = useState<number | null>(null);
@@ -89,8 +89,8 @@ export default function CumulativeChart({ bundle }: { bundle: DashboardBundle })
   const cursor = replaying ? cumAll[Math.min(replayIdx!, cumAll.length - 1)] : null;
 
   return (
-    <div className="flex flex-col gap-2">
-      <div className="relative h-[218px] w-full">
+    <div className={`flex flex-col gap-2 ${fill ? "h-full min-h-0" : ""}`}>
+      <div className={`relative w-full ${fill ? "min-h-0 flex-1" : "h-[218px]"}`}>
         <ResponsiveContainer width="100%" height="100%">
           <AreaChart data={data} margin={{ top: 6, right: 4, left: -8, bottom: 0 }}>
             <defs>
