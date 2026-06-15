@@ -204,6 +204,26 @@ export default function CompareLab({
   const removeRepo = (r: string) =>
     setRepos(repos.filter((x) => x.toLowerCase() !== r.toLowerCase()));
 
+  // Stable per-repo colors: a repo keeps its color when OTHERS are removed.
+  // Index-based color would reshuffle every line/chip on each removal, which
+  // is exactly what confuses someone testing with many repos. Removed colors
+  // are freed and reused by the next add.
+  const colorIdx = useRef<Record<string, number>>({});
+  const colors = useMemo(() => {
+    const map = colorIdx.current;
+    const keys = repos.map((r) => r.toLowerCase());
+    for (const k of Object.keys(map)) if (!keys.includes(k)) delete map[k];
+    for (const k of keys) {
+      if (map[k] === undefined) {
+        const used = new Set(Object.values(map));
+        let idx = 0;
+        while (used.has(idx)) idx++;
+        map[k] = idx;
+      }
+    }
+    return keys.map((k) => repoColor(map[k]));
+  }, [repos]);
+
   // build the merged chart data
   const { data, refDots, xDomain, yDomain, anyLoading } = useMemo(() => {
     const series = repos
@@ -372,9 +392,9 @@ export default function CompareLab({
             <span
               key={repo}
               className="flex items-center gap-2 border px-2.5 py-1"
-              style={{ borderColor: `${repoColor(i)}66` }}
+              style={{ borderColor: `${colors[i]}66` }}
             >
-              <span className="h-2.5 w-2.5 shrink-0" style={{ background: repoColor(i) }} />
+              <span className="h-2.5 w-2.5 shrink-0" style={{ background: colors[i] }} />
               <span className="numeral text-label text-ink">{repo}</span>
               {status[repo.toLowerCase()] === "loading" ? (
                 <span className="numeral text-micro text-faint">scanning…</span>
@@ -476,8 +496,11 @@ export default function CompareLab({
                   formatter={(value, key) => {
                     const i = Number(String(key).slice(1));
                     const repo = repos[i];
+                    // values are interpolated onto the shared grid, so round
+                    // before display (a fractional ".777" reads as millions)
+                    const n = Math.round(Number(value));
                     return [
-                      metric === "growth" ? `${fmt(Number(value))}/day` : `${fmt(Number(value))} ★`,
+                      metric === "growth" ? `${fmt(n)}/day` : `${fmt(n)} ★`,
                       repo ? shortRepo(repo) : String(key),
                     ];
                   }}
@@ -487,7 +510,7 @@ export default function CompareLab({
                     key={repo}
                     dataKey={`r${i}`}
                     name={shortRepo(repo)}
-                    stroke={repoColor(i)}
+                    stroke={colors[i]}
                     strokeWidth={2}
                     dot={false}
                     type="monotone"
@@ -502,7 +525,7 @@ export default function CompareLab({
                     x={d.x}
                     y={d.y}
                     r={4}
-                    fill={repoColor(d.i)}
+                    fill={colors[d.i]}
                     stroke={C.void}
                     strokeWidth={1.5}
                   />
@@ -525,7 +548,7 @@ export default function CompareLab({
                 const total = c?.total ?? st?.stars ?? null;
                 return (
                   <div key={repo} className="flex flex-wrap items-center gap-x-4 gap-y-1">
-                    <span className="h-3 w-3 shrink-0" style={{ background: repoColor(i) }} />
+                    <span className="h-3 w-3 shrink-0" style={{ background: colors[i] }} />
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img src={`https://github.com/${repo.split("/")[0]}.png?size=40`} alt="" width={18} height={18} className="shrink-0 border border-grid" />
                     <Link href={`/r/${repo}`} className="numeral text-label text-ink transition-colors hover:text-accent">
