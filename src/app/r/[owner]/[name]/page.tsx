@@ -14,7 +14,7 @@ import Heatmap from "@/components/Heatmap";
 import RankChart from "@/components/RankChart";
 import MissionLog from "@/components/MissionLog";
 import Dashboard from "@/components/Dashboard";
-import CurveChart from "@/components/CurveChart";
+import CompareLab from "@/components/CompareLab";
 import Masthead from "@/components/Masthead";
 import { buildBundle } from "@/lib/bundle";
 import { loadMeta, isHostedRepo, loadTenantHistory, loadTenantTimestamps } from "@/lib/history";
@@ -329,12 +329,16 @@ export default async function ExplorerPage({
             ),
           }}
           cumulative={{
-            meta: "real data · interactive",
+            meta: "the race",
             node: (
-              <div className="flex h-full flex-col justify-between gap-2">
-                {/* /api/curve shares the cached reconstruction with the SVG
-                    embed, so a page visit warms the embed for everyone */}
-                <CurveChart repo={repoLabel} />
+              <div className="flex h-full flex-col gap-2">
+                {/* The star chart IS the race: CompareLab embedded starts as this
+                    one repo and a threat-alert toggle injects its rivals.
+                    /api/curve shares the cached reconstruction with the SVG embed,
+                    so a page visit warms the embed for everyone. */}
+                <div className="min-h-0 flex-1">
+                  <CompareLab initialRepos={[repoLabel]} embedded />
+                </div>
                 <a
                   href={`/#embed=${encodeURIComponent(repoLabel)}`}
                   className="numeral self-start border border-accent/40 px-3 py-2 text-label tracking-[0.18em] text-accent transition-colors hover:bg-accent/10"

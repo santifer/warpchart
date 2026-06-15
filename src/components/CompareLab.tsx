@@ -90,16 +90,28 @@ function interpAtX(rows: { x: number; y: number }[], x: number): number | null {
   return a.y + (b.y - a.y) * k;
 }
 
+// minimal shape of /api/v1/overtakes?repo= for the embedded rival fetch
+interface OvertakeLite {
+  hunter: { repo: string };
+  victim: { repo: string };
+  etaDays: number;
+}
+
 export default function CompareLab({
   initialRepos,
   initialMetric = "cumulative",
   initialAlign = false,
   initialLog = false,
+  embedded = false,
 }: {
   initialRepos: string[];
   initialMetric?: Metric;
   initialAlign?: boolean;
   initialLog?: boolean;
+  // embedded: lives inside a repo page / console panel as the star chart itself.
+  // Hides the manual add-bar and shareable footer, fills its container, and
+  // shows a threat-alert toggle that injects the repo's rivals (race in place).
+  embedded?: boolean;
 }) {
   const C = usePalette();
   const [repos, setRepos] = useState<string[]>(initialRepos);
@@ -113,10 +125,70 @@ export default function CompareLab({
   const [items, setItems] = useState<SearchItem[]>([]);
   const [open, setOpen] = useState(false);
   const [copied, setCopied] = useState(false);
-  const [zoom, setZoom] = useState(initialMetric === "cumulative");
+  // embedded solo starts WITHOUT the crossover zoom (nothing to cross until
+  // rivals are toggled in); the toggle turns it on with the race.
+  const [zoom, setZoom] = useState(!embedded && initialMetric === "cumulative");
   const [zoomP, setZoomP] = useState(1); // 0 = full view, 1 = zoomed to crossover
   const [drawing, setDrawing] = useState(true); // line draw-in active (phase 1)
   const fetched = useRef<Set<string>>(new Set());
+
+  // ---- embedded race-in-place ----
+  // The chart starts as ONE repo (the page's own) and a threat-alert toggle
+  // injects its rivals: the hunters closing on it + the repos it is catching.
+  const mainRepo = initialRepos[0] ?? "";
+  const [raceOn, setRaceOn] = useState(false);
+  const [rivals, setRivals] = useState<string[]>([]);
+  const [threat, setThreat] = useState<{ repo: string; etaDays: number } | null>(null);
+
+  // fetch the rivals once (cache-only overtakes endpoint, zero GitHub cost): the
+  // threat label can show before the user clicks, which is the whole invitation.
+  useEffect(() => {
+    if (!embedded || !mainRepo) return;
+    let stop = false;
+    (async () => {
+      try {
+        const res = await fetch(`/api/v1/overtakes?repo=${encodeURIComponent(mainRepo)}`);
+        if (!res.ok) return;
+        const d = (await res.json()) as { hunters?: OvertakeLite[]; targets?: OvertakeLite[] };
+        const hunters = (d.hunters ?? []).slice().sort((a, b) => a.etaDays - b.etaDays);
+        const targets = (d.targets ?? []).slice().sort((a, b) => a.etaDays - b.etaDays);
+        const seen = new Set([mainRepo.toLowerCase()]);
+        const list: string[] = [];
+        // guarantee the nearest threat goes first, then alternate threats/targets
+        for (const r of [
+          ...hunters.slice(0, 2).map((h) => h.hunter.repo),
+          ...targets.slice(0, 2).map((t) => t.victim.repo),
+        ]) {
+          const k = r.toLowerCase();
+          if (!seen.has(k)) { seen.add(k); list.push(r); }
+        }
+        if (stop) return;
+        setRivals(list.slice(0, 4));
+        setThreat(
+          hunters.length
+            ? { repo: hunters[0].hunter.repo, etaDays: Math.max(1, Math.round(hunters[0].etaDays)) }
+            : null
+        );
+      } catch { /* rivals are optional */ }
+    })();
+    return () => { stop = true; };
+  }, [embedded, mainRepo]);
+
+  const toggleRace = () => {
+    if (raceOn) {
+      setRepos([mainRepo]);
+      setRaceOn(false);
+      setZoom(false);
+    } else {
+      if (!rivals.length) return;
+      setRepos([mainRepo, ...rivals]);
+      setRaceOn(true);
+      setMetric("cumulative");
+      setAlign(false);
+      setLog(false);
+      setZoom(true);
+    }
+  };
 
   // fetch each repo's curve once (cached server-side)
   useEffect(() => {
@@ -163,8 +235,10 @@ export default function CompareLab({
     };
   }, [repos]);
 
-  // URL state (shareable, SSR-able for the OG card)
+  // URL state (shareable, SSR-able for the OG card). Embedded never owns the
+  // URL — it lives on a repo/console page, not /compare.
   useEffect(() => {
+    if (embedded) return;
     const p = new URLSearchParams();
     if (repos.length) p.set("repos", repos.join(","));
     if (metric !== "cumulative") p.set("metric", metric);
@@ -516,9 +590,53 @@ export default function CompareLab({
       }`
     : "";
 
+  // Solo (embedded, one repo) relocates the per-repo honesty that the race
+  // view can't show across many lines: where the curve is exact vs reconstructed.
+  const mainCurve = curves[mainRepo.toLowerCase()];
+  const seamNote = !mainCurve
+    ? "reconstructing trajectory…"
+    : (mainCurve.exactFrom ?? null) !== null
+      ? "recent window: exact daily record · earlier: reconstructed beyond GitHub's 40K cap"
+      : (mainCurve.archiveFrom ?? null) !== null
+        ? "exact api timestamps + gh archive beyond the 40K cap (normalized)"
+        : mainCurve.dashedFrom !== null
+          ? "solid = real stargazer timestamps · dashed = estimated beyond the 40K cap"
+          : "every point is a real stargazer timestamp";
+
+  // The threat-alert toggle that turns the star chart into the live race.
+  const raceToggle =
+    embedded && rivals.length ? (
+      <button
+        onClick={toggleRace}
+        className={`numeral flex items-center gap-2 border px-3 py-1.5 text-micro tracking-[0.16em] transition-colors ${
+          raceOn
+            ? "border-grid text-dim hover:border-accent/50 hover:text-accent"
+            : "race-invite border-warn/50 text-warn hover:border-warn"
+        }`}
+        aria-label={raceOn ? "back to solo chart" : "see the race"}
+      >
+        {raceOn ? (
+          "◂ SOLO"
+        ) : threat ? (
+          <>
+            <span className="race-pulse h-2 w-2 shrink-0 rounded-full bg-warn" aria-hidden />
+            <span className="text-ink">{shortRepo(threat.repo)}</span>
+            <span className="text-warn">· {threat.etaDays}d</span>
+            <span className="text-accent">▸ RACE</span>
+          </>
+        ) : (
+          <>
+            <span className="race-pulse h-2 w-2 shrink-0 rounded-full bg-accent" aria-hidden />
+            <span className="text-accent">SEE THE RACE ▸</span>
+          </>
+        )}
+      </button>
+    ) : null;
+
   return (
-    <div className="flex flex-col gap-4">
-      {/* add bar */}
+    <div className={embedded ? "flex h-full min-h-0 flex-col gap-2" : "flex flex-col gap-4"}>
+      {/* add bar (manual repo picker) — hidden when embedded in a repo/console panel */}
+      {!embedded ? (
       <div className="hud relative px-4 py-3">
         <div className="flex flex-wrap items-center gap-2">
           <div className="relative min-w-[240px] flex-1">
@@ -589,6 +707,7 @@ export default function CompareLab({
             : null}
         </div>
       </div>
+      ) : null}
 
       {/* toolbar */}
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -655,18 +774,19 @@ export default function CompareLab({
             />
             LOG SCALE
           </label>
+          {raceToggle}
         </div>
       </div>
 
       {/* chart */}
-      <div className="hud px-3 py-4 sm:px-5">
+      <div className={embedded ? "min-h-0 flex-1" : "hud px-3 py-4 sm:px-5"}>
         {repos.length === 0 ? (
           <div className="numeral flex h-[440px] flex-col items-center justify-center gap-2 text-center text-dim">
             <span className="font-display text-label tracking-[0.3em] text-dim">THE RACE IS EMPTY</span>
             <span className="text-micro text-faint">add two or more repos to chart their climb side by side</span>
           </div>
         ) : (
-          <div className="h-[440px] w-full">
+          <div className={embedded ? "h-full min-h-0 w-full" : "h-[440px] w-full"}>
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={view.data} margin={{ top: 10, right: 18, bottom: 0, left: 4 }}>
                 <CartesianGrid stroke={C.grid} strokeDasharray="2 6" vertical={false} />
@@ -810,8 +930,44 @@ export default function CompareLab({
         )}
       </div>
 
+      {/* embedded readout: solo = where the data is exact; race = the verdict */}
+      {embedded ? (
+        <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 px-1">
+          <span className="numeral text-micro text-faint">
+            {raceOn ? (
+              view.crossovers.length ? (
+                <>
+                  <span className="text-ink">{shortRepo(repos[view.crossovers[0].winner])}</span>{" "}
+                  <span className="text-dim">{view.crossovers[0].future ? "passes" : "passed"}</span>{" "}
+                  <span className="text-ink">{shortRepo(repos[view.crossovers[0].loser])}</span>{" "}
+                  <span className={view.crossovers[0].future ? "text-accent" : "text-faint"}>
+                    {view.crossovers[0].future ? "~ " : ""}
+                    {new Date(view.crossovers[0].t).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                  </span>
+                  {view.crossovers.length > 1 ? (
+                    <span className="text-faint"> · +{view.crossovers.length - 1} more</span>
+                  ) : null}
+                </>
+              ) : (
+                "no crossover in range — rivals holding station"
+              )
+            ) : (
+              seamNote
+            )}
+          </span>
+          {raceOn ? (
+            <Link
+              href={`/compare?repos=${encodeURIComponent(repos.join(","))}`}
+              className="numeral text-micro tracking-[0.18em] text-accent hover:underline underline-offset-4"
+            >
+              ▸ full race
+            </Link>
+          ) : null}
+        </div>
+      ) : null}
+
       {/* legend + insight */}
-      {repos.length > 0 ? (
+      {!embedded && repos.length > 0 ? (
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
           <div className="hud px-4 py-3 lg:col-span-2">
             <div className="module-title !text-micro mb-2">Contenders</div>
@@ -886,7 +1042,7 @@ export default function CompareLab({
       ) : null}
 
       {/* actions */}
-      {repos.length > 0 ? (
+      {!embedded && repos.length > 0 ? (
         <div className="flex flex-wrap items-center gap-2">
           <button onClick={copyLink} className={btn}>{copied ? "✓ COPIED" : "COPY LINK"}</button>
           <button onClick={share} className={btn}>SHARE</button>

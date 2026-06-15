@@ -1321,3 +1321,38 @@ body.gx-warping .ghx-lore {
     animation: none;
   }
 }
+
+/* race threat-alert toggle: a pulsing dot + a soft amber glow that invites the
+   click without shouting. amber = warn token (#f2c46a). */
+.race-pulse {
+  animation: race-pulse 1.4s ease-in-out infinite;
+}
+@keyframes race-pulse {
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.3;
+    transform: scale(0.78);
+  }
+}
+.race-invite {
+  animation: race-invite 2.2s ease-in-out infinite;
+}
+@keyframes race-invite {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(242, 196, 106, 0);
+  }
+  50% {
+    box-shadow: 0 0 0 3px rgba(242, 196, 106, 0.13);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .race-pulse,
+  .race-invite {
+    animation: none;
+  }
+}
