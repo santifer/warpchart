@@ -202,7 +202,6 @@ export default function ExploreSearch({ catalog }: { catalog: CatalogEntry[] }) 
                   </Link>
                 ))
               )}
-              </div>
             </div>
           ) : null}
         </div>
