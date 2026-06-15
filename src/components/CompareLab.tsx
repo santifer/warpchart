@@ -113,6 +113,7 @@ export default function CompareLab({
   const [copied, setCopied] = useState(false);
   const [zoom, setZoom] = useState(initialMetric === "cumulative");
   const [zoomP, setZoomP] = useState(1); // 0 = full view, 1 = zoomed to crossover
+  const [drawing, setDrawing] = useState(true); // line draw-in active (phase 1)
   const fetched = useRef<Set<string>>(new Set());
 
   // fetch each repo's curve once (cached server-side)
@@ -358,25 +359,28 @@ export default function CompareLab({
   // loaded data changes, and when the zoom toggle flips.
   const loadedKey = repos.map((r) => (curves[r.toLowerCase()] ? "1" : "0")).join("") + metric + align;
   useEffect(() => {
-    if (!zoom || !view.hasZoom) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setZoomP(1);
-      return;
-    }
+    const zoomable = zoom && view.hasZoom;
+    // phase 1: the lines draw in the full view
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    setZoomP(0);
+    setDrawing(true);
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setZoomP(zoomable ? 0 : 1);
     let raf = 0;
-    const delay = setTimeout(() => {
+    const t = setTimeout(() => {
+      // phase 2: FREEZE the drawn lines, then zoom the FRAME only (a pure
+      // vector reframe — no redraw, which was the broken-segments effect)
+      setDrawing(false);
+      if (!zoomable) return;
       const start = performance.now();
       const tick = (now: number) => {
-        const k = Math.min(1, (now - start) / 1000);
-        setZoomP(1 - Math.pow(1 - k, 3)); // ease-out cubic
+        const k = Math.min(1, (now - start) / 900);
+        setZoomP(1 - Math.pow(1 - k, 3));
         if (k < 1) raf = requestAnimationFrame(tick);
       };
       raf = requestAnimationFrame(tick);
-    }, 1150);
+    }, 1050);
     return () => {
-      clearTimeout(delay);
+      clearTimeout(t);
       if (raf) cancelAnimationFrame(raf);
     };
   }, [zoom, view.hasZoom, loadedKey]);
@@ -409,14 +413,6 @@ export default function CompareLab({
     };
   }, [repos, curves]);
 
-  const fmtX = (x: number) => {
-    if (align) {
-      if (x < 60) return `${Math.round(x)}d`;
-      if (x < 730) return `${Math.round(x / 30.44)}mo`;
-      return `${(x / 365.25).toFixed(1)}y`;
-    }
-    return new Date(x).toLocaleDateString("en-US", { month: "short", year: "2-digit" });
-  };
 
   const shareUrl = useMemo(() => {
     const base = typeof window !== "undefined" ? window.location.origin : "https://warpchart.dev";
@@ -473,6 +469,27 @@ export default function CompareLab({
   const yDomain: [number, number] = useZoom
     ? [lerp(view.fullY[0], view.zoomY![0], zoomP), lerp(view.fullY[1], view.zoomY![1], zoomP)]
     : view.fullY;
+
+  // X axis labels adapt to the visible span: month+year zoomed out, day when
+  // closer, day + predicted hour in the tight crossover window.
+  const xSpanDays = (xDomain[1] - xDomain[0]) / DAY;
+  const pad2 = (n: number) => String(n).padStart(2, "0");
+  const fmtX = (x: number) => {
+    if (align) {
+      if (x < 60) return `${Math.round(x)}d`;
+      if (x < 730) return `${Math.round(x / 30.44)}mo`;
+      return `${(x / 365.25).toFixed(1)}y`;
+    }
+    const d = new Date(x);
+    if (xSpanDays > 420) return d.toLocaleDateString("en-US", { month: "short", year: "2-digit" });
+    if (xSpanDays > 9) return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+    return `${d.toLocaleDateString("en-US", { month: "short", day: "numeric" })} ${pad2(d.getHours())}:00`;
+  };
+  const focusLabel = view.focus
+    ? `~ ${new Date(view.focus.t).toLocaleDateString("en-US", { month: "short", day: "numeric" })}${
+        xSpanDays <= 9 ? ` ${pad2(new Date(view.focus.t).getHours())}:00` : ""
+      }`
+    : "";
 
   return (
     <div className="flex flex-col gap-4">
@@ -651,28 +668,49 @@ export default function CompareLab({
                   width={56}
                 />
                 <Tooltip
-                  contentStyle={{
-                    background: C.hull,
-                    border: `1px solid ${C.grid}`,
-                    fontFamily: "var(--font-jbmono)",
-                    fontSize: 13,
-                  }}
-                  labelStyle={{ color: C.dim }}
-                  labelFormatter={(x) =>
-                    align
-                      ? `day ${Math.round(Number(x))}`
-                      : new Date(Number(x)).toLocaleDateString("en-US", { dateStyle: "medium" })
-                  }
-                  formatter={(value, key) => {
-                    const i = Number(String(key).slice(1));
-                    const repo = repos[i];
-                    // values are interpolated onto the shared grid, so round
-                    // before display (a fractional ".777" reads as millions)
-                    const n = Math.round(Number(value));
-                    return [
-                      metric === "growth" ? `${fmt(n)}/day` : `${fmt(n)} ★`,
-                      repo ? shortRepo(repo) : String(key),
-                    ];
+                  cursor={{ stroke: C.grid }}
+                  // custom content: dedupe by repo (each repo has a real line
+                  // r{i} AND a projection p{i}; the default tooltip listed both,
+                  // showing the same repo twice). Prefer the real value.
+                  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                  content={(p: any) => {
+                    if (!p?.active || !p?.payload?.length) return null;
+                    const byRepo = new Map<number, { v: number; proj: boolean }>();
+                    for (const it of p.payload as { dataKey?: unknown; value?: number | null }[]) {
+                      if (it.value == null) continue;
+                      const k = String(it.dataKey);
+                      const i = Number(k.slice(1));
+                      const proj = k.startsWith("p");
+                      const prev = byRepo.get(i);
+                      if (!prev || (prev.proj && !proj)) byRepo.set(i, { v: Number(it.value), proj });
+                    }
+                    if (!byRepo.size) return null;
+                    const lx = Number(p.label);
+                    const when = align
+                      ? `day ${Math.round(lx)}`
+                      : xSpanDays <= 9
+                        ? `${new Date(lx).toLocaleDateString("en-US", { month: "short", day: "numeric" })} ${pad2(new Date(lx).getHours())}:00`
+                        : new Date(lx).toLocaleDateString("en-US", { dateStyle: "medium" });
+                    return (
+                      <div
+                        className="numeral border border-grid px-3 py-2"
+                        style={{ background: C.hull, fontFamily: "var(--font-jbmono)", fontSize: 13 }}
+                      >
+                        <div className="mb-1 text-micro text-dim">{when}</div>
+                        {[...byRepo.entries()]
+                          .sort((a, b) => b[1].v - a[1].v)
+                          .map(([i, d]) => (
+                            <div key={i} className="flex items-center gap-2">
+                              <span className="inline-block h-2 w-2 shrink-0" style={{ background: colors[i] }} />
+                              <span className="text-ink">{shortRepo(repos[i])}</span>
+                              <span className="text-faint">
+                                {metric === "growth" ? `${fmt(d.v)}/day` : `${fmt(d.v)} ★`}
+                                {d.proj ? " · proj" : ""}
+                              </span>
+                            </div>
+                          ))}
+                      </div>
+                    );
                   }}
                 />
                 {repos.map((repo, i) => (
@@ -685,7 +723,7 @@ export default function CompareLab({
                     dot={false}
                     type="monotone"
                     connectNulls={false}
-                    isAnimationActive
+                    isAnimationActive={drawing}
                     animationDuration={1000}
                   />
                 ))}
@@ -725,6 +763,13 @@ export default function CompareLab({
                     fill="#ffffff"
                     stroke={C.void}
                     strokeWidth={2}
+                    label={{
+                      value: focusLabel,
+                      position: "top",
+                      fill: "#f5fbff",
+                      fontSize: 12,
+                      fontFamily: "var(--font-jbmono)",
+                    }}
                   />
                 ) : null}
               </LineChart>
