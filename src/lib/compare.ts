@@ -51,10 +51,12 @@ export function parseRepos(raw: string | null | undefined, max = 8): string[] {
 // point (so an overlay never invents future stars).
 export function valueAt(pts: CurvePoint[], t: number): number | null {
   if (!pts.length) return null;
-  if (t < pts[0].t) return null;
+  if (t <= pts[0].t) return t < pts[0].t ? null : pts[0].v;
   const last = pts[pts.length - 1];
   if (t >= last.t) return last.v;
-  let lo = 0;
+  // strictly inside (pts[0].t < t < last.t); lo starts at 1 so pts[lo-1] is
+  // always valid even when t lands exactly on an interior point.
+  let lo = 1;
   let hi = pts.length - 1;
   while (lo < hi) {
     const mid = (lo + hi) >> 1;
