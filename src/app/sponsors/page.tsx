@@ -32,7 +32,7 @@ export default function Sponsors() {
   return (
     <main className="mx-auto flex min-h-screen max-w-[860px] flex-col gap-10 px-4 py-10 sm:px-6">
       <header className="rise flex items-center justify-between" style={{ animationDelay: "0ms" }}>
-        <Link href="/explore" className="font-display text-sm tracking-[0.3em] text-star hover:text-accent">
+        <Link href="/" className="font-display text-sm tracking-[0.3em] text-star hover:text-accent">
           WARPCHART
         </Link>
         <span className="numeral text-micro tracking-[0.2em] text-dim">MISSION PATRONS</span>
@@ -93,7 +93,7 @@ export default function Sponsors() {
         <span className="numeral text-micro tracking-[0.15em] text-faint">
           WARPCHART · open telemetry over public GitHub data
         </span>
-        <Link href="/explore" className="numeral text-micro text-accent/80 hover:text-accent">
+        <Link href="/" className="numeral text-micro text-accent/80 hover:text-accent">
           ← EXPLORE
         </Link>
       </footer>

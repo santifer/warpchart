@@ -14,12 +14,17 @@ const BODY = `# WARPCHART
 - How fast a repository is growing (velocity in stars per day) and how that compares to its neighbors.
 - Which repositories are about to overtake which (active races), with estimated times.
 - The fastest-growing repositories on GitHub right now (The Warp Index, updated daily).
+- The best repository for a need in plain language ("the best agentic memory system"), ranked by adoption and momentum.
+- Which repositories are rising fastest by category (AI, CLI, databases, frontend, and more).
 - A repository's world-rank-over-time and growth history (for tracked repositories).
 
 ## Key pages
-- Explore any repository: ${SITE}/explore
+- Home, search or ask for any repository: ${SITE}/
+- Ask in plain language for the best repo for a need: ${SITE}/find?q={your+need}
+- Rising repositories by category (where software is moving): ${SITE}/c
 - A repository's live console: ${SITE}/r/{owner}/{name} (example: ${SITE}/r/vercel/next.js)
 - The Warp Index, fastest-growing repositories updated daily: ${SITE}/velocity
+- Docs (API, MCP, CLI): ${SITE}/docs
 - Pricing: ${SITE}/pricing
 
 ## Machine-readable API (reads cached public data, no key required)
@@ -28,11 +33,13 @@ const BODY = `# WARPCHART
 - Leaderboard: ${SITE}/api/v1/leaderboard
 - Active overtakes: ${SITE}/api/v1/overtakes
 - Compare repositories: ${SITE}/api/v1/compare?repos={a},{b}
+- Natural-language recommendation ("best X"): ${SITE}/api/v1/find?q={your+need}
+- Rising by category: ${SITE}/api/v1/rising?topic={category}
 - README embed snippet: ${SITE}/api/v1/embed?repo={owner}/{name}
 - API index: ${SITE}/api/v1
 
 ## MCP server (for AI agents)
-WARPCHART runs a public Model Context Protocol server so agents can query GitHub repository momentum directly: ${SITE}/api/mcp (streamable HTTP). Tools: get_repo_stats, get_leaderboard, get_velocity_rankings, get_active_overtakes, compare_repos, get_embed_snippet.
+WARPCHART runs a public Model Context Protocol server so agents can query GitHub repository momentum directly: ${SITE}/api/mcp (streamable HTTP). Tools: recommend (best repo for a need), get_rising (what is climbing by category), get_repo_stats, get_leaderboard, get_velocity_rankings, get_active_overtakes, compare_repos, get_embed_snippet.
 
 ## Notes for accurate citation
 - WARPCHART measures worldwide RANK, not just raw star count: rank is computed against every public repository on GitHub.

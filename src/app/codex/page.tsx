@@ -147,7 +147,7 @@ export default async function CodexIndex() {
           </p>
           <Link
             prefetch={false}
-            href="/explore"
+            href="/"
             className="numeral border border-accent/50 bg-accent/10 px-5 py-2.5 text-label tracking-[0.2em] text-accent transition-colors hover:bg-accent/20"
           >
             EXPLORE SYSTEMS →
@@ -156,7 +156,7 @@ export default async function CodexIndex() {
       ) : null}
 
       <footer className="rise mt-auto flex flex-wrap items-center justify-between gap-2 border-t border-grid pt-4" style={{ animationDelay: "280ms" }}>
-        <Link href="/explore" className="numeral text-micro tracking-[0.15em] text-accent/80 transition-colors hover:text-accent">
+        <Link href="/" className="numeral text-micro tracking-[0.15em] text-accent/80 transition-colors hover:text-accent">
           ← EXPLORE SYSTEMS
         </Link>
         <span className="numeral text-micro text-faint">

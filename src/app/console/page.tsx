@@ -1,0 +1,24 @@
+// The house repo's live mission console (status bar, the galactic chart, the ten
+// telemetry panels). Self-hosted instances and the product both reach it here;
+// the public root is the landing. Every other repo's console lives at
+// /r/owner/name.
+import Dashboard from "@/components/Dashboard";
+import { buildBundle } from "@/lib/bundle";
+import { getCachedDossier } from "@/lib/explorer";
+import { loadMeta } from "@/lib/history";
+import { fetchLiveSnapshot } from "@/lib/live-blob";
+
+// ISR every 60s: data/ (the heavy curve) is read at regeneration time from
+// the committed snapshot, while the fresh "current state" rides the Vercel
+// Blob (collector/live.mjs, no build). So the house console paints near
+// real-time without a 2h jump, at the cost of a cheap per-minute regenerate.
+export const revalidate = 60;
+
+export default async function Console() {
+  const repo = loadMeta()?.repo ?? "";
+  const live = repo ? await fetchLiveSnapshot(repo) : null;
+  const bundle = buildBundle(undefined, live);
+  const [owner, name] = repo.split("/");
+  const dossier = owner && name ? await getCachedDossier(owner, name) : null;
+  return <Dashboard bundle={bundle} dossier={dossier} />;
+}

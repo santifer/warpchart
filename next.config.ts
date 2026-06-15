@@ -33,6 +33,8 @@ const nextConfig: NextConfig = {
     "/pricing": ["./data/**"],
     "/velocity": ["./data/**"],
     "/feed.xml": ["./data/**"],
+    "/": ["./data/**"],
+    "/console": ["./data/**"],
     "/hq": ["./data/**"],
     "/r/*": ["./data/**"],
     "/r/**": ["./data/**"],

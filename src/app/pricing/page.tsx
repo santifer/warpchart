@@ -285,7 +285,7 @@ export default async function Pricing({
       <SpaceBackdrop mode="launch" />
 
       <header className="rise flex items-center justify-between" style={{ animationDelay: "0ms" }}>
-        <Link href="/explore" className="font-display text-sm tracking-[0.3em] text-star hover:text-accent">
+        <Link href="/" className="font-display text-sm tracking-[0.3em] text-star hover:text-accent">
           WARPCHART
         </Link>
         {data ? (
@@ -417,7 +417,7 @@ export default async function Pricing({
           live badge installed (recurring brand impressions + a foot in the door) */}
       <section className="rise" style={{ animationDelay: "240ms" }}>
         <a
-          href={data ? `/explore#embed=${encodeURIComponent(repoLabel)}` : "/explore#embed"}
+          href={data ? `/#embed=${encodeURIComponent(repoLabel)}` : "/#embed"}
           className="hud flex flex-wrap items-center justify-between gap-3 border-dashed px-4 py-3 transition-colors hover:border-accent/50"
         >
           <span className="text-data font-light leading-relaxed text-dim">
@@ -487,7 +487,7 @@ export default async function Pricing({
         <span className="numeral text-micro tracking-[0.15em] text-faint">
           WARPCHART · open telemetry over public GitHub data
         </span>
-        <Link href="/explore" className="numeral text-micro text-accent/80 hover:text-accent">
+        <Link href="/" className="numeral text-micro text-accent/80 hover:text-accent">
           ← EXPLORE
         </Link>
       </footer>

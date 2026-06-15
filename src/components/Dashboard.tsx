@@ -180,7 +180,7 @@ export default function Dashboard({
           </span>
           <Link
             prefetch={false}
-            href="/explore"
+            href="/"
             className="numeral text-micro tracking-[0.15em] text-accent/80 transition-colors hover:text-accent"
           >
             EXPLORE ANY REPO →

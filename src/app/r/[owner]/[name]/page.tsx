@@ -336,7 +336,7 @@ export default async function ExplorerPage({
                     embed, so a page visit warms the embed for everyone */}
                 <CurveChart repo={repoLabel} />
                 <a
-                  href={`/explore#embed=${encodeURIComponent(repoLabel)}`}
+                  href={`/#embed=${encodeURIComponent(repoLabel)}`}
                   className="numeral self-start border border-accent/40 px-3 py-2 text-label tracking-[0.18em] text-accent transition-colors hover:bg-accent/10"
                 >
                   GET THE ANIMATED README EMBED →
