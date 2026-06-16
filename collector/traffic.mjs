@@ -112,10 +112,18 @@ for (const repo of repos) {
     for (const c of clones.clones ?? []) {
       vault.clones[c.timestamp.slice(0, 10)] = { c: c.count, u: c.uniques };
     }
+    const today = new Date().toISOString().slice(0, 10);
     vault.referrers = (referrers ?? [])
       .slice(0, 10)
       .map((r) => ({ r: r.referrer, c: r.count, u: r.uniques }));
-    vault.referrersAt = new Date().toISOString().slice(0, 10);
+    vault.referrersAt = today;
+    // Keep a DATED history of referrer snapshots. The 14-day aggregate alone
+    // cannot pinpoint which domain drove a specific day's spike; diffing two
+    // snapshots can ("t.co jumped +1,400 the day of the spike"). Idempotent per
+    // UTC day, capped to ~90 entries.
+    vault.referrerHistory = (vault.referrerHistory ?? []).filter((h) => h.at !== today);
+    vault.referrerHistory.push({ at: today, refs: vault.referrers });
+    vault.referrerHistory = vault.referrerHistory.slice(-90);
     vault.updatedAt = new Date().toISOString();
 
     await put(blobKey(repo), JSON.stringify(vault), {
