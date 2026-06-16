@@ -1,7 +1,7 @@
 // Assembles every build-time series into one serializable bundle that the
 // client dashboard receives as props. Runs on the server only (fs).
 import {
-  loadTimestamps, loadHistory, loadMeta, loadMilestones, loadRoute, loadForensics,
+  loadTimestamps, loadHistory, loadMeta, loadMilestones, loadRoute, loadForensics, loadAttribution,
 } from "./history";
 import {
   hourlyBuckets, dailyCounts, movingAverage, madrugadaFloor,
@@ -9,7 +9,7 @@ import {
   rankSeries, thresholdSeries,
 } from "./series";
 import { driftPerDay } from "./projections";
-import { detectEvents, captainsLog } from "./events";
+import { detectEvents, captainsLog, surgeEvents } from "./events";
 import type {
   RepoMetaFile, Snapshot, HourPoint, DayPoint, CumPoint, RankPoint,
   FloorPoint, Neighbor, Apex, RouteRepo, MissionEvent, Spike,
@@ -187,7 +187,10 @@ export function buildBundle(
   const hourlyAll = hourlyBuckets(timestamps, lifeHours, nowMs);
   const dailyAll = dailyCounts(timestamps, lifeDays, nowMs);
   const spikes = loadForensics()?.spikes ?? [];
-  const events = detectEvents(history, dailyAll, spikes);
+  // Hourly surge attribution is house-only (attribution.json never exists for a
+  // tenant's data), so it merges only into the house Mission Log.
+  const surges = src ? [] : (loadAttribution()?.surges ?? []);
+  const events = detectEvents(history, dailyAll, spikes, surgeEvents(surges));
   const captain = captainsLog(dailyAll, latest?.rank ?? null);
 
   // engagement: fork/star ratio vs the top 1000 population

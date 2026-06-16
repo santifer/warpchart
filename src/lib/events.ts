@@ -1,14 +1,25 @@
 // Mission log: notable events auto-detected from the hourly history and the
 // star timestamps. Pure functions, run at build time.
-import type { Snapshot, MissionEvent, DayPoint, Spike } from "./types";
+import type { Snapshot, MissionEvent, DayPoint, Spike, Surge } from "./types";
 import { fmt, shortName } from "./format";
+
+// Hourly surges, attributed to the traffic source that drove them, rendered as
+// spike-kind log entries: "+67 stars in one hour · Twitter (t.co)".
+export function surgeEvents(surges: Surge[]): MissionEvent[] {
+  return surges.map((s) => {
+    const c = s.cause;
+    const src = c ? `${c.confidence === "likely" ? "likely " : ""}${c.label}` : "source unconfirmed";
+    return { ts: s.hourStart, kind: "spike" as const, text: `+${fmt(s.stars)} stars in one hour · ${src}` };
+  });
+}
 
 export function detectEvents(
   history: Snapshot[],
   dailyAll: DayPoint[],
-  spikes: Spike[] = []
+  spikes: Spike[] = [],
+  extra: MissionEvent[] = []
 ): MissionEvent[] {
-  const events: MissionEvent[] = [];
+  const events: MissionEvent[] = [...extra];
   if (history.length) {
     events.push({ ts: history[0].ts, kind: "online", text: "telemetry online" });
   }

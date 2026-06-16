@@ -112,19 +112,20 @@ for (const repo of repos) {
     for (const c of clones.clones ?? []) {
       vault.clones[c.timestamp.slice(0, 10)] = { c: c.count, u: c.uniques };
     }
-    const today = new Date().toISOString().slice(0, 10);
+    const stamp = new Date().toISOString();
     vault.referrers = (referrers ?? [])
       .slice(0, 10)
       .map((r) => ({ r: r.referrer, c: r.count, u: r.uniques }));
-    vault.referrersAt = today;
-    // Keep a DATED history of referrer snapshots. The 14-day aggregate alone
-    // cannot pinpoint which domain drove a specific day's spike; diffing two
-    // snapshots can ("t.co jumped +1,400 the day of the spike"). Idempotent per
-    // UTC day, capped to ~90 entries.
-    vault.referrerHistory = (vault.referrerHistory ?? []).filter((h) => h.at !== today);
-    vault.referrerHistory.push({ at: today, refs: vault.referrers });
-    vault.referrerHistory = vault.referrerHistory.slice(-90);
-    vault.updatedAt = new Date().toISOString();
+    vault.referrersAt = stamp.slice(0, 10);
+    // Keep a PER-RUN history of referrer snapshots (one every ~2h). The 14-day
+    // aggregate alone cannot pinpoint which domain drove a specific HOUR's spike;
+    // diffing the two snapshots that bracket the spike can ("t.co jumped +1,400
+    // the hour 67 stars landed"). collector/attribute.mjs consumes this. ~250
+    // entries ≈ 3 weeks at the 2h cadence.
+    vault.referrerHistory = vault.referrerHistory ?? [];
+    vault.referrerHistory.push({ at: stamp, refs: vault.referrers });
+    vault.referrerHistory = vault.referrerHistory.slice(-250);
+    vault.updatedAt = stamp;
 
     await put(blobKey(repo), JSON.stringify(vault), {
       access: "private",

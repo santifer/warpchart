@@ -1,7 +1,7 @@
 // Build-time / server-side loaders for the data/ directory.
 import { readFileSync, existsSync } from "node:fs";
 import path from "node:path";
-import type { Snapshot, RepoMetaFile, MilestonesFile, RouteFile, ForensicsFile, CollisionsFile, CatalogFile, EnrichmentEntry, EnrichmentFile } from "./types";
+import type { Snapshot, RepoMetaFile, MilestonesFile, RouteFile, ForensicsFile, AttributionFile, CollisionsFile, CatalogFile, EnrichmentEntry, EnrichmentFile } from "./types";
 
 const DATA = path.join(process.cwd(), "data");
 
@@ -151,6 +151,18 @@ export function loadForensics(): ForensicsFile | null {
   const p = path.join(DATA, "forensics.json");
   if (!existsSync(p)) return null;
   return JSON.parse(readFileSync(p, "utf8")) as ForensicsFile;
+}
+
+// Hourly star surges attributed to their traffic source (collector/attribute.mjs).
+// House repo only; never present on tenant data.
+export function loadAttribution(): AttributionFile | null {
+  const p = path.join(DATA, "attribution.json");
+  if (!existsSync(p)) return null;
+  try {
+    return JSON.parse(readFileSync(p, "utf8")) as AttributionFile;
+  } catch {
+    return null;
+  }
 }
 
 export function loadCollisions(): CollisionsFile | null {

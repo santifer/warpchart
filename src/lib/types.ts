@@ -100,6 +100,30 @@ export interface ForensicsFile {
   spikes: Spike[];
 }
 
+// Hourly star surge attributed to the traffic source that drove it (collector/
+// attribute.mjs). "high" = confirmed by diffing referrer snapshots across the
+// surge window; "likely" = the dominant external referrer, no bracketing diff.
+export interface SurgeCause {
+  type: "referrer";
+  domain: string;
+  label: string;
+  delta: number | null;
+  confidence: "high" | "likely";
+}
+
+export interface Surge {
+  hourStart: string; // ISO, start of the surge hour (UTC)
+  stars: number;
+  baseline: number;
+  cause: SurgeCause | null;
+}
+
+export interface AttributionFile {
+  generated_at: string;
+  repo: string;
+  surges: Surge[];
+}
+
 export interface Snapshot {
   ts: string;
   stars: number;
