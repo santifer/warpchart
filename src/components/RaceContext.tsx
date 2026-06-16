@@ -36,8 +36,18 @@ const RaceCtx = createContext<RaceState>({
 
 export const useRace = () => useContext(RaceCtx);
 
-export function RaceProvider({ repo, children }: { repo: string; children: ReactNode }) {
-  const [raceOn, setRaceOn] = useState(false);
+export function RaceProvider({
+  repo,
+  children,
+  initialRaceOn = false,
+}: {
+  repo: string;
+  children: ReactNode;
+  // Start already in race mode (used on the pricing page, where the crossing
+  // lines ARE the proof). On /r/ it stays false so the visitor opts in.
+  initialRaceOn?: boolean;
+}) {
+  const [raceOn, setRaceOn] = useState(initialRaceOn);
   const [rivals, setRivals] = useState<string[]>([]);
   const [threat, setThreat] = useState<{ repo: string; etaDays: number } | null>(null);
 

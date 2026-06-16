@@ -19,6 +19,8 @@ import { loadExplorerData, type ExplorerData } from "@/lib/explorer";
 import { fmt, fmtEtaDays } from "@/lib/format";
 import SpaceBackdrop from "@/components/SpaceBackdrop";
 import LockedRankPreview from "@/components/LockedRankPreview";
+import CompareLab from "@/components/CompareLab";
+import { RaceProvider, RaceToggle } from "@/components/RaceContext";
 
 // Dynamic: the page reads ?repo=. The expensive GitHub work is paid at most
 // once per repo per 15 min inside loadExplorerData, so render stays cheap.
@@ -222,41 +224,77 @@ function personalizedPlans(d: NonNullable<ExplorerData>): Plan[] {
 // to zero every 14 days; the Vault is one continuous, accumulating line. The
 // divergence sells itself.
 function VaultDivergence() {
+  // The SVG is stretched edge-to-edge (preserveAspectRatio="none"), which would
+  // distort any geometry or text drawn inside it: the endpoint dot becomes an
+  // ellipse and the monospace labels get smeared wide. So ONLY the lines live in
+  // the SVG (with non-scaling strokes, so their width stays even at any aspect),
+  // while the dot and every label are HTML overlays positioned by percentage —
+  // immune to the horizontal stretch. Day gridlines sit at 25/50/75% so the
+  // overlaid "day N" labels line up under them.
   return (
-    <svg
-      viewBox="0 0 560 132"
-      preserveAspectRatio="none"
-      className="h-[120px] w-full sm:h-[148px]"
-      role="img"
-      aria-label="GitHub erases your traffic data every 14 days; the Warpchart Vault keeps it"
-    >
-      <line x1="0" y1="104" x2="560" y2="104" stroke="var(--grid)" strokeWidth="1" />
-      {[140, 280, 420].map((x) => (
-        <g key={x}>
-          <line x1={x} y1="18" x2={x} y2="104" stroke="var(--grid)" strokeDasharray="2 6" />
-          <text x={x} y="120" textAnchor="middle" fontFamily="var(--font-jbmono)" fontSize="9" fill="var(--faint)">
-            day {((x / 140) * 14).toFixed(0)}
-          </text>
-        </g>
-      ))}
-      {/* GitHub: rises then is wiped to zero every 14 days */}
-      <path
-        d="M 0 104 L 120 58 L 140 104 L 260 58 L 280 104 L 400 58 L 420 104 L 540 58 L 560 104"
-        fill="none"
-        stroke="var(--warn)"
-        strokeWidth="1.6"
-        strokeOpacity="0.85"
+    <div className="relative w-full">
+      <svg
+        viewBox="0 0 560 132"
+        preserveAspectRatio="none"
+        className="h-[120px] w-full sm:h-[148px]"
+        role="img"
+        aria-label="GitHub erases your traffic data every 14 days; the Warpchart Vault keeps it"
+      >
+        <line x1="0" y1="104" x2="560" y2="104" stroke="var(--grid)" strokeWidth="1" vectorEffect="non-scaling-stroke" />
+        {[140, 280, 420].map((x) => (
+          <line key={x} x1={x} y1="18" x2={x} y2="104" stroke="var(--grid)" strokeDasharray="2 6" vectorEffect="non-scaling-stroke" />
+        ))}
+        {/* GitHub: rises then is wiped to zero every 14 days */}
+        <path
+          d="M 0 104 L 120 58 L 140 104 L 260 58 L 280 104 L 400 58 L 420 104 L 540 58 L 560 104"
+          fill="none"
+          stroke="var(--warn)"
+          strokeWidth="1.6"
+          strokeOpacity="0.85"
+          vectorEffect="non-scaling-stroke"
+        />
+        {/* Warpchart Vault: one continuous, accumulating record */}
+        <path
+          d="M 0 104 C 170 96 300 60 556 24"
+          fill="none"
+          stroke="var(--accent)"
+          strokeWidth="2.4"
+          vectorEffect="non-scaling-stroke"
+        />
+      </svg>
+
+      {/* round endpoint dot — kept perfectly circular as an HTML overlay */}
+      <span
+        className="pointer-events-none absolute h-2.5 w-2.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-accent"
+        style={{ left: "99%", top: "18%", boxShadow: "0 0 9px var(--accent)" }}
+        aria-hidden
       />
-      {/* Warpchart Vault: one continuous, accumulating record */}
-      <path d="M 0 104 C 170 96 300 60 556 24" fill="none" stroke="var(--accent)" strokeWidth="2.4" />
-      <circle cx="556" cy="24" r="3.6" fill="var(--accent)" />
-      <text x="6" y="14" fontFamily="var(--font-jbmono)" fontSize="10" fill="var(--warn)" opacity="0.95">
+      <span
+        className="numeral pointer-events-none absolute text-micro tracking-[0.1em] text-warn"
+        style={{ left: "1%", top: "6%" }}
+      >
         GITHUB · wiped every 14 days
-      </text>
-      <text x="554" y="42" textAnchor="end" fontFamily="var(--font-jbmono)" fontSize="10" fill="var(--accent)">
+      </span>
+      <span
+        className="numeral pointer-events-none absolute text-micro tracking-[0.1em] text-accent"
+        style={{ right: "1%", top: "30%" }}
+      >
         WARPCHART VAULT · kept forever
-      </text>
-    </svg>
+      </span>
+      {[
+        { left: "25%", label: "day 14" },
+        { left: "50%", label: "day 28" },
+        { left: "75%", label: "day 42" },
+      ].map((d) => (
+        <span
+          key={d.label}
+          className="numeral pointer-events-none absolute bottom-0 -translate-x-1/2 text-micro text-faint"
+          style={{ left: d.left }}
+        >
+          {d.label}
+        </span>
+      ))}
+    </div>
   );
 }
 
@@ -500,27 +538,31 @@ export default async function Pricing({
             </h2>
             <span className="numeral text-micro tracking-[0.15em] text-faint">no mockups · real data</span>
           </div>
-          <Link
-            href={`/r/${demoRepo}`}
-            className="hud group block overflow-hidden p-3 transition-colors hover:border-accent/50"
-          >
-            {/* the animated SVG embed IS the product — it draws itself live */}
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={`/api/chart?repo=${encodeURIComponent(demoRepo)}`}
-              alt={`Live animated star chart of ${demoRepo}`}
-              className="h-auto w-full"
-              loading="lazy"
-            />
-            <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
-              <span className="text-data font-light text-dim">
-                <span className="text-ink">{demoRepo}</span> · a live console running on the exact Hosted plan.
-              </span>
-              <span className="numeral shrink-0 text-label tracking-[0.18em] text-accent group-hover:underline underline-offset-4">
-                OPEN THE LIVE CONSOLE →
-              </span>
+          {/* the real race chart — starts in race mode, so the crossing lines
+              ARE the proof of crossing-data intelligence; flip to SOLO is live */}
+          <RaceProvider repo={demoRepo} initialRaceOn>
+            <div className="hud flex flex-col gap-3 p-3 sm:p-4">
+              <div className="flex items-center justify-between gap-2">
+                <span className="numeral text-label tracking-[0.18em] text-dim">CUMULATIVE STARS · THE RACE</span>
+                <RaceToggle />
+              </div>
+              <div className="h-[400px] sm:h-[460px]">
+                <CompareLab initialRepos={[demoRepo]} embedded />
+              </div>
+              <div className="flex flex-wrap items-center justify-between gap-2 border-t border-grid/60 pt-3">
+                <span className="text-data font-light text-dim">
+                  <span className="text-ink">{demoRepo}</span> against the repos it is passing — a live console on the exact
+                  Hosted plan.
+                </span>
+                <Link
+                  href={`/r/${demoRepo}`}
+                  className="numeral shrink-0 text-label tracking-[0.18em] text-accent hover:underline underline-offset-4"
+                >
+                  OPEN THE LIVE CONSOLE →
+                </Link>
+              </div>
             </div>
-          </Link>
+          </RaceProvider>
         </section>
       ) : null}
 
