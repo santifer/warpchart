@@ -789,19 +789,24 @@ body.gx-fullscreen .gx-hero-copy {
   right: auto;
   height: 100%;
   width: auto;
-  transform: translate(-50%, -50%);
-  transform-origin: center center;
-  animation: ghx-fs-in 0.6s cubic-bezier(0.22, 1, 0.36, 1) both;
+  /* scaled up from near the core so the field FILLS the screen (the empty
+     margins crop away) with the core kept in the upper-right third */
+  transform-origin: 74% 30%;
+  transform: translate(-50%, -46%) scale(1.62);
+  /* soft-edged: the field melts into the backdrop, no hard rectangular crop
+     and no abrupt gradient chords at the edges */
+  -webkit-mask-image: radial-gradient(ellipse 78% 82% at 54% 50%, #000 52%, transparent 100%);
+  mask-image: radial-gradient(ellipse 78% 82% at 54% 50%, #000 52%, transparent 100%);
+  /* fade + grow in, then drift forever so it feels alive, not a static image */
+  animation: ghx-fs-in 0.8s ease-out both, ghx-fs-drift 52s ease-in-out 0.8s infinite;
 }
 @keyframes ghx-fs-in {
-  from {
-    opacity: 0.5;
-    transform: translate(-50%, -50%) scale(1.05);
-  }
-  to {
-    opacity: 1;
-    transform: translate(-50%, -50%) scale(1);
-  }
+  from { opacity: 0; transform: translate(-50%, -46%) scale(1.5); }
+  to   { opacity: 1; transform: translate(-50%, -46%) scale(1.62); }
+}
+@keyframes ghx-fs-drift {
+  0%, 100% { transform: translate(-50%, -46%) scale(1.62); }
+  50%      { transform: translate(-48.6%, -47.5%) scale(1.66); }
 }
 @media (prefers-reduced-motion: reduce) {
   .ghx-stage.ghx-immersive .ghx-plane { animation: none; }
