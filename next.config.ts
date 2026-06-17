@@ -6,6 +6,21 @@ const nextConfig: NextConfig = {
   experimental: {
     viewTransition: true,
   },
+  // The public JSON API is meant to be consumed from anywhere (browser apps,
+  // notebooks, agents), so it advertises open CORS. It is read-only, cache-only
+  // public data — nothing to protect with same-origin.
+  async headers() {
+    return [
+      {
+        source: "/api/v1/:path*",
+        headers: [
+          { key: "Access-Control-Allow-Origin", value: "*" },
+          { key: "Access-Control-Allow-Methods", value: "GET, OPTIONS" },
+          { key: "Access-Control-Allow-Headers", value: "Content-Type" },
+        ],
+      },
+    ];
+  },
   // data/ files are read with fs by the live API routes, the badge, the OG
   // card and the explorer; force-include them in the function bundles.
   outputFileTracingIncludes: {

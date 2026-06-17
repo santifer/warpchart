@@ -50,7 +50,17 @@ export function repoStats(repoInput: string, band = 5): RepoStats | null {
   const r = loadRoute();
   if (!r) return null;
   const lower = repoInput.toLowerCase();
-  const idx = r.repos.findIndex((p) => p.r.toLowerCase() === lower);
+  let idx = r.repos.findIndex((p) => p.r.toLowerCase() === lower);
+  // Fallback for the REAL GitHub path when the registry stores a canonical/brand
+  // owner (e.g. a query for "facebook/react" must resolve to "react/react"):
+  // match by the name part and take the most prominent (highest-ranked) repo with
+  // that name. route.repos is rank-ordered, so the first match is the canonical
+  // one. The response's `repo` field returns that canonical name, so the
+  // resolution is transparent to the caller.
+  if (idx === -1) {
+    const name = lower.split("/")[1] ?? "";
+    if (name) idx = r.repos.findIndex((p) => p.r.toLowerCase().split("/")[1] === name);
+  }
   if (idx === -1) return null;
   const me = r.repos[idx];
   const rank = idx + 1;
