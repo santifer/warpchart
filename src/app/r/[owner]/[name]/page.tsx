@@ -15,6 +15,7 @@ import Heatmap from "@/components/Heatmap";
 import RankChart from "@/components/RankChart";
 import MissionLog from "@/components/MissionLog";
 import Dashboard from "@/components/Dashboard";
+import Badges from "@/components/Badges";
 import CompareLab from "@/components/CompareLab";
 import Masthead from "@/components/Masthead";
 import { buildBundle } from "@/lib/bundle";
@@ -213,6 +214,7 @@ export default async function ExplorerPage({
                 {data.desc ?? "public repository"}
                 {data.lang ? ` · ${data.lang}` : ""}
               </p>
+              <Badges repo={repoLabel} />
               {/* the dossier's own line, up front: unique content the visitor
                   reads before deciding to open the full transmission */}
               {codex?.tagline ? (
