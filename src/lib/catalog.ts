@@ -110,14 +110,29 @@ function load(): Loaded {
 // stars/day, never negative for ranking purposes
 const vel = (p: CatalogRepo) => Math.max(0, p.v ?? 0);
 
-// Rank a member set by momentum, with a graceful fallback to stars on the very
-// first days before velocities have accumulated (so a page is never empty).
+// RELATIVE daily growth = stars/day as a fraction of the repo's own size. This
+// is what "trending" actually means: a 3k-star repo gaining 6%/day is hotter
+// than a 200k-star repo gaining 0.3%/day, even though the giant's ABSOLUTE
+// stars/day is larger. Ranking by absolute velocity just resurfaces the giants
+// (saturation by size); ranking by relative growth surfaces real breakouts.
+// Floors kill noise (a 100->150 repo is not "trending"): a real base AND real
+// daily movement are both required before the ratio counts.
+const REL_S_FLOOR = 1000;
+const REL_V_FLOOR = 25; // mirrors the Warp Index velocity board's relative floor
+const relGrowth = (p: CatalogRepo) => (p.s >= REL_S_FLOOR && vel(p) >= REL_V_FLOOR ? vel(p) / p.s : 0);
+
+// Rank a member set by RELATIVE momentum (true trending). Falls back to absolute
+// velocity, then raw stars, when too few repos clear the floor (a niche category
+// or the very first days), so a page is never empty.
 function rankRising(members: CatalogRepo[], limit: number): CatalogRepo[] {
+  const cap = Math.max(1, Math.min(limit, 100));
+  const trending = members.filter((p) => relGrowth(p) > 0);
+  if (trending.length >= 5) {
+    return trending.sort((a, b) => relGrowth(b) - relGrowth(a)).slice(0, cap);
+  }
   const moving = members.filter((p) => vel(p) > 0);
   const base = moving.length >= 5 ? moving : [...members];
-  return base
-    .sort((a, b) => (moving.length >= 5 ? vel(b) - vel(a) : b.s - a.s))
-    .slice(0, Math.max(1, Math.min(limit, 100)));
+  return base.sort((a, b) => (moving.length >= 5 ? vel(b) - vel(a) : b.s - a.s)).slice(0, cap);
 }
 
 export interface CategorySummary extends Category {
@@ -145,6 +160,7 @@ export interface RisingEntry {
   rank: number; // worldwide rank
   stars: number;
   velocityPerDay: number;
+  growthPctDay: number; // daily growth as % of own size — the "trending" signal
   language: string | null;
   description: string | null;
   forks: number | null;
@@ -156,6 +172,7 @@ const toEntry = (p: CatalogRepo): RisingEntry => ({
   rank: p.rank,
   stars: p.s,
   velocityPerDay: p.v ?? 0,
+  growthPctDay: p.s > 0 ? Math.round((Math.max(0, p.v ?? 0) / p.s) * 1000) / 10 : 0,
   language: p.l ?? null,
   description: p.d ?? null,
   forks: p.f ?? null,

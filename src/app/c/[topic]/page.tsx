@@ -84,8 +84,9 @@ export default async function CategoryPage({
           RISING · {cat.label.toUpperCase()}
         </h1>
         <p className="max-w-[720px] text-base font-light leading-relaxed text-dim">
-          {cat.blurb ? cat.blurb + " " : ""}The {cat.label} repositories climbing fastest right now, ranked by
-          momentum, the stars per day humans are adding, not just the total they have already earned.
+          {cat.blurb ? cat.blurb + " " : ""}The {cat.label} repositories breaking out right now, ranked by
+          relative momentum: daily growth against their own size, so real risers surface instead of the giants that
+          merely add the most stars in absolute terms.
         </p>
         <p className="numeral text-micro tracking-[0.15em] text-faint">
           {day ? `catalog of ${day} · ` : ""}velocity from the daily distribution · the one history nobody else keeps
@@ -116,8 +117,13 @@ export default async function CategoryPage({
                 </span>
                 <span className="flex shrink-0 items-center gap-4 numeral">
                   <span className="text-label text-dim">{fmtCompact(e.stars)} ★</span>
-                  {e.velocityPerDay > 0 ? (
-                    <span className="text-label text-accent">▲ {e.velocityPerDay}/day</span>
+                  {e.growthPctDay > 0 ? (
+                    <span className="flex items-baseline gap-2">
+                      <span className="text-label text-accent">▲ {e.growthPctDay}%/day</span>
+                      <span className="text-micro text-faint">{fmtCompact(e.velocityPerDay)}/d</span>
+                    </span>
+                  ) : e.velocityPerDay > 0 ? (
+                    <span className="text-label text-accent">▲ {fmtCompact(e.velocityPerDay)}/day</span>
                   ) : (
                     <span className="text-micro text-faint">#{e.rank}</span>
                   )}

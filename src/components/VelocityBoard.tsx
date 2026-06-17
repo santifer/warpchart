@@ -116,7 +116,10 @@ export default function VelocityBoard({
   medianV: number;
 }) {
   const C = usePalette();
-  const [lens, setLens] = useState<Lens>("absolute");
+  // Default to RISING (relative growth): the Warp Index leads with real breakouts
+  // — repos hot relative to their size — not the giants that merely add the most
+  // stars in absolute terms. FASTEST (absolute) stays one tab away.
+  const [lens, setLens] = useState<Lens>("relative");
   const maxAbs = absolute[0]?.v ?? 1;
   const maxRel = relative[0]?.v ?? 1;
 
