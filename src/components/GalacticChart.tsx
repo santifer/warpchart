@@ -164,7 +164,7 @@ export default function GalacticChart({
   const [mainClass, setMainClass] = useState<string | null>(null);
   useEffect(() => {
     let gone = false;
-    fetch(`/api/v1/repo?repo=${encodeURIComponent(inputs.repo)}`)
+    fetch(`/api/v1/repo?repo=${encodeURIComponent(ssrInputs.repo)}`)
       .then((r) => (r.ok ? r.json() : null))
       .then((j) => {
         const list: { key: string; kind: string }[] = j?.classifications ?? [];
@@ -175,7 +175,7 @@ export default function GalacticChart({
     return () => {
       gone = true;
     };
-  }, [inputs.repo]);
+  }, [ssrInputs.repo]);
   const sceneHot =
     Math.max(ssrInputs.v7d, ...ssrInputs.neighbors.map((n) => n.v || 0)) >= 300;
   useEffect(() => {
