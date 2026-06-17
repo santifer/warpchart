@@ -925,10 +925,12 @@ export default function GalacticChart({
   const nodeSigil = (repo: string, cx: number, textY: number, name: string) => {
     const k = badgeMap?.[repo.toLowerCase()];
     if (!k) return null;
-    const sz = Math.round(13 * fs);
-    const halfW = (Math.max(name.length, 4) * 6.8 * fs) / 2;
+    // identical to the hero ship's sigil: same size (17*fs) and same gap to
+    // the name (sz + 3), so every node's badge reads at the protagonist's scale
+    const sz = Math.round(17 * fs);
+    const half = (name.length * 7.6 * fs) / 2;
     return (
-      <g transform={`translate(${(cx - halfW - sz - 1).toFixed(1)}, ${(textY - sz / 2 - 4).toFixed(1)})`}>
+      <g transform={`translate(${(cx - half - sz - 3).toFixed(1)}, ${(textY - sz / 2 - 4).toFixed(1)})`}>
         <BadgeSigil badgeKey={k} size={sz} />
       </g>
     );
@@ -1443,7 +1445,7 @@ export default function GalacticChart({
                 <circle cx={ax(coreStars)} cy={BAND_A_Y} r={4} fill={C.white} />
                 {apex && badgeMap?.[apex.r.toLowerCase()] ? (
                   <g transform={`translate(${(ax(coreStars) + 9).toFixed(1)}, ${(BAND_A_Y - 9).toFixed(1)})`}>
-                    <BadgeSigil badgeKey={badgeMap[apex.r.toLowerCase()]} size={Math.round(16 * fs)} />
+                    <BadgeSigil badgeKey={badgeMap[apex.r.toLowerCase()]} size={Math.round(17 * fs)} />
                   </g>
                 ) : null}
                 <text x={ax(coreStars)} y={BAND_A_Y - 44} fill={C.white} fontSize={12 * fs}

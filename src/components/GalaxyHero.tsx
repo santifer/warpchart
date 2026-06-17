@@ -6,7 +6,7 @@
 // neighborhood under the cursor leans in (no rotation, the galaxy's angle
 // never changes), and each layer zooms by a different factor so depth reads
 // as the dust lagging behind the systems.
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   GX_W,
@@ -31,6 +31,25 @@ export default function GalaxyHero({ data }: { data: GalaxyData }) {
   const planeRef = useRef<HTMLDivElement>(null);
   const warping = useRef(false);
   const prefetched = useRef(new Set<string>());
+  const [immersive, setImmersive] = useState(false);
+
+  // FULLSCREEN: a discrete toggle promotes the star map to a viewport overlay
+  // (the marketing column drops away, a minimal mission bar takes the top).
+  // While it is open, lock the page scroll and let ESC dismiss it.
+  useEffect(() => {
+    if (!immersive) return;
+    const root = document.documentElement;
+    const prev = root.style.overflow;
+    root.style.overflow = "hidden";
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setImmersive(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => {
+      root.style.overflow = prev;
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [immersive]);
 
   useEffect(() => {
     const el = planeRef.current;
@@ -105,6 +124,7 @@ export default function GalaxyHero({ data }: { data: GalaxyData }) {
   // snapshot IS the dive's final frame.
   const warpTo = (repo: string, point: { x: number; y: number } | null) => {
     if (warping.current) return;
+    setImmersive(false); // leaving the system drops the overlay and unlocks scroll
     const el = planeRef.current;
     const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     const push = () => router.push(`/r/${repo}`, { transitionTypes: ["warp"] });
@@ -167,7 +187,7 @@ export default function GalaxyHero({ data }: { data: GalaxyData }) {
   };
 
   return (
-    <div className="ghx-stage">
+    <div className={immersive ? "ghx-stage ghx-immersive" : "ghx-stage"}>
       <div ref={planeRef} className="ghx-plane">
         {/* far layer: the full top 1000 as dust, every grain a real repo at
             its real log position; non-interactive on purpose */}
@@ -323,6 +343,39 @@ export default function GalaxyHero({ data }: { data: GalaxyData }) {
       <span className="ghx-lore numeral" aria-hidden>
         a galaxy of systems, each pulled by its stars · every light is real
       </span>
+
+      {/* fullscreen: a discrete chip expands the map to a viewport overlay; in
+          immersive a minimal mission bar (brand + nav + exit) floats on top so
+          the menu stays reachable while the galaxy takes the whole screen */}
+      {immersive ? (
+        <div className="ghx-immersive-bar numeral">
+          <a href="/" className="ghx-imm-brand">
+            ◆ WARPCHART
+          </a>
+          <nav className="ghx-imm-nav">
+            <a href="/explore">EXPLORE</a>
+            <a href="/velocity">RISING</a>
+            <a href="/codex">CODEX</a>
+          </nav>
+          <button
+            type="button"
+            className="ghx-imm-exit"
+            onClick={() => setImmersive(false)}
+            aria-label="Exit fullscreen"
+          >
+            ✕ EXIT
+          </button>
+        </div>
+      ) : (
+        <button
+          type="button"
+          className="ghx-fsbtn numeral"
+          onClick={() => setImmersive(true)}
+          aria-label="Open the galaxy fullscreen"
+        >
+          <span aria-hidden>⤢</span> FULLSCREEN
+        </button>
+      )}
     </div>
   );
 }

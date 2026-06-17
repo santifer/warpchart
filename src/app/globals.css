@@ -724,6 +724,96 @@ svg text {
 @media (min-width: 2700px) {
   .ghx-stage { transform: scale(1.46) translateY(-13%); }
 }
+/* FULLSCREEN. The chip is click-live even though the stage is click-transparent.
+   In immersive the stage goes fixed + opaque and the plane sheds its raised roof
+   so the map fills the viewport; a minimal mission bar floats on top. The
+   double-class selector outweighs the wide-screen transforms above, so `transform:
+   none` wins without !important. */
+.ghx-fsbtn {
+  position: absolute;
+  right: 18px;
+  bottom: 18px;
+  z-index: 6;
+  pointer-events: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 12px;
+  font-size: 11px;
+  letter-spacing: 0.18em;
+  color: var(--dim);
+  background: color-mix(in srgb, var(--void) 70%, transparent);
+  border: 1px solid var(--grid);
+  backdrop-filter: blur(6px);
+  transition: color 0.15s ease, border-color 0.15s ease;
+}
+.ghx-fsbtn:hover {
+  color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 55%, transparent);
+}
+.ghx-stage.ghx-immersive {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  transform: none;
+  background: var(--void);
+  pointer-events: auto;
+}
+.ghx-stage.ghx-immersive .ghx-plane {
+  top: 0;
+  height: 100%;
+}
+.ghx-stage.ghx-immersive .ghx-scrim,
+.ghx-stage.ghx-immersive .ghx-warpveil {
+  inset: 0;
+}
+.ghx-immersive-bar {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 8;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 20px;
+  pointer-events: auto;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--void) 90%, transparent), transparent);
+}
+.ghx-imm-brand {
+  font-size: 13px;
+  letter-spacing: 0.22em;
+  color: var(--ink);
+}
+.ghx-imm-brand:hover {
+  color: var(--accent);
+}
+.ghx-imm-nav {
+  display: flex;
+  gap: 20px;
+}
+.ghx-imm-nav a,
+.ghx-imm-exit {
+  font-size: 11px;
+  letter-spacing: 0.18em;
+  color: var(--dim);
+  transition: color 0.15s ease, border-color 0.15s ease;
+}
+.ghx-imm-nav a:hover {
+  color: var(--accent);
+}
+.ghx-imm-exit {
+  border: 1px solid var(--grid);
+  padding: 6px 12px;
+}
+.ghx-imm-exit:hover {
+  color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 55%, transparent);
+}
+@media (max-width: 640px) {
+  .ghx-imm-nav { display: none; }
+}
 .ghx-plane {
   position: absolute;
   top: var(--ghx-roof);
