@@ -756,14 +756,62 @@ svg text {
   inset: 0;
   z-index: 60;
   transform: none;
-  background: var(--void);
   pointer-events: auto;
+  /* transparent on purpose: the page's existing fixed backdrop (grid, bluish
+     wash, starfield — all in the body, covering the viewport) shows straight
+     through. No replication. The non-galaxy page content is hidden via
+     body.gx-fullscreen below, so only that backdrop is left behind the map. */
+  background: transparent;
 }
+/* fullscreen hides everything on the page except the galaxy itself, so the
+   real backdrop becomes the immersive background (one source of atmosphere).
+   The minimal mission bar inside the overlay replaces the page nav. */
+/* fade the page out rather than cut it: opacity transitions (display:none does
+   not), the elements stay in layout but invisible behind the transparent
+   overlay, so the backdrop shows and the exit fades them back in */
+body.gx-fullscreen main > *:not(.gx-hero-sec),
+body.gx-fullscreen .gx-hero-copy {
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.5s ease;
+}
+/* fill the viewport: the galaxy grows and spans the whole width, so the left
+   arms come into frame instead of clipping off a right-anchored edge. It eases
+   IN organically (scale + fade) as the page text clears around it. */
 .ghx-stage.ghx-immersive .ghx-plane {
-  top: 0;
-  height: 100%;
+  top: 50%;
+  left: 50%;
+  right: auto;
+  width: 100%;
+  height: auto;
+  transform: translate(-50%, -50%) scale(1.2);
+  transform-origin: center center;
+  animation: ghx-fs-in 0.6s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
-.ghx-stage.ghx-immersive .ghx-scrim,
+@keyframes ghx-fs-in {
+  from {
+    opacity: 0.5;
+    transform: translate(-50%, -50%) scale(1.04);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1.2);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ghx-stage.ghx-immersive .ghx-plane { animation: none; }
+  body.gx-fullscreen main > *:not(.gx-hero-sec),
+  body.gx-fullscreen .gx-hero-copy { transition: none; }
+}
+/* strip the persistent labels for a clean, mostly-visual field; the hover
+   tips still reveal each system on demand */
+.ghx-stage.ghx-immersive .ghx-ring-label,
+.ghx-stage.ghx-immersive .ghx-name,
+.ghx-stage.ghx-immersive .ghx-core-label,
+.ghx-stage.ghx-immersive .ghx-lore,
+.ghx-stage.ghx-immersive .ghx-scrim {
+  display: none;
+}
 .ghx-stage.ghx-immersive .ghx-warpveil {
   inset: 0;
 }

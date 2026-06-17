@@ -32,21 +32,27 @@ export default function GalaxyHero({ data }: { data: GalaxyData }) {
   const warping = useRef(false);
   const prefetched = useRef(new Set<string>());
   const [immersive, setImmersive] = useState(false);
+  // auto-fullscreen fires at most ONCE per session and is disarmed the moment
+  // the viewer enters (auto or by the chip), so it never fights a manual exit
+  const autoFsArmed = useRef(true);
 
-  // FULLSCREEN: a discrete toggle promotes the star map to a viewport overlay
-  // (the marketing column drops away, a minimal mission bar takes the top).
-  // While it is open, lock the page scroll and let ESC dismiss it.
+  // FULLSCREEN: promotes the star map to a viewport overlay. The page's own
+  // fixed backdrop (grid, bluish wash, starfield) shows straight through — the
+  // body.gx-fullscreen class just fades the rest of the page out. Lock scroll
+  // and let ESC dismiss it while it is open.
   useEffect(() => {
     if (!immersive) return;
     const root = document.documentElement;
     const prev = root.style.overflow;
     root.style.overflow = "hidden";
+    document.body.classList.add("gx-fullscreen");
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") setImmersive(false);
     };
     window.addEventListener("keydown", onKey);
     return () => {
       root.style.overflow = prev;
+      document.body.classList.remove("gx-fullscreen");
       window.removeEventListener("keydown", onKey);
     };
   }, [immersive]);
@@ -82,6 +88,7 @@ export default function GalaxyHero({ data }: { data: GalaxyData }) {
     // steps back (dims via body class) so the galaxy takes the stage; the
     // moment the pointer leaves the map it returns to full strength
     let dwell = 0;
+    let fsTimer = 0;
     const onMove = (e: PointerEvent) => {
       if (warping.current) return;
       const r = el.getBoundingClientRect();
@@ -94,6 +101,19 @@ export default function GalaxyHero({ data }: { data: GalaxyData }) {
           document.body.classList.add("gx-immersed");
         }, 1400);
       }
+      // sustained engagement escalates to fullscreen on its own — but only once
+      // per session, only near the top of the page (never yank a reader who has
+      // scrolled down), and never while warping. Leaving the map cancels it.
+      // The effect already bailed for reduced-motion / coarse pointers above,
+      // so this only ever runs on a deliberate desktop hover.
+      if (!fsTimer && autoFsArmed.current) {
+        fsTimer = window.setTimeout(() => {
+          if (autoFsArmed.current && window.scrollY < 60 && !warping.current) {
+            autoFsArmed.current = false;
+            setImmersive(true);
+          }
+        }, 4500);
+      }
     };
     const onLeave = () => {
       tzf = 0;
@@ -101,6 +121,10 @@ export default function GalaxyHero({ data }: { data: GalaxyData }) {
       if (dwell) {
         clearTimeout(dwell);
         dwell = 0;
+      }
+      if (fsTimer) {
+        clearTimeout(fsTimer);
+        fsTimer = 0;
       }
       document.body.classList.remove("gx-immersed");
     };
@@ -370,7 +394,10 @@ export default function GalaxyHero({ data }: { data: GalaxyData }) {
         <button
           type="button"
           className="ghx-fsbtn numeral"
-          onClick={() => setImmersive(true)}
+          onClick={() => {
+            autoFsArmed.current = false;
+            setImmersive(true);
+          }}
           aria-label="Open the galaxy fullscreen"
         >
           <span aria-hidden>⤢</span> FULLSCREEN
