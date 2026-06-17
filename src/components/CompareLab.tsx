@@ -314,6 +314,10 @@ export default function CompareLab({
       const ev: Cross[] = [];
       for (let a = 0; a < series.length; a++)
         for (let b = a + 1; b < series.length; b++) {
+          // only contact points that involve the MAIN repo (i===0): the
+          // monitored repo's own crossings (who it passes / who passes it),
+          // never a race between two rivals that does not touch us
+          if (series[a].i !== 0 && series[b].i !== 0) continue;
           const A = cur[a];
           const B = cur[b];
           const dv = A.v - B.v;
@@ -345,8 +349,13 @@ export default function CompareLab({
       }
       crossovers = [...byPair.values()].sort((p, q) => Math.abs(p.t - nowMs) - Math.abs(q.t - nowMs)).slice(0, 6);
       focus = crossovers.length ? { t: crossovers[0].t, val: crossovers[0].val } : { t: nowMs, val: cur[0].y };
-      const focusDays = (focus.t - nowMs) / DAY;
-      const horizon = nowMs + Math.max(focusDays > 0 ? focusDays * 1.25 : 7, 3) * DAY;
+      // project the dashed forecast only as far as the FURTHEST relevant
+      // (main-repo) crossover, plus a hair so its dot isn't on the edge — the
+      // line should stop at the last contact point with us, not keep running
+      // past it into a future that touches nobody we care about
+      const futureT = crossovers.map((c) => c.t).filter((t) => t > nowMs);
+      const lastDays = futureT.length ? (Math.max(...futureT) - nowMs) / DAY : 0;
+      const horizon = nowMs + Math.max(lastDays > 0 ? lastDays * 1.06 : 7, 3) * DAY;
       for (const c of cur) {
         projByI[c.i] = [
           { x: c.x, y: c.y },
