@@ -1,19 +1,21 @@
 "use client";
 
-// Real-usage curve for the dossier: the two ACQUISITION channels stacked and
-// colour-coded over time — npm installs (cyan, since the package launched) and
-// unique git clones (amber, since the Traffic Vault started recording, which
-// GitHub itself deletes after 14 days). Each channel begins at its own real
-// date, no fake backfill; where one has no data yet its layer is simply zero.
-// CUMULATIVE tells the "watch it grow" story, DAILY shows the run-rate; the
-// tooltip carries both channels. Clones are only passed for the public house
-// repo (its vault is the opt-in demo); everyone else gets the npm series alone.
-import { useState } from "react";
+// Real-usage curve for the dossier: the acquisition channels STACKED over time
+// so the top of the stack is the TOTAL — npm installs (cyan) at the base, unique
+// git clones (amber) on top, and a white line tracing the running total. Each
+// channel starts at its own real date (npm at launch, clones when the Traffic
+// Vault began recording — GitHub deletes clones after 14 days), no fake
+// backfill; a newer source simply lifts off zero on its first day. The tooltip
+// breaks the point down into total + each channel. CUMULATIVE tells the
+// watch-it-grow story; DAILY shows the run-rate. Clones are only passed for the
+// public house repo (its vault is the opt-in demo); others get npm alone.
+import { useState, type ComponentProps } from "react";
 import {
   ResponsiveContainer,
   ComposedChart,
   Area,
   Bar,
+  Line,
   XAxis,
   YAxis,
   Tooltip,
@@ -21,6 +23,16 @@ import {
 } from "recharts";
 import { usePalette } from "@/lib/usePalette";
 import { fmt, fmtCompact } from "@/lib/format";
+
+interface Row {
+  t: number;
+  npm: number;
+  clones: number;
+  npmCum: number;
+  clonesCum: number;
+  total: number;
+  totalCum: number;
+}
 
 export default function UsageChart({
   npm,
@@ -35,7 +47,6 @@ export default function UsageChart({
   const hasClones = !!clones && clones.length > 0;
   if ((!npm || npm.length < 2) && !hasClones) return null;
 
-  // unify both channels on one daily timeline
   const byDay = new Map<string, { npm: number; clones: number }>();
   for (const p of npm ?? []) {
     const e = byDay.get(p.day) ?? { npm: 0, clones: 0 };
@@ -51,7 +62,7 @@ export default function UsageChart({
   if (days.length < 2) return null;
   let cn = 0;
   let cc = 0;
-  const rows = days.map((day) => {
+  const rows: Row[] = days.map((day) => {
     const e = byDay.get(day)!;
     cn += e.npm;
     cc += e.clones;
@@ -61,6 +72,8 @@ export default function UsageChart({
       clones: e.clones,
       npmCum: cn,
       clonesCum: cc,
+      total: e.npm + e.clones,
+      totalCum: cn + cc,
     };
   });
 
@@ -68,6 +81,46 @@ export default function UsageChart({
   const firstClone = hasClones ? clones![0]?.day : undefined;
   const fmtDay = (d?: string) =>
     d ? new Date(`${d}T00:00:00Z`).toLocaleDateString("en-US", { month: "short", day: "numeric" }) : "";
+
+  // tooltip: total + each channel, colour-coded (extensible to more sources)
+  const TipRow = ({ dot, k, v }: { dot: string; k: string; v: number }) => (
+    <div className="flex items-center justify-between gap-4">
+      <span className="flex items-center gap-1.5">
+        <span className="inline-block h-2 w-2 rounded-full" style={{ background: dot }} />
+        {k}
+      </span>
+      <span style={{ color: C.ink }}>{fmt(v)}</span>
+    </div>
+  );
+  const renderTip = (props: {
+    active?: boolean;
+    label?: string | number;
+    payload?: { payload: Row }[];
+  }) => {
+    if (!props.active || !props.payload?.length) return null;
+    const r = props.payload[0].payload;
+    const np = mode === "cum" ? r.npmCum : r.npm;
+    const cl = mode === "cum" ? r.clonesCum : r.clones;
+    return (
+      <div
+        className="numeral flex flex-col gap-1"
+        style={{
+          background: C.hull,
+          border: `1px solid ${C.grid}`,
+          color: C.dim,
+          fontSize: 12,
+          padding: "7px 10px",
+        }}
+      >
+        <span style={{ color: C.dim }}>
+          {new Date(Number(props.label)).toLocaleDateString("en-US", { dateStyle: "medium" })}
+        </span>
+        <TipRow dot={C.white} k="total" v={np + cl} />
+        {hasClones ? <TipRow dot={C.warn} k="git clones" v={cl} /> : null}
+        <TipRow dot={C.accent} k="npm installs" v={np} />
+      </div>
+    );
+  };
 
   return (
     <div className="flex flex-col gap-1.5">
@@ -115,56 +168,59 @@ export default function UsageChart({
               axisLine={false}
               width={42}
             />
-            <Tooltip
-              contentStyle={{
-                background: C.hull,
-                border: `1px solid ${C.grid}`,
-                fontFamily: "var(--font-jbmono)",
-                fontSize: 12,
-              }}
-              labelStyle={{ color: C.dim }}
-              labelFormatter={(t) => new Date(Number(t)).toLocaleDateString("en-US", { dateStyle: "medium" })}
-              formatter={(value, name) => [fmt(Number(value)), name]}
-            />
-            {/* NOT stacked: each channel rises from the baseline so a newer
-                source (npm, from its launch) visibly LIFTS OFF zero instead of
-                riding a misleading line on top of the older one. clones drawn
-                first (the bigger, background channel), npm in front. */}
+            <Tooltip content={renderTip as unknown as ComponentProps<typeof Tooltip>["content"]} />
+            {/* STACKED so the top = total: npm at the base, clones on top. A
+                channel that doesn't exist yet contributes 0, so a newer source
+                lifts off zero on its launch day instead of riding a false line. */}
             {mode === "cum" ? (
               <>
-                {hasClones ? (
-                  <Area
-                    type="monotone"
-                    dataKey="clonesCum"
-                    name="git clones · unique"
-                    stroke={C.warn}
-                    strokeWidth={1.4}
-                    fill={C.warn}
-                    fillOpacity={0.13}
-                    isAnimationActive
-                    animationDuration={1200}
-                    dot={false}
-                  />
-                ) : null}
                 <Area
                   type="monotone"
                   dataKey="npmCum"
                   name="npm installs"
+                  stackId="1"
                   stroke={C.accent}
-                  strokeWidth={1.8}
+                  strokeWidth={1.4}
                   fill={C.accent}
                   fillOpacity={0.22}
                   isAnimationActive
                   animationDuration={1200}
                   dot={false}
                 />
+                {hasClones ? (
+                  <Area
+                    type="monotone"
+                    dataKey="clonesCum"
+                    name="git clones · unique"
+                    stackId="1"
+                    stroke="none"
+                    fill={C.warn}
+                    fillOpacity={0.16}
+                    isAnimationActive
+                    animationDuration={1200}
+                    dot={false}
+                  />
+                ) : null}
+                {/* the running TOTAL, traced in white on the top of the stack */}
+                {hasClones ? (
+                  <Line
+                    type="monotone"
+                    dataKey="totalCum"
+                    name="total"
+                    stroke={C.white}
+                    strokeWidth={1.8}
+                    dot={false}
+                    isAnimationActive
+                    animationDuration={1200}
+                  />
+                ) : null}
               </>
             ) : (
               <>
+                <Bar dataKey="npm" name="npm installs" stackId="1" fill={C.accent} fillOpacity={0.65} isAnimationActive animationDuration={900} />
                 {hasClones ? (
-                  <Bar dataKey="clones" name="git clones · unique" fill={C.warn} fillOpacity={0.5} isAnimationActive animationDuration={900} />
+                  <Bar dataKey="clones" name="git clones · unique" stackId="1" fill={C.warn} fillOpacity={0.55} isAnimationActive animationDuration={900} />
                 ) : null}
-                <Bar dataKey="npm" name="npm installs" fill={C.accent} fillOpacity={0.65} isAnimationActive animationDuration={900} />
               </>
             )}
           </ComposedChart>
@@ -173,6 +229,10 @@ export default function UsageChart({
 
       {hasClones ? (
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+          <span className="flex items-center gap-1.5">
+            <span className="inline-block h-2 w-[10px] rounded-full" style={{ background: C.white }} />
+            <span className="numeral text-micro text-dim">total acquisitions</span>
+          </span>
           <span className="flex items-center gap-1.5">
             <span className="inline-block h-2 w-2 rounded-full" style={{ background: C.warn }} />
             <span className="numeral text-micro text-dim">git clones · unique · since {fmtDay(firstClone)}</span>

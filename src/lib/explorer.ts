@@ -84,7 +84,7 @@ export async function fetchDossier(owner: string, name: string): Promise<Dossier
 export const getCachedDossier = (owner: string, name: string) =>
   unstable_cache(
     () => fetchDossier(owner, name),
-    ["dossier-v4", `${owner}/${name}`.toLowerCase()],
+    ["dossier-v5", `${owner}/${name}`.toLowerCase()],
     { revalidate: 900 },
   )();
 
