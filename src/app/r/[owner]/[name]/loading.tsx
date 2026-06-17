@@ -351,27 +351,27 @@ export default function ExplorerLoading() {
               </div>
             </div>
           </PanelSkeleton>
-          <PanelSkeleton index="04" title="Real usage" meta="installs, not applause" delay={240}>
-            <div className="flex min-h-[158px] flex-col gap-3 py-1">
-              <div className="flex flex-col gap-2">
-                <Bar w="w-24" />
-                <Bar w="w-32" />
-              </div>
-              {[0, 1, 2].map((i) => (
-                <div key={i} className="flex items-center gap-2">
-                  <Bar w="w-24" />
-                  <div className="h-1.5 flex-1 animate-pulse bg-grid/60" />
-                  <Bar w="w-12" />
-                </div>
-              ))}
-            </div>
+          <PanelSkeleton index="04" title="Velocity, stars per hour" meta="24h vs previous 24h" delay={240}>
+            <VelocitySilhouette />
           </PanelSkeleton>
         </div>
       </div>
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-12">
-        <PanelSkeleton index="05" title="Velocity, stars per hour" meta="24h vs previous 24h" className="lg:col-span-8" delay={280}>
-          <VelocitySilhouette />
+        <PanelSkeleton index="05" title="Real usage" meta="installs, not applause" className="lg:col-span-8" delay={280}>
+          <div className="flex min-h-[158px] flex-col gap-3 py-1">
+            <div className="flex flex-col gap-2">
+              <Bar w="w-24" />
+              <Bar w="w-32" />
+            </div>
+            {[0, 1, 2].map((i) => (
+              <div key={i} className="flex items-center gap-2">
+                <Bar w="w-24" />
+                <div className="h-1.5 flex-1 animate-pulse bg-grid/60" />
+                <Bar w="w-12" />
+              </div>
+            ))}
+          </div>
         </PanelSkeleton>
         <PanelSkeleton index="06" title="Milestone projections" meta="unlocks with tracking" className="lg:col-span-4" delay={320}>
           <div className="relative">

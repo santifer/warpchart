@@ -56,20 +56,17 @@ export default function ConsoleLayout({
         </Panel>
         <div className="flex flex-col gap-4">
           <PulsePanel dossier={dossier} index="03" delay={200} />
-          <UsagePanel dossier={dossier} index="04" delay={240} />
+          {/* velocity moved here: it has room to spare in the narrow column */}
+          <Panel index="04" title="Velocity, stars per hour" meta={velocity.meta} delay={240}>
+            {velocity.node}
+          </Panel>
         </div>
       </div>
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-12">
-        <Panel
-          index="05"
-          title="Velocity, stars per hour"
-          meta={velocity.meta}
-          className="lg:col-span-8"
-          delay={280}
-        >
-          {velocity.node}
-        </Panel>
+        {/* real usage moved to the wide cell: it now stacks npm + clones over
+            time and wants the horizontal room */}
+        <UsagePanel dossier={dossier} index="05" className="lg:col-span-8" delay={280} />
         <Panel
           index="06"
           title="Milestone projections"
