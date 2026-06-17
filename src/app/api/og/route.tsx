@@ -10,7 +10,7 @@ import { worldwideRank, repoLite } from "@/lib/github";
 import { cachedSampleCurve, tenantCurve, isTenantRepo, withLiveTotal, type Curve } from "@/lib/curve";
 import { fmt } from "@/lib/format";
 import { parseRepos, repoColor, shortRepo } from "@/lib/compare";
-import { risingOverall, catalogMeta } from "@/lib/catalog";
+import { risingOverall } from "@/lib/catalog";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -262,8 +262,12 @@ async function compareCard(param: string): Promise<Response> {
 // should look like — the product, not a single tenant's stats.
 async function indexCard(): Promise<Response> {
   const apex = loadRoute()?.repos?.[0] ?? null;
-  const meta = catalogMeta();
-  const risers = risingOverall(3).filter((r) => r.growthPctDay > 0);
+  // We record the daily world rank of the top 10,000 (the rank-history moat);
+  // the catalog is a richer 3k subset. The marketing claim is the full coverage.
+  const COVERED = 10000;
+  // Risers for the card: real trending (relative growth), but floored to
+  // SIGNIFICANT repos so the share card never headlines an obscure +20% micro-spike.
+  const risers = risingOverall(50).filter((r) => r.growthPctDay > 0 && r.stars >= 5000).slice(0, 3);
 
   const [michroma, jbmono] = await Promise.all([googleFont("Michroma"), googleFont("JetBrains Mono")]);
   const fonts: { name: string; data: ArrayBuffer; style: "normal" }[] = [];
@@ -364,7 +368,7 @@ async function indexCard(): Promise<Response> {
             <div style={{ display: "flex", color: C.accent }}>IS MOVING</div>
           </div>
           <div style={{ display: "flex", fontSize: 19, color: C.dim }}>
-            {`${fmt(meta.size)} repositories charted · ranked by momentum · the one history nobody else keeps`}
+            {`the worldwide top ${fmt(COVERED)} · ranked every day · the one history nobody else keeps`}
           </div>
         </div>
       </div>
