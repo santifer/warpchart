@@ -10,6 +10,7 @@ import { worldwideRank, repoLite } from "@/lib/github";
 import { cachedSampleCurve, tenantCurve, isTenantRepo, withLiveTotal, type Curve } from "@/lib/curve";
 import { fmt } from "@/lib/format";
 import { parseRepos, repoColor, shortRepo } from "@/lib/compare";
+import { risingOverall, catalogMeta } from "@/lib/catalog";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -255,11 +256,135 @@ async function compareCard(param: string): Promise<Response> {
   );
 }
 
+// The HOME card is the whole UNIVERSE, not one repo: a star map of the tracked
+// field, the route sweeping into the gold worldwide-#1 core, the live risers as
+// cyan nodes, and a RISING-NOW readout. This is what a shared warpchart.dev link
+// should look like — the product, not a single tenant's stats.
+async function indexCard(): Promise<Response> {
+  const apex = loadRoute()?.repos?.[0] ?? null;
+  const meta = catalogMeta();
+  const risers = risingOverall(3).filter((r) => r.growthPctDay > 0);
+
+  const [michroma, jbmono] = await Promise.all([googleFont("Michroma"), googleFont("JetBrains Mono")]);
+  const fonts: { name: string; data: ArrayBuffer; style: "normal" }[] = [];
+  if (michroma) fonts.push({ name: "Michroma", data: michroma, style: "normal" });
+  if (jbmono) fonts.push({ name: "JetBrains Mono", data: jbmono, style: "normal" });
+  const mono = jbmono ? "JetBrains Mono" : "monospace";
+  const display = michroma ? "Michroma" : mono;
+
+  const stars = specks("warpchart-galaxy-index", 120);
+  const nodes = [
+    { x: 320, y: 250, r: 6 }, { x: 470, y: 430, r: 4 }, { x: 610, y: 300, r: 5 },
+    { x: 700, y: 470, r: 4 }, { x: 540, y: 195, r: 4 }, { x: 770, y: 360, r: 6 },
+  ];
+  const coreX = 880;
+  const coreY = 300;
+
+  return new ImageResponse(
+    (
+      <div
+        style={{
+          width: "100%",
+          height: "100%",
+          display: "flex",
+          position: "relative",
+          background: C.void,
+          fontFamily: mono,
+          color: C.ink,
+          overflow: "hidden",
+          border: `2px solid ${C.grid}`,
+        }}
+      >
+        <div
+          style={{
+            display: "flex",
+            position: "absolute",
+            left: coreX - 380,
+            top: coreY - 380,
+            width: 760,
+            height: 760,
+            borderRadius: 9999,
+            background: "radial-gradient(closest-side, rgba(83,214,232,0.20), rgba(255,211,77,0.06) 45%, rgba(2,5,10,0) 72%)",
+          }}
+        />
+        {stars.map((d, i) => (
+          <div
+            key={i}
+            style={{
+              display: "flex",
+              position: "absolute",
+              left: d.left,
+              top: d.top,
+              width: d.size,
+              height: d.size,
+              borderRadius: 9999,
+              background: "#bfe9ff",
+              opacity: d.opacity,
+            }}
+          />
+        ))}
+        <svg width={1200} height={630} viewBox="0 0 1200 630" style={{ position: "absolute", left: 0, top: 0 }}>
+          <path d={`M 70 590 C 360 560, 620 470, ${coreX} ${coreY}`} fill="none" stroke={C.accent} strokeWidth={2.5} opacity={0.5} />
+          <path d={`M ${coreX} ${coreY} C 1000 230, 1090 180, 1175 128`} fill="none" stroke={C.accent} strokeWidth={2} strokeDasharray="3 8" opacity={0.4} />
+          {nodes.map((n, i) => (
+            <circle key={i} cx={n.x} cy={n.y} r={n.r} fill={C.accent} opacity={0.85} />
+          ))}
+          <circle cx={coreX} cy={coreY} r={34} fill="none" stroke={C.gold} strokeWidth={1.5} opacity={0.35} />
+          <circle cx={coreX} cy={coreY} r={20} fill="none" stroke={C.gold} strokeWidth={1.5} opacity={0.6} />
+          <circle cx={coreX} cy={coreY} r={9} fill={C.gold} />
+        </svg>
+
+        <div style={{ display: "flex", position: "absolute", left: 56, top: 44, width: 1088, justifyContent: "space-between", alignItems: "center" }}>
+          <div style={{ display: "flex", fontFamily: display, fontSize: 22, letterSpacing: 11, color: C.ink }}>WARPCHART</div>
+          <div style={{ display: "flex", fontSize: 17, color: C.dim }}>warpchart.dev</div>
+        </div>
+
+        {apex ? (
+          <div style={{ display: "flex", flexDirection: "column", position: "absolute", left: coreX + 28, top: coreY - 28, gap: 3 }}>
+            <div style={{ display: "flex", fontSize: 13, letterSpacing: 4, color: C.gold }}>WORLDWIDE #1</div>
+            <div style={{ display: "flex", fontSize: 21, color: C.ink }}>{shortRepo(apex.r)}</div>
+          </div>
+        ) : null}
+
+        {risers.length ? (
+          <div style={{ display: "flex", flexDirection: "column", position: "absolute", right: 56, top: 96, gap: 5, alignItems: "flex-end" }}>
+            <div style={{ display: "flex", fontSize: 12, letterSpacing: 4, color: C.dim }}>RISING NOW</div>
+            {risers.map((r) => (
+              <div key={r.repo} style={{ display: "flex", gap: 9, fontSize: 16, alignItems: "baseline" }}>
+                <div style={{ display: "flex", color: C.accent }}>{`+${r.growthPctDay}%/d`}</div>
+                <div style={{ display: "flex", color: C.dim }}>{shortRepo(r.repo)}</div>
+              </div>
+            ))}
+          </div>
+        ) : null}
+
+        <div style={{ display: "flex", flexDirection: "column", position: "absolute", left: 56, bottom: 54, gap: 16 }}>
+          <div style={{ display: "flex", flexDirection: "column", fontFamily: display, fontSize: 58, lineHeight: 1.08 }}>
+            <div style={{ display: "flex", color: "#f5fbff" }}>WHERE SOFTWARE</div>
+            <div style={{ display: "flex", color: C.accent }}>IS MOVING</div>
+          </div>
+          <div style={{ display: "flex", fontSize: 19, color: C.dim }}>
+            {`${fmt(meta.size)} repositories charted · ranked by momentum · the one history nobody else keeps`}
+          </div>
+        </div>
+      </div>
+    ),
+    {
+      width: 1200,
+      height: 630,
+      fonts: fonts.length ? fonts : undefined,
+      headers: { "Cache-Control": "public, s-maxage=1800, stale-while-revalidate=86400" },
+    }
+  );
+}
+
 export async function GET(req: Request) {
   const url = new URL(req.url);
   const compareParam = url.searchParams.get("compare");
   if (compareParam) return compareCard(compareParam);
   const repoParam = url.searchParams.get("repo");
+  // No repo => the home card is the whole index (the galaxy), not the tenant.
+  if (!repoParam) return indexCard();
 
   let data: CardData | null = null;
   try {
