@@ -766,36 +766,41 @@ svg text {
 /* fullscreen hides everything on the page except the galaxy itself, so the
    real backdrop becomes the immersive background (one source of atmosphere).
    The minimal mission bar inside the overlay replaces the page nav. */
-/* fade the page out rather than cut it: opacity transitions (display:none does
-   not), the elements stay in layout but invisible behind the transparent
-   overlay, so the backdrop shows and the exit fades them back in */
+/* fade the whole page out (header, spotlight, every section) so only the
+   galaxy is left. animation:none is REQUIRED — the .rise entrance animation
+   ends at opacity:1 with fill `forwards`, and a running/filled animation beats
+   a plain opacity declaration; killing it lets the fade to 0 win. The elements
+   stay in layout but invisible behind the transparent overlay. */
 body.gx-fullscreen main > *:not(.gx-hero-sec),
 body.gx-fullscreen .gx-hero-copy {
   opacity: 0;
   pointer-events: none;
+  animation: none;
   transition: opacity 0.5s ease;
 }
-/* fill the viewport: the galaxy grows and spans the whole width, so the left
-   arms come into frame instead of clipping off a right-anchored edge. It eases
-   IN organically (scale + fade) as the page text clears around it. */
+/* the galaxy fills the viewport: height 100% stretches it all the way DOWN,
+   centred (not right-anchored) so the left arms come into frame instead of
+   clipping off the edge. aspect-ratio keeps it undistorted; the extra width
+   overflows and is clipped by the stage. It eases in (scale + fade) as the
+   page clears around it. */
 .ghx-stage.ghx-immersive .ghx-plane {
   top: 50%;
   left: 50%;
   right: auto;
-  width: 100%;
-  height: auto;
-  transform: translate(-50%, -50%) scale(1.2);
+  height: 100%;
+  width: auto;
+  transform: translate(-50%, -50%);
   transform-origin: center center;
   animation: ghx-fs-in 0.6s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 @keyframes ghx-fs-in {
   from {
     opacity: 0.5;
-    transform: translate(-50%, -50%) scale(1.04);
+    transform: translate(-50%, -50%) scale(1.05);
   }
   to {
     opacity: 1;
-    transform: translate(-50%, -50%) scale(1.2);
+    transform: translate(-50%, -50%) scale(1);
   }
 }
 @media (prefers-reduced-motion: reduce) {
@@ -827,7 +832,9 @@ body.gx-fullscreen .gx-hero-copy {
   gap: 16px;
   padding: 14px 20px;
   pointer-events: auto;
-  background: linear-gradient(180deg, color-mix(in srgb, var(--void) 90%, transparent), transparent);
+  /* fluid, not a hard bar: a faint top-down wash just for legibility, melting
+     into the galaxy with no visible seam */
+  background: linear-gradient(180deg, color-mix(in srgb, var(--void) 38%, transparent) 0%, transparent 100%);
 }
 .ghx-imm-brand {
   font-size: 13px;
