@@ -448,3 +448,26 @@ export async function npmDownloads(pkg: string): Promise<number | null> {
     return null;
   }
 }
+
+// Daily download history (no auth). npm keeps up to a year of per-day points;
+// we trim the leading zero days so the series starts at the package's launch —
+// the usage curve that grows on its own as the package ages. null = not a
+// package; [] = published but no downloads yet.
+export async function npmDownloadsRange(
+  pkg: string,
+): Promise<{ day: string; d: number }[] | null> {
+  try {
+    const res = await fetch(
+      `https://api.npmjs.org/downloads/range/last-year/${encodeURIComponent(pkg)}`,
+      { signal: AbortSignal.timeout(4500) }
+    );
+    if (!res.ok) return null;
+    const j = (await res.json()) as { downloads?: { day: string; downloads: number }[] };
+    const arr = j.downloads ?? [];
+    const first = arr.findIndex((p) => p.downloads > 0);
+    if (first === -1) return [];
+    return arr.slice(first).map((p) => ({ day: p.day, d: p.downloads }));
+  } catch {
+    return null;
+  }
+}

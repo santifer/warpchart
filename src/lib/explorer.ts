@@ -13,6 +13,7 @@ import {
   lowFuel,
   repoDossier,
   npmDownloads,
+  npmDownloadsRange,
   type DossierRaw,
 } from "./github";
 import { reqLog } from "./log";
@@ -22,6 +23,9 @@ import type { ChartInputs, Neighbor, RouteRepo } from "./types";
 
 export interface Dossier extends DossierRaw {
   npmLast30: number | null;
+  // daily download history (since launch) of the resolved npm package, so the
+  // panel can draw the usage curve climbing over time, not just one number
+  npmHistory: { day: string; d: number }[] | null;
 }
 
 // Resolve a repo's real npm usage. Tries the repo's own PUBLIC package name
@@ -34,16 +38,19 @@ async function resolveNpmUsage(
   owner: string,
   name: string,
   rootPkg: string | null,
-): Promise<{ npmPkg: string | null; npmLast30: number | null }> {
+): Promise<{ npmPkg: string | null; npmLast30: number | null; npmHistory: { day: string; d: number }[] | null }> {
   const candidates = [
     ...(rootPkg ? [rootPkg] : []),
     `@${owner.toLowerCase()}/${name.toLowerCase()}`,
   ];
   for (const cand of candidates) {
     const dl = await npmDownloads(cand);
-    if (dl !== null) return { npmPkg: cand, npmLast30: dl };
+    if (dl !== null) {
+      const npmHistory = await npmDownloadsRange(cand);
+      return { npmPkg: cand, npmLast30: dl, npmHistory };
+    }
   }
-  return { npmPkg: null, npmLast30: null };
+  return { npmPkg: null, npmLast30: null, npmHistory: null };
 }
 
 // standalone cached dossier for routes that don't run the full explorer
@@ -51,8 +58,8 @@ async function resolveNpmUsage(
 export async function fetchDossier(owner: string, name: string): Promise<Dossier | null> {
   try {
     const raw = await repoDossier(owner, name);
-    const { npmPkg, npmLast30 } = await resolveNpmUsage(owner, name, raw.npmPkg);
-    return { ...raw, npmPkg, npmLast30 };
+    const { npmPkg, npmLast30, npmHistory } = await resolveNpmUsage(owner, name, raw.npmPkg);
+    return { ...raw, npmPkg, npmLast30, npmHistory };
   } catch {
     return null;
   }
@@ -61,7 +68,7 @@ export async function fetchDossier(owner: string, name: string): Promise<Dossier
 export const getCachedDossier = (owner: string, name: string) =>
   unstable_cache(
     () => fetchDossier(owner, name),
-    ["dossier-v2", `${owner}/${name}`.toLowerCase()],
+    ["dossier-v3", `${owner}/${name}`.toLowerCase()],
     { revalidate: 900 },
   )();
 
@@ -212,8 +219,8 @@ export async function getExplorerData(owner: string, name: string): Promise<Expl
   try {
     const [o, n] = repoName.split("/");
     const raw = await repoDossier(o, n);
-    const { npmPkg, npmLast30 } = await resolveNpmUsage(o, n, raw.npmPkg);
-    dossier = { ...raw, npmPkg, npmLast30 };
+    const { npmPkg, npmLast30, npmHistory } = await resolveNpmUsage(o, n, raw.npmPkg);
+    dossier = { ...raw, npmPkg, npmLast30, npmHistory };
   } catch (err) {
     log.warn("dossier.failed", { err: err instanceof Error ? err.message.slice(0, 120) : String(err) });
   }

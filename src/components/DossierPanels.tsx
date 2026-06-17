@@ -26,6 +26,43 @@ function Metric({ label, value, hint, tone }: { label: string; value: string; hi
   );
 }
 
+// Installs accumulating since launch — the usage curve climbing over time, not
+// just one number. Cumulative so it always reads as "watch it grow"; the slope
+// IS the momentum. preserveAspectRatio=none + non-scaling-stroke keep the line
+// crisp and undistorted as the box stretches (the VaultDivergence lesson).
+function UsageCurve({ history }: { history: { day: string; d: number }[] }) {
+  if (history.length < 2) return null;
+  let acc = 0;
+  const cum = history.map((p) => ({ day: p.day, v: (acc += p.d) }));
+  const W = 300;
+  const H = 52;
+  const PAD = 2;
+  const n = cum.length;
+  const max = cum[n - 1].v || 1;
+  const x = (i: number) => PAD + (i / (n - 1)) * (W - 2 * PAD);
+  const y = (v: number) => H - PAD - (v / max) * (H - 2 * PAD);
+  const line = cum.map((p, i) => `${i === 0 ? "M" : "L"} ${x(i).toFixed(1)} ${y(p.v).toFixed(1)}`).join(" ");
+  const area = `${line} L ${x(n - 1).toFixed(1)} ${H} L ${x(0).toFixed(1)} ${H} Z`;
+  return (
+    <div className="flex flex-col gap-1">
+      <span className="numeral text-micro tracking-[0.2em] text-faint">
+        INSTALLS OVER TIME · SINCE {cum[0].day}
+      </span>
+      <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" className="h-[52px] w-full" aria-hidden>
+        <path d={area} fill="var(--accent)" opacity="0.12" />
+        <path
+          d={line}
+          fill="none"
+          stroke="var(--accent)"
+          strokeWidth="1.5"
+          vectorEffect="non-scaling-stroke"
+          strokeLinejoin="round"
+        />
+      </svg>
+    </div>
+  );
+}
+
 export function PulsePanel({
   dossier,
   index = "03",
@@ -132,6 +169,9 @@ export function UsagePanel({
                 hint={d!.npmPkg ?? undefined}
                 tone="accent"
               />
+            ) : null}
+            {d!.npmHistory && d!.npmHistory.length >= 2 ? (
+              <UsageCurve history={d!.npmHistory} />
             ) : null}
             {withDownloads.length ? (
               <div className="flex flex-col gap-1.5">
