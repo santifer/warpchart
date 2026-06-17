@@ -10,13 +10,10 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 import { shortRepo } from "@/lib/compare";
 
-interface OvertakeLite {
-  hunter: { repo: string };
-  victim: { repo: string };
-  etaDays: number;
-}
 interface NeighborLite {
   repo: string;
+  gap: number; // their stars minus ours: >0 = ahead of us, <0 = behind us
+  velocityPerDay: number | null;
 }
 interface RaceState {
   enabled: boolean; // there is at least one rival to race against
@@ -56,40 +53,56 @@ export function RaceProvider({
     let stop = false;
     (async () => {
       try {
-        // Imminent overtakes give the dramatic threat (with a countdown); the
-        // ranking neighbours guarantee a race for repos with NO imminent
-        // crossover (e.g. a big, stable repo whose gaps are huge). Both are
-        // cache-only — zero GitHub cost.
-        const [ovR, rpR] = await Promise.all([
-          fetch(`/api/v1/overtakes?repo=${encodeURIComponent(repo)}`),
-          fetch(`/api/v1/repo?repo=${encodeURIComponent(repo)}`),
-        ]);
-        const ov = ovR.ok ? ((await ovR.json()) as { hunters?: OvertakeLite[]; targets?: OvertakeLite[] }) : {};
-        const rp = rpR.ok ? ((await rpR.json()) as { ahead?: NeighborLite[]; behind?: NeighborLite[] }) : {};
-        const hunters = (ov.hunters ?? []).slice().sort((a, b) => a.etaDays - b.etaDays);
-        const targets = (ov.targets ?? []).slice().sort((a, b) => a.etaDays - b.etaDays);
+        // The race = the repos we will actually CROSS, computed from the same
+        // live neighbour velocities the route chart uses (cache-only, zero
+        // GitHub cost): the ones AHEAD we are catching (we're faster), plus the
+        // two closest BEHIND that are catching US (they're faster) — at any ETA,
+        // a day or twenty. A repo only earns a lane if a crossover is projected.
+        const rpR = await fetch(`/api/v1/repo?repo=${encodeURIComponent(repo)}`);
+        const rp = rpR.ok
+          ? ((await rpR.json()) as {
+              velocityPerDay?: number | null;
+              ahead?: NeighborLite[];
+              behind?: NeighborLite[];
+            })
+          : {};
+        const ownV = rp.velocityPerDay ?? 0;
+        // ahead of us (more stars) AND we are closing (faster) -> we overtake
+        const willPass = (rp.ahead ?? [])
+          .filter((n) => n.gap > 0 && (n.velocityPerDay ?? 0) < ownV)
+          .map((n) => ({ repo: n.repo, eta: n.gap / Math.max(ownV - (n.velocityPerDay ?? 0), 1e-6) }))
+          .sort((a, b) => a.eta - b.eta);
+        // behind us (fewer stars) AND faster than us -> they overtake us
+        const threats = (rp.behind ?? [])
+          .filter((n) => (n.velocityPerDay ?? 0) > ownV)
+          .map((n) => ({ repo: n.repo, eta: Math.abs(n.gap) / Math.max((n.velocityPerDay ?? 0) - ownV, 1e-6) }))
+          .sort((a, b) => a.eta - b.eta);
         const seen = new Set([repo.toLowerCase()]);
         const list: string[] = [];
-        // nearest threat first, then the repos it is catching, then fill with
-        // the closest ranking neighbours (behind = on your heels, ahead = your
-        // next target) so EVERY ranked repo can race
-        for (const r of [
-          ...hunters.slice(0, 2).map((h) => h.hunter.repo),
-          ...targets.slice(0, 2).map((t) => t.victim.repo),
-          ...(rp.behind ?? []).slice(0, 2).map((n) => n.repo),
-          ...(rp.ahead ?? []).slice(0, 2).map((n) => n.repo),
-        ]) {
+        for (const r of [...willPass.slice(0, 2).map((x) => x.repo), ...threats.slice(0, 2).map((x) => x.repo)]) {
           const k = r.toLowerCase();
           if (!seen.has(k)) {
             seen.add(k);
             list.push(r);
           }
         }
+        // fallback so a stable repo with no projected crossover still gets a
+        // race: its nearest neighbours, ahead and behind
+        if (!list.length) {
+          for (const r of [...(rp.ahead ?? []).slice(0, 2), ...(rp.behind ?? []).slice(0, 2)].map((n) => n.repo)) {
+            const k = r.toLowerCase();
+            if (!seen.has(k)) {
+              seen.add(k);
+              list.push(r);
+            }
+          }
+        }
         if (stop) return;
         setRivals(list.slice(0, 4));
+        // the threat = the soonest repo about to overtake US (watch your back)
         setThreat(
-          hunters.length
-            ? { repo: hunters[0].hunter.repo, etaDays: Math.max(1, Math.round(hunters[0].etaDays)) }
+          threats.length
+            ? { repo: threats[0].repo, etaDays: Math.max(1, Math.round(threats[0].eta)) }
             : null
         );
       } catch {
