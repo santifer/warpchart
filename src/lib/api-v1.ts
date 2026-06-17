@@ -5,6 +5,7 @@
 // collector, so traffic is free. The line stays public-and-free; per-tenant
 // history is a separate, gated surface.
 import { loadRoute, loadCollisions } from "@/lib/history";
+import { repoBadges } from "@/lib/badges";
 
 export const SITE = "https://warpchart.dev";
 
@@ -41,6 +42,7 @@ export interface RepoStats {
   ahead: NeighborStat[];
   behind: NeighborStat[];
   nextGate: { rank: number; threshold: number; gap: number } | null;
+  classifications: { key: string; label: string; kind: "class" | "designation" }[];
   url: string;
 }
 
@@ -97,6 +99,14 @@ export function repoStats(repoInput: string, band = 5): RepoStats | null {
     ahead,
     behind,
     nextGate,
+    classifications: (() => {
+      const bd = repoBadges(me.r);
+      return [...(bd.klass ? [bd.klass] : []), ...bd.designations].map((b) => ({
+        key: b.key,
+        label: b.label,
+        kind: b.kind,
+      }));
+    })(),
     url: `${SITE}/r/${me.r}`,
   };
 }
