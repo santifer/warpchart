@@ -20,6 +20,7 @@ import {
   DAY, repoColor, rateAt, lastCrossover, shortRepo, type CurvePoint,
 } from "@/lib/compare";
 import { useRace } from "./RaceContext";
+import BadgeSigil from "./BadgeSigil";
 
 interface Curve {
   repo: string;
@@ -111,6 +112,9 @@ export default function CompareLab({
   const [repos, setRepos] = useState<string[]>(initialRepos);
   const [curves, setCurves] = useState<Record<string, Curve>>({});
   const [status, setStatus] = useState<Record<string, "loading" | "ok" | "error">>({});
+  // each repo's earned classifications (badges), fetched from the public API so
+  // the sigil rides alongside its name in the race.
+  const [cls, setCls] = useState<Record<string, { key: string; label: string; kind: string }[]>>({});
   const [stats, setStats] = useState<Record<string, Stats>>({});
   const [metric, setMetric] = useState<Metric>(initialMetric);
   const [align, setAlign] = useState(initialAlign);
@@ -152,6 +156,13 @@ export default function CompareLab({
       const key = repo.toLowerCase();
       if (fetched.current.has(key)) continue;
       fetched.current.add(key);
+      // classifications (badges) ride alongside the curve, from the public API
+      fetch(`/api/v1/repo?repo=${encodeURIComponent(repo)}`)
+        .then((r) => (r.ok ? r.json() : null))
+        .then((j) => {
+          if (j?.classifications?.length) setCls((c) => ({ ...c, [key]: j.classifications }));
+        })
+        .catch(() => {});
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setStatus((s) => ({ ...s, [key]: "loading" }));
       (async () => {
@@ -561,6 +572,21 @@ export default function CompareLab({
 
   return (
     <div className={embedded ? "flex h-full min-h-0 flex-col gap-2" : "flex flex-col gap-4"}>
+      {/* embedded legend: the chips are hidden here, so this carries each racer's
+          colour, short name and earned sigils (the star chart on /r/ + console) */}
+      {embedded && repos.length ? (
+        <div className="flex shrink-0 flex-wrap items-center gap-x-3 gap-y-1">
+          {repos.map((repo, i) => (
+            <span key={repo} className="inline-flex items-center gap-1.5">
+              <span className="h-2 w-2 shrink-0" style={{ background: colors[i] }} />
+              <span className="numeral text-micro text-dim">{shortRepo(repo)}</span>
+              {(cls[repo.toLowerCase()] ?? []).map((c) => (
+                <BadgeSigil key={c.key} badgeKey={c.key} size={15} />
+              ))}
+            </span>
+          ))}
+        </div>
+      ) : null}
       {/* add bar (manual repo picker) — hidden when embedded in a repo/console panel */}
       {!embedded ? (
       <div className="hud relative px-4 py-3">
@@ -614,6 +640,9 @@ export default function CompareLab({
             >
               <span className="h-2.5 w-2.5 shrink-0" style={{ background: colors[i] }} />
               <span className="numeral text-label text-ink">{repo}</span>
+              {(cls[repo.toLowerCase()] ?? []).map((c) => (
+                <BadgeSigil key={c.key} badgeKey={c.key} size={16} />
+              ))}
               {status[repo.toLowerCase()] === "loading" ? (
                 <span className="numeral text-micro text-faint">scanning…</span>
               ) : status[repo.toLowerCase()] === "error" ? (
