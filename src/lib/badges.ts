@@ -65,21 +65,11 @@ function computeThresholds(repos: CatalogRepo[], now: number): Thresholds {
 
 const fmt = (n: number) => Math.round(n).toLocaleString("en-US");
 
-// Classify a repo from the catalog. Returns no badges for repos outside the
-// catalog (we cannot place them in a cohort), which is the honest neutral state.
-export function repoBadges(repoName: string): RepoBadges {
-  const repos = loadCatalog()?.repos ?? [];
-  if (!repos.length) return { klass: null, designations: [] };
-  const lower = repoName.toLowerCase();
-  let me = repos.find((p) => p.r.toLowerCase() === lower);
-  if (!me) {
-    const n = lower.split("/")[1] ?? "";
-    if (n) me = repos.find((p) => p.r.toLowerCase().split("/")[1] === n);
-  }
-  if (!me) return { klass: null, designations: [] };
-
-  const now = Date.now();
-  const T = computeThresholds(repos, now);
+// Classify ONE catalog repo against pre-computed cohort thresholds. Split out
+// so the single-repo lookup (repoBadges) and the whole-registry batch
+// (classifiedRegistry) share identical gate logic — and the batch computes the
+// thresholds once instead of re-sorting the catalog per repo.
+function classify(me: CatalogRepo, T: Thresholds, now: number): RepoBadges {
   const ageDays = ageDaysOf(me, now);
   const yrs = ageDays / 365;
   const spd = me.s / ageDays;
@@ -119,7 +109,7 @@ export function repoBadges(repoName: string): RepoBadges {
 
   // DESIGNATIONS — additive honors.
   const designations: Badge[] = [];
-  const decile = T.forkByDecile.find((d) => me!.s <= d.maxStars) ?? T.forkByDecile[T.forkByDecile.length - 1];
+  const decile = T.forkByDecile.find((d) => me.s <= d.maxStars) ?? T.forkByDecile[T.forkByDecile.length - 1];
   const infra = (me.t ?? []).some((t) => INFRA.test(t)) || INFRA.test(me.d ?? "");
   if (decile && fr >= decile.gate && infra) {
     designations.push({
@@ -133,4 +123,45 @@ export function repoBadges(repoName: string): RepoBadges {
   }
 
   return { klass, designations };
+}
+
+// Classify a repo from the catalog. Returns no badges for repos outside the
+// catalog (we cannot place them in a cohort), which is the honest neutral state.
+export function repoBadges(repoName: string): RepoBadges {
+  const repos = loadCatalog()?.repos ?? [];
+  if (!repos.length) return { klass: null, designations: [] };
+  const lower = repoName.toLowerCase();
+  let me = repos.find((p) => p.r.toLowerCase() === lower);
+  if (!me) {
+    const n = lower.split("/")[1] ?? "";
+    if (n) me = repos.find((p) => p.r.toLowerCase().split("/")[1] === n);
+  }
+  if (!me) return { klass: null, designations: [] };
+  const now = Date.now();
+  return classify(me, computeThresholds(repos, now), now);
+}
+
+export interface ClassifiedRepo {
+  r: string;
+  key: string;
+  label: string;
+  kind: "class" | "designation";
+}
+
+// The PRIMARY badge (class, else first designation) of every classified repo in
+// the catalog, computed in a SINGLE pass (thresholds once). Powers the star
+// chart's per-node sigils from one cache-only response — no fetch per node.
+// Only the ~5% of repos that earned a badge are returned, so the payload is tiny.
+export function classifiedRegistry(): ClassifiedRepo[] {
+  const repos = loadCatalog()?.repos ?? [];
+  if (!repos.length) return [];
+  const now = Date.now();
+  const T = computeThresholds(repos, now);
+  const out: ClassifiedRepo[] = [];
+  for (const me of repos) {
+    const b = classify(me, T, now);
+    const primary = b.klass ?? b.designations[0] ?? null;
+    if (primary) out.push({ r: me.r, key: primary.key, label: primary.label, kind: primary.kind });
+  }
+  return out;
 }

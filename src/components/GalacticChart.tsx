@@ -176,6 +176,25 @@ export default function GalacticChart({
       gone = true;
     };
   }, [ssrInputs.repo]);
+  // Per-node classifications: ONE cache-only fetch returns the primary badge
+  // key of every classified repo in the registry, so EACH labelled node in the
+  // chart can wear its sigil — not just the hero. Badges cluster toward the
+  // core (the top-100 is dense with MAIN SEQUENCE / BLUE GIANT), so panning
+  // inward lights the route up; the local desert at mid-rank stays bare, which
+  // is the honest signal that the hero is the only anomaly there.
+  const [badgeMap, setBadgeMap] = useState<Record<string, string> | null>(null);
+  useEffect(() => {
+    let gone = false;
+    fetch("/api/v1/badges")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j) => {
+        if (!gone && j?.badges) setBadgeMap(j.badges);
+      })
+      .catch(() => {});
+    return () => {
+      gone = true;
+    };
+  }, []);
   const sceneHot =
     Math.max(ssrInputs.v7d, ...ssrInputs.neighbors.map((n) => n.v || 0)) >= 300;
   useEffect(() => {
@@ -900,6 +919,21 @@ export default function GalacticChart({
   const bandATop = ((BAND_A_Y + 18) / H) * 100;
   const bandBTop = ((BAND_B_Y - 14) / H) * 100;
 
+  // A small classification sigil to the LEFT of a centred node label, vertically
+  // centred on it. Returns null for unclassified repos (the honest neutral
+  // state), so only badged systems wear a mark.
+  const nodeSigil = (repo: string, cx: number, textY: number, name: string) => {
+    const k = badgeMap?.[repo.toLowerCase()];
+    if (!k) return null;
+    const sz = Math.round(13 * fs);
+    const halfW = (Math.max(name.length, 4) * 6.8 * fs) / 2;
+    return (
+      <g transform={`translate(${(cx - halfW - sz - 1).toFixed(1)}, ${(textY - sz / 2 - 4).toFixed(1)})`}>
+        <BadgeSigil badgeKey={k} size={sz} />
+      </g>
+    );
+  };
+
   return (
     // no scroll container here: every mount is lg+ and the svg scales to
     // fit, while an overflow-x-auto wrapper turned overflow-y auto too, so
@@ -1301,6 +1335,7 @@ export default function GalacticChart({
                       </>
                     ) : null}
                     <circle className="nbr-dot" cx={x} cy={BAND_A_Y} r={3.2} fill={color} opacity={isAhead ? 0.95 : 0.55} />
+                    {nodeSigil(n.r, x, tierY - 13, trunc(shortName(n.r)))}
                     <text className="nbr-name" x={x} y={tierY - 13} fill={labelAbove ? C.ink : C.faint} fontSize={12.5 * fs}
                       textAnchor="middle">
                       {trunc(shortName(n.r))}
@@ -1368,6 +1403,7 @@ export default function GalacticChart({
                   })()}
                   <circle className="nbr-dot" cx={x} cy={BAND_A_Y} r={2.4}
                     fill={routeDotColor.get(p.r) ?? C.white} opacity={0.85} />
+                  {nodeSigil(p.r, x, tierY - 2, trunc(shortName(p.r)))}
                   <text className="nbr-name" x={x} y={tierY - 2} fill={C.ink} fontSize={12.5 * fs} textAnchor="middle">
                     {trunc(shortName(p.r))}
                   </text>
@@ -1405,6 +1441,11 @@ export default function GalacticChart({
               <g className="core-glow">
                 <circle cx={ax(coreStars)} cy={BAND_A_Y} r={30} fill="url(#coreGrad)" />
                 <circle cx={ax(coreStars)} cy={BAND_A_Y} r={4} fill={C.white} />
+                {apex && badgeMap?.[apex.r.toLowerCase()] ? (
+                  <g transform={`translate(${(ax(coreStars) + 9).toFixed(1)}, ${(BAND_A_Y - 9).toFixed(1)})`}>
+                    <BadgeSigil badgeKey={badgeMap[apex.r.toLowerCase()]} size={Math.round(16 * fs)} />
+                  </g>
+                ) : null}
                 <text x={ax(coreStars)} y={BAND_A_Y - 44} fill={C.white} fontSize={12 * fs}
                   textAnchor="middle" fontWeight={700}>
                   GALACTIC CORE · #1 {shortName(apex.r)}
