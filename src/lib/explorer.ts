@@ -27,10 +27,10 @@ export interface Dossier extends DossierRaw {
   // daily download history (since launch) of the resolved npm package, so the
   // panel can draw the usage curve climbing over time, not just one number
   npmHistory: { day: string; d: number }[] | null;
-  // daily UNIQUE git cloners (the other acquisition channel for clone-and-run
-  // repos), from the Traffic Vault. Only populated for the public house repo —
-  // every other repo's traffic stays private. u = unique cloners that day.
-  clonesHistory: { day: string; u: number }[] | null;
+  // daily git clones (the other acquisition channel for clone-and-run repos),
+  // from the Traffic Vault. Only populated for the public house repo — every
+  // other repo's traffic stays private. u = unique cloners, c = raw count.
+  clonesHistory: { day: string; u: number; c: number }[] | null;
 }
 
 // Resolve a repo's real npm usage. Tries the repo's own PUBLIC package name
@@ -70,10 +70,10 @@ export async function fetchDossier(owner: string, name: string): Promise<Dossier
     // includes CI/mirrors).
     const repo = `${owner}/${name}`;
     const house = loadMeta()?.repo ?? "";
-    let clonesHistory: { day: string; u: number }[] | null = null;
+    let clonesHistory: { day: string; u: number; c: number }[] | null = null;
     if (house && repo.toLowerCase() === house.toLowerCase()) {
       const vault = await loadTrafficVault(repo);
-      clonesHistory = vault?.days.map((dd) => ({ day: dd.d, u: dd.clonesU })) ?? null;
+      clonesHistory = vault?.days.map((dd) => ({ day: dd.d, u: dd.clonesU, c: dd.clones })) ?? null;
     }
     return { ...raw, npmPkg, npmLast30, npmHistory, clonesHistory };
   } catch {

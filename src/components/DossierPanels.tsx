@@ -126,14 +126,38 @@ export function UsagePanel({
       <div className="flex min-h-[150px] flex-col gap-3 py-1">
         {hasUsage ? (
           <>
-            {d!.npmLast30 !== null ? (
-              <Metric
-                label="NPM INSTALLS · 30D"
-                value={fmtCompact(d!.npmLast30)}
-                hint={d!.npmPkg ?? undefined}
-                tone="accent"
-              />
-            ) : null}
+            {(() => {
+              const ch = d!.clonesHistory;
+              const cloneTotal = ch ? ch.reduce((s, x) => s + x.c, 0) : 0;
+              const cloneUnique = ch ? ch.reduce((s, x) => s + x.u, 0) : 0;
+              const since =
+                ch && ch.length
+                  ? new Date(`${ch[0].day}T00:00:00Z`).toLocaleDateString("en-US", {
+                      month: "short",
+                      day: "numeric",
+                    })
+                  : "";
+              return (
+                <div className="flex flex-wrap gap-x-8 gap-y-3">
+                  {d!.npmLast30 !== null ? (
+                    <Metric
+                      label="NPM INSTALLS · 30D"
+                      value={fmtCompact(d!.npmLast30)}
+                      hint={d!.npmPkg ?? undefined}
+                      tone="accent"
+                    />
+                  ) : null}
+                  {ch && ch.length ? (
+                    <Metric
+                      label={`GIT CLONES · SINCE ${since}`}
+                      value={fmtCompact(cloneTotal)}
+                      hint={`${fmtCompact(cloneUnique)} unique cloners`}
+                      tone="warn"
+                    />
+                  ) : null}
+                </div>
+              );
+            })()}
             {(d!.npmHistory && d!.npmHistory.length >= 2) ||
             (d!.clonesHistory && d!.clonesHistory.length >= 2) ? (
               <UsageChart npm={d!.npmHistory ?? []} clones={d!.clonesHistory} />

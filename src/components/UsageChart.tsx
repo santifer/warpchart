@@ -91,7 +91,7 @@ export default function UsageChart({
         </div>
       </div>
 
-      <div className="h-[120px] w-full">
+      <div className="h-[260px] w-full">
         <ResponsiveContainer width="100%" height="100%">
           <ComposedChart data={rows} margin={{ top: 6, right: 26, bottom: 0, left: 4 }}>
             <CartesianGrid stroke={C.grid} strokeDasharray="2 6" vertical={false} />
@@ -126,8 +126,10 @@ export default function UsageChart({
               labelFormatter={(t) => new Date(Number(t)).toLocaleDateString("en-US", { dateStyle: "medium" })}
               formatter={(value, name) => [fmt(Number(value)), name]}
             />
-            {/* clones first = bottom of the stack (the bigger channel for a
-                clone-and-run repo), npm on top */}
+            {/* NOT stacked: each channel rises from the baseline so a newer
+                source (npm, from its launch) visibly LIFTS OFF zero instead of
+                riding a misleading line on top of the older one. clones drawn
+                first (the bigger, background channel), npm in front. */}
             {mode === "cum" ? (
               <>
                 {hasClones ? (
@@ -135,11 +137,10 @@ export default function UsageChart({
                     type="monotone"
                     dataKey="clonesCum"
                     name="git clones · unique"
-                    stackId="1"
                     stroke={C.warn}
                     strokeWidth={1.4}
                     fill={C.warn}
-                    fillOpacity={0.16}
+                    fillOpacity={0.13}
                     isAnimationActive
                     animationDuration={1200}
                     dot={false}
@@ -149,10 +150,10 @@ export default function UsageChart({
                   type="monotone"
                   dataKey="npmCum"
                   name="npm installs"
-                  stackId="1"
                   stroke={C.accent}
-                  strokeWidth={1.6}
-                  fill={C.accentSoft}
+                  strokeWidth={1.8}
+                  fill={C.accent}
+                  fillOpacity={0.22}
                   isAnimationActive
                   animationDuration={1200}
                   dot={false}
@@ -161,9 +162,9 @@ export default function UsageChart({
             ) : (
               <>
                 {hasClones ? (
-                  <Bar dataKey="clones" name="git clones · unique" stackId="1" fill={C.warn} fillOpacity={0.5} isAnimationActive animationDuration={900} />
+                  <Bar dataKey="clones" name="git clones · unique" fill={C.warn} fillOpacity={0.5} isAnimationActive animationDuration={900} />
                 ) : null}
-                <Bar dataKey="npm" name="npm installs" stackId="1" fill={C.accent} fillOpacity={0.6} isAnimationActive animationDuration={900} />
+                <Bar dataKey="npm" name="npm installs" fill={C.accent} fillOpacity={0.65} isAnimationActive animationDuration={900} />
               </>
             )}
           </ComposedChart>
