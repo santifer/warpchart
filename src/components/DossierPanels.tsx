@@ -149,9 +149,9 @@ export function UsagePanel({
                   ) : null}
                   {ch && ch.length ? (
                     <Metric
-                      label={`GIT CLONES · SINCE ${since}`}
-                      value={fmtCompact(cloneTotal)}
-                      hint={`${fmtCompact(cloneUnique)} unique cloners`}
+                      label={`UNIQUE CLONERS · SINCE ${since}`}
+                      value={fmtCompact(cloneUnique)}
+                      hint={`${fmtCompact(cloneTotal)} clones total`}
                       tone="warn"
                     />
                   ) : null}
