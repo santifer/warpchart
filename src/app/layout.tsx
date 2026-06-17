@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Michroma, Chakra_Petch, JetBrains_Mono } from "next/font/google";
+import { Analytics } from "@vercel/analytics/next";
 import { ThemeProvider } from "@/lib/usePalette";
 import DemoBanner from "@/components/DemoBanner";
 import "./globals.css";
@@ -62,6 +63,7 @@ export default function RootLayout({
           <DemoBanner />
           {children}
         </ThemeProvider>
+        <Analytics />
       </body>
     </html>
   );

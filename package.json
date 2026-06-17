@@ -12,7 +12,10 @@
   "dependencies": {
     "@anthropic-ai/sdk": "^0.104.1",
     "@number-flow/react": "^0.6.0",
+    "@resvg/resvg-js": "^2.6.2",
+    "@vercel/analytics": "^2.0.1",
     "@vercel/blob": "^2.4.0",
+    "gifenc": "^1.0.3",
     "mcp-handler": "^1.1.0",
     "next": "16.2.9",
     "react": "19.2.4",
