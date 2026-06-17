@@ -53,7 +53,7 @@ export default function UsageChart({ history }: { history: { day: string; d: num
       </div>
       <div className="h-[120px] w-full">
         <ResponsiveContainer width="100%" height="100%">
-          <ComposedChart data={rows} margin={{ top: 6, right: 8, bottom: 0, left: 0 }}>
+          <ComposedChart data={rows} margin={{ top: 6, right: 26, bottom: 0, left: 4 }}>
             <CartesianGrid stroke={C.grid} strokeDasharray="2 6" vertical={false} />
             <XAxis
               dataKey="t"
@@ -66,6 +66,7 @@ export default function UsageChart({ history }: { history: { day: string; d: num
               tickLine={false}
               axisLine={{ stroke: C.grid }}
               minTickGap={44}
+              padding={{ left: 6, right: 8 }}
             />
             <YAxis
               tickFormatter={(v: number) => fmtCompact(v)}
