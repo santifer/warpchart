@@ -16,6 +16,7 @@ import {
   npmDownloadsRange,
   type DossierRaw,
 } from "./github";
+import { loadTrafficVault } from "./traffic";
 import { reqLog } from "./log";
 import { nextMilestones } from "./milestones";
 import { buildRouteLayers, forkRatioPercentile } from "./bundle";
@@ -26,6 +27,10 @@ export interface Dossier extends DossierRaw {
   // daily download history (since launch) of the resolved npm package, so the
   // panel can draw the usage curve climbing over time, not just one number
   npmHistory: { day: string; d: number }[] | null;
+  // daily UNIQUE git cloners (the other acquisition channel for clone-and-run
+  // repos), from the Traffic Vault. Only populated for the public house repo —
+  // every other repo's traffic stays private. u = unique cloners that day.
+  clonesHistory: { day: string; u: number }[] | null;
 }
 
 // Resolve a repo's real npm usage. Tries the repo's own PUBLIC package name
@@ -59,7 +64,18 @@ export async function fetchDossier(owner: string, name: string): Promise<Dossier
   try {
     const raw = await repoDossier(owner, name);
     const { npmPkg, npmLast30, npmHistory } = await resolveNpmUsage(owner, name, raw.npmPkg);
-    return { ...raw, npmPkg, npmLast30, npmHistory };
+    // git clones are the owner's PRIVATE traffic — surface them as a second
+    // acquisition channel ONLY for the public house repo (its vault is the
+    // opt-in demo). Unique cloners/day = the real-people proxy (raw count
+    // includes CI/mirrors).
+    const repo = `${owner}/${name}`;
+    const house = loadMeta()?.repo ?? "";
+    let clonesHistory: { day: string; u: number }[] | null = null;
+    if (house && repo.toLowerCase() === house.toLowerCase()) {
+      const vault = await loadTrafficVault(repo);
+      clonesHistory = vault?.days.map((dd) => ({ day: dd.d, u: dd.clonesU })) ?? null;
+    }
+    return { ...raw, npmPkg, npmLast30, npmHistory, clonesHistory };
   } catch {
     return null;
   }
@@ -68,7 +84,7 @@ export async function fetchDossier(owner: string, name: string): Promise<Dossier
 export const getCachedDossier = (owner: string, name: string) =>
   unstable_cache(
     () => fetchDossier(owner, name),
-    ["dossier-v3", `${owner}/${name}`.toLowerCase()],
+    ["dossier-v4", `${owner}/${name}`.toLowerCase()],
     { revalidate: 900 },
   )();
 
@@ -220,7 +236,9 @@ export async function getExplorerData(owner: string, name: string): Promise<Expl
     const [o, n] = repoName.split("/");
     const raw = await repoDossier(o, n);
     const { npmPkg, npmLast30, npmHistory } = await resolveNpmUsage(o, n, raw.npmPkg);
-    dossier = { ...raw, npmPkg, npmLast30, npmHistory };
+    // clones (private traffic) are surfaced only via the cached dossier path
+    // (getCachedDossier -> fetchDossier), which the panels actually render
+    dossier = { ...raw, npmPkg, npmLast30, npmHistory, clonesHistory: null };
   } catch (err) {
     log.warn("dossier.failed", { err: err instanceof Error ? err.message.slice(0, 120) : String(err) });
   }

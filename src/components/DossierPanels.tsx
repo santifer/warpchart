@@ -134,8 +134,9 @@ export function UsagePanel({
                 tone="accent"
               />
             ) : null}
-            {d!.npmHistory && d!.npmHistory.length >= 2 ? (
-              <UsageChart history={d!.npmHistory} />
+            {(d!.npmHistory && d!.npmHistory.length >= 2) ||
+            (d!.clonesHistory && d!.clonesHistory.length >= 2) ? (
+              <UsageChart npm={d!.npmHistory ?? []} clones={d!.clonesHistory} />
             ) : null}
             {withDownloads.length ? (
               <div className="flex flex-col gap-1.5">
