@@ -184,7 +184,7 @@ export default async function ExplorerPage({
     // NO ViewTransition here on purpose: the loading skeleton plays the
     // warp entrance, and the skeleton -> content reveal must be an in-place
     // swap (a second animated entrance made everything vanish and reappear)
-    <main className="mx-auto flex max-w-[1440px] flex-col gap-4 px-3 py-4 sm:px-6 sm:py-6">
+    <main className="mx-auto flex max-w-[1440px] flex-col gap-4 px-2 py-4 sm:px-6 sm:py-6">
       {/* same rich starfield as the landing/explore, so the translucent hud
           panels (and the star chart) float over space instead of flat dark */}
       <SpaceBackdrop mode="scan" />

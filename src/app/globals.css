@@ -172,6 +172,15 @@ body {
   background: linear-gradient(180deg, rgba(12, 24, 38, 0.72), rgba(5, 11, 19, 0.55));
   backdrop-filter: blur(2px);
 }
+/* Mobile: tighten the side padding INSIDE cards (the px-4/5/6 utilities set
+   16-24px, too much on a phone) so content claims more of the narrow viewport.
+   !important to override the per-card utility intentionally for small screens. */
+@media (max-width: 640px) {
+  .hud {
+    padding-left: 0.8rem !important;
+    padding-right: 0.8rem !important;
+  }
+}
 
 .hud::before {
   content: "";
