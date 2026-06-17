@@ -8,8 +8,10 @@
 // it escapes), and labels shed to leader lines when space runs out: the
 // dot always sits at its REAL position. Tap a ship to pin it (dashboard)
 // or warp to it (explorer); the chevron opens its scan page.
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import RotateHint from "./RotateHint";
+import BadgeSigil from "./BadgeSigil";
 import type { ChartInputs } from "@/lib/types";
 import type { Palette } from "@/lib/theme";
 import { usePalette } from "@/lib/usePalette";
@@ -80,6 +82,36 @@ export default function VerticalChart({
   const router = useRouter();
   const C = usePalette();
   const chartedSet = charted ? new Set(charted.map((r) => r.toLowerCase())) : null;
+
+  // Per-node classification sigils (same cache-only map as the desktop chart),
+  // so the mobile ascent also shows which systems carry a badge — not just the
+  // hero. One fetch, looked up by lower-cased repo name.
+  const [badgeMap, setBadgeMap] = useState<Record<string, string> | null>(null);
+  useEffect(() => {
+    let gone = false;
+    fetch("/api/v1/badges")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j) => {
+        if (!gone && j?.badges) setBadgeMap(j.badges);
+      })
+      .catch(() => {});
+    return () => {
+      gone = true;
+    };
+  }, []);
+  // a sigil placed to the RIGHT of a left-anchored node name (the mobile chart
+  // has no room left of the dot column), vertically centred on the name
+  const sigilRight = (repo: string, baselineY: number, name: string, fontSize: number) => {
+    const k = badgeMap?.[repo.toLowerCase()];
+    if (!k) return null;
+    const sz = 16;
+    const nameW = name.length * fontSize * 0.6; // numeral font is monospace
+    return (
+      <g transform={`translate(${(LABEL_X + nameW + 5).toFixed(1)}, ${(baselineY - sz / 2 - 4).toFixed(1)})`}>
+        <BadgeSigil badgeKey={k} size={sz} />
+      </g>
+    );
+  };
   const { stars, rank, v7d: vOwn, apex } = inputs;
   const etas = neighborEtas(inputs.neighbors, stars, vOwn);
 
@@ -381,6 +413,7 @@ export default function VerticalChart({
                 fill={isAhead || n.catchDays !== null ? C.ink : C.faint} className="numeral chart-anno">
                 {trunc(shortName(n.r))}
               </text>
+              {sigilRight(n.r, y - 2, trunc(shortName(n.r)), 13)}
               <text x={LABEL_X} y={y + 13} fontSize={11} fill={C.dim} className="numeral chart-anno">
                 {isAhead ? `+${fmtCompact(n.gap)}` : fmtCompact(n.gap)} · {Math.round(n.v)}/d ·{" "}
                 <tspan
@@ -460,6 +493,7 @@ export default function VerticalChart({
           <text x={LABEL_X} y={meY - 1} fontSize={14} fontWeight={700} fill={C.white} className="numeral chart-anno">
             {trunc(shortName(inputs.repo))}
           </text>
+          {sigilRight(inputs.repo, meY - 1, trunc(shortName(inputs.repo)), 14)}
           <text x={LABEL_X} y={meY + 15} fontSize={11.5} fill={C.accent} className="numeral chart-anno">
             {fmt(stars)} ★{rank ? ` · #${fmt(rank)}` : ""} · {fmt(Math.round(vOwn))}/day
           </text>
