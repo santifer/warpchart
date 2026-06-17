@@ -214,7 +214,7 @@ export default async function ExplorerPage({
                 {data.desc ?? "public repository"}
                 {data.lang ? ` · ${data.lang}` : ""}
               </p>
-              <Badges repo={repoLabel} />
+              <Badges repo={repoLabel} className="mt-2" />
               {/* the dossier's own line, up front: unique content the visitor
                   reads before deciding to open the full transmission */}
               {codex?.tagline ? (

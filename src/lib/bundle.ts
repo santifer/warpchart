@@ -10,6 +10,7 @@ import {
 } from "./series";
 import { driftPerDay } from "./projections";
 import { detectEvents, captainsLog, surgeEvents } from "./events";
+import { repoBadges, type RepoBadges } from "./badges";
 import type {
   RepoMetaFile, Snapshot, HourPoint, DayPoint, CumPoint, RankPoint,
   FloorPoint, Neighbor, Apex, RouteRepo, MissionEvent, Spike,
@@ -55,6 +56,7 @@ export interface DashboardBundle {
   spikes: Spike[];
   forkRatio: number | null; // forks / stars
   forkPercentile: number | null; // share of top 1000 repos with a LOWER ratio
+  badges: RepoBadges; // earned classifications (class + designations)
 }
 
 // Percentile of a fork/star ratio against the top 1000 population.
@@ -231,5 +233,6 @@ export function buildBundle(
     spikes,
     forkRatio,
     forkPercentile,
+    badges: repoBadges(meta?.repo ?? ""),
   };
 }
