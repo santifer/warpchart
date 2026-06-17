@@ -24,13 +24,35 @@ export interface Dossier extends DossierRaw {
   npmLast30: number | null;
 }
 
+// Resolve a repo's real npm usage. Tries the repo's own PUBLIC package name
+// first, then the conventional scoped name @owner/name — repos frequently ship
+// an installer published under a scope while the root app's package.json stays
+// private (e.g. santifer/career-ops keeps the app private but publishes the
+// `npx @santifer/career-ops` installer, ~4k downloads/month, which the bare
+// package.json lookup missed). First candidate with real download data wins.
+async function resolveNpmUsage(
+  owner: string,
+  name: string,
+  rootPkg: string | null,
+): Promise<{ npmPkg: string | null; npmLast30: number | null }> {
+  const candidates = [
+    ...(rootPkg ? [rootPkg] : []),
+    `@${owner.toLowerCase()}/${name.toLowerCase()}`,
+  ];
+  for (const cand of candidates) {
+    const dl = await npmDownloads(cand);
+    if (dl !== null) return { npmPkg: cand, npmLast30: dl };
+  }
+  return { npmPkg: null, npmLast30: null };
+}
+
 // standalone cached dossier for routes that don't run the full explorer
-// assembly (the house and hosted-tenant consoles)
+// assembly (the house and hosted-tenant consoles, AND the /r/ explorer panels)
 export async function fetchDossier(owner: string, name: string): Promise<Dossier | null> {
   try {
     const raw = await repoDossier(owner, name);
-    const npmLast30 = raw.npmPkg ? await npmDownloads(raw.npmPkg) : null;
-    return { ...raw, npmLast30 };
+    const { npmPkg, npmLast30 } = await resolveNpmUsage(owner, name, raw.npmPkg);
+    return { ...raw, npmPkg, npmLast30 };
   } catch {
     return null;
   }
@@ -39,7 +61,7 @@ export async function fetchDossier(owner: string, name: string): Promise<Dossier
 export const getCachedDossier = (owner: string, name: string) =>
   unstable_cache(
     () => fetchDossier(owner, name),
-    ["dossier-v1", `${owner}/${name}`.toLowerCase()],
+    ["dossier-v2", `${owner}/${name}`.toLowerCase()],
     { revalidate: 900 },
   )();
 
@@ -190,26 +212,7 @@ export async function getExplorerData(owner: string, name: string): Promise<Expl
   try {
     const [o, n] = repoName.split("/");
     const raw = await repoDossier(o, n);
-    // Resolve real npm usage by trying, in order: the repo's own public package
-    // name, then the conventional scoped name @owner/name. Repos often ship an
-    // installer published under a scope even when the root app's package.json is
-    // private — e.g. santifer/career-ops keeps the app private but publishes the
-    // `npx @santifer/career-ops` installer, which the bare-name lookup missed.
-    // First candidate with real download data (incl. 0) wins.
-    const npmCandidates = [
-      ...(raw.npmPkg ? [raw.npmPkg] : []),
-      `@${o.toLowerCase()}/${n.toLowerCase()}`,
-    ];
-    let npmPkg: string | null = null;
-    let npmLast30: number | null = null;
-    for (const cand of npmCandidates) {
-      const dl = await npmDownloads(cand);
-      if (dl !== null) {
-        npmPkg = cand;
-        npmLast30 = dl;
-        break;
-      }
-    }
+    const { npmPkg, npmLast30 } = await resolveNpmUsage(o, n, raw.npmPkg);
     dossier = { ...raw, npmPkg, npmLast30 };
   } catch (err) {
     log.warn("dossier.failed", { err: err instanceof Error ? err.message.slice(0, 120) : String(err) });
