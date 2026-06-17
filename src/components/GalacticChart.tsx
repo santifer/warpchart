@@ -12,6 +12,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import BadgeSigil from "./BadgeSigil";
 import type { ChartInputs, RouteRepo } from "@/lib/types";
 import type { Palette } from "@/lib/theme";
 import { usePalette } from "@/lib/usePalette";
@@ -158,6 +159,23 @@ export default function GalacticChart({
   // star count once a minute. One edge-cached response is shared by every
   // viewer of the same scene, so cost does not scale with audience.
   const [liveAnchor, setLiveAnchor] = useState<{ ts: number; stars: Record<string, number> } | null>(null);
+  // the hero's primary classification (badge), fetched from the public API so its
+  // sigil can ride next to the origin node's name in the star chart.
+  const [mainClass, setMainClass] = useState<string | null>(null);
+  useEffect(() => {
+    let gone = false;
+    fetch(`/api/v1/repo?repo=${encodeURIComponent(inputs.repo)}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j) => {
+        const list: { key: string; kind: string }[] = j?.classifications ?? [];
+        const c = list.find((x) => x.kind === "class") ?? list[0];
+        if (!gone && c) setMainClass(c.key);
+      })
+      .catch(() => {});
+    return () => {
+      gone = true;
+    };
+  }, [inputs.repo]);
   const sceneHot =
     Math.max(ssrInputs.v7d, ...ssrInputs.neighbors.map((n) => n.v || 0)) >= 300;
   useEffect(() => {
@@ -1439,8 +1457,14 @@ export default function GalacticChart({
                   const half = (repoName.length * 7.6 * fs) / 2;
                   // the band clip starts at x=28; stay inside it
                   const lx = Math.min(Math.max(ax(stars), half + 32), W - half - 32);
+                  const sz = Math.round(17 * fs);
                   return (
                     <>
+                      {mainClass ? (
+                        <g transform={`translate(${(lx - half - sz - 3).toFixed(1)}, ${(BAND_A_Y + 26 - sz / 2 - 4).toFixed(1)})`}>
+                          <BadgeSigil badgeKey={mainClass} size={sz} />
+                        </g>
+                      ) : null}
                       <text x={lx} y={BAND_A_Y + 26} fill={C.white} fontSize={12.5 * fs}
                         textAnchor="middle" fontWeight={700}>
                         {repoName}
