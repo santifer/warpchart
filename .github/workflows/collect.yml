@@ -64,6 +64,13 @@ jobs:
         env:
           BLOB_READ_WRITE_TOKEN: ${{ secrets.BLOB_READ_WRITE_TOKEN }}
 
+      # 3c. Ping IndexNow (Bing/Yandex) with the refreshed corpus so new charted
+      #     repos and the daily rank/velocity updates get crawled in hours. Once
+      #     per UTC day (the stamp syncs to Blob below); never fails the run.
+      - name: Submit corpus to IndexNow
+        run: node collector/indexnow.mjs
+        continue-on-error: true
+
       # 4. Mirror the updated data/ back UP to the private Blob — the moat.
       - name: Mirror data to private Blob
         run: node scripts/sync-to-blob.mjs
