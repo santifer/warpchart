@@ -1,6 +1,7 @@
 // ETA math with moving thresholds. Thresholds (stars of the repo at rank N)
 // rise over time, so the chase speed is own velocity minus threshold drift.
 import type { Neighbor } from "./types";
+import { projectCrossing } from "./compare";
 
 const DAY = 86_400_000;
 
@@ -57,12 +58,19 @@ export interface NeighborEta extends Neighbor {
 }
 
 export function neighborEtas(neighbors: Neighbor[], stars: number, vOwn: number): NeighborEta[] {
+  // one projection source of truth (see compare.ts projectCrossing): the
+  // scan-cards, the race chart and the OG card all meet a rival through the
+  // same math, so an ETA here can never disagree with the same pair elsewhere.
   return neighbors.map((n) => {
-    const gap = n.s - stars;
-    const closing = Math.round((vOwn - n.v) * 10) / 10;
-    const ahead = gap > 0;
-    const etaDays = ahead && closing > 0 ? Math.round((gap / closing) * 10) / 10 : null;
-    const catchDays = !ahead && closing < 0 ? Math.round((gap / closing) * 10) / 10 : null;
-    return { ...n, gap, closing, etaDays, catchDays, receding: ahead && closing <= 0 };
+    const x = projectCrossing(stars, vOwn, n.s, n.v);
+    const ahead = x.gap > 0;
+    return {
+      ...n,
+      gap: x.gap,
+      closing: x.closing,
+      etaDays: ahead && x.closing > 0 ? x.etaDays : null, // we pass them
+      catchDays: !ahead && x.closing < 0 ? x.etaDays : null, // they catch us
+      receding: ahead && x.closing <= 0,
+    };
   });
 }

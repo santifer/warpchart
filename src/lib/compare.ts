@@ -106,6 +106,47 @@ export function rateAt(pts: CurvePoint[], t: number, windowMs = 7 * DAY): number
   return days > 0 ? Math.max(0, (v - vPrev) / days) : 0;
 }
 
+// THE single projection. When does repo A meet repo B, given their current
+// star counts and per-day velocities? Pure, now-independent (callers add the
+// date as `now + etaDays*DAY`), so the race chart, the neighbor scan-cards, the
+// OG card and the API all read ONE source of truth and cannot contradict each
+// other. A meeting exists only when the currently-BEHIND repo is the faster
+// one (it is closing the gap); a parallel or diverging pair returns null.
+//
+// `confidence` flags how trustworthy the single number is: eta = gap/closing is
+// hypersensitive when `closing` is small, so a near-tie projected far out is
+// "noisy" and the UI should show a band, not a hard date (the honesty layer).
+export interface Crossing {
+  gap: number; // bStars - aStars (positive = B is ahead of A)
+  closing: number; // aVel - bVel (positive = A is gaining on B)
+  etaDays: number | null; // days until they meet (>= 0); null = not converging
+  confidence: "firm" | "soft" | "noisy";
+}
+
+export function projectCrossing(
+  aStars: number,
+  aVel: number,
+  bStars: number,
+  bVel: number,
+): Crossing {
+  const gap = bStars - aStars;
+  const closing = Math.round((aVel - bVel) * 10) / 10;
+  // converging iff the behind repo is faster: gap>0 needs closing>0 (A catches
+  // B), gap<0 needs closing<0 (B catches A); either way gap/closing >= 0.
+  let etaDays: number | null = null;
+  if (gap === 0) etaDays = 0;
+  else if (gap > 0 && closing > 0) etaDays = gap / closing;
+  else if (gap < 0 && closing < 0) etaDays = gap / closing;
+  etaDays = etaDays === null ? null : Math.round(etaDays * 10) / 10;
+
+  let confidence: Crossing["confidence"] = "firm";
+  if (etaDays === null) confidence = "noisy";
+  else if (Math.abs(closing) < 3 || etaDays > 25) confidence = "noisy";
+  else if (etaDays > 8) confidence = "soft";
+
+  return { gap, closing, etaDays, confidence };
+}
+
 export function shortRepo(repo: string): string {
   return repo.includes("/") ? repo.split("/")[1] : repo;
 }

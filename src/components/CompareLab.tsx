@@ -17,7 +17,7 @@ import {
 import { usePalette } from "@/lib/usePalette";
 import { fmt, fmtCompact } from "@/lib/format";
 import {
-  DAY, repoColor, rateAt, lastCrossover, shortRepo, type CurvePoint,
+  DAY, repoColor, rateAt, lastCrossover, projectCrossing, shortRepo, type CurvePoint,
 } from "@/lib/compare";
 import { useRace } from "./RaceContext";
 import BadgeSigil from "./BadgeSigil";
@@ -320,14 +320,14 @@ export default function CompareLab({
           if (series[a].i !== 0 && series[b].i !== 0) continue;
           const A = cur[a];
           const B = cur[b];
-          const dv = A.v - B.v;
-          if (Math.abs(dv) > 1e-6) {
-            const days = (B.y - A.y) / dv; // days from now to the forecast crossover
-            if (days > 0 && days < 140) {
-              const faster = A.v > B.v ? series[a].i : series[b].i;
-              const slower = A.v > B.v ? series[b].i : series[a].i;
-              ev.push({ t: nowMs + days * DAY, val: A.y + A.v * days, winner: faster, loser: slower, future: true });
-            }
+          // forecast crossover through the SHARED projection (same math the
+          // neighbor scan-cards use): a meeting exists only when the behind
+          // repo is the faster one, so etaDays is non-null exactly then.
+          const x = projectCrossing(A.y, A.v, B.y, B.v);
+          if (x.etaDays !== null && x.etaDays > 0 && x.etaDays < 140) {
+            const faster = A.v > B.v ? series[a].i : series[b].i;
+            const slower = A.v > B.v ? series[b].i : series[a].i;
+            ev.push({ t: nowMs + x.etaDays * DAY, val: A.y + A.v * x.etaDays, winner: faster, loser: slower, future: true });
           }
           const hc = lastCrossover(series[a].c.pts, series[b].c.pts);
           if (hc) {
