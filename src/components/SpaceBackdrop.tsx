@@ -25,16 +25,20 @@ function seeded(text: string) {
 const W = 1600;
 const H = 900;
 
+// quantize coordinates: full-precision floats (451.89037434756756) bloat the
+// server HTML and its parse for no visual gain — sub-pixel rounding is invisible
+const q = (v: number, d = 1) => Math.round(v * 10 ** d) / 10 ** d;
+
 export type BackdropMode = "scan" | "launch" | "raceway";
 
 export default function SpaceBackdrop({ mode = "scan" }: { mode?: BackdropMode }) {
   const rand = seeded(`warpchart::backdrop::${mode}`);
   const layer = (n: number, rA: number, rB: number, oA: number, oB: number) =>
     Array.from({ length: n }, () => ({
-      x: rand() * W,
-      y: rand() * H,
-      r: rA + rand() * (rB - rA),
-      o: oA + rand() * (oB - oA),
+      x: q(rand() * W),
+      y: q(rand() * H),
+      r: q(rA + rand() * (rB - rA), 2),
+      o: q(oA + rand() * (oB - oA), 2),
       tw: rand() < 0.3,
     }));
   // launch sits almost still (the calm before ignition); raceway's field is
@@ -47,9 +51,9 @@ export default function SpaceBackdrop({ mode = "scan" }: { mode?: BackdropMode }
   ];
   // a few bright named-feeling stars with a soft halo, the field's anchors
   const heroes = Array.from({ length: 7 }, () => ({
-    x: rand() * W,
-    y: rand() * H,
-    r: 1.8 + rand() * 1.4,
+    x: q(rand() * W),
+    y: q(rand() * H),
+    r: q(1.8 + rand() * 1.4, 2),
     warm: rand() < 0.25,
   }));
 
