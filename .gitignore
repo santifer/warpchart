@@ -42,6 +42,11 @@ yarn-error.log*
 # synthetic data-sample/ instead.
 /data/
 
+# internal SEO/GEO work artifacts — audit reports, action plans and
+# ready-to-publish off-site drafts. Working notes (incl. operational tooling
+# detail), not product. Never publish to this public repo.
+/seo-audit/
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts

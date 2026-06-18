@@ -14,11 +14,47 @@ export default function JsonLd({ data }: { data: object | object[] }) {
 
 export const ORG_ID = "https://warpchart.dev/#org";
 
-// Organization + WebSite, the stable entity anchor every other page references
-// via ORG_ID. Rendered once sitewide (the layout).
+// Santiago's canonical entity. SAME @id that santifer.io and career-ops use, so
+// engines and LLMs resolve ONE consolidated person across all his domains — the
+// E-E-A-T cluster (santifer.io <-> career-ops <-> warpchart). This is a MIRROR of
+// the canonical node in cv-santiago's src/articles/json-ld.ts; if that sameAs
+// list changes, update it here too. The authority identifiers (Wikidata
+// Q138710224, ORCID, Crunchbase, Stack Overflow) are what actually resolve and
+// validate the entity — not the social profiles.
+export const PERSON_ID = "https://santifer.io/#person";
+const SANTIAGO = {
+  "@type": "Person",
+  "@id": PERSON_ID,
+  name: "Santiago Fernández de Valderrama Aparicio",
+  url: "https://santifer.io",
+  jobTitle: "Head of Applied AI",
+  sameAs: [
+    "https://www.linkedin.com/in/santifer",
+    "https://github.com/santifer",
+    "https://x.com/santifer",
+    "https://dev.to/santifer",
+    "https://santifer.substack.com",
+    "https://contentdigest.santifer.io",
+    "https://www.youtube.com/@santifer_io",
+    "https://stackoverflow.com/users/32541743",
+    "https://orcid.org/0009-0006-2192-7210",
+    "https://www.crunchbase.com/person/santiago-fernandez-de-valderrama",
+    "https://huggingface.co/santifer",
+    "https://www.wikidata.org/wiki/Q138710224",
+    "https://santiferirepair.es",
+    "https://career-ops.org/about",
+    "https://www.facebook.com/santifer.io/",
+    "https://www.producthunt.com/@santifer",
+    "https://app.daily.dev/santifer",
+  ],
+};
+
+// Person + Organization + WebSite, the stable entity anchor every other page
+// references via ORG_ID / PERSON_ID. Rendered once sitewide (the layout).
 export const siteGraph = {
   "@context": "https://schema.org",
   "@graph": [
+    SANTIAGO,
     {
       "@type": "Organization",
       "@id": ORG_ID,
@@ -27,6 +63,12 @@ export const siteGraph = {
       logo: "https://warpchart.dev/icon.svg",
       description:
         "Warpchart is a developer tool that ranks every public GitHub repository by worldwide star rank and growth velocity, live and free.",
+      // Project -> person by @id (never duplicated). This is what clusters
+      // warpchart with career-ops and santifer.io under one creator.
+      founder: { "@id": PERSON_ID },
+      // warpchart's own entity links. Add its Wikidata item URI here once the
+      // item exists (statements drafted in seo-audit/off-site-drafts.md) so the
+      // graph closes both ways.
       sameAs: ["https://github.com/santifer/warpchart"],
     },
     {
@@ -104,6 +146,7 @@ export const pricingGraph = {
   url: "https://warpchart.dev",
   applicationCategory: "DeveloperApplication",
   operatingSystem: "Web",
+  author: { "@id": PERSON_ID },
   publisher: { "@id": ORG_ID },
   offers: [
     { "@type": "Offer", name: "Free", price: "0", priceCurrency: "USD", url: "https://warpchart.dev/pricing" },
