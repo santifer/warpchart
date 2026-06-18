@@ -75,7 +75,21 @@ export async function fetchDossier(owner: string, name: string): Promise<Dossier
       const vault = await loadTrafficVault(repo);
       clonesHistory = vault?.days.map((dd) => ({ day: dd.d, u: dd.clonesU, c: dd.clones })) ?? null;
     }
-    return { ...raw, npmPkg, npmLast30, npmHistory, clonesHistory };
+    // only surface COMPLETE days. The current UTC day is still accumulating,
+    // and npm / GitHub Traffic only finalise a day's count after it closes, so
+    // a partial "today" bucket would render as a false dip and understate the
+    // metric totals. Keep strictly-past days; the boundary recomputes on every
+    // 15-min cache revalidation so a new day appears the day after it ends.
+    const todayUTC = new Date().toISOString().slice(0, 10);
+    const completeOnly = <T extends { day: string }>(xs: T[] | null) =>
+      xs ? xs.filter((x) => x.day < todayUTC) : xs;
+    return {
+      ...raw,
+      npmPkg,
+      npmLast30,
+      npmHistory: completeOnly(npmHistory),
+      clonesHistory: completeOnly(clonesHistory),
+    };
   } catch {
     return null;
   }
@@ -84,7 +98,7 @@ export async function fetchDossier(owner: string, name: string): Promise<Dossier
 export const getCachedDossier = (owner: string, name: string) =>
   unstable_cache(
     () => fetchDossier(owner, name),
-    ["dossier-v5", `${owner}/${name}`.toLowerCase()],
+    ["dossier-v6", `${owner}/${name}`.toLowerCase()],
     { revalidate: 900 },
   )();
 
