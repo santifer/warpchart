@@ -75,21 +75,29 @@ export async function fetchDossier(owner: string, name: string): Promise<Dossier
       const vault = await loadTrafficVault(repo);
       clonesHistory = vault?.days.map((dd) => ({ day: dd.d, u: dd.clonesU, c: dd.clones })) ?? null;
     }
-    // only surface COMPLETE days. The current UTC day is still accumulating,
-    // and npm / GitHub Traffic only finalise a day's count after it closes, so
-    // a partial "today" bucket would render as a false dip and understate the
-    // metric totals. Keep strictly-past days; the boundary recomputes on every
-    // 15-min cache revalidation so a new day appears the day after it ends.
+    // only surface COMPLETE days.
+    // (1) the current UTC day is still accumulating -> drop it, so a partial
+    //     "today" bucket never renders as a false dip.
+    // (2) when BOTH channels exist, the trailing edge must be the latest day
+    //     they SHARE: npm finalises ~1 day faster than GitHub Traffic, so a day
+    //     with npm but no clones yet would draw clones as a false 0. Trim both
+    //     to min(last npm day, last clones day). Earlier single-channel days
+    //     (a channel that had not launched) are kept -- that absence is real,
+    //     not a lag, and it is the intended channel lift-off.
+    // The boundary recomputes on every 15-min cache revalidation, so a day
+    // appears once EVERY channel has closed it.
     const todayUTC = new Date().toISOString().slice(0, 10);
-    const completeOnly = <T extends { day: string }>(xs: T[] | null) =>
+    const past = <T extends { day: string }>(xs: T[] | null) =>
       xs ? xs.filter((x) => x.day < todayUTC) : xs;
-    return {
-      ...raw,
-      npmPkg,
-      npmLast30,
-      npmHistory: completeOnly(npmHistory),
-      clonesHistory: completeOnly(clonesHistory),
-    };
+    let np = past(npmHistory);
+    let cl = past(clonesHistory);
+    if (np && np.length && cl && cl.length) {
+      const maxDay = (xs: { day: string }[]) => xs.reduce((m, x) => (x.day > m ? x.day : m), xs[0].day);
+      const bound = [maxDay(np), maxDay(cl)].sort()[0]; // the earlier of the two latest days
+      np = np.filter((x) => x.day <= bound);
+      cl = cl.filter((x) => x.day <= bound);
+    }
+    return { ...raw, npmPkg, npmLast30, npmHistory: np, clonesHistory: cl };
   } catch {
     return null;
   }
@@ -98,7 +106,7 @@ export async function fetchDossier(owner: string, name: string): Promise<Dossier
 export const getCachedDossier = (owner: string, name: string) =>
   unstable_cache(
     () => fetchDossier(owner, name),
-    ["dossier-v6", `${owner}/${name}`.toLowerCase()],
+    ["dossier-v7", `${owner}/${name}`.toLowerCase()],
     { revalidate: 900 },
   )();
 
