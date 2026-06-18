@@ -250,7 +250,10 @@ export default async function Home() {
 
       <footer className="rise mt-auto flex flex-wrap items-center justify-between gap-2 border-t border-grid pt-4" style={{ animationDelay: "320ms" }}>
         <span className="numeral text-micro tracking-[0.15em] text-faint">
-          WARPCHART · open telemetry over public GitHub data
+          WARPCHART · by the maker of{" "}
+          <a href="https://career-ops.org" className="text-accent/80 transition-colors hover:text-accent">
+            career-ops
+          </a>
         </span>
         <nav className="numeral flex flex-wrap items-center gap-x-3 gap-y-1 text-micro tracking-[0.14em] text-faint">
           <Link href="/codex" className="hover:text-accent">CODEX</Link>

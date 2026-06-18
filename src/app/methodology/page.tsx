@@ -109,7 +109,10 @@ export default function MethodologyPage() {
 
       <footer className="rise flex flex-wrap items-center justify-between gap-2 pb-4 pt-2" style={{ animationDelay: "560ms" }}>
         <span className="numeral text-micro tracking-[0.15em] text-faint">
-          WARPCHART · open telemetry over public GitHub data
+          WARPCHART · by the maker of{" "}
+          <Link href="https://career-ops.org" className="text-accent/80 transition-colors hover:text-accent">
+            career-ops
+          </Link>
         </span>
         <Link prefetch={false} href="https://github.com/santifer/warpchart" className="numeral text-micro text-faint hover:text-dim">
           source on github →

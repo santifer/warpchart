@@ -30,9 +30,13 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     { url: `${base}/sponsors`, lastModified: now, changeFrequency: "monthly", priority: 0.4 },
   ];
 
-  // the worldwide top-1000 registry (ordered by rank) + anything charted that
-  // is outside it, deduped. route.json is updated daily; the codex listing
-  // carries its own charted date.
+  // QUALITY set, not the whole corpus: the worldwide top-200 (the most notable
+  // and searchable, and the ones actually linked from home/velocity/codex) plus
+  // everything charted (each has a unique dossier). The deep untracked repos
+  // (rank 200+ that nobody has charted) are intentionally left OUT — they are
+  // orphan + thin, so sitemapping them is noise, not reach. They earn a place
+  // once a browsable index links them and their prose is enriched.
+  const TOP = 200;
   const route = loadRoute();
   const routeMod = route?.generated_at ? new Date(route.generated_at) : now;
   const charted = await listCodexes().catch(() => []);
@@ -40,7 +44,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
 
   const seen = new Set<string>();
   const repos: MetadataRoute.Sitemap = [];
-  for (const r of [...(route?.repos ?? []).map((p) => p.r), ...charted.map((c) => c.repo)]) {
+  for (const r of [...(route?.repos ?? []).slice(0, TOP).map((p) => p.r), ...charted.map((c) => c.repo)]) {
     const k = r.toLowerCase();
     if (seen.has(k) || !REPO_RE.test(r)) continue;
     seen.add(k);
