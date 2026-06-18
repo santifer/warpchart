@@ -54,6 +54,16 @@ jobs:
           ALERT_WEBHOOK_URL: ${{ secrets.ALERT_WEBHOOK_URL }}
           WARM_BASE_URL: ${{ vars.WARM_BASE_URL }}
 
+      # 3b. Stabilise route.json velocity: add a 7-day rate (`v7`) per repo from
+      #     the rank-history shards, so every consumer that reads route velocity
+      #     inherits ONE stable number instead of the noisy ~1-day `v`. Additive
+      #     (never touches `v`), idempotent per route refresh, never fails the run.
+      - name: Stabilise route velocity (7-day)
+        run: node collector/velocity7.mjs
+        continue-on-error: true
+        env:
+          BLOB_READ_WRITE_TOKEN: ${{ secrets.BLOB_READ_WRITE_TOKEN }}
+
       # 4. Mirror the updated data/ back UP to the private Blob — the moat.
       - name: Mirror data to private Blob
         run: node scripts/sync-to-blob.mjs
