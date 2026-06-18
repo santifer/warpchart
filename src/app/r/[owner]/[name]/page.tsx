@@ -13,6 +13,7 @@ import Projections from "@/components/Projections";
 import DailyLadder from "@/components/DailyLadder";
 import Heatmap from "@/components/Heatmap";
 import RankChart from "@/components/RankChart";
+import GodRank from "@/components/GodRank";
 import MissionLog from "@/components/MissionLog";
 import Dashboard from "@/components/Dashboard";
 import Badges from "@/components/Badges";
@@ -387,10 +388,18 @@ export default async function ExplorerPage({
           }}
           rank={{
             meta: "unlocks with tracking",
+            // owner-only god mode: with the private token in localStorage this
+            // swaps the locked teaser for the repo's REAL world-rank trajectory
+            // (the moat), client-side, so the public page keeps its ISR cache
             node: (
-              <Locked unlockFor={repoLabel}>
-                <RankChart bundle={demoBundle} />
-              </Locked>
+              <GodRank
+                repo={repoLabel}
+                locked={
+                  <Locked unlockFor={repoLabel}>
+                    <RankChart bundle={demoBundle} />
+                  </Locked>
+                }
+              />
             ),
           }}
           traffic={{
