@@ -30,7 +30,7 @@ const siteUrl = process.env.VERCEL_PROJECT_PRODUCTION_URL
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),
   // point crawlers/agents at the machine-readable guide from <head> too
-  alternates: { types: { "text/plain": [{ url: "/llms.txt", title: "llms.txt" }] } },
+  alternates: { types: { "text/plain": "/llms.txt" } },
   title: "Warpchart",
   description:
     "Live growth telemetry for an open source repository: star velocity, worldwide rank and the route to the galactic core.",
