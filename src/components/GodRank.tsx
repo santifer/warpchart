@@ -64,15 +64,17 @@ export default function GodRank({ repo, locked }: { repo: string; locked: React.
     );
   }
 
-  const data = state.pts.map((p) => ({ t: p.t, rank: p.rank }));
+  const data = state.pts.map((p) => ({ t: p.t, rank: p.rank, stars: p.stars }));
   const ranks = data.map((p) => p.rank);
   const yDomain: [number, number] = [Math.min(...ranks) - 2, Math.max(...ranks) + 2];
+  const since = new Date(state.pts[0].t).toLocaleDateString("en-US", { month: "short", day: "numeric" });
 
   return (
-    <div className="relative h-[230px] w-full">
+    <div className="relative flex h-[230px] w-full flex-col">
       <span className="numeral pointer-events-none absolute right-1 top-0 z-10 text-micro tracking-[0.24em] text-accent/70">
         ◈ GOD MODE
       </span>
+      <div className="min-h-0 flex-1">
       <ResponsiveContainer width="100%" height="100%">
         <LineChart data={data} margin={{ top: 10, right: 8, left: -14, bottom: 0 }}>
           <CartesianGrid stroke={C.grid} strokeDasharray="2 6" vertical={false} />
@@ -111,7 +113,13 @@ export default function GodRank({ repo, locked }: { repo: string; locked: React.
             labelFormatter={(t) =>
               new Date(Number(t)).toLocaleDateString("en-US", { month: "short", day: "numeric" })
             }
-            formatter={(value) => [`#${value}`, "world rank"]}
+            formatter={(value, _n, item) => {
+              const stars = (item as { payload?: { stars?: number } })?.payload?.stars;
+              return [
+                `#${value}${stars != null ? ` · ${stars.toLocaleString("en-US")} ★` : ""}`,
+                "world rank",
+              ];
+            }}
           />
           <Line
             dataKey="rank"
@@ -123,6 +131,10 @@ export default function GodRank({ repo, locked }: { repo: string; locked: React.
           />
         </LineChart>
       </ResponsiveContainer>
+      </div>
+      <span className="numeral px-1 pt-1 text-micro text-faint">
+        world rank · recorded since {since} · un-backfillable, grows daily
+      </span>
     </div>
   );
 }
