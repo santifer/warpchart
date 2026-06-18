@@ -15,6 +15,7 @@ import { fmtCompact, fmtEtaDays } from "@/lib/format";
 export const revalidate = 900;
 
 export const metadata: Metadata = {
+  alternates: { canonical: "/velocity" },
   title: "The Warp Index · fastest-growing GitHub repositories, updated daily · Warpchart",
   description:
     "The Warp Index ranks the fastest-growing repositories on GitHub every day: fastest movers in stars per day, fastest risers relative to their size, and the active overtakes about to happen, with live ETAs. Free, with a machine-readable feed for investors and builders.",

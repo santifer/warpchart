@@ -11,6 +11,7 @@ import { listCodexes, getCachedCodex } from "@/lib/codex";
 export const revalidate = 600;
 
 export const metadata: Metadata = {
+  alternates: { canonical: "/codex" },
   title: "The Codex · charted systems · Warpchart",
   description:
     "The Warpchart Codex: a growing atlas of GitHub repositories, each charted into a short system dossier. Browse the systems explorers have discovered on the ascent to the galactic core.",

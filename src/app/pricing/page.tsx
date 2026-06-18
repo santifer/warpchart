@@ -61,12 +61,16 @@ export async function generateMetadata({
   const valid = repo && FULL.test(repo.trim()) ? repo.trim() : null;
   if (valid) {
     return {
+      // personalized ?repo= variants consolidate to the canonical /pricing so
+      // we don't index an unbounded set of near-duplicate pricing URLs
+      alternates: { canonical: "/pricing" },
       title: `Chart ${valid} · Warpchart`,
       description: `Track ${valid} with exact hourly history, world-rank trajectory, hunter ETAs and alerts. The public explorer stays free; your history is yours forever.`,
       openGraph: { images: [`/api/og?repo=${valid}`] },
     };
   }
   return {
+    alternates: { canonical: "/pricing" },
     title: "Pricing · Warpchart",
     description:
       "Self-host Warpchart free, or get your repository tracked with exact hourly history, the traffic GitHub erases every 14 days, alerts and zero ops. The public explorer stays free forever; the data is never for sale.",

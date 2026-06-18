@@ -7,6 +7,7 @@ import { loadMeta } from "@/lib/history";
 export const dynamic = "force-static";
 
 export const metadata: Metadata = {
+  alternates: { canonical: "/sponsors" },
   title: "Sponsors · Warpchart",
   description:
     "Support Warpchart, the open growth telemetry console for any GitHub repository. Scarce, clearly labeled sponsor placements. The data is never for sale.",

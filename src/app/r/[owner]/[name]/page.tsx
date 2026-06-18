@@ -20,7 +20,7 @@ import Badges from "@/components/Badges";
 import CompareLab from "@/components/CompareLab";
 import Masthead from "@/components/Masthead";
 import { buildBundle } from "@/lib/bundle";
-import { loadMeta, isHostedRepo, loadTenantHistory, loadTenantTimestamps } from "@/lib/history";
+import { loadMeta, isHostedRepo, loadTenantHistory, loadTenantTimestamps, loadRoute } from "@/lib/history";
 import { fetchLiveSnapshot } from "@/lib/live-blob";
 import { isOwnedBy } from "@/lib/config";
 import CodexModal from "@/components/CodexModal";
@@ -29,7 +29,7 @@ import SpaceBackdrop from "@/components/SpaceBackdrop";
 import TrafficPanel from "@/components/TrafficPanel";
 import { getCachedCodex, listCodexes } from "@/lib/codex";
 import { loadExplorerData, getCachedDossier } from "@/lib/explorer";
-import { fmt, fmtEtaDays } from "@/lib/format";
+import { fmt, fmtCompact, fmtEtaDays } from "@/lib/format";
 
 // Same template as the unlocked mission console: identical panels in identical
 // order. The only difference between repos is what is unlocked. Locked
@@ -80,10 +80,28 @@ export async function generateMetadata({
   params: Promise<{ owner: string; name: string }>;
 }): Promise<Metadata> {
   const { owner, name } = await params;
+  const repo = `${owner}/${name}`;
+  // pull the live-ish numbers from the cache-only route registry (no GitHub
+  // call) so the meta description carries real facts, not a templated slug.
+  // Falls back to the generic line for deep repos outside the top-1000 route.
+  const route = loadRoute();
+  const idx = route?.repos.findIndex((p) => p.r.toLowerCase() === repo.toLowerCase()) ?? -1;
+  let description = `Worldwide star rank, velocity and the repos closing in on ${repo}. Live and free.`;
+  if (idx >= 0 && route) {
+    const p = route.repos[idx];
+    const vel = Math.round(p.v7 ?? p.v ?? 0);
+    description =
+      `${repo} ranks #${fmt(idx + 1)} of every public GitHub repository — ${fmtCompact(p.s)} stars` +
+      `${vel ? `, climbing ${fmt(vel)}/day` : ""}. Live worldwide rank, velocity and the repos closing in.`;
+  }
   return {
-    title: `${owner}/${name} · Warpchart`,
-    description: `Worldwide star rank, velocity and ranking neighbors of ${owner}/${name}.`,
+    title: `${repo} · worldwide GitHub rank & velocity · Warpchart`,
+    description,
+    alternates: { canonical: `/r/${owner}/${name}` },
     openGraph: {
+      title: `${repo} · Warpchart`,
+      description,
+      url: `/r/${owner}/${name}`,
       images: [`/api/og?repo=${owner}/${name}`],
     },
   };

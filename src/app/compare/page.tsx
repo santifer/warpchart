@@ -25,6 +25,9 @@ export async function generateMetadata({ searchParams }: { searchParams: SP }): 
   const names = list.map(shortRepo).join(" vs ");
   const title = `${names} · Star race · Warpchart`;
   return {
+    // self-canonical on the normalized repo list (resolveRepos dedupes/orders),
+    // so "a vs b" and "b vs a" consolidate to one indexable comparison URL
+    alternates: { canonical: list.length ? `/compare?repos=${list.join(",")}` : "/compare" },
     title,
     description: `Compare the GitHub star growth of ${list.join(", ")} side by side: cumulative stars, growth rate, day-zero alignment and world rank.`,
     openGraph: {
