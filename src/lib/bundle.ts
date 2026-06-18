@@ -170,7 +170,12 @@ export function buildBundle(
     if (top) apex = { r: top.r, s: top.s };
   }
 
-  const daily = dailyCounts(timestamps, 62, nowMs); // ~2 months for the daily ladder
+  // Stars-per-day over the WHOLE life of the repo, so the daily ladder pans
+  // back to the very first star (not just a trailing 2-month window). Capped at
+  // 400 days. dailyAll below reuses this exact series.
+  const firstMs = timestamps.length ? Date.parse(timestamps[0]) : nowMs;
+  const lifeDays = Math.min(Math.ceil((nowMs - firstMs) / DAY) + 1, 400);
+  const daily = dailyCounts(timestamps, lifeDays, nowMs);
   const netStars = latest?.stars ?? timestamps.length;
   const { dots: routeDots, landmarks: routeLandmarks, all: routeAll } = buildRouteLayers(
     netStars, milestones, apex, meta?.repo ?? null
@@ -182,12 +187,11 @@ export function buildBundle(
     m.at = above ? Math.round((m.threshold + above.s) / 2) : null;
   }
 
-  // Whole-life series for replay + event detection.
-  const firstMs = timestamps.length ? Date.parse(timestamps[0]) : nowMs;
+  // Whole-life hourly series for replay + event detection; dailyAll is the same
+  // full-life daily series the ladder uses (firstMs/lifeDays computed above).
   const lifeHours = Math.min(Math.ceil((nowMs - firstMs) / HOUR) + 1, 24 * 400);
-  const lifeDays = Math.min(Math.ceil((nowMs - firstMs) / DAY) + 1, 400);
   const hourlyAll = hourlyBuckets(timestamps, lifeHours, nowMs);
-  const dailyAll = dailyCounts(timestamps, lifeDays, nowMs);
+  const dailyAll = daily;
   const spikes = loadForensics()?.spikes ?? [];
   // Hourly surge attribution is house-only (attribution.json never exists for a
   // tenant's data), so it merges only into the house Mission Log.
@@ -227,7 +231,7 @@ export function buildBundle(
     hourly: hourlyBuckets(timestamps, 8 * 24, nowMs),
     daily,
     ma7: movingAverage(daily, 7),
-    floor: madrugadaFloor(timestamps, 62, nowMs),
+    floor: madrugadaFloor(timestamps, lifeDays, nowMs),
     cumulative: cumulativeSeries(timestamps),
     heatmap: heatmapMatrix(timestamps),
     v7d: focalV7 ?? velocity7d(timestamps, nowMs),

@@ -26,7 +26,10 @@ interface Row {
   cause: string | null;
 }
 
-const VISIBLE = 31; // ~1 month on screen; pan over the full ~2 months
+// The compact panel shows ~1 month and pans back over the repo's FULL history;
+// the full-screen deck (fill) shows ~3 months at once.
+const VISIBLE_COMPACT = 31;
+const VISIBLE_FILL = 93;
 
 export default function DailyLadder({ bundle, fill }: { bundle: DashboardBundle; fill?: boolean }) {
   const live = useLive();
@@ -53,7 +56,7 @@ export default function DailyLadder({ bundle, fill }: { bundle: DashboardBundle;
     });
   }, [bundle.daily, bundle.ma7, bundle.floor, bundle.spikes, live.todayCount, live.nowMs]);
 
-  const visible = Math.min(VISIBLE, all.length);
+  const visible = Math.min(fill ? VISIBLE_FILL : VISIBLE_COMPACT, all.length);
   const latestOff = Math.max(0, all.length - visible);
   const [offset, setOffset] = useState<number | null>(null); // null = latest
   const offRef = useRef<number | null>(null);
@@ -69,9 +72,12 @@ export default function DailyLadder({ bundle, fill }: { bundle: DashboardBundle;
     return true;
   });
 
-  // Y is FIXED over the whole window so bars don't rescale while panning.
-  const dayMax = Math.max(1, ...all.map((r) => Math.max(r.stars, r.ma7 ?? 0)));
-  const floorMax = Math.max(1, ...all.map((r) => r.floor ?? 0));
+  // Y scales to the VISIBLE window, not the whole life: the full history now
+  // includes the launch spike (often ~10x a normal day), so a globally-fixed
+  // scale would flatten recent days into invisibility. Per-window scaling keeps
+  // every era legible — the axis re-fits as you pan back toward the viral start.
+  const dayMax = Math.max(1, ...view.map((r) => Math.max(r.stars, r.ma7 ?? 0)));
+  const floorMax = Math.max(1, ...view.map((r) => r.floor ?? 0));
   const canPan = all.length > visible;
 
   return (

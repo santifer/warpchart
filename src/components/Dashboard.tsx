@@ -165,7 +165,7 @@ export default function Dashboard({
             meta: `own v7d ${fmt(Math.round(bundle.v7d))}/day`,
             node: <Projections bundle={bundle} />,
           }}
-          ladder={{ meta: "30 days · night floor 00-05 UTC", node: <DailyLadder bundle={bundle} /> }}
+          ladder={{ meta: "full history · drag to pan · night floor 00-05 UTC", node: <DailyLadder bundle={bundle} /> }}
           heatmap={{ meta: `${fmt(bundle.totalStars)} star events`, node: <Heatmap bundle={bundle} /> }}
           rank={{ meta: "hourly snapshots", node: <RankChart bundle={bundle} /> }}
           traffic={{

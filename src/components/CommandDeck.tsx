@@ -323,8 +323,8 @@ export default function CommandDeck({
           </Panel>
           <PulsePanel dossier={dossier} index="03" />
           <UsagePanel dossier={dossier} index="04" />
-          <Panel index="07" title="Daily ladder" meta="30 days · night floor 00-05 UTC">
-            <DailyLadder bundle={bundle} />
+          <Panel index="07" title="Daily ladder" meta="full history · night floor 00-05 UTC">
+            <DailyLadder bundle={bundle} fill />
           </Panel>
           <Panel index="06" title="Milestone projections" meta={`own v7d ${fmt(Math.round(vOwn))}/day`}>
             <Projections bundle={bundle} compact />
