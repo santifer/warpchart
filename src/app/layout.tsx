@@ -3,6 +3,7 @@ import { Michroma, Chakra_Petch, JetBrains_Mono } from "next/font/google";
 import { Analytics } from "@vercel/analytics/next";
 import { ThemeProvider } from "@/lib/usePalette";
 import DemoBanner from "@/components/DemoBanner";
+import JsonLd, { siteGraph } from "@/components/JsonLd";
 import "./globals.css";
 
 const michroma = Michroma({
@@ -37,6 +38,12 @@ export const metadata: Metadata = {
       "Live growth telemetry: star velocity, worldwide rank and the route to the galactic core.",
     images: ["/api/og"],
   },
+  // Google Search Console (URL-prefix / HTML-tag method): paste the token into
+  // the GOOGLE_SITE_VERIFICATION env var and it emits the verification meta.
+  // Omitted entirely when unset.
+  verification: process.env.GOOGLE_SITE_VERIFICATION
+    ? { google: process.env.GOOGLE_SITE_VERIFICATION }
+    : undefined,
 };
 
 // Applies the resolved scheme before first paint (no flash). Mirrors the
@@ -56,6 +63,7 @@ export default function RootLayout({
     >
       <body>
         <script dangerouslySetInnerHTML={{ __html: themeInit }} />
+        <JsonLd data={siteGraph} />
         <ThemeProvider>
           <div className="space-backdrop" aria-hidden />
           <div className="space-grid" aria-hidden />

@@ -6,6 +6,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import Masthead from "@/components/Masthead";
 import SpaceBackdrop from "@/components/SpaceBackdrop";
+import JsonLd, { codexGraph } from "@/components/JsonLd";
 import { listCodexes, getCachedCodex } from "@/lib/codex";
 
 export const revalidate = 600;
@@ -42,6 +43,7 @@ export default async function CodexIndex() {
 
   return (
     <main className="mx-auto flex min-h-screen max-w-[1120px] flex-col gap-12 px-4 py-12 sm:px-6">
+      <JsonLd data={codexGraph(listing)} />
       <SpaceBackdrop mode="scan" />
       <header className="rise" style={{ animationDelay: "0ms" }}>
         <Masthead />

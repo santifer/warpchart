@@ -14,6 +14,7 @@ import DailyLadder from "@/components/DailyLadder";
 import Heatmap from "@/components/Heatmap";
 import RankChart from "@/components/RankChart";
 import GodRank from "@/components/GodRank";
+import JsonLd, { repoGraph } from "@/components/JsonLd";
 import MissionLog from "@/components/MissionLog";
 import Dashboard from "@/components/Dashboard";
 import Badges from "@/components/Badges";
@@ -126,12 +127,16 @@ export default async function ExplorerPage({
   const tenant = loadMeta();
   if (tenant && `${owner}/${name}`.toLowerCase() === tenant.repo.toLowerCase()) {
     const live = await fetchLiveSnapshot(tenant.repo);
+    const tBundle = buildBundle(undefined, live);
     return (
-      <Dashboard
-        bundle={buildBundle(undefined, live)}
-        dossier={await getCachedDossier(owner, name)}
-        charted={chartedRepos}
-      />
+      <>
+        <JsonLd data={repoGraph(tenant.repo, { stars: tBundle.netStars, rank: tBundle.rank })} />
+        <Dashboard
+          bundle={tBundle}
+          dossier={await getCachedDossier(owner, name)}
+          charted={chartedRepos}
+        />
+      </>
     );
   }
 
@@ -158,13 +163,17 @@ export default async function ExplorerPage({
         language: null,
         forks: 0,
       };
+      const hBundle = buildBundle({ timestamps: tTimestamps, history: tHistory, meta: tMeta }, tLive);
       return (
-        <Dashboard
-          bundle={buildBundle({ timestamps: tTimestamps, history: tHistory, meta: tMeta }, tLive)}
-          polling={false}
-          dossier={await getCachedDossier(owner, name)}
-          charted={chartedRepos}
-        />
+        <>
+          <JsonLd data={repoGraph(hostedLabel, { stars: hBundle.netStars, rank: hBundle.rank })} />
+          <Dashboard
+            bundle={hBundle}
+            polling={false}
+            dossier={await getCachedDossier(owner, name)}
+            charted={chartedRepos}
+          />
+        </>
       );
     }
   }
@@ -204,6 +213,7 @@ export default async function ExplorerPage({
     // warp entrance, and the skeleton -> content reveal must be an in-place
     // swap (a second animated entrance made everything vanish and reappear)
     <main className="mx-auto flex max-w-[1440px] flex-col gap-4 px-2 py-4 sm:px-6 sm:py-6">
+      <JsonLd data={repoGraph(repoLabel, { stars: inputs.stars, rank: inputs.rank })} />
       {/* same rich starfield as the landing/explore, so the translucent hud
           panels (and the star chart) float over space instead of flat dark */}
       <SpaceBackdrop mode="scan" />

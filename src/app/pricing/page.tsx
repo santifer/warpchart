@@ -18,6 +18,7 @@ import { loadMeta } from "@/lib/history";
 import { loadExplorerData, type ExplorerData } from "@/lib/explorer";
 import { fmt, fmtEtaDays } from "@/lib/format";
 import SpaceBackdrop from "@/components/SpaceBackdrop";
+import JsonLd, { pricingGraph } from "@/components/JsonLd";
 import LockedRankPreview from "@/components/LockedRankPreview";
 import CompareLab from "@/components/CompareLab";
 import { RaceProvider, RaceToggle } from "@/components/RaceContext";
@@ -424,6 +425,7 @@ export default async function Pricing({
 
   return (
     <main className="mx-auto flex min-h-screen max-w-[1080px] flex-col gap-14 px-4 py-10 sm:px-6">
+      <JsonLd data={pricingGraph} />
       <SpaceBackdrop mode="launch" />
 
       <header className="rise flex items-center justify-between" style={{ animationDelay: "0ms" }}>
