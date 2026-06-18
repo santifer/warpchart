@@ -109,7 +109,7 @@ export async function GET(req: Request) {
       if (idx >= 0) {
         rank = idx + 1;
         stars = route!.repos[idx].s;
-        cacheControl = embedCache(adaptiveTtl(stars, route!.repos[idx].v));
+        cacheControl = embedCache(adaptiveTtl(stars, route!.repos[idx].v7 ?? route!.repos[idx].v));
       } else {
         const [owner, name] = repoParam.split("/");
         stars = await currentStars(owner, name);

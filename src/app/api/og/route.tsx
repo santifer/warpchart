@@ -66,7 +66,12 @@ async function tenantData(): Promise<CardData | null> {
     desc: meta.description,
     rank: last.rank,
     stars: last.stars,
-    vPerDay: Math.round(velocity7d(loadTimestamps(), Date.now())),
+    // canonical velocity: the stable route v7 (matches the site + API), with
+    // the timestamp-based 7-day rate as the fallback if the focal isn't routed
+    vPerDay: Math.round(
+      loadRoute()?.repos.find((p) => p.r.toLowerCase() === meta.repo.toLowerCase())?.v7 ??
+        velocity7d(loadTimestamps(), Date.now())
+    ),
   };
 }
 
