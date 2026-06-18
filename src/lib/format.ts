@@ -21,8 +21,9 @@ export function fmtEtaDays(days: number | null): string {
   if (days === null) return "n/a";
   if (days <= 0) return "now";
   if (days < 1) return Math.max(1, Math.round(days * 24)) + "h";
-  if (days < 10) return days.toFixed(1).replace(/\.0$/, "") + "d";
-  if (days < 60) return Math.round(days) + "d";
+  // whole days only: a projected ETA is not precise to the tenth, and a
+  // decimal reads as false precision the velocity data does not support
+  if (days < 60) return Math.max(1, Math.round(days)) + "d";
   if (days < 365) {
     const mo = Math.round(days / 30.44);
     return mo >= 12 ? "1y" : mo + "mo";
