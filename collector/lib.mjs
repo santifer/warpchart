@@ -407,7 +407,12 @@ export async function reposVelocity(fullNames, now = new Date()) {
     let v = 0;
     if (edges.length >= 2) {
       const oldest = new Date(edges[0].starredAt);
-      const days = Math.max((now - oldest) / 864e5, 0.01);
+      // Floor only guards near-simultaneous timestamps (div-by-~0); keep it
+      // tiny, since edges.length / floor is the implicit velocity ceiling.
+      // 0.01 (14.4 min) capped this at 100 / 0.01 = 10000 stars/day; 2 min
+      // lifts it to ~72000/day, past any real sustained pace.
+      const MIN_SPAN_DAYS = 2 / 1440; // 2 minutes
+      const days = Math.max((now - oldest) / 864e5, MIN_SPAN_DAYS);
       v = edges.length / days;
     }
     out.push({

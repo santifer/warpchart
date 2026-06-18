@@ -282,7 +282,15 @@ export async function neighborsVelocity(
       const edges = d.stargazers.edges;
       let v = 0;
       if (edges.length >= 2) {
-        const days = Math.max((now - Date.parse(edges[0].starredAt)) / 864e5, 0.01);
+        // Span of the last ~30 stars. The floor ONLY guards degenerate
+        // near-simultaneous timestamps (div-by-~0); it must stay tiny, because
+        // edges.length / floor is the implicit velocity CEILING. The old 0.01
+        // (14.4 min) capped every repo at 30 / 0.01 = 3000 stars/day, so a repo
+        // climbing faster (e.g. headroom at ~6000/day) flat-lined at exactly
+        // 3000. 2 min lifts the ceiling to ~21,600/day, past any sustained real
+        // pace, while still absorbing same-instant timestamp bursts.
+        const MIN_SPAN_DAYS = 2 / 1440; // 2 minutes
+        const days = Math.max((now - Date.parse(edges[0].starredAt)) / 864e5, MIN_SPAN_DAYS);
         v = edges.length / days;
       }
       out.push({
