@@ -97,7 +97,9 @@ export async function runCollisionScan({ enrich = true } = {}) {
       const was = prevStars.get(p.r.toLowerCase());
       return {
         r: p.r, s: p.s, l: p.l ?? null, d: p.d ?? null, rank: i + 1,
-        v: was !== undefined ? (p.s - was) / days : null,
+        // prefer the stable 7-day rate (velocity7.mjs) over the noisy ~1-day
+        // delta, so the overtake scan / threat label agree with the charts
+        v: p.v7 ?? (was !== undefined ? (p.s - was) / days : null),
         isNew: was === undefined,
       };
     })

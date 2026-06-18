@@ -22,11 +22,16 @@ export interface RouteRepo {
   // stars/day from the daily registry diff (collector); colors the whole
   // galaxy with doppler dots at zero API cost. Null/absent = unknown.
   v?: number | null;
+  // stable 7-day stars/day (collector/velocity7.mjs, from the rank-history
+  // moat). THE canonical velocity: every ETA consumer prefers v7 over the
+  // noisy ~1-day v, so projections agree across the product. Absent until the
+  // repo has a 7-day baseline recorded.
+  v7?: number | null;
 }
 
 export interface RouteFile {
   generated_at: string;
-  repos: { r: string; s: number; d?: string | null; l?: string | null; f?: number; v?: number | null }[];
+  repos: { r: string; s: number; d?: string | null; l?: string | null; f?: number; v?: number | null; v7?: number | null }[];
 }
 
 // data/catalog.json, written daily by collector/route-history.mjs from the same

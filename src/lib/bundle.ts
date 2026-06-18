@@ -197,6 +197,18 @@ export function buildBundle(
 
   // engagement: fork/star ratio vs the top 1000 population
   const route = loadRoute();
+  // ONE canonical velocity (compare.ts projectCrossing reads it everywhere):
+  // prefer the stable 7-day route rate (v7) over the noisy ~1-day v, so the
+  // scan-card ETAs match the race and the overtake scan. Enrich the focal
+  // velocity and every neighbor from the same source.
+  const routeV7 = new Map(
+    (route?.repos ?? []).map((p) => [p.r.toLowerCase(), p.v7 ?? p.v ?? null] as const),
+  );
+  neighbors = neighbors.map((n) => {
+    const rv = routeV7.get(n.r.toLowerCase());
+    return rv != null ? { ...n, v: rv } : n;
+  });
+  const focalV7 = meta?.repo ? routeV7.get(meta.repo.toLowerCase()) ?? null : null;
   let forkRatio: number | null = null;
   let forkPercentile: number | null = null;
   if (meta && meta.forks > 0 && netStars > 0) {
@@ -218,7 +230,7 @@ export function buildBundle(
     floor: madrugadaFloor(timestamps, 62, nowMs),
     cumulative: cumulativeSeries(timestamps),
     heatmap: heatmapMatrix(timestamps),
-    v7d: velocity7d(timestamps, nowMs),
+    v7d: focalV7 ?? velocity7d(timestamps, nowMs),
     recent48h: recentTimestamps(timestamps, 48, nowMs),
     rankHistory: rankSeries(history),
     neighbors,

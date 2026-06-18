@@ -74,7 +74,7 @@ export function repoStats(repoInput: string, band = 5): RepoStats | null {
       rank: start + k + 1,
       stars: p.s,
       gap: p.s - me.s,
-      velocityPerDay: p.v ?? null,
+      velocityPerDay: p.v7 ?? p.v ?? null,
     }));
   };
   const ahead = slice(idx - band, idx).reverse(); // closest ahead first
@@ -93,7 +93,7 @@ export function repoStats(repoInput: string, band = 5): RepoStats | null {
     repo: me.r,
     rank,
     stars: me.s,
-    velocityPerDay: me.v ?? null,
+    velocityPerDay: me.v7 ?? me.v ?? null,
     language: me.l ?? null,
     forks: me.f ?? null,
     ahead,
@@ -125,7 +125,7 @@ export function velocityRanking(limit = 20, language?: string): VelocityEntry[] 
   if (!r) return [];
   const lang = language?.trim().toLowerCase();
   return r.repos
-    .map((p, i) => ({ repo: p.r, rank: i + 1, stars: p.s, velocityPerDay: p.v ?? 0, language: p.l ?? null }))
+    .map((p, i) => ({ repo: p.r, rank: i + 1, stars: p.s, velocityPerDay: p.v7 ?? p.v ?? 0, language: p.l ?? null }))
     .filter((p) => p.velocityPerDay > 0 && (!lang || (p.language ?? "").toLowerCase() === lang))
     .sort((a, b) => b.velocityPerDay - a.velocityPerDay)
     .slice(0, clamp(limit));
@@ -149,7 +149,7 @@ export function leaderboard(limit = 20, language?: string): VelocityEntry[] {
   if (!r) return [];
   const lang = language?.trim().toLowerCase();
   return r.repos
-    .map((p, i) => ({ repo: p.r, rank: i + 1, stars: p.s, velocityPerDay: p.v ?? 0, language: p.l ?? null }))
+    .map((p, i) => ({ repo: p.r, rank: i + 1, stars: p.s, velocityPerDay: p.v7 ?? p.v ?? 0, language: p.l ?? null }))
     .filter((p) => !lang || (p.language ?? "").toLowerCase() === lang)
     .slice(0, clamp(limit));
 }
