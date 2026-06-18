@@ -41,6 +41,7 @@ const ageDaysOf = (r: CatalogRepo, now: number): number => {
 interface Thresholds {
   meteorSpd: number; // top-15% lifetime stars/day among young (<2y) + top-1000 repos
   blueV: number; // p90 velocity of the top-1000
+  cometV: number; // p98 RECENT stars/day across the whole catalog (live momentum)
   forkByDecile: { maxStars: number; gate: number }[]; // p95 fork-ratio per star decile
 }
 
@@ -49,6 +50,9 @@ function computeThresholds(repos: CatalogRepo[], now: number): Thresholds {
   const meteorSpd = pctile(young.map((r) => r.s / ageDaysOf(r, now)), 0.85);
   const top1k = repos.filter((r) => r.rank <= 1000);
   const blueV = pctile(top1k.map((r) => Math.max(0, r.v ?? 0)), 0.9);
+  // COMET is size-blind: the top 2% of RECENT velocity across the whole
+  // catalog, so a surging mid-pack repo earns it without being a giant.
+  const cometV = pctile(repos.filter((r) => (r.v ?? 0) > 0).map((r) => r.v ?? 0), 0.98);
   const byStars = [...repos].sort((a, b) => a.s - b.s);
   const dec = Math.max(1, Math.ceil(byStars.length / 10));
   const forkByDecile: Thresholds["forkByDecile"] = [];
@@ -60,7 +64,7 @@ function computeThresholds(repos: CatalogRepo[], now: number): Thresholds {
       gate: pctile(band.map((r) => (r.f ?? 0) / Math.max(1, r.s)), 0.95),
     });
   }
-  return { meteorSpd, blueV, forkByDecile };
+  return { meteorSpd, blueV, cometV, forkByDecile };
 }
 
 const fmt = (n: number) => Math.round(n).toLocaleString("en-US");
@@ -82,7 +86,7 @@ function classify(me: CatalogRepo, T: Thresholds, now: number): RepoBadges {
     klass = {
       key: "meteor",
       label: "METEOR",
-      glyph: "☄",
+      glyph: "✶",
       kind: "class",
       blurb: "Explosive early growth — a young project accruing stars faster than almost any other its age.",
       detail: `${fmt(spd)} stars/day on average since it was created ${yrs.toFixed(1)} years ago — top 15% of all repos under two years old.`,
@@ -107,8 +111,21 @@ function classify(me: CatalogRepo, T: Thresholds, now: number): RepoBadges {
     };
   }
 
-  // DESIGNATIONS — additive honors.
+  // DESIGNATIONS — additive honors. COMET goes first so it is the PRIMARY sigil
+  // for a repo with no class (a surging mid-pack repo like headroom): live
+  // momentum, size-blind. It reads me.v (recent stars/day), so it tracks the
+  // present, not the lifetime average that METEOR uses.
   const designations: Badge[] = [];
+  if (v > 0 && v >= T.cometV) {
+    designations.push({
+      key: "comet",
+      label: "COMET",
+      glyph: "☄",
+      kind: "designation",
+      blurb: "Surging right now — adding stars faster than ~98% of every repo Warpchart tracks.",
+      detail: `Adding ${fmt(v)} stars/day right now — top 2% live velocity of every tracked repo, regardless of size.`,
+    });
+  }
   const decile = T.forkByDecile.find((d) => me.s <= d.maxStars) ?? T.forkByDecile[T.forkByDecile.length - 1];
   const infra = (me.t ?? []).some((t) => INFRA.test(t)) || INFRA.test(me.d ?? "");
   if (decile && fr >= decile.gate && infra) {

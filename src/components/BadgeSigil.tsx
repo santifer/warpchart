@@ -4,9 +4,10 @@
 // emblem in a dossier (lg), in server components, and inside Satori (OG cards).
 import type { ReactNode } from "react";
 
-type Key = "meteor" | "blue-giant" | "main-sequence" | "foundational";
+type Key = "comet" | "meteor" | "blue-giant" | "main-sequence" | "foundational";
 
 const COLOR: Record<Key, string> = {
+  comet: "#5ef2cf", // teal — live momentum, surging right now
   meteor: "#f2a33c", // amber — fast, hot, young
   "blue-giant": "#53d6e8", // cyan — the brightest
   "main-sequence": "#bfe9ff", // star-white
@@ -15,6 +16,16 @@ const COLOR: Record<Key, string> = {
 
 // each form is drawn in a 32x32 box, centered on (16,16), in `currentColor`
 const ART: Record<Key, ReactNode> = {
+  // bright head low-left, tail sweeping UP-right: a comet on the rise
+  comet: (
+    <>
+      <path d="M13.5 18.5 L24 8" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" />
+      <path d="M13 16 L19 10.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" opacity="0.55" />
+      <path d="M16.5 21.5 L22.5 16" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" opacity="0.55" />
+      <circle cx="11" cy="21" r="3.1" fill="currentColor" />
+      <circle cx="11" cy="21" r="1.3" fill="#fff" opacity="0.9" />
+    </>
+  ),
   meteor: (
     <>
       <circle cx="20.5" cy="11.5" r="3" fill="currentColor" />
