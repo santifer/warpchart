@@ -252,9 +252,14 @@ export default async function Home() {
         <span className="numeral text-micro tracking-[0.15em] text-faint">
           WARPCHART · open telemetry over public GitHub data
         </span>
-        <Link href="/sponsors" className="numeral text-micro tracking-[0.15em] text-accent/80 transition-colors hover:text-accent">
-          MISSION PATRONS →
-        </Link>
+        <nav className="numeral flex flex-wrap items-center gap-x-3 gap-y-1 text-micro tracking-[0.14em] text-faint">
+          <Link href="/codex" className="hover:text-accent">CODEX</Link>
+          <Link href="/velocity" className="hover:text-accent">WARP INDEX</Link>
+          <Link href="/methodology" className="hover:text-accent">METHODOLOGY</Link>
+          <Link href="/docs" className="hover:text-accent">DOCS</Link>
+          <Link href="/pricing" className="hover:text-accent">PRICING</Link>
+          <Link href="/sponsors" className="text-accent/80 hover:text-accent">PATRONS</Link>
+        </nav>
         <span className="numeral text-micro text-faint">
           worldwide registry refreshed daily · live polling every 60s
         </span>

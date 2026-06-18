@@ -19,6 +19,18 @@ const nextConfig: NextConfig = {
           { key: "Access-Control-Allow-Headers", value: "Content-Type" },
         ],
       },
+      // baseline security headers on every route (the standard technical-SEO
+      // pass). No CSP/X-Frame-Options: inline bootstrap scripts and the
+      // <img>-based README embed must keep working.
+      {
+        source: "/:path*",
+        headers: [
+          { key: "X-Content-Type-Options", value: "nosniff" },
+          { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
+          { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=(), browsing-topics=()" },
+          { key: "Strict-Transport-Security", value: "max-age=63072000; includeSubDomains; preload" },
+        ],
+      },
     ];
   },
   // data/ files are read with fs by the live API routes, the badge, the OG
