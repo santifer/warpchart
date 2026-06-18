@@ -1,14 +1,20 @@
 import type { MetadataRoute } from "next";
+import { loadRoute } from "@/lib/history";
 import { listCodexes } from "@/lib/codex";
 
 const base = process.env.VERCEL_PROJECT_PRODUCTION_URL
   ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`
   : "http://localhost:3000";
 
-// Regenerated hourly: the charted /r/ corpus grows daily, and the home/codex
-// freshness is daily. listCodexes() is the same cache-only Blob listing the
-// home + /codex read, so this costs no extra GitHub calls.
+// Regenerated hourly. The /r/ corpus is the long tail: EVERY repo in the
+// worldwide top-1000 registry has a real, unique console page (rank, velocity,
+// neighbours, dossier), so we list them all — not just the handful explorers
+// have charted. Both sources are cache-only (route.json on disk, the codex Blob
+// listing), so this costs no GitHub calls. Capped well under the 50k/sitemap
+// limit.
 export const revalidate = 3600;
+
+const REPO_RE = /^[\w.-]+\/[\w.-]+$/;
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const now = new Date();
@@ -24,16 +30,28 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     { url: `${base}/sponsors`, lastModified: now, changeFrequency: "monthly", priority: 0.4 },
   ];
 
-  // every charted repo's console (owner/name); the most valuable long-tail
+  // the worldwide top-1000 registry (ordered by rank) + anything charted that
+  // is outside it, deduped. route.json is updated daily; the codex listing
+  // carries its own charted date.
+  const route = loadRoute();
+  const routeMod = route?.generated_at ? new Date(route.generated_at) : now;
   const charted = await listCodexes().catch(() => []);
-  const repos: MetadataRoute.Sitemap = charted
-    .filter((c) => /^[\w.-]+\/[\w.-]+$/.test(c.repo))
-    .map((c) => ({
-      url: `${base}/r/${c.repo}`,
-      lastModified: c.chartedAt ? new Date(c.chartedAt) : now,
-      changeFrequency: "daily" as const,
-      priority: 0.7,
-    }));
+  const chartedAt = new Map(charted.map((c) => [c.repo.toLowerCase(), c.chartedAt]));
 
-  return [...statics, ...repos];
+  const seen = new Set<string>();
+  const repos: MetadataRoute.Sitemap = [];
+  for (const r of [...(route?.repos ?? []).map((p) => p.r), ...charted.map((c) => c.repo)]) {
+    const k = r.toLowerCase();
+    if (seen.has(k) || !REPO_RE.test(r)) continue;
+    seen.add(k);
+    const at = chartedAt.get(k);
+    repos.push({
+      url: `${base}/r/${r}`,
+      lastModified: at ? new Date(at) : routeMod,
+      changeFrequency: "daily",
+      priority: 0.6,
+    });
+  }
+
+  return [...statics, ...repos.slice(0, 45000)];
 }

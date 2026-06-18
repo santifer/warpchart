@@ -426,6 +426,17 @@ export default async function Pricing({
   return (
     <main className="mx-auto flex min-h-screen max-w-[1080px] flex-col gap-14 px-4 py-10 sm:px-6">
       <JsonLd data={pricingGraph} />
+      <JsonLd
+        data={{
+          "@context": "https://schema.org",
+          "@type": "FAQPage",
+          mainEntity: FAQ.map(({ q, a }) => ({
+            "@type": "Question",
+            name: q,
+            acceptedAnswer: { "@type": "Answer", text: a },
+          })),
+        }}
+      />
       <SpaceBackdrop mode="launch" />
 
       <header className="rise flex items-center justify-between" style={{ animationDelay: "0ms" }}>

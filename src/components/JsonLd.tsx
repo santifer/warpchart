@@ -57,6 +57,9 @@ export function repoGraph(repo: string, opts?: { stars?: number; rank?: number |
         url,
         creator: { "@id": ORG_ID },
         isAccessibleForFree: true,
+        // freshness is the product's differentiator; stamp the render time
+        // (ISR-regenerated), so crawlers and LLMs see a recent dateModified
+        dateModified: new Date().toISOString().slice(0, 10),
         keywords: [
           "github stars",
           "repository worldwide rank",

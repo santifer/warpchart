@@ -69,6 +69,8 @@ const nextConfig: NextConfig = {
     "/c/*": ["./data/**"],
     "/c/[topic]": ["./data/**"],
     "/find": ["./data/**"],
+    "/sitemap.xml": ["./data/**"],
+    "/r/[owner]/[name]": ["./data/**"],
   },
 };
 
