@@ -210,6 +210,21 @@ export async function getExplorerData(owner: string, name: string): Promise<Expl
       .map((p) => ({ r: p.r, s: p.s, v: 0, d: p.d ?? null, l: p.l ?? null }));
   }
 
+  // Canonical velocity: prefer the stable 7-day route rate (v7) over the noisy
+  // last-30-stars estimate, so the /r/ header, prose and on-chart ETAs carry the
+  // SAME number as the OG card and the API (bundle.ts does exactly this). Only a
+  // deep-space repo with no route entry keeps the live estimate, as the honest
+  // fallback.
+  const routeV7 = new Map<string, number | null>(
+    ranked.map((p) => [p.r.toLowerCase(), p.v7 ?? p.v ?? null]),
+  );
+  const focalV7 = routeV7.get(repoName.toLowerCase());
+  if (focalV7 != null) v7d = focalV7;
+  neighbors = neighbors.map((n) => {
+    const rv = routeV7.get(n.r.toLowerCase());
+    return rv != null ? { ...n, v: rv } : n;
+  });
+
   const milestoneRanks = nextMilestones(rank, 4).filter((m) => m <= ranked.length);
   const milestones = milestoneRanks.map((m) => ({
     rank: m,

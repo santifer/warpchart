@@ -31,8 +31,11 @@ export default function VelocityPage() {
   const collisions = loadCollisions();
   const meta = loadMeta();
 
-  const ranked = (route?.repos ?? []).map((p, i) => ({ ...p, rank: i + 1 }));
-  const withV = ranked.filter((p) => p.v != null && p.v > 0);
+  // canonical velocity everywhere: the stable 7-day route rate (v7), falling back
+  // to v only where v7 is missing — so the board matches /r/, the OG card and the
+  // API instead of ranking on the noisy ~1-day rate.
+  const ranked = (route?.repos ?? []).map((p, i) => ({ ...p, rank: i + 1, vEff: p.v7 ?? p.v ?? null }));
+  const withV = ranked.filter((p) => p.vEff != null && p.vEff > 0);
 
   // the scan runs once per daily route refresh, but this page rebuilds
   // hourly: age every ETA by the time elapsed since the scan and drop
@@ -59,19 +62,19 @@ export default function VelocityPage() {
     r: p.r,
     s: p.s,
     rank: p.rank,
-    v: p.v!,
+    v: p.vEff!,
     l: p.l ?? null,
-    relPct: (p.v! / p.s) * 100,
+    relPct: (p.vEff! / p.s) * 100,
     hunt: huntByHunter.get(p.r) ?? null,
   });
 
-  const absolute = [...withV].sort((a, b) => b.v! - a.v!).slice(0, 25).map(toLane);
+  const absolute = [...withV].sort((a, b) => b.vEff! - a.vEff!).slice(0, 25).map(toLane);
   const relative = [...withV]
-    .filter((p) => p.v! >= 25) // relative noise floor
-    .sort((a, b) => b.v! / b.s - a.v! / a.s)
+    .filter((p) => p.vEff! >= 25) // relative noise floor
+    .sort((a, b) => b.vEff! / b.s - a.vEff! / a.s)
     .slice(0, 25)
     .map(toLane);
-  const vs = withV.map((p) => p.v!).sort((a, b) => a - b);
+  const vs = withV.map((p) => p.vEff!).sort((a, b) => a - b);
   const medianV = vs.length ? vs[Math.floor(vs.length / 2)] : 1;
 
   const hunts: HuntRow[] = live
