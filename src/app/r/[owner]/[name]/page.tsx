@@ -8,14 +8,17 @@ import { RaceProvider, RaceToggle } from "@/components/RaceContext";
 import GalacticChart from "@/components/GalacticChart";
 import VerticalChart from "@/components/VerticalChart";
 import LiveProvider from "@/components/LiveProvider";
-import VelocityChart from "@/components/VelocityChart";
-import Projections from "@/components/Projections";
-import DailyLadder from "@/components/DailyLadder";
-import Heatmap from "@/components/Heatmap";
-import RankChart from "@/components/RankChart";
+import LockedRankPreview from "@/components/LockedRankPreview";
+import {
+  VelocitySilhouette,
+  HeatmapSilhouette,
+  LadderSilhouette,
+  LogSilhouette,
+  StepsSilhouette,
+} from "@/components/PanelSilhouettes";
+import { repoRankTrajectory } from "@/lib/rank-history";
 import GodRank from "@/components/GodRank";
 import JsonLd, { repoGraph } from "@/components/JsonLd";
-import MissionLog from "@/components/MissionLog";
 import Dashboard from "@/components/Dashboard";
 import Badges from "@/components/Badges";
 import CompareLab from "@/components/CompareLab";
@@ -208,6 +211,11 @@ export default async function ExplorerPage({
     hourlyAll: demo.hourlyAll.filter((_, i) => i % 4 === 0),
   };
 
+  // does the moat already hold THIS repo's own world-rank trajectory? if so the
+  // locked rank panel teases its real climb (the best "we already have your
+  // data"); otherwise a neutral silhouette — never the house tenant's data.
+  const hasOwnTraj = (await repoRankTrajectory(repoLabel).catch(() => [])).length >= 2;
+
   return (
     // NO ViewTransition here on purpose: the loading skeleton plays the
     // warp entrance, and the skeleton -> content reveal must be an in-place
@@ -386,7 +394,7 @@ export default async function ExplorerPage({
             meta: "24h vs previous 24h",
             node: (
               <Locked unlockFor={repoLabel}>
-                <VelocityChart />
+                <VelocitySilhouette />
               </Locked>
             ),
           }}
@@ -394,7 +402,7 @@ export default async function ExplorerPage({
             meta: "unlocks with tracking",
             node: (
               <Locked unlockFor={repoLabel}>
-                <Projections bundle={demoBundle} />
+                <StepsSilhouette />
               </Locked>
             ),
           }}
@@ -402,7 +410,7 @@ export default async function ExplorerPage({
             meta: "unlocks with tracking",
             node: (
               <Locked unlockFor={repoLabel}>
-                <DailyLadder bundle={demoBundle} />
+                <LadderSilhouette />
               </Locked>
             ),
           }}
@@ -410,7 +418,7 @@ export default async function ExplorerPage({
             meta: "unlocks with tracking",
             node: (
               <Locked unlockFor={repoLabel}>
-                <Heatmap bundle={demoBundle} />
+                <HeatmapSilhouette />
               </Locked>
             ),
           }}
@@ -423,9 +431,16 @@ export default async function ExplorerPage({
               <GodRank
                 repo={repoLabel}
                 locked={
-                  <Locked unlockFor={repoLabel}>
-                    <RankChart bundle={demoBundle} />
-                  </Locked>
+                  hasOwnTraj ? (
+                    // we already recorded THIS repo's world-rank: tease its real
+                    // climb (the best "we already have your data"), never the
+                    // house tenant's trajectory
+                    <LockedRankPreview repo={repoLabel} name={repoName} />
+                  ) : (
+                    <Locked unlockFor={repoLabel}>
+                      <StepsSilhouette />
+                    </Locked>
+                  )
                 }
               />
             ),
@@ -442,7 +457,7 @@ export default async function ExplorerPage({
             meta: "unlocks with tracking",
             node: (
               <Locked unlockFor={repoLabel}>
-                <MissionLog events={demoBundle.events.slice(0, 8)} captain={demoBundle.captain} />
+                <LogSilhouette />
               </Locked>
             ),
           }}
