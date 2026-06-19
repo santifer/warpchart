@@ -14,6 +14,12 @@ const COLOR: Record<Key, string> = {
   foundational: "#a78bfa", // violet — set apart from the growth classes
 };
 
+// The signature color of a badge key, for non-SVG surfaces (e.g. the OG card,
+// where Satori can't safely render the full sigil).
+export function badgeColor(key: string): string {
+  return COLOR[key as Key] ?? "#bfe9ff";
+}
+
 // each form is drawn in a 32x32 box, centered on (16,16), in `currentColor`
 const ART: Record<Key, ReactNode> = {
   // bright head low-left, tail sweeping UP-right: a comet on the rise

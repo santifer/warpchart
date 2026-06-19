@@ -11,6 +11,8 @@ import { cachedSampleCurve, tenantCurve, isTenantRepo, withLiveTotal, type Curve
 import { fmt } from "@/lib/format";
 import { parseRepos, repoColor, shortRepo } from "@/lib/compare";
 import { risingOverall } from "@/lib/catalog";
+import { repoBadges } from "@/lib/badges";
+import { badgeColor } from "@/components/BadgeSigil";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -427,6 +429,13 @@ export async function GET(req: Request) {
   if (jbmono) fonts.push({ name: "JetBrains Mono", data: jbmono, style: "normal" });
 
   const owner = data.repo.split("/")[0];
+  // The repo's primary classification, drawn as a colored chip beside its name —
+  // turns every shared /r/ card into a badge flex (a COMET, a BLUE GIANT...).
+  const primaryBadge = (() => {
+    const b = repoBadges(data.repo);
+    return b.klass ?? b.designations[0] ?? null;
+  })();
+  const badgeCol = primaryBadge ? badgeColor(primaryBadge.key) : null;
   const mono = jbmono ? "JetBrains Mono" : "monospace";
   const display = michroma ? "Michroma" : mono;
   const CW = 1104;
@@ -484,8 +493,27 @@ export async function GET(req: Request) {
             alt=""
           />
           <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-            <div style={{ display: "flex", fontSize: 40, fontWeight: 700, color: "#f5fbff" }}>
-              {data.repo}
+            <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+              <div style={{ display: "flex", fontSize: 40, fontWeight: 700, color: "#f5fbff" }}>
+                {data.repo}
+              </div>
+              {primaryBadge && badgeCol ? (
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 10,
+                    padding: "6px 16px",
+                    border: `2px solid ${badgeCol}`,
+                    borderRadius: 9999,
+                  }}
+                >
+                  <div style={{ display: "flex", width: 14, height: 14, borderRadius: 9999, background: badgeCol }} />
+                  <div style={{ display: "flex", fontFamily: display, fontSize: 20, letterSpacing: 3, color: badgeCol }}>
+                    {primaryBadge.label}
+                  </div>
+                </div>
+              ) : null}
             </div>
             {data.desc ? (
               <div style={{ display: "flex", fontSize: 18, color: C.dim, maxWidth: 980 }}>
