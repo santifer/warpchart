@@ -24,7 +24,10 @@ export default function BadgeRow({
   return (
     <div className={`flex flex-wrap items-center ${compact ? "gap-1.5" : "gap-x-3 gap-y-1.5"} ${className}`}>
       {all.map((b) => (
-        <span key={b.key} className="group relative inline-flex cursor-help items-center gap-1.5">
+        <span
+          key={b.key}
+          className={`group relative inline-flex cursor-help items-center gap-1.5 ${b.active === false ? "opacity-40" : ""}`}
+        >
           <BadgeSigil badgeKey={b.key} size={px} />
           {compact ? null : (
             <span

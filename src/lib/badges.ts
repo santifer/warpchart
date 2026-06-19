@@ -15,12 +15,27 @@ export interface Badge {
   kind: "class" | "designation";
   blurb: string; // what the classification means
   detail: string; // the exact data that earned it (shown on hover)
+  active?: boolean; // false = earned in the past, no longer met (sticky history)
+  earnedAt?: string | null; // ISO date the badge was first earned, if known
 }
 
 export interface RepoBadges {
   klass: Badge | null;
   designations: Badge[];
 }
+
+// Static presentation metadata per badge key, so a STICKY badge (earned then
+// lost) can be reconstructed without re-running the gates it no longer passes.
+const BADGE_META: Record<string, Pick<Badge, "label" | "glyph" | "kind" | "blurb">> = {
+  comet: { label: "COMET", glyph: "☄", kind: "designation", blurb: "Surging right now — adding stars faster than ~98% of every repo Warpchart tracks." },
+  meteor: { label: "METEOR", glyph: "✶", kind: "class", blurb: "Explosive early growth — a young project accruing stars faster than almost any other its age." },
+  "blue-giant": { label: "BLUE GIANT", glyph: "◉", kind: "class", blurb: "Elite scale, still burning hot — top-100 worldwide and among the fastest-growing of its peers." },
+  "main-sequence": { label: "MAIN SEQUENCE", glyph: "✦", kind: "class", blurb: "A venerable cornerstone — a top-100 project that has burned steadily for many years." },
+  foundational: { label: "FOUNDATIONAL", glyph: "⬡", kind: "designation", blurb: "Infrastructure others build on — forked far more than its peers, the mark of a true dependency." },
+};
+
+// Sticky store shape: repo (lowercased) -> badge key -> ISO date first earned.
+export type EarnedBadges = Record<string, Record<string, string>>;
 
 const DAY = 86400e3;
 const INFRA = /(library|framework|sdk|api|cli|database|runtime|kernel|compiler|orm|driver)/i;
@@ -181,4 +196,45 @@ export function classifiedRegistry(): ClassifiedRepo[] {
     if (primary) out.push({ r: me.r, key: primary.key, label: primary.label, kind: primary.kind });
   }
   return out;
+}
+
+// Every (repo, badgeKey) currently MET across the catalog — class AND each
+// designation, not just the primary. The /api/cron/badges job unions this into
+// the sticky earned-badges store so nothing earned is ever lost.
+export function allActiveBadges(): { r: string; key: string }[] {
+  const repos = loadCatalog()?.repos ?? [];
+  if (!repos.length) return [];
+  const now = Date.now();
+  const T = computeThresholds(repos, now);
+  const out: { r: string; key: string }[] = [];
+  for (const me of repos) {
+    const b = classify(me, T, now);
+    if (b.klass) out.push({ r: me.r, key: b.klass.key });
+    for (const d of b.designations) out.push({ r: me.r, key: d.key });
+  }
+  return out;
+}
+
+// repoBadges + the sticky layer. A badge earned in the past is KEPT once a repo
+// stops meeting it, marked active:false so the UI can dim it ("earned, no longer
+// active") — sticky without lying about the present. `earned` is loaded by the
+// caller (loadEarnedBadges, async/Blob) so this stays sync + pure.
+export function repoBadgesWithHistory(repoName: string, earned: EarnedBadges): RepoBadges {
+  const live = repoBadges(repoName);
+  const mine = earned[repoName.toLowerCase()] ?? {};
+  const stamp = (b: Badge): Badge => ({ ...b, active: true, earnedAt: mine[b.key] ?? null });
+  const klass = live.klass ? stamp(live.klass) : null;
+  const designations = live.designations.map(stamp);
+  const activeKeys = new Set<string>([...(klass ? [klass.key] : []), ...designations.map((d) => d.key)]);
+  const historical: Badge[] = Object.entries(mine)
+    .filter(([key]) => !activeKeys.has(key) && BADGE_META[key])
+    .sort((a, b) => (a[1] < b[1] ? 1 : -1)) // most recently earned first
+    .map(([key, date]) => ({
+      ...BADGE_META[key],
+      key,
+      active: false,
+      earnedAt: date,
+      detail: `Earned ${date} · no longer active, kept as a record.`,
+    }));
+  return { klass, designations: [...designations, ...historical] };
 }
