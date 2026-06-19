@@ -333,24 +333,6 @@ export default async function ExplorerPage({
         </div>
       </header>
 
-      {inputs.neighbors.length ? (
-        <nav aria-label="Nearby repositories" className="flex flex-col gap-2">
-          <span className="module-title !text-micro">Neighbors · the repos it is racing</span>
-          <div className="flex flex-wrap gap-2">
-            {inputs.neighbors.slice(0, 24).map((n) => (
-              <a
-                key={n.r}
-                href={`/r/${n.r}`}
-                className="hud numeral flex items-center gap-2 px-2.5 py-1.5 text-micro text-dim transition-colors hover:border-accent/40 hover:text-accent"
-              >
-                <span className="text-ink">{n.r}</span>
-                <span className="text-faint">{fmt(n.s)}★</span>
-              </a>
-            ))}
-          </div>
-        </nav>
-      ) : null}
-
       <LiveProvider bundle={demoBundle} polling={false}>
         <RaceProvider repo={repoLabel}>
         <ConsoleLayout
