@@ -256,7 +256,7 @@ export default async function ExplorerPage({
                   repo={repoLabel}
                   stats={{ stars: inputs.stars, rank: inputs.rank, vPerDay: inputs.v7d }}
                 />
-                {!codex ? (
+                {!codex && (inputs.rank === null || inputs.rank > 500) ? (
                   <span className="numeral text-micro tracking-[0.15em] text-faint">
                     be the first to chart this system
                   </span>
@@ -284,11 +284,11 @@ export default async function ExplorerPage({
                 {fmt(Math.round(inputs.v7d))}<span className="text-sm text-dim">/day</span>
               </span>
             </div>
-            {next ? (
+            {next && gap !== null && gap > 0 ? (
               <div className="flex flex-col gap-1 border-l border-grid pl-5">
                 <span className="module-title !text-micro">Gap to top {next.rank}</span>
                 <span className="numeral text-metric leading-none text-ink">
-                  {fmt(Math.max(0, next.threshold - inputs.stars))}
+                  {fmt(gap)}
                 </span>
               </div>
             ) : null}

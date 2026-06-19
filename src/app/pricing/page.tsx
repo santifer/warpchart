@@ -15,6 +15,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { loadMeta } from "@/lib/history";
+import { repoRankTrajectory } from "@/lib/rank-history";
 import { loadExplorerData, type ExplorerData } from "@/lib/explorer";
 import { fmt, fmtEtaDays } from "@/lib/format";
 import SpaceBackdrop from "@/components/SpaceBackdrop";
@@ -408,6 +409,9 @@ export default async function Pricing({
   let next: NonNullable<ExplorerData>["inputs"]["milestones"][number] | null = null;
   let gap: number | null = null;
   let eta: string | null = null;
+  // whether we ALREADY have recorded rank-history for this repo (the moat): the
+  // header must not say "uncharted" while LockedRankPreview below shows days on record.
+  let charted = false;
 
   if (data) {
     repoLabel = data.inputs.repo;
@@ -421,6 +425,7 @@ export default async function Pricing({
     next = data.inputs.milestones[0] ?? null;
     gap = next ? Math.max(0, next.threshold - data.inputs.stars) : null;
     eta = next && gap && gap > 0 && data.inputs.v7d > 0 ? fmtEtaDays(gap / data.inputs.v7d) : null;
+    charted = (await repoRankTrajectory(repoLabel).catch(() => [])).length >= 2;
   }
 
   return (
@@ -466,10 +471,11 @@ export default async function Pricing({
             />
             <div className="min-w-0">
               <span className="numeral inline-block border border-grid px-2 py-0.5 text-micro tracking-[0.28em] text-faint">
-                ◌ CURRENTLY UNCHARTED
+                {charted ? "◈ ALREADY ON THE MAP" : "◌ CURRENTLY UNCHARTED"}
               </span>
               <h1 className="mt-2 font-display text-xl leading-snug tracking-[0.07em] text-ink sm:text-2xl">
-                START {repoName.toUpperCase()}&apos;S PERMANENT RECORD
+                {charted ? "UNLOCK" : "START"} {repoName.toUpperCase()}&apos;S{" "}
+                {charted ? "FULL RECORD" : "PERMANENT RECORD"}
               </h1>
             </div>
           </div>

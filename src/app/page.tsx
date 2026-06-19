@@ -97,7 +97,7 @@ export default async function Home() {
             <div className="pointer-events-auto flex w-fit flex-col items-center gap-7 text-center lg:items-start lg:text-left">
               <h1 className="glow-star font-display max-w-[900px] text-[clamp(1.9rem,3.5vw,3rem)] leading-[1.14] tracking-[0.05em] text-star">
                 OPEN SOURCE IS A RACE.
-                <br className="hidden sm:block" /> CHART ANY REPO&apos;S CLIMB.
+                <br /> CHART ANY REPO&apos;S CLIMB.
               </h1>
               <p className="max-w-[620px] text-lg font-light leading-relaxed text-dim">
                 See any GitHub repository&apos;s worldwide rank, how fast it is climbing, and the
