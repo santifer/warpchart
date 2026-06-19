@@ -70,11 +70,17 @@ const ranked = deep.map((r, i) => ({ ...r, rank: i + 1 }));
 // velocity: fresh top-1000 velocities from the committed registry, then fall
 // back to a diff against yesterday's catalog for everything deeper
 const routeV = new Map();
+const routeV7 = new Map();
 const routePath = join(DATA_DIR, "route.json");
 if (existsSync(routePath)) {
   try {
     const route = JSON.parse(readFileSync(routePath, "utf8"));
-    for (const p of route.repos ?? []) if (p?.r && p.v != null) routeV.set(p.r.toLowerCase(), p.v);
+    for (const p of route.repos ?? []) {
+      if (p?.r && p.v != null) routeV.set(p.r.toLowerCase(), p.v);
+      // carry the stable 7-day rate too, so catalog consumers (badges, /c,
+      // rising, the galaxy) can show the canonical velocity, not the noisy v
+      if (p?.r && p.v7 != null) routeV7.set(p.r.toLowerCase(), p.v7);
+    }
   } catch {
     /* no usable route.json */
   }
@@ -92,7 +98,8 @@ const repos = ranked.map((r) => {
   if (v == null && prevDays > 0.25 && prevStars.has(key)) {
     v = Math.round(((r.s - prevStars.get(key)) / prevDays) * 10) / 10;
   }
-  return { r: r.r, rank: r.rank, s: r.s, v, l: r.l ?? null, t: r.t ?? [], d: r.d ?? null, f: r.f ?? 0, c: r.c ?? null };
+  const v7 = routeV7.has(key) ? routeV7.get(key) : null;
+  return { r: r.r, rank: r.rank, s: r.s, v, v7, l: r.l ?? null, t: r.t ?? [], d: r.d ?? null, f: r.f ?? 0, c: r.c ?? null };
 });
 
 await writeJson(CATALOG_KEY, { generated_at: new Date().toISOString(), repos });

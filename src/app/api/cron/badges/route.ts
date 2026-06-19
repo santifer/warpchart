@@ -10,16 +10,17 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
 export async function GET(req: Request) {
-  // Vercel cron sends `Authorization: Bearer ${CRON_SECRET}` when CRON_SECRET is
-  // set. If it isn't, the job is open (the write is idempotent + harmless), so
-  // it works with zero extra config; set CRON_SECRET to lock it down.
+  // This writes a PERMANENT ledger, so the secret is REQUIRED: a missing or
+  // empty CRON_SECRET must not leave the endpoint open. Vercel cron sends
+  // `Authorization: Bearer ${CRON_SECRET}`; manual runs can pass ?key=.
   const secret = process.env.CRON_SECRET;
-  if (secret) {
-    const auth = req.headers.get("authorization");
-    const key = new URL(req.url).searchParams.get("key");
-    if (auth !== `Bearer ${secret}` && key !== secret) {
-      return new Response("forbidden", { status: 403, headers: { "Cache-Control": "no-store" } });
-    }
+  if (!secret) {
+    return new Response("cron not configured", { status: 503, headers: { "Cache-Control": "no-store" } });
+  }
+  const auth = req.headers.get("authorization");
+  const key = new URL(req.url).searchParams.get("key");
+  if (auth !== `Bearer ${secret}` && key !== secret) {
+    return new Response("forbidden", { status: 403, headers: { "Cache-Control": "no-store" } });
   }
 
   const active = allActiveBadges();

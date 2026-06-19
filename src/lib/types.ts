@@ -42,7 +42,8 @@ export interface CatalogRepo {
   r: string;
   rank: number;
   s: number;
-  v?: number | null; // stars/day
+  v?: number | null; // stars/day (noisy ~1-day rate)
+  v7?: number | null; // stable 7-day rate (the canonical velocity), carried from route.json
   l?: string | null; // primary language
   t?: string[]; // GitHub topics
   d?: string | null; // short description

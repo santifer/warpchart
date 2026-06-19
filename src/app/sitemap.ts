@@ -1,6 +1,7 @@
 import type { MetadataRoute } from "next";
 import { loadRoute } from "@/lib/history";
 import { listCodexes } from "@/lib/codex";
+import { listCategories } from "@/lib/catalog";
 
 const base = process.env.VERCEL_PROJECT_PRODUCTION_URL
   ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`
@@ -57,5 +58,20 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     });
   }
 
-  return [...statics, ...repos.slice(0, 45000)];
+  // The rising-by-category directory (/c + its ~40 topic/language pages): the
+  // GEO "where software is moving" surface that llms.txt promotes as a Key Page,
+  // previously orphaned from the sitemap. Cache-only (catalog listing), daily.
+  const cats = listCategories();
+  const catMod = cats.asOf ? new Date(cats.asOf) : now;
+  const categoryUrls: MetadataRoute.Sitemap = [
+    { url: `${base}/c`, lastModified: catMod, changeFrequency: "daily", priority: 0.6 },
+    ...cats.categories.map((c) => ({
+      url: `${base}/c/${c.id}`,
+      lastModified: catMod,
+      changeFrequency: "daily" as const,
+      priority: 0.6,
+    })),
+  ];
+
+  return [...statics, ...categoryUrls, ...repos.slice(0, 45000)];
 }
