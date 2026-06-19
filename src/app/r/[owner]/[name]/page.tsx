@@ -7,7 +7,6 @@ import ConsoleLayout from "@/components/ConsoleLayout";
 import { RaceProvider, RaceToggle } from "@/components/RaceContext";
 import GalacticChart from "@/components/GalacticChart";
 import VerticalChart from "@/components/VerticalChart";
-import LiveProvider from "@/components/LiveProvider";
 import LockedRankPreview from "@/components/LockedRankPreview";
 import {
   VelocitySilhouette,
@@ -200,16 +199,10 @@ export default async function ExplorerPage({
   const netV = next ? inputs.v7d - (next.drift ?? 0) : 0;
   const eta = next && gap !== null && gap > 0 && netV > 0 ? fmtEtaDays(gap / netV) : null;
 
-  // Demo data for the locked panels: the live mission's bundle, slimmed
-  // (no route layers, sparser replay buckets) to keep the page light.
-  const demo = buildBundle();
-  const demoBundle = {
-    ...demo,
-    routeAll: [],
-    routeDots: [],
-    routeLandmarks: [],
-    hourlyAll: demo.hourlyAll.filter((_, i) => i % 4 === 0),
-  };
+  // the house tenant's repo NAME — only for the "see the live demo" links below.
+  // We deliberately do NOT build its bundle: its data must never feed a
+  // stranger's page, not even serialized into the RSC payload of a client island.
+  const tenantRepo = loadMeta()?.repo ?? "";
 
   // does the moat already hold THIS repo's own world-rank trajectory? if so the
   // locked rank panel teases its real climb (the best "we already have your
@@ -341,8 +334,7 @@ export default async function ExplorerPage({
         </div>
       </header>
 
-      <LiveProvider bundle={demoBundle} polling={false}>
-        <RaceProvider repo={repoLabel}>
+      <RaceProvider repo={repoLabel}>
         <ConsoleLayout
           dossier={data.dossier}
           starChart={{
@@ -353,7 +345,7 @@ export default async function ExplorerPage({
               <>
                 <div className="mb-2 hidden items-center justify-end gap-2 lg:flex">
                   <a
-                    href={`/r/${demo.meta?.repo ?? ""}#deck`}
+                    href={`/r/${tenantRepo}#deck`}
                     title="Fullscreen flight console. Unlocks with tracking; click to see it live on the demo mission."
                     className="numeral border border-grid px-2.5 py-1 text-micro tracking-[0.2em] text-faint transition-colors hover:border-accent/50 hover:text-accent"
                   >
@@ -402,7 +394,7 @@ export default async function ExplorerPage({
             meta: "unlocks with tracking",
             node: (
               <Locked unlockFor={repoLabel}>
-                <StepsSilhouette />
+                <StepsSilhouette h={260} />
               </Locked>
             ),
           }}
@@ -463,7 +455,6 @@ export default async function ExplorerPage({
           }}
         />
         </RaceProvider>
-      </LiveProvider>
 
       <div className="hud flex flex-wrap items-center justify-between gap-3 px-4 py-3">
         <span className="numeral text-label text-dim">
@@ -479,7 +470,7 @@ export default async function ExplorerPage({
             CHART {name.toUpperCase().slice(0, 24)} →
           </a>
           <a
-            href={`/r/${demo.meta?.repo ?? ""}#from=${encodeURIComponent(repoLabel)}`}
+            href={`/r/${tenantRepo}#from=${encodeURIComponent(repoLabel)}`}
             className="numeral border border-grid px-3 py-1.5 text-label tracking-[0.2em] text-dim transition-colors hover:text-ink"
           >
             SEE THE LIVE DEMO MISSION

@@ -7,12 +7,10 @@ const base = process.env.VERCEL_PROJECT_PRODUCTION_URL
   ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`
   : "http://localhost:3000";
 
-// Regenerated hourly. The /r/ corpus is the long tail: EVERY repo in the
-// worldwide top-1000 registry has a real, unique console page (rank, velocity,
-// neighbours, dossier), so we list them all — not just the handful explorers
-// have charted. Both sources are cache-only (route.json on disk, the codex Blob
-// listing), so this costs no GitHub calls. Capped well under the 50k/sitemap
-// limit.
+// Regenerated hourly. A QUALITY /r/ set (the worldwide top-200 ∪ everything
+// charted, see TOP below) plus the static pages and the /c category directory.
+// All sources are cache-only (route.json on disk, the codex + catalog listings),
+// so this costs no GitHub calls and stays well under the 50k/sitemap limit.
 export const revalidate = 3600;
 
 const REPO_RE = /^[\w.-]+\/[\w.-]+$/;

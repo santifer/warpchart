@@ -110,6 +110,15 @@ export default async function LockedRankPreview({ repo, name }: { repo: string; 
         <span className="text-accent">{days} days</span>. Tracking unlocks every point, keeps every
         day from here, and you never lose another. This is the one thing that cannot be backfilled.
       </p>
+
+      {/* the whole preview is a conversion surface: clicking unlocks pricing for
+          THIS repo. Without it, the strongest "we already have your data" panel
+          was a dead click while every other locked panel funneled to /pricing. */}
+      <a
+        href={`/pricing?repo=${encodeURIComponent(repo)}`}
+        className="absolute inset-0 z-20"
+        aria-label={`Unlock ${name}'s full world-rank history`}
+      />
     </div>
   );
 }
