@@ -7,8 +7,10 @@ import Link from "next/link";
 import Masthead from "@/components/Masthead";
 import SpaceBackdrop from "@/components/SpaceBackdrop";
 import VelocityBoard, { type LaneRepo, type HuntRow } from "@/components/VelocityBoard";
-import { loadRoute, loadCollisions, loadMeta } from "@/lib/history";
-import { fmtCompact, fmtEtaDays } from "@/lib/format";
+import BadgeSigil from "@/components/BadgeSigil";
+import { classifiedRegistry } from "@/lib/badges";
+import { loadRoute, loadCollisions, loadMeta, loadCatalog } from "@/lib/history";
+import { fmtCompact, fmtEtaDays, fmt } from "@/lib/format";
 
 // 15 min: the data file is daily, but ETAs age in render time, so rebuilds
 // must outpace the shortest hunts (zero API cost, this page only reads fs)
@@ -90,6 +92,18 @@ export default function VelocityPage() {
   const entrants = (collisions?.entrants ?? []).slice(0, 8);
   const day = (route?.generated_at ?? "").slice(0, 10);
 
+  // ☄ COMETS — repos carrying the live-momentum badge (top 2% of recent
+  // velocity, size-blind). Each links to its /r/ console: internal links +
+  // discovery, and the surging-right-now cut of the whole catalog.
+  const catalog = loadCatalog()?.repos ?? [];
+  const byRepo = new Map(catalog.map((r) => [r.r.toLowerCase(), r]));
+  const comets = classifiedRegistry()
+    .filter((c) => c.key === "comet")
+    .map((c) => byRepo.get(c.r.toLowerCase()))
+    .filter((r): r is NonNullable<typeof r> => !!r)
+    .sort((a, b) => (b.v ?? 0) - (a.v ?? 0))
+    .slice(0, 24);
+
   return (
     <main className="mx-auto flex min-h-screen max-w-[1120px] flex-col gap-8 px-4 py-8 sm:px-6">
       <SpaceBackdrop mode="raceway" />
@@ -120,6 +134,35 @@ export default function VelocityPage() {
           ▸ FOR INVESTORS &amp; BUILDERS · GET THIS AS JSON (/api/v1)
         </a>
       </section>
+
+      {comets.length ? (
+        <section className="rise flex flex-col gap-3" style={{ animationDelay: "100ms" }}>
+          <div className="flex items-center gap-2.5">
+            <BadgeSigil badgeKey="comet" size={24} />
+            <h2 className="font-display text-title tracking-[0.14em] text-ink">
+              COMETS · SURGING RIGHT NOW
+            </h2>
+          </div>
+          <p className="max-w-[720px] text-data font-light leading-relaxed text-dim">
+            The top 2% of live velocity across every tracked repository, regardless of size. A repo
+            earns the comet the moment it starts accruing stars faster than almost everything else.
+          </p>
+          <div className="flex flex-wrap gap-2">
+            {comets.map((c) => (
+              <Link
+                key={c.r}
+                prefetch={false}
+                href={`/r/${c.r}`}
+                className="hud numeral flex items-center gap-2 px-3 py-2 text-label text-dim transition-colors hover:border-accent/40 hover:text-accent"
+              >
+                <span className="text-ink">{c.r}</span>
+                <span className="text-faint">{fmtCompact(c.s)}★</span>
+                <span style={{ color: "#5ef2cf" }}>{fmt(Math.round(c.v ?? 0))}/d</span>
+              </Link>
+            ))}
+          </div>
+        </section>
+      ) : null}
 
       <section className="rise" style={{ animationDelay: "120ms" }}>
         <VelocityBoard absolute={absolute} relative={relative} hunts={hunts} medianV={medianV} />
