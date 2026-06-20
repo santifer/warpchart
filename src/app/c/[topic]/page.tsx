@@ -89,7 +89,7 @@ export default async function CategoryPage({
           merely add the most stars in absolute terms.
         </p>
         <p className="numeral text-micro tracking-[0.15em] text-faint">
-          {day ? `catalog of ${day} · ` : ""}velocity from the daily distribution · the one history nobody else keeps
+          {day ? `catalog of ${day} · ` : ""}velocity is a trailing pace, up to 7 days · the one history nobody else keeps
         </p>
         <FeedLink id={cat.id} />
       </section>

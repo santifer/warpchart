@@ -5,6 +5,7 @@
 //                                default adapts via prefers-color-scheme.
 import { loadHistory, loadMeta, loadRoute } from "@/lib/history";
 import { currentStars, worldwideRank, lowFuel } from "@/lib/github";
+import { canonicalVelocity } from "@/lib/velocity";
 import { fmt } from "@/lib/format";
 import { fmtEmbed, adaptiveTtl, embedCache, TENANT_EMBED_CACHE } from "@/lib/embed";
 import { noteEmbedHit } from "@/lib/embed-track";
@@ -109,7 +110,7 @@ export async function GET(req: Request) {
       if (idx >= 0) {
         rank = idx + 1;
         stars = route!.repos[idx].s;
-        cacheControl = embedCache(adaptiveTtl(stars, route!.repos[idx].v7 ?? route!.repos[idx].v));
+        cacheControl = embedCache(adaptiveTtl(stars, canonicalVelocity(route!.repos[idx])));
       } else {
         const [owner, name] = repoParam.split("/");
         stars = await currentStars(owner, name);

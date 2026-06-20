@@ -11,6 +11,7 @@ import {
 import { driftPerDay } from "./projections";
 import { detectEvents, captainsLog, surgeEvents } from "./events";
 import { repoBadges, type RepoBadges } from "./badges";
+import { canonicalVelocity } from "./velocity";
 import type {
   RepoMetaFile, Snapshot, HourPoint, DayPoint, CumPoint, RankPoint,
   FloorPoint, Neighbor, Apex, RouteRepo, MissionEvent, Spike,
@@ -83,7 +84,12 @@ export function buildRouteLayers(
 ): { dots: RouteRepo[]; landmarks: RouteRepo[]; all: RouteRepo[] } {
   const route = loadRoute();
   if (!route || !apex || !route.repos.length) return { dots: [], landmarks: [], all: [] };
-  const ranked: RouteRepo[] = route.repos.map((p, i) => ({ ...p, rank: i + 1 }));
+  // Canonical velocity on every route dot: override v with the stable 7-day rate
+  // (v7), the noisy ~1-day v only as fallback. The chart's doppler hue, dot
+  // tails, drift positions, promoted-dot ETAs and scan-card readouts all read
+  // dot.v, so this one override makes the explorer chart agree with /velocity,
+  // the API and the headline figure instead of showing the 1-day diff.
+  const ranked: RouteRepo[] = route.repos.map((p, i) => ({ ...p, rank: i + 1, v: canonicalVelocity(p) }));
   const thresholdsAsc = milestones
     .map((m) => m.threshold)
     .filter((t) => t > stars)
@@ -206,7 +212,7 @@ export function buildBundle(
   // scan-card ETAs match the race and the overtake scan. Enrich the focal
   // velocity and every neighbor from the same source.
   const routeV7 = new Map(
-    (route?.repos ?? []).map((p) => [p.r.toLowerCase(), p.v7 ?? p.v ?? null] as const),
+    (route?.repos ?? []).map((p) => [p.r.toLowerCase(), canonicalVelocity(p)] as const),
   );
   neighbors = neighbors.map((n) => {
     const rv = routeV7.get(n.r.toLowerCase());

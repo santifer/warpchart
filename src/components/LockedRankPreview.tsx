@@ -107,8 +107,9 @@ export default async function LockedRankPreview({ repo, name }: { repo: string; 
 
       <p className="mt-3 max-w-[68ch] text-data font-light leading-relaxed text-dim">
         We have been recording <span className="text-ink">{name}</span>&apos;s world rank for{" "}
-        <span className="text-accent">{days} days</span>. Tracking unlocks every point, keeps every
-        day from here, and you never lose another. This is the one thing that cannot be backfilled.
+        <span className="text-accent">{days} days</span>. Tracking unlocks the recorded trajectory, and
+        the recording continues from here. Today&apos;s worldwide standing can only be captured today, so
+        your record only deepens from the day you start.
       </p>
 
       {/* the whole preview is a conversion surface: clicking unlocks pricing for

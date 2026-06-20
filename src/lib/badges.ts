@@ -7,6 +7,7 @@
 // never bought (that integrity is what makes them worth displaying).
 import { loadCatalog } from "./history";
 import type { CatalogRepo } from "./types";
+import { canonicalVel0 } from "./velocity";
 
 export interface Badge {
   key: string;
@@ -64,10 +65,12 @@ function computeThresholds(repos: CatalogRepo[], now: number): Thresholds {
   const young = repos.filter((r) => ageDaysOf(r, now) < 730 && r.rank <= 1000);
   const meteorSpd = pctile(young.map((r) => r.s / ageDaysOf(r, now)), 0.85);
   const top1k = repos.filter((r) => r.rank <= 1000);
-  const blueV = pctile(top1k.map((r) => Math.max(0, r.v ?? 0)), 0.9);
-  // COMET is size-blind: the top 2% of RECENT velocity across the whole
-  // catalog, so a surging mid-pack repo earns it without being a giant.
-  const cometV = pctile(repos.filter((r) => (r.v ?? 0) > 0).map((r) => r.v ?? 0), 0.98);
+  const blueV = pctile(top1k.map((r) => canonicalVel0(r)), 0.9);
+  // COMET is size-blind: the top 2% of velocity across the whole catalog, so a
+  // surging mid-pack repo earns it without being a giant. Gated on the CANONICAL
+  // 7-day rate (velocity.ts), not the noisy ~1-day v, so the public sigil cannot
+  // be won or lost on a single-day burst (the integrity the badge promises).
+  const cometV = pctile(repos.map(canonicalVel0).filter((v) => v > 0), 0.98);
   const byStars = [...repos].sort((a, b) => a.s - b.s);
   const dec = Math.max(1, Math.ceil(byStars.length / 10));
   const forkByDecile: Thresholds["forkByDecile"] = [];
@@ -92,7 +95,7 @@ function classify(me: CatalogRepo, T: Thresholds, now: number): RepoBadges {
   const ageDays = ageDaysOf(me, now);
   const yrs = ageDays / 365;
   const spd = me.s / ageDays;
-  const v = Math.max(0, me.v ?? 0);
+  const v = canonicalVel0(me); // canonical 7-day rate (velocity.ts), matches the gates above
   const fr = (me.f ?? 0) / Math.max(1, me.s);
 
   // CLASS — at most one, priority METEOR > BLUE GIANT > MAIN SEQUENCE.
@@ -104,7 +107,7 @@ function classify(me: CatalogRepo, T: Thresholds, now: number): RepoBadges {
       glyph: "✶",
       kind: "class",
       blurb: "Explosive early growth — a young project accruing stars faster than almost any other its age.",
-      detail: `${fmt(spd)} stars/day on average since it was created ${yrs.toFixed(1)} years ago — top 15% of all repos under two years old.`,
+      detail: `${fmt(Math.round(spd))} stars/day on average since it was created ${yrs.toFixed(1)} years ago — top 15% of all repos under two years old.`,
     };
   } else if (me.rank <= 100 && v >= T.blueV) {
     klass = {
@@ -113,7 +116,7 @@ function classify(me: CatalogRepo, T: Thresholds, now: number): RepoBadges {
       glyph: "◉",
       kind: "class",
       blurb: "Elite scale, still burning hot — top-100 worldwide and among the fastest-growing of its peers.",
-      detail: `#${fmt(me.rank)} worldwide and still adding ${fmt(v)} stars/day — top 10% velocity of the entire top 1,000.`,
+      detail: `#${fmt(me.rank)} worldwide and still adding ${fmt(Math.round(v))} stars/day — top 10% velocity of the entire top 1,000.`,
     };
   } else if (yrs > 8 && me.rank <= 100) {
     klass = {
@@ -127,9 +130,9 @@ function classify(me: CatalogRepo, T: Thresholds, now: number): RepoBadges {
   }
 
   // DESIGNATIONS — additive honors. COMET goes first so it is the PRIMARY sigil
-  // for a repo with no class (a surging mid-pack repo like headroom): live
-  // momentum, size-blind. It reads me.v (recent stars/day), so it tracks the
-  // present, not the lifetime average that METEOR uses.
+  // for a repo with no class (a surging mid-pack repo like headroom): recent
+  // momentum, size-blind. It reads the canonical velocity (7-day v7, ~1-day v
+  // fallback), so it tracks the present, not the lifetime average METEOR uses.
   const designations: Badge[] = [];
   if (v > 0 && v >= T.cometV) {
     designations.push({
@@ -138,7 +141,7 @@ function classify(me: CatalogRepo, T: Thresholds, now: number): RepoBadges {
       glyph: "☄",
       kind: "designation",
       blurb: "Surging right now — adding stars faster than ~98% of every repo Warpchart tracks.",
-      detail: `Adding ${fmt(v)} stars/day right now — top 2% live velocity of every tracked repo, regardless of size.`,
+      detail: `Adding ${fmt(Math.round(v))} stars/day (trailing pace, up to 7 days) — top 2% of every tracked repo, regardless of size.`,
     });
   }
   const decile = T.forkByDecile.find((d) => me.s <= d.maxStars) ?? T.forkByDecile[T.forkByDecile.length - 1];

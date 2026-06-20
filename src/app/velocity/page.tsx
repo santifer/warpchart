@@ -10,6 +10,7 @@ import VelocityBoard, { type LaneRepo, type HuntRow } from "@/components/Velocit
 import BadgeSigil from "@/components/BadgeSigil";
 import { classifiedRegistry } from "@/lib/badges";
 import { loadRoute, loadCollisions, loadMeta, loadCatalog } from "@/lib/history";
+import { canonicalVelocity, canonicalVel0 } from "@/lib/velocity";
 import { fmtCompact, fmtEtaDays, fmt } from "@/lib/format";
 
 // 15 min: the data file is daily, but ETAs age in render time, so rebuilds
@@ -34,7 +35,7 @@ export default function VelocityPage() {
   // canonical velocity everywhere: the stable 7-day route rate (v7), falling back
   // to v only where v7 is missing — so the board matches /r/, the OG card and the
   // API instead of ranking on the noisy ~1-day rate.
-  const ranked = (route?.repos ?? []).map((p, i) => ({ ...p, rank: i + 1, vEff: p.v7 ?? p.v ?? null }));
+  const ranked = (route?.repos ?? []).map((p, i) => ({ ...p, rank: i + 1, vEff: canonicalVelocity(p) }));
   const withV = ranked.filter((p) => p.vEff != null && p.vEff > 0);
 
   // the scan runs once per daily route refresh, but this page rebuilds
@@ -104,7 +105,7 @@ export default function VelocityPage() {
     .filter((c) => c.key === "comet")
     .map((c) => byRepo.get(c.r.toLowerCase()))
     .filter((r): r is NonNullable<typeof r> => !!r)
-    .sort((a, b) => (b.v ?? 0) - (a.v ?? 0))
+    .sort((a, b) => canonicalVel0(b) - canonicalVel0(a))
     .slice(0, 24);
 
   return (
@@ -125,7 +126,7 @@ export default function VelocityPage() {
           pace of the whole fleet.
         </p>
         <p className="numeral text-micro tracking-[0.15em] text-faint">
-          registry of {day} · velocities from the daily diff · overtake etas from the collision scan
+          registry of {day} · velocities are a trailing pace, up to 7 days · overtake etas from the collision scan
         </p>
         {/* a JSON API endpoint, not a page: plain anchor (not next/link). The
             href is a variable so the no-html-link-for-pages heuristic does not
@@ -147,8 +148,8 @@ export default function VelocityPage() {
             </h2>
           </div>
           <p className="max-w-[720px] text-data font-light leading-relaxed text-dim">
-            The top 2% of live velocity across every tracked repository, regardless of size. A repo
-            earns the comet the moment it starts accruing stars faster than almost everything else.
+            The top 2% of velocity (trailing pace, up to 7 days) across every tracked repository, regardless
+            of size. A repo earns the comet the moment it starts accruing stars faster than almost everything else.
           </p>
           <div className="flex flex-wrap gap-2">
             {comets.map((c) => (
@@ -160,7 +161,7 @@ export default function VelocityPage() {
               >
                 <span className="text-ink">{c.r}</span>
                 <span className="text-faint">{fmtCompact(c.s)}★</span>
-                <span style={{ color: "#5ef2cf" }}>{fmt(Math.round(c.v ?? 0))}/d</span>
+                <span style={{ color: "#5ef2cf" }}>{fmt(Math.round(canonicalVel0(c)))}/d</span>
               </Link>
             ))}
           </div>

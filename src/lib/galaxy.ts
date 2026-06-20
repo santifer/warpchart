@@ -7,6 +7,7 @@
 // Pure module: imported by the server (data prep) and the client (ring paths,
 // phase C focus math). No fs, no React.
 import { fmtCompact } from "@/lib/format";
+import { canonicalVel0 } from "@/lib/velocity";
 
 export const GX_W = 1560;
 export const GX_H = 640;
@@ -130,7 +131,7 @@ export function galaxyAngle(x: number, y: number): number {
 }
 
 export function buildGalaxy(
-  repos: { r: string; s: number; v?: number | null }[],
+  repos: { r: string; s: number; v?: number | null; v7?: number | null }[],
   homeRepo?: string | null,
   daySeed?: string,
 ): GalaxyData {
@@ -144,11 +145,14 @@ export function buildGalaxy(
   // everyone recognizes), today's fastest movers, then a depth-spaced sweep
   // so the whole fan is inhabited, not just the bulge near the core
   const head = repos.slice(1, 16);
+  // canonical velocity (7-day v7, ~1-day v fallback): "today's fastest movers"
+  // selected and labelled on the stable rate, matching every other surface.
+  const cvel = canonicalVel0;
   const hotSet = new Set(
     repos
       .slice(16)
-      .filter((p) => (p.v ?? 0) >= 150)
-      .sort((a, b) => (b.v ?? 0) - (a.v ?? 0))
+      .filter((p) => cvel(p) >= 150)
+      .sort((a, b) => cvel(b) - cvel(a))
       .slice(0, 10)
       .map((p) => p.r),
   );
@@ -173,7 +177,7 @@ export function buildGalaxy(
   }
 
   const nodes: GalaxyNode[] = [];
-  const tryAccept = (p: { r: string; s: number; v?: number | null }) => {
+  const tryAccept = (p: { r: string; s: number; v?: number | null; v7?: number | null }) => {
     if (nodes.length >= MAX_NODES) return;
     const q = proj(p);
     for (const n of nodes) {
@@ -183,6 +187,7 @@ export function buildGalaxy(
     }
     const hot = hotSet.has(p.r);
     const rank = rankOf.get(p.r) ?? 0;
+    const cv = cvel(p);
     nodes.push({
       r: p.r,
       rank,
@@ -196,7 +201,7 @@ export function buildGalaxy(
       label: p.r.split("/")[1] ?? p.r,
       tip:
         `#${rank} · ${fmtCompact(p.s)} ★` +
-        (hot && p.v ? ` · +${Math.round(p.v)}/day` : ""),
+        (hot && cv ? ` · +${Math.round(cv)}/day` : ""),
     });
   };
   for (const p of head) tryAccept(p);

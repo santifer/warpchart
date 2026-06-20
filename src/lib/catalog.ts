@@ -10,6 +10,7 @@
 // what plus the where-it-is-going, by category.
 import { loadCatalog } from "@/lib/history";
 import type { CatalogRepo } from "@/lib/types";
+import { canonicalVel0 } from "@/lib/velocity";
 
 export const SITE = "https://warpchart.dev";
 
@@ -107,8 +108,11 @@ function load(): Loaded {
   return { repos: all, byCat, cats, asOf: file?.generated_at ?? null };
 }
 
-// stars/day, never negative for ranking purposes
-const vel = (p: CatalogRepo) => Math.max(0, p.v ?? 0);
+// stars/day, never negative for ranking purposes. The CANONICAL velocity lives
+// in one place (velocity.ts): the stable 7-day rate, ~1-day fallback, so /c
+// ranks and displays match /velocity, /r/, the API and the badges instead of the
+// trailing-1-day diff (the contradiction the methodology page forbids).
+const vel = (p: CatalogRepo) => canonicalVel0(p);
 
 // RELATIVE daily growth = stars/day as a fraction of the repo's own size. This
 // is what "trending" actually means: a 3k-star repo gaining 6%/day is hotter
@@ -147,8 +151,8 @@ export function listCategories(): { asOf: string | null; categories: CategorySum
   const out: CategorySummary[] = [];
   for (const [id, members] of byCat) {
     const cat = cats.get(id)!;
-    const heat = Math.round(members.reduce((s, p) => s + vel(p), 0) * 10) / 10;
-    const top = rankRising(members, 3).map((p) => ({ repo: p.r, stars: p.s, velocityPerDay: p.v ?? 0 }));
+    const heat = Math.round(members.reduce((s, p) => s + vel(p), 0));
+    const top = rankRising(members, 3).map((p) => ({ repo: p.r, stars: p.s, velocityPerDay: Math.round(vel(p)) }));
     out.push({ ...cat, count: members.length, heat, top });
   }
   out.sort((a, b) => b.heat - a.heat || b.count - a.count);
@@ -171,8 +175,8 @@ const toEntry = (p: CatalogRepo): RisingEntry => ({
   repo: p.r,
   rank: p.rank,
   stars: p.s,
-  velocityPerDay: p.v ?? 0,
-  growthPctDay: p.s > 0 ? Math.round((Math.max(0, p.v ?? 0) / p.s) * 1000) / 10 : 0,
+  velocityPerDay: Math.round(vel(p)),
+  growthPctDay: p.s > 0 ? Math.round((vel(p) / p.s) * 1000) / 10 : 0,
   language: p.l ?? null,
   description: p.d ?? null,
   forks: p.f ?? null,

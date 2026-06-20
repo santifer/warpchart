@@ -6,6 +6,7 @@
 // history is a separate, gated surface.
 import { loadRoute, loadCollisions } from "@/lib/history";
 import { repoBadges } from "@/lib/badges";
+import { canonicalVelocity, canonicalVel0 } from "@/lib/velocity";
 
 export const SITE = "https://warpchart.dev";
 
@@ -13,6 +14,10 @@ export const SITE = "https://warpchart.dev";
 const GATES = [1, 3, 5, 10, 25, 50, 100, 200, 300, 400, 500, 750, 1000];
 
 const clamp = (n: number) => Math.max(1, Math.min(Math.floor(n) || 20, 200));
+
+// stars/day shown to a consumer are whole numbers (a star count never carries
+// decimals); the canonical v7/v can be fractional, so round at the API boundary.
+const rnd = (v: number | null | undefined): number | null => (v == null ? null : Math.round(v));
 
 export interface RegistryMeta {
   size: number;
@@ -74,7 +79,7 @@ export function repoStats(repoInput: string, band = 5): RepoStats | null {
       rank: start + k + 1,
       stars: p.s,
       gap: p.s - me.s,
-      velocityPerDay: p.v7 ?? p.v ?? null,
+      velocityPerDay: rnd(canonicalVelocity(p)),
     }));
   };
   const ahead = slice(idx - band, idx).reverse(); // closest ahead first
@@ -93,7 +98,7 @@ export function repoStats(repoInput: string, band = 5): RepoStats | null {
     repo: me.r,
     rank,
     stars: me.s,
-    velocityPerDay: me.v7 ?? me.v ?? null,
+    velocityPerDay: rnd(canonicalVelocity(me)),
     language: me.l ?? null,
     forks: me.f ?? null,
     ahead,
@@ -125,7 +130,7 @@ export function velocityRanking(limit = 20, language?: string): VelocityEntry[] 
   if (!r) return [];
   const lang = language?.trim().toLowerCase();
   return r.repos
-    .map((p, i) => ({ repo: p.r, rank: i + 1, stars: p.s, velocityPerDay: p.v7 ?? p.v ?? 0, language: p.l ?? null }))
+    .map((p, i) => ({ repo: p.r, rank: i + 1, stars: p.s, velocityPerDay: Math.round(canonicalVel0(p)), language: p.l ?? null }))
     .filter((p) => p.velocityPerDay > 0 && (!lang || (p.language ?? "").toLowerCase() === lang))
     .sort((a, b) => b.velocityPerDay - a.velocityPerDay)
     .slice(0, clamp(limit));
@@ -149,7 +154,7 @@ export function leaderboard(limit = 20, language?: string): VelocityEntry[] {
   if (!r) return [];
   const lang = language?.trim().toLowerCase();
   return r.repos
-    .map((p, i) => ({ repo: p.r, rank: i + 1, stars: p.s, velocityPerDay: p.v7 ?? p.v ?? 0, language: p.l ?? null }))
+    .map((p, i) => ({ repo: p.r, rank: i + 1, stars: p.s, velocityPerDay: Math.round(canonicalVel0(p)), language: p.l ?? null }))
     .filter((p) => !lang || (p.language ?? "").toLowerCase() === lang)
     .slice(0, clamp(limit));
 }

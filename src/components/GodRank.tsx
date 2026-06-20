@@ -133,7 +133,7 @@ export default function GodRank({ repo, locked }: { repo: string; locked: React.
       </ResponsiveContainer>
       </div>
       <span className="numeral px-1 pt-1 text-micro text-faint">
-        world rank · recorded since {since} · un-backfillable, grows daily
+        world rank · recorded live since {since} · the daily record, grows daily
       </span>
     </div>
   );

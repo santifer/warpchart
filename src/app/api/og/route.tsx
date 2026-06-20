@@ -6,6 +6,7 @@
 import { ImageResponse } from "next/og";
 import { loadMeta, loadHistory, loadRoute, loadTimestamps } from "@/lib/history";
 import { velocity7d } from "@/lib/series";
+import { canonicalVelocity } from "@/lib/velocity";
 import { worldwideRank, repoLite } from "@/lib/github";
 import { cachedSampleCurve, tenantCurve, isTenantRepo, withLiveTotal, type Curve } from "@/lib/curve";
 import { fmt } from "@/lib/format";
@@ -87,7 +88,7 @@ async function repoData(repoParam: string): Promise<CardData | null> {
     const e = route!.repos[idx];
     // canonical velocity (route v7 keystone, v fallback) so the card carries the
     // same number as the rest of the site instead of hiding it
-    const rv = e.v7 ?? e.v ?? null;
+    const rv = canonicalVelocity(e);
     return { repo: e.r, desc: e.d ?? null, rank: idx + 1, stars: e.s, vPerDay: rv != null ? Math.round(rv) : null };
   }
   const [owner, name] = repoParam.split("/");

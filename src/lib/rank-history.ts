@@ -1,8 +1,10 @@
 // Reads the accumulated worldwide-rank distribution (top 10k) from the PRIVATE
-// Blob and extracts ONE repo's world-rank trajectory. This is the
-// un-backfillable moat: stars reconstruct any time, world rank only exists from
-// the day we started recording the whole distribution. Powers the pricing
-// page's "locked treasure" preview. Server-side only.
+// Blob and extracts ONE repo's world-rank trajectory. This is the rank-of-record
+// moat: stars reconstruct any time, and world rank CAN be roughly reconstructed
+// from public archives (GH Archive) but those reconstructions DRIFT; Warpchart
+// records the live authoritative rank daily, so its dated trajectory is accurate
+// from the day recording began. Powers the pricing page's "locked treasure"
+// preview. Server-side only.
 //
 // The index is SHARDED (32 files, written by collector/route-history.mjs)
 // because Next's data cache caps a cached item at 2MB and the full index is

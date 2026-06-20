@@ -8,6 +8,7 @@ import type { ChartInputs, Neighbor } from "@/lib/types";
 import { loadRoute, loadMeta, lastSnapshot } from "@/lib/history";
 import { neighborsVelocity } from "@/lib/github";
 import { buildRouteLayers } from "@/lib/bundle";
+import { canonicalVelocity } from "@/lib/velocity";
 
 function seedFrom(text: string): number {
   let h = 2166136261;
@@ -43,7 +44,7 @@ export async function buildDemoSpotlight(): Promise<DemoSpotlight | null> {
   // in under two minutes read as 21,600/day and made every neighbor "catch you
   // in now"). Same fix the explorer already applies to its scan.
   const routeV7 = new Map<string, number | null>(
-    route.repos.map((p) => [p.r.toLowerCase(), p.v7 ?? p.v ?? null]),
+    route.repos.map((p) => [p.r.toLowerCase(), canonicalVelocity(p)]),
   );
   let neighbors: Neighbor[] = [];
   let heroV = 0;

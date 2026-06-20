@@ -1,5 +1,7 @@
 // PRIVATE: world-rank-over-time for ANY recorded top-10k repo. This is the moat
-// (the un-backfillable rank trajectory) and the headline paid feature, so it is
+// (the live authoritative rank-of-record; roughly reconstructable from public
+// archives but drift-prone, so the dated daily capture is the edge) and the
+// headline paid feature, so it is
 // gated by a secret key (?k=) checked against WARPCHART_GOD_KEY. It powers the
 // owner's private "god mode" competitor analysis: localStorage holds the token,
 // a client panel fetches this, and the public /r/ page keeps its ISR cache

@@ -148,11 +148,15 @@ export const pricingGraph = {
   operatingSystem: "Web",
   author: { "@id": PERSON_ID },
   publisher: { "@id": ORG_ID },
+  // Only the SELF-SERVE, purchasable plans are published as buyable Offers.
+  // Business ($399) is concierge (a mailto, no Polar product), so emitting a
+  // machine-readable Offer for it would advertise a price a buyer cannot
+  // actually purchase: an honesty/credibility liability (and a crawler/agent
+  // would surface it as buyable). It stays on the pricing page as "contact".
   offers: [
     { "@type": "Offer", name: "Free", price: "0", priceCurrency: "USD", url: "https://warpchart.dev/pricing" },
     { ...monthly("29"), name: "Pro" },
     { ...monthly("149"), name: "Team" },
-    { ...monthly("399"), name: "Business" },
   ],
 };
 

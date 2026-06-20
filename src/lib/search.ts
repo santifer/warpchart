@@ -7,6 +7,7 @@
 // at request time: it reads the catalog and the optional enrichment file.
 import { loadCatalog, loadEnrichment } from "@/lib/history";
 import type { CatalogRepo } from "@/lib/types";
+import { canonicalVel0 } from "@/lib/velocity";
 
 export const SITE = "https://warpchart.dev";
 
@@ -152,7 +153,7 @@ function termWeight(term: string, ix: Indexed): number {
 // We treat every repository as legitimate: warpchart reports what the data
 // says (stars and momentum), it does not judge a repo as "fake" or downrank it.
 function popularityFactor(p: CatalogRepo): number {
-  const v = Math.max(0, p.v ?? 0);
+  const v = canonicalVel0(p); // canonical 7-day rate (velocity.ts)
   return 1 + Math.log10(p.s + 1) / 8 + Math.min(v, 600) / 2000;
 }
 
@@ -184,7 +185,7 @@ export function searchRepos(query: string, limit = 15): { query: string; results
       repo: ix.repo.r,
       rank: ix.repo.rank,
       stars: ix.repo.s,
-      velocityPerDay: ix.repo.v ?? 0,
+      velocityPerDay: Math.round(canonicalVel0(ix.repo)),
       language: ix.repo.l ?? null,
       description: ix.repo.d ?? null,
       url: `${SITE}/r/${ix.repo.r}`,

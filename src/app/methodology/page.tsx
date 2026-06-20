@@ -45,7 +45,7 @@ const QA: { q: string; a: string }[] = [
   },
   {
     q: "Why does the worldwide-rank history only go back a few days for some repos?",
-    a: "Worldwide rank requires a snapshot of the entire distribution on a given day, and Warpchart can only show it from the day it started recording that distribution. It is un-backfillable: nobody, including Warpchart, can reconstruct a repository's worldwide rank for a day before recording began. The history grows by one point every day. A repository's raw star history, by contrast, goes back to its creation.",
+    a: "Worldwide rank requires a snapshot of the entire distribution on a given day, and Warpchart shows it from the day it started recording that distribution. The underlying events can be approximately reconstructed from public archives like GH Archive, but those reconstructions drift: they miss un-stars, can double-count, and GitHub's API returns only current stargazers. So a reconstruction is an estimate, not the authoritative daily rank Warpchart captures live. The history grows by one point every day. A repository's raw star history, by contrast, goes back to its creation.",
   },
   {
     q: "Is a star the same as an endorsement?",

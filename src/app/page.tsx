@@ -16,6 +16,7 @@ import SpotlightChart from "@/components/SpotlightChart";
 import VerticalChart from "@/components/VerticalChart";
 import { buildDemoSpotlight } from "@/lib/demo";
 import { buildGalaxy } from "@/lib/galaxy";
+import { canonicalVelocity } from "@/lib/velocity";
 import { loadRoute, loadMeta } from "@/lib/history";
 import { listCodexes } from "@/lib/codex";
 import { fmtCompact } from "@/lib/format";
@@ -49,15 +50,17 @@ export default async function Home() {
   // of the featured labels rotate with the build day (like the spotlight)
   const galaxy = route?.repos?.length
     ? buildGalaxy(
-        route.repos.map((p) => ({ r: p.r, s: p.s, v: p.v ?? null })),
+        route.repos.map((p) => ({ r: p.r, s: p.s, v: p.v ?? null, v7: p.v7 ?? null })),
         meta?.repo ?? null,
         new Date().toISOString().slice(0, 10),
       )
     : null;
 
-  // landing teaser for the velocity rankings: today's three fastest movers
+  // landing teaser for the velocity rankings: today's three fastest movers, on
+  // the CANONICAL 7-day rate (v7, ~1-day v fallback) so the first velocity a
+  // visitor sees matches /velocity and the /r/ page they click into.
   const fastest = (route?.repos ?? [])
-    .map((p, i) => ({ r: p.r, v: p.v ?? null, rank: i + 1 }))
+    .map((p, i) => ({ r: p.r, v: canonicalVelocity(p), rank: i + 1 }))
     .filter((p): p is { r: string; v: number; rank: number } => p.v !== null && p.v > 0)
     .sort((a, b) => b.v - a.v)
     .slice(0, 3);

@@ -9,6 +9,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import crypto from "node:crypto";
 import { readTenantsBlob, writeTenantsBlob } from "@/lib/tenants-store";
+import { sendEmail } from "@/lib/email";
 
 export const maxDuration = 30;
 
@@ -78,6 +79,57 @@ async function provision(
   return { action: "provisioned", vaultKey };
 }
 
+// The customer-facing welcome email, sent automatically on order.paid. It
+// carries the owner-only ?vault= link (the secret the manual flow kept dropping)
+// and the "your history started" framing. Plain text, builder-silent voice;
+// mirrors docs/email/welcome-hosted.md. Best-effort via Resend (sendEmail never
+// throws); a false return falls back to the operator alert.
+async function sendWelcomeEmail(
+  to: string,
+  repo: string,
+  plan: "hosted" | "fleet",
+  consoleUrl: string,
+  vaultUrl: string | null,
+): Promise<boolean> {
+  const subject = `your mission is live: ${repo} is now under hourly telemetry`;
+  const vaultBlock = vaultUrl
+    ? `\nYour private traffic vault (owner-only, keep this link): ${vaultUrl}\n` +
+      `This is where your clones, views and referrers are kept past GitHub's 14-day wipe.\n`
+    : "";
+  const fleetLine =
+    plan === "fleet"
+      ? `\nYour plan covers up to 10 repositories and ${repo} is the first. Reply with the rest ` +
+        `of your fleet (owner/name, one per line) and they will be live within the day.\n`
+      : "";
+  const text =
+    `Welcome aboard.\n\n` +
+    `Tracking for ${repo} is active as of this hour. From now on every hour of your star ` +
+    `history is recorded permanently: the hourly record that cannot be reconstructed after the ` +
+    `fact, and it is yours forever (export anytime, self-host anytime, the software is MIT).\n\n` +
+    `Your console: ${consoleUrl}\n` +
+    vaultBlock +
+    `\nOne honest note about the first hours: the collector has just started walking your ` +
+    `repository's history backwards. Most repos resolve within a couple of hours; very large ` +
+    `ones take a few more. If a panel still shows a placeholder tonight, that is the backfill ` +
+    `at work, not a problem. It fills in on its own.\n\n` +
+    `What you have now:\n` +
+    `- The full console: velocity, projections, daily ladder, heatmap, rank over time and the mission log\n` +
+    `- Embeds with exact live counters for your README\n` +
+    `- Alerts for milestone gates and incoming overtakes (reply to wire Slack, Discord or RSS)\n` +
+    fleetLine +
+    `\nIf anything looks off, just reply: this inbox reaches a human who also happens to be the maintainer.\n\n` +
+    `Safe travels to the core,\nSantiago · warpchart.dev\n`;
+  // explicit owner-controlled sender (a Resend-verified support identity), so the
+  // welcome never silently inherits the internal alerts FROM (embeds@/hello@).
+  return sendEmail({
+    from: process.env.WELCOME_EMAIL_FROM || "WARPCHART <support@warpchart.dev>",
+    to,
+    subject,
+    text,
+    replyTo: process.env.WELCOME_REPLY_TO || "hi@santifer.io",
+  });
+}
+
 async function notify(text: string) {
   const hook = process.env.ALERT_WEBHOOK_URL;
   if (!hook) return;
@@ -122,16 +174,23 @@ export async function POST(req: NextRequest) {
     }
     try {
       const { action, vaultKey } = await provision(repo, plan);
-      const vaultLine = vaultKey
-        ? ` Private traffic vault: https://warpchart.dev/r/${repo}?vault=${vaultKey} (owner-only, include in the welcome email).`
-        : "";
+      const consoleUrl = `https://warpchart.dev/r/${repo}`;
+      const vaultUrl = vaultKey ? `${consoleUrl}?vault=${vaultKey}` : null;
+      // transactional welcome email to the BUYER (best-effort; the tenant is
+      // already provisioned). It carries the owner-only vault link. A missing or
+      // malformed customer email, or a Resend failure, falls back to the operator
+      // alert below so the welcome is never silently lost.
+      const emailed = /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)
+        ? await sendWelcomeEmail(email, repo, plan, consoleUrl, vaultUrl)
+        : false;
+      const vaultLine = vaultUrl ? ` Vault: ${vaultUrl} (owner-only).` : "";
       await notify(
         `💸 NEW ${plan.toUpperCase()} MISSION: ${repo} · ${email} · ${action}. ` +
-          `Console: https://warpchart.dev/r/${repo} · Send the welcome email (docs/email/welcome-hosted).` +
+          `Console: ${consoleUrl} · welcome email ${emailed ? "SENT automatically ✅" : "NOT sent, send manually (docs/email/welcome-hosted) ⚠️"}.` +
           vaultLine +
           (plan === "fleet" ? " FLEET: ask for their remaining repos." : ""),
       );
-      return NextResponse.json({ ok: true, action });
+      return NextResponse.json({ ok: true, action, emailed });
     } catch (err) {
       await notify(
         `⚠️ PROVISIONING FAILED for ${repo} (${email}): ${err instanceof Error ? err.message : err}. Provision manually.`,

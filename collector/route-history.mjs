@@ -1,11 +1,14 @@
 #!/usr/bin/env node
 // Daily snapshot of the worldwide top-10,000 distribution into a SHARDED index
-// in the PRIVATE Blob (route-history/shard-{i}.json + meta.json). This is the
-// un-backfillable moat: a repo's star history reconstructs any time, but its
-// WORLD RANK over time does NOT, unless someone records the whole distribution
-// each day. Now we do, for the top 10k (every repo with a rank worth a story).
-// At pay-time (and on the pricing page's locked preview) any of them gets its
-// real rank trajectory, "already there".
+// in the PRIVATE Blob (route-history/shard-{i}.json + meta.json), plus a cold
+// archive (archive/shard-{i}.json) that keeps every day past the 90-day hot
+// window. The moat, stated honestly: a repo's worldwide RANK over time CAN be
+// roughly reconstructed from GH Archive, but those reconstructions DRIFT (GH
+// Archive misses un-stars and double-counts; GitHub's API returns only CURRENT
+// stargazers), whereas we record the LIVE authoritative rank each day. That
+// accurate, dated rank-of-record is the asset a competitor cannot retroactively
+// obtain. At pay-time (and on the pricing page's locked preview) any of the top
+// 10k gets its real rank trajectory, "already there".
 //
 // Sharded because Next's data cache caps a cached item at 2MB: 10k repos x ~90
 // days would be ~22MB in one object. 32 shards keyed by a deterministic hash
@@ -44,9 +47,11 @@ function shardOf(repo) {
   return (h >>> 0) % SHARDS;
 }
 
-async function readJson(key) {
+async function readJson(key, useCache = true) {
   try {
-    const res = await get(key, { access: "private", token });
+    // useCache=false bypasses the Blob CDN cache so a just-written object is read
+    // back from origin (a stale CDN copy would drop the same-run archive append).
+    const res = await get(key, { access: "private", token, useCache });
     if (res?.statusCode === 200 && res.stream) {
       return JSON.parse(await new Response(res.stream).text());
     }
@@ -149,6 +154,27 @@ for (let i = 0; i < SHARDS; i++) {
   };
   if (seedDay) ingest(seedDay, slist);
   ingest(today, tlist);
+
+  // COLD ARCHIVE: before rolling the 90-day hot window, append the points about
+  // to fall out to this shard's append-only archive (route-history/archive/
+  // shard-{i}.json). The hot shards stay bounded for the 2MB data cache; the
+  // archive deepens forever, so the rank-of-record moat is never silently
+  // destroyed at day 91. Written BEFORE the hot roll so a crash duplicates (the
+  // archive dedups) rather than loses; useCache:false because the archive grows.
+  const evicting = [];
+  for (const k of Object.keys(shard.series)) {
+    for (const p of shard.series[k]) if (p[0] < cutoffIso) evicting.push([k, p[0], p[1], p[2]]);
+  }
+  if (evicting.length) {
+    const aKey = `${PREFIX}/archive/shard-${i}.json`;
+    const arch = (await readJson(aKey, false)) ?? { series: {} };
+    arch.series ??= {};
+    for (const [repo, day, rank, stars] of evicting) {
+      const arr = (arch.series[repo] ??= []);
+      if (!arr.some((q) => q[0] === day)) arr.push([day, rank, stars]);
+    }
+    await writeJson(aKey, arch);
+  }
 
   // roll the window
   shard.dates = shard.dates.filter((d) => d >= cutoffIso).sort();
