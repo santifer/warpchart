@@ -142,7 +142,7 @@ export async function POST(req: NextRequest) {
 
   if (event.type === "subscription.revoked") {
     await notify(
-      `🔕 SUBSCRIPTION REVOKED: ${repo || "unknown repo"} (${email}). Tenant data kept; remove from tenants.json manually when confirmed.`,
+      `🔕 SUBSCRIPTION REVOKED: ${repo || "unknown repo"} (${email}). Tenant data kept; remove from the PRIVATE Blob tenants.json (not git) when confirmed.`,
     );
   }
 

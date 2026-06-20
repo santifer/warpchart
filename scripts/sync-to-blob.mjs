@@ -27,10 +27,17 @@ function walk(dir) {
   return out;
 }
 
+// The Polar webhook is the ONLY writer of the tenant registry (collect.mjs only
+// reads it). Re-uploading the collector's copy — which may predate a webhook
+// that landed mid-run, between this script's hydrate and mirror steps — would
+// silently clobber a just-paid tenant. Never mirror it back up.
+const SKIP = new Set(["tenants.json"]);
+
 const files = walk(DATA);
 let n = 0;
 for (const f of files) {
   const rel = relative(DATA, f).split(sep).join("/");
+  if (SKIP.has(rel)) continue;
   await put(PREFIX + rel, readFileSync(f), {
     access: "private",
     addRandomSuffix: false,

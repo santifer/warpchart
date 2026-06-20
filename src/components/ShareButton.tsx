@@ -21,10 +21,11 @@ export default function ShareButton({
   const [copied, setCopied] = useState(false);
   const url = `https://warpchart.dev/r/${repo}`;
   const starStr = stars.toLocaleString("en-US");
+  const vpd = Math.round(vel); // round BEFORE the guard: vel=0.3 must not print "climbing 0 a day"
   const text =
     rank !== null
       ? `${repo} is #${rank.toLocaleString("en-US")} worldwide on GitHub, ${starStr} stars` +
-        (vel > 0 ? `, climbing ${Math.round(vel).toLocaleString("en-US")} a day.` : ".")
+        (vpd > 0 ? `, climbing ${vpd.toLocaleString("en-US")} a day.` : ".")
       : `${repo} on warpchart: ${starStr} stars and its worldwide rank.`;
 
   const onShare = async () => {
@@ -33,8 +34,11 @@ export default function ShareButton({
       try {
         await nav.share({ title: `${repo} · Warpchart`, text, url });
         return;
-      } catch {
-        /* dismissed: fall through to copy */
+      } catch (e) {
+        // dismissing the share sheet throws AbortError — do NOT fall through to
+        // copy (it would wrongly flash "LINK COPIED" on a cancel). Only a real
+        // share failure falls through.
+        if (e instanceof DOMException && e.name === "AbortError") return;
       }
     }
     try {
