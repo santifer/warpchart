@@ -37,16 +37,27 @@ export async function buildDemoSpotlight(): Promise<DemoSpotlight | null> {
   const hi = Math.min(route.repos.length, idx + 11);
   const names = route.repos.slice(lo, hi).map((p) => p.r);
 
+  // Canonical velocity: prefer the stable route v7 (v fallback) over the noisy
+  // last-30-stars estimate, so the home spotlight matches /r/, the API and the
+  // galaxy instead of pinning the neighborsVelocity ceiling (a burst of 30 stars
+  // in under two minutes read as 21,600/day and made every neighbor "catch you
+  // in now"). Same fix the explorer already applies to its scan.
+  const routeV7 = new Map<string, number | null>(
+    route.repos.map((p) => [p.r.toLowerCase(), p.v7 ?? p.v ?? null]),
+  );
   let neighbors: Neighbor[] = [];
   let heroV = 0;
   try {
     const vel = await neighborsVelocity(names, Date.parse(route.generated_at));
     const byName = new Map(vel.map((v) => [v.r.toLowerCase(), v]));
     const heroLive = byName.get(hero.r.toLowerCase());
-    heroV = heroLive?.v ?? 0;
+    heroV = routeV7.get(hero.r.toLowerCase()) ?? heroLive?.v ?? 0;
     neighbors = vel
       .filter((v) => v.r.toLowerCase() !== hero.r.toLowerCase())
-      .map((v) => ({ r: v.r, s: v.s, v: v.v, d: v.d, l: v.l }));
+      .map((v) => {
+        const rv = routeV7.get(v.r.toLowerCase());
+        return { r: v.r, s: v.s, v: rv != null ? rv : v.v, d: v.d, l: v.l };
+      });
   } catch {
     /* route-only degradation */
   }
