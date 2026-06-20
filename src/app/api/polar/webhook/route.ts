@@ -1,11 +1,14 @@
-// Polar webhook: the moment an order is PAID, the tenant provisions
-// itself: the repo lands in data/tenants.json via the GitHub contents API
-// (the data commit redeploys the site), the collector fires immediately
-// for the first backwalk, and the alert webhook announces the sale. The
-// buyer's console unlocks within minutes, not at the next cron tick.
+// Polar webhook: the moment an order is PAID, the tenant provisions itself —
+// the repo lands in the PRIVATE Blob's data/tenants.json (NOT public git: that
+// path 404s after the moat cutover, and would leak per-tenant vaultKey secrets),
+// the collector fires immediately for the first backwalk, and the alert webhook
+// announces the sale. The buyer's console unlocks within minutes: the collector
+// run pulls the new tenant from the Blob, backwalks it, and the deploy makes
+// loadTenants (disk, mirrored from the Blob) see it.
 // Signature scheme: Standard Webhooks (HMAC-SHA256 of "id.timestamp.body").
 import { NextRequest, NextResponse } from "next/server";
 import crypto from "node:crypto";
+import { readTenantsBlob, writeTenantsBlob } from "@/lib/tenants-store";
 
 export const maxDuration = 30;
 
@@ -53,15 +56,9 @@ async function provision(
   repo: string,
   plan: "hosted" | "fleet",
 ): Promise<{ action: string; vaultKey: string | null }> {
-  const cur = await gh("/contents/data/tenants.json?ref=main");
-  if (!cur.ok) throw new Error(`tenants.json read ${cur.status}`);
-  const file = (await cur.json()) as { content: string; sha: string };
-  const tenants = JSON.parse(Buffer.from(file.content, "base64").toString("utf8")) as {
-    repo: string;
-    plan: string;
-    since: string;
-    vaultKey?: string;
-  }[];
+  // read + write the registry in the PRIVATE Blob (vaultKeys are secrets; they
+  // must never touch public git)
+  const tenants = await readTenantsBlob();
   const existing = tenants.find((t) => t.repo.toLowerCase() === repo.toLowerCase());
   if (existing) {
     return { action: "already-provisioned", vaultKey: existing.vaultKey ?? null };
@@ -69,18 +66,11 @@ async function provision(
   // per-tenant secret for the PRIVATE traffic vault view (owner-only)
   const vaultKey = crypto.randomUUID();
   tenants.push({ repo, plan, since: new Date().toISOString().slice(0, 10), vaultKey });
-  const put = await gh("/contents/data/tenants.json", {
-    method: "PUT",
-    body: JSON.stringify({
-      message: `Provision hosted tenant ${repo} (${plan})`,
-      content: Buffer.from(JSON.stringify(tenants, null, 2) + "\n").toString("base64"),
-      sha: file.sha,
-      branch: "main",
-    }),
-  });
-  if (!put.ok) throw new Error(`tenants.json write ${put.status}`);
-  // fire the collector now: the buyer's first backwalk should not wait
-  // for the next 2h cron tick (best effort)
+  await writeTenantsBlob(tenants);
+  // fire the collector now: the buyer's first backwalk should not wait for the
+  // next 2h cron tick (best effort). The collector's sync-from-blob picks up the
+  // new tenant from the Blob, backwalks it, and the deploy makes loadTenants
+  // (disk) see it — console unlocks in minutes.
   await gh("/actions/workflows/collect.yml/dispatches", {
     method: "POST",
     body: JSON.stringify({ ref: "main" }),
