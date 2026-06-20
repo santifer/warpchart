@@ -27,6 +27,7 @@ import { loadMeta, isHostedRepo, loadTenantHistory, loadTenantTimestamps, loadRo
 import { fetchLiveSnapshot } from "@/lib/live-blob";
 import { isOwnedBy } from "@/lib/config";
 import CodexModal from "@/components/CodexModal";
+import ShareButton from "@/components/ShareButton";
 import FirstLightBanner from "@/components/FirstLightBanner";
 import SpaceBackdrop from "@/components/SpaceBackdrop";
 import TrafficPanel from "@/components/TrafficPanel";
@@ -252,11 +253,12 @@ export default async function ExplorerPage({
                   {codex.tagline}
                 </p>
               ) : null}
-              <div className="mt-2.5 flex items-center gap-3">
+              <div className="mt-2.5 flex flex-wrap items-center gap-3">
                 <CodexModal
                   repo={repoLabel}
                   stats={{ stars: inputs.stars, rank: inputs.rank, vPerDay: inputs.v7d }}
                 />
+                <ShareButton repo={repoLabel} stars={inputs.stars} rank={inputs.rank} vel={inputs.v7d} />
                 {!codex && (inputs.rank === null || inputs.rank > 500) ? (
                   <span className="numeral text-micro tracking-[0.15em] text-faint">
                     be the first to chart this system
