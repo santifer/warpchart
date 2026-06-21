@@ -58,6 +58,7 @@ async function gh(path: string, init?: RequestInit) {
 async function provision(
   repo: string,
   plan: "hosted" | "fleet",
+  email: string,
 ): Promise<{ action: string; vaultKey: string | null }> {
   // read + write the registry in the PRIVATE Blob (vaultKeys are secrets; they
   // must never touch public git)
@@ -68,7 +69,14 @@ async function provision(
   }
   // per-tenant secret for the PRIVATE traffic vault view (owner-only)
   const vaultKey = crypto.randomUUID();
-  tenants.push({ repo, plan, since: new Date().toISOString().slice(0, 10), vaultKey });
+  tenants.push({
+    repo,
+    plan,
+    since: new Date().toISOString().slice(0, 10),
+    vaultKey,
+    // store a valid buyer email so the alerts cron can push events (private)
+    email: /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email) ? email : undefined,
+  });
   await writeTenantsBlob(tenants);
   // fire the collector now: the buyer's first backwalk should not wait for the
   // next 2h cron tick (best effort). The collector's sync-from-blob picks up the
@@ -92,11 +100,13 @@ async function sendWelcomeEmail(
   plan: "hosted" | "fleet",
   consoleUrl: string,
   vaultUrl: string | null,
+  exportUrl: string | null,
 ): Promise<boolean> {
   const subject = `your mission is live: ${repo} is now under hourly telemetry`;
   const vaultBlock = vaultUrl
     ? `\nYour private traffic vault (owner-only, keep this link): ${vaultUrl}\n` +
-      `This is where your clones, views and referrers are kept past GitHub's 14-day wipe.\n`
+      `This is where your clones, views and referrers are kept past GitHub's 14-day wipe.\n` +
+      (exportUrl ? `Export everything anytime: ${exportUrl}\n` : "")
     : "";
   const fleetLine =
     plan === "fleet"
@@ -162,7 +172,10 @@ export async function POST(req: NextRequest) {
 
   const d = event.data ?? {};
   const repo = (d.metadata?.repo ?? d.custom_field_data?.["github-repo"] ?? "").trim();
-  const plan: "hosted" | "fleet" = /fleet/i.test(d.product?.name ?? d.metadata?.plan ?? "")
+  // fleet tier = the multi-repo plan: matches "fleet" or "team" (and their annual
+  // variants) in the product name or the checkout's metadata.plan; everything
+  // else (pro / pro-annual / hosted) is the single-repo hosted tier.
+  const plan: "hosted" | "fleet" = /fleet|team/i.test(d.product?.name ?? d.metadata?.plan ?? "")
     ? "fleet"
     : "hosted";
   const email = d.customer?.email ?? "unknown";
@@ -175,9 +188,12 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: true, action: "manual-follow-up" });
     }
     try {
-      const { action, vaultKey } = await provision(repo, plan);
+      const { action, vaultKey } = await provision(repo, plan, email);
       const consoleUrl = `https://warpchart.dev/r/${repo}`;
       const vaultUrl = vaultKey ? `${consoleUrl}?vault=${vaultKey}` : null;
+      const exportUrl = vaultKey
+        ? `https://warpchart.dev/api/export?repo=${repo}&vault=${vaultKey}`
+        : null;
       // seed a first live snapshot so the buyer sees a real own-repo data point in
       // seconds (FirstLightBanner reads it via /api/tenant-status), instead of
       // waiting for the provisioning redeploy. Free when the repo is in the cached
@@ -205,7 +221,7 @@ export async function POST(req: NextRequest) {
       // malformed customer email, or a Resend failure, falls back to the operator
       // alert below so the welcome is never silently lost.
       const emailed = /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)
-        ? await sendWelcomeEmail(email, repo, plan, consoleUrl, vaultUrl)
+        ? await sendWelcomeEmail(email, repo, plan, consoleUrl, vaultUrl, exportUrl)
         : false;
       const vaultLine = vaultUrl ? ` Vault: ${vaultUrl} (owner-only).` : "";
       await notify(
@@ -224,9 +240,33 @@ export async function POST(req: NextRequest) {
   }
 
   if (event.type === "subscription.revoked") {
+    if (!/^[\w.-]+\/[\w.-]+$/.test(repo)) {
+      await notify(`🔕 REVOKED but no repo on the event (${email}). Remove from the private tenants.json manually.`);
+      return NextResponse.json({ ok: true, action: "manual-follow-up" });
+    }
+    // De-provision: remove the tenant from the PRIVATE registry. The per-tenant
+    // vaultKey dies with the record, so the traffic-vault link and the export
+    // endpoint stop authorizing once the registry syncs to disk on the next
+    // collector deploy. A read/write failure must NOT be swallowed (that would
+    // leave a cancelled customer fully provisioned), so it 500s for a manual fix.
+    let removed = false;
+    try {
+      const tenants = await readTenantsBlob();
+      const next = tenants.filter((t) => t.repo.toLowerCase() !== repo.toLowerCase());
+      if (next.length !== tenants.length) {
+        await writeTenantsBlob(next);
+        removed = true;
+      }
+    } catch (err) {
+      await notify(
+        `⚠️ REVOKE de-provision FAILED for ${repo} (${email}): ${err instanceof Error ? err.message : err}. Remove from the private tenants.json manually.`,
+      );
+      return NextResponse.json({ ok: false }, { status: 500 });
+    }
     await notify(
-      `🔕 SUBSCRIPTION REVOKED: ${repo || "unknown repo"} (${email}). Tenant data kept; remove from the PRIVATE Blob tenants.json (not git) when confirmed.`,
+      `🔕 REVOKED: ${repo} (${email}, sub ${d.id ?? "?"}). ${removed ? "De-provisioned: removed from the registry; the vault and export links are now dead. If this repo has another active subscription, re-provision it." : "Not in the registry (already gone)."} History files remain until the collector prunes them.`,
     );
+    return NextResponse.json({ ok: true, removed });
   }
 
   return NextResponse.json({ ok: true });

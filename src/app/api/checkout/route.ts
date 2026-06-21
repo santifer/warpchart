@@ -25,11 +25,21 @@ const STATIC_LINKS: Record<string, string> = {
   team: "https://buy.polar.sh/polar_cl_6CaoF5JYYrFq3Jnwypr8BNqLhDKJfr7vz53Ti2Te5Si",
 };
 
+// Annual plans map to env-configured Polar product IDs (Santiago creates the
+// annual products in the Polar dashboard; until then an annual link falls back to
+// its monthly product so it never 404s). Annual = the single easiest ACV lever
+// and the only recurring-discount tier; e.g. ?plan=pro-annual / team-annual.
+const ANNUAL_ENV: Record<string, string | undefined> = {
+  "pro-annual": process.env.POLAR_PRODUCT_PRO_ANNUAL,
+  "team-annual": process.env.POLAR_PRODUCT_TEAM_ANNUAL,
+};
+
 export async function GET(req: NextRequest) {
   const plan = (req.nextUrl.searchParams.get("plan") ?? "hosted").toLowerCase();
   const repo = (req.nextUrl.searchParams.get("repo") ?? "").trim();
-  const product = PRODUCTS[plan];
-  const fallback = STATIC_LINKS[plan] ?? STATIC_LINKS.hosted;
+  const monthly = plan.replace(/-annual$/, "");
+  const product = PRODUCTS[plan] ?? ANNUAL_ENV[plan] ?? PRODUCTS[monthly];
+  const fallback = STATIC_LINKS[plan] ?? STATIC_LINKS[monthly] ?? STATIC_LINKS.hosted;
   const token = process.env.POLAR_ACCESS_TOKEN;
   if (!product || !token) return NextResponse.redirect(fallback, 302);
 

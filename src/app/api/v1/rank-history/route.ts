@@ -25,7 +25,8 @@ export async function GET(request: Request) {
   if (!VALID.test(repo)) {
     return Response.json({ error: "repo must be 'owner/name'" }, { status: 400 });
   }
-  const points = await repoRankTrajectory(repo);
+  // authorized (god-key) surface: serve the FULL record, hot window + cold archive
+  const points = await repoRankTrajectory(repo, { includeArchive: true });
   return Response.json(
     { repo, points },
     { headers: { "Cache-Control": "private, no-store" } },

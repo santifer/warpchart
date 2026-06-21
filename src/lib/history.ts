@@ -73,6 +73,10 @@ export interface TenantEntry {
   // provisioning, sent in the welcome email). Traffic is owner-only data, never
   // shown on the public console.
   vaultKey?: string;
+  // buyer email (from the Polar order), so the alerts cron can push milestone /
+  // overtake / record events. PRIVATE (registry lives in the private Blob); never
+  // exposed on any public surface.
+  email?: string;
 }
 
 export function loadTenants(): TenantEntry[] {

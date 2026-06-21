@@ -261,6 +261,7 @@ export default async function Home() {
         <nav className="numeral flex flex-wrap items-center gap-x-3 gap-y-1 text-micro tracking-[0.14em] text-faint">
           <Link href="/codex" className="hover:text-accent">CODEX</Link>
           <Link href="/velocity" className="hover:text-accent">WARP INDEX</Link>
+          <Link href="/constellation" className="hover:text-accent">CONSTELLATION</Link>
           <Link href="/methodology" className="hover:text-accent">METHODOLOGY</Link>
           <Link href="/docs" className="hover:text-accent">DOCS</Link>
           <Link href="/pricing" className="hover:text-accent">PRICING</Link>
