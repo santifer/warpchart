@@ -101,11 +101,12 @@ const GENERIC_PLANS: Plan[] = [
     price: "$29",
     cadence: "/ month",
     perks: [
+      "Traffic Vault: the clones, views and referrers GitHub deletes every 14 days, kept forever (yours, never sold)",
       "Track up to 3 repos with exact hourly history, from the second you start",
-      "Traffic Vault: clones, views & referrers kept past GitHub's 14-day wipe",
-      "Live console + replay · alerts on incoming hunters and gate crossings",
+      "Automatic alerts (email, Slack or webhook) on incoming hunters and gate crossings",
+      "Live console + replay, and a per-repo RSS feed of every event",
       "Exact live counter on your README badge",
-      "Zero ops — we run the collector for you",
+      "Zero ops, we run the collector for you",
     ],
     cta: { label: "START PRO →", href: "/api/checkout?plan=pro" },
     note: "For the solo maintainer.",
@@ -158,8 +159,8 @@ function personalizedPlans(d: NonNullable<ExplorerData>): Plan[] {
     ? `Who's hunting ${name}: live gaps and ETAs on ${hunters.join(" and ")}, and every repo closing in`
     : `Live gaps and ETAs on every repo closing in on ${name}`;
   const gatePerk = next
-    ? `Alerts the moment a hunter closes in or ${name} breaks into the top ${fmt(next.rank)} (Slack, Discord, RSS)`
-    : `Alerts the moment a hunter closes in or ${name} crosses its next gate (Slack, Discord, RSS)`;
+    ? `Automatic alerts the moment a hunter closes in or ${name} breaks into the top ${fmt(next.rank)} (email, Slack or RSS)`
+    : `Automatic alerts the moment a hunter closes in or ${name} crosses its next gate (email, Slack or RSS)`;
 
   return [
     {
@@ -179,12 +180,12 @@ function personalizedPlans(d: NonNullable<ExplorerData>): Plan[] {
       price: "$29",
       cadence: "/ month",
       perks: [
+        `Traffic Vault: ${name}'s clones, views and referrers, the data GitHub deletes every 14 days, kept forever`,
         `Exact hourly history of ${name} from the second you pay (it cannot be backfilled)`,
         `${name}'s full console unlocked: rank trajectory, daily ladder, heatmap, spike forensics`,
         huntersPerk,
-        `Traffic Vault: ${name}'s clones, views and referrers, kept past GitHub's 14-day wipe`,
-        `Exact live star counter on ${name}'s README badge and embed`,
         gatePerk,
+        `Exact live star counter on ${name}'s README badge and embed`,
       ],
       cta: {
         label: `TRACK ${name.toUpperCase().slice(0, 16)} →`,
@@ -304,7 +305,7 @@ function VaultDivergence() {
   );
 }
 
-function PlanCard({ p }: { p: Plan }) {
+function PlanCard({ p, annual }: { p: Plan; annual: { price: string; href: string } | null }) {
   const external = p.cta.href.startsWith("http") || p.cta.href.startsWith("mailto");
   return (
     <div
@@ -347,6 +348,14 @@ function PlanCard({ p }: { p: Plan }) {
         >
           {p.cta.label}
         </a>
+        {annual ? (
+          <a
+            href={annual.href}
+            className="numeral text-center text-micro tracking-[0.14em] text-faint transition-colors hover:text-accent"
+          >
+            or {annual.price}, 2 months free →
+          </a>
+        ) : null}
         <span className="numeral text-center text-micro tracking-[0.12em] text-faint">{p.note}</span>
       </div>
     </div>
@@ -427,6 +436,20 @@ export default async function Pricing({
     eta = next && gap && gap > 0 && data.inputs.v7d > 0 ? fmtEtaDays(gap / data.inputs.v7d) : null;
     charted = (await repoRankTrajectory(repoLabel).catch(() => [])).length >= 2;
   }
+
+  // The annual option only appears once the annual Polar products exist (env set),
+  // so we never show an annual price that would silently fall back to a monthly
+  // charge. Annual = 2 months free (monthly x 10).
+  const annualEnabled = Boolean(
+    process.env.POLAR_PRODUCT_PRO_ANNUAL && process.env.POLAR_PRODUCT_TEAM_ANNUAL,
+  );
+  const repoQ = repoLabel ? `repo=${encodeURIComponent(repoLabel)}&` : "";
+  const annualFor = (planName: string): { price: string; href: string } | null => {
+    if (!annualEnabled) return null;
+    if (planName === "PRO") return { price: "$290 / year", href: `/api/checkout?${repoQ}plan=pro-annual` };
+    if (planName === "TEAM") return { price: "$1,490 / year", href: `/api/checkout?${repoQ}plan=team-annual` };
+    return null;
+  };
 
   return (
     <main className="mx-auto flex min-h-screen max-w-[1080px] flex-col gap-14 px-4 py-10 sm:px-6">
@@ -605,7 +628,7 @@ export default async function Pricing({
         </div>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4 lg:items-start">
           {plans.map((p) => (
-            <PlanCard key={p.name} p={p} />
+            <PlanCard key={p.name} p={p} annual={annualFor(p.name)} />
           ))}
         </div>
       </section>
@@ -645,6 +668,13 @@ export default async function Pricing({
           </span>
           <span className="numeral shrink-0 text-label tracking-[0.18em] text-accent">GET THE FREE BADGE →</span>
         </a>
+        <p className="mt-2 numeral text-micro tracking-[0.14em] text-faint">
+          Or{" "}
+          <Link href="/constellation" className="text-accent underline-offset-4 hover:underline">
+            follow repos free in your Constellation
+          </Link>{" "}
+          and watch them move, no signup.
+        </p>
       </section>
 
       {/* ===== PATRON: a separate funnel ===== */}
