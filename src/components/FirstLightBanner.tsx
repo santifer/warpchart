@@ -21,6 +21,7 @@ export default function FirstLightBanner({ repo }: { repo: string }) {
   const [show, setShow] = useState(false);
   const [stage, setStage] = useState(1); // index of the step currently in progress
   const [live, setLive] = useState(false);
+  const [preview, setPreview] = useState<{ stars: number; rank: number } | null>(null);
   const reloaded = useRef(false);
 
   // gate on ?welcome=1 (client-side, so the server render keeps its ISR cache).
@@ -51,7 +52,11 @@ export default function FirstLightBanner({ repo }: { repo: string }) {
         const r = await fetch(`/api/tenant-status?repo=${encodeURIComponent(repo)}`, {
           cache: "no-store",
         });
-        const j = (await r.json()) as { live?: boolean };
+        const j = (await r.json()) as {
+          live?: boolean;
+          preview?: { stars: number; rank: number } | null;
+        };
+        if (!stopped && j?.preview) setPreview(j.preview);
         if (j?.live && !stopped) {
           setLive(true);
           setStage(3);
@@ -94,6 +99,12 @@ export default function FirstLightBanner({ repo }: { repo: string }) {
               ? "Console online. Revealing your mission deck…"
               : "Payment received. Your console is coming online, usually within minutes."}
           </p>
+          {!live && preview ? (
+            <p className="numeral mt-2 text-data tracking-[0.12em] text-accent">
+              {name} · #{preview.rank.toLocaleString("en-US")} worldwide ·{" "}
+              {preview.stars.toLocaleString("en-US")} ★ · recording started
+            </p>
+          ) : null}
         </div>
         <span className="numeral shrink-0 text-micro tracking-[0.2em] text-faint">
           {live ? "▸ ONLINE" : "◌ ACQUIRING SIGNAL"}

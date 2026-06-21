@@ -10,6 +10,8 @@ import { NextRequest, NextResponse } from "next/server";
 import crypto from "node:crypto";
 import { readTenantsBlob, writeTenantsBlob } from "@/lib/tenants-store";
 import { sendEmail } from "@/lib/email";
+import { loadRoute } from "@/lib/history";
+import { writeLiveSnapshot } from "@/lib/live-blob";
 
 export const maxDuration = 30;
 
@@ -176,6 +178,28 @@ export async function POST(req: NextRequest) {
       const { action, vaultKey } = await provision(repo, plan);
       const consoleUrl = `https://warpchart.dev/r/${repo}`;
       const vaultUrl = vaultKey ? `${consoleUrl}?vault=${vaultKey}` : null;
+      // seed a first live snapshot so the buyer sees a real own-repo data point in
+      // seconds (FirstLightBanner reads it via /api/tenant-status), instead of
+      // waiting for the provisioning redeploy. Free when the repo is in the cached
+      // top-10k route; deep-space repos light up after the first collection. Its
+      // own try/catch: a snapshot failure must never fail a paid order.
+      try {
+        const route = action === "provisioned" ? loadRoute() : null;
+        const ri = route ? route.repos.findIndex((p) => p.r.toLowerCase() === repo.toLowerCase()) : -1;
+        if (route && ri >= 0) {
+          const p = route.repos[ri];
+          await writeLiveSnapshot(repo, {
+            ts: new Date().toISOString(),
+            stars: p.s,
+            rank: ri + 1,
+            milestones: null,
+            neighbors: null,
+            apex: { r: route.repos[0].r, s: route.repos[0].s },
+          });
+        }
+      } catch {
+        /* best-effort: a snapshot failure must never fail a paid order */
+      }
       // transactional welcome email to the BUYER (best-effort; the tenant is
       // already provisioned). It carries the owner-only vault link. A missing or
       // malformed customer email, or a Resend failure, falls back to the operator

@@ -7,6 +7,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { isHostedRepo, loadTenantHistory } from "@/lib/history";
 import { isOwnedBy } from "@/lib/config";
+import { readLiveSnapshotFresh } from "@/lib/live-blob";
 
 export const dynamic = "force-dynamic";
 
@@ -20,5 +21,13 @@ export async function GET(req: NextRequest) {
   const owner = repo.split("/")[0];
   const hosted = isHostedRepo(repo) || isOwnedBy(owner);
   const live = hosted && loadTenantHistory(repo).length > 0;
-  return NextResponse.json({ repo, hosted, live }, { headers: NO_STORE });
+  // FIRST LIGHT preview: a seeded live snapshot (written by the Polar webhook at
+  // provision time) lets the welcome banner show a real own-repo number within
+  // seconds, before the provisioning redeploy makes `live` (disk history) true.
+  // Gated on isHostedRepo ONLY (real paying tenants), NOT isOwnedBy: otherwise an
+  // unauthenticated poll for any santifer/* string would force an uncached
+  // private-Blob read per request. Owned house repos never need first-light.
+  const snap = isHostedRepo(repo) && !live ? await readLiveSnapshotFresh(repo) : null;
+  const preview = snap ? { stars: snap.stars, rank: snap.rank } : null;
+  return NextResponse.json({ repo, hosted, live, preview }, { headers: NO_STORE });
 }
