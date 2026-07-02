@@ -44,32 +44,26 @@ async function resolveNpmUsage(
   name: string,
   rootPkg: string | null,
 ): Promise<{ npmPkg: string | null; npmLast30: number | null; npmHistory: { day: string; d: number }[] | null }> {
-  const NONE: { npmPkg: string | null; npmLast30: number | null; npmHistory: { day: string; d: number }[] | null } = {
-    npmPkg: null,
-    npmLast30: null,
-    npmHistory: null,
-  };
   const candidates = [
     ...(rootPkg ? [rootPkg] : []),
     `@${owner.toLowerCase()}/${name.toLowerCase()}`,
   ];
-  const work = (async () => {
-    for (const cand of candidates) {
-      const dl = await npmDownloads(cand);
-      if (dl !== null) {
-        const npmHistory = await npmDownloadsRange(cand);
-        return { npmPkg: cand, npmLast30: dl, npmHistory };
-      }
+  for (const cand of candidates) {
+    // Fetch the point total and the daily history in PARALLEL, so a candidate
+    // costs ~one 8s timeout instead of two back-to-back. No retry and no total
+    // race-cap (an earlier cap was cutting a slow-but-valid npm mid-resolution
+    // and blanking the whole npm channel): worst case is 2 candidates x ~8s =
+    // ~16s, well under the /r/ maxDuration, and npm resolves as reliably as a
+    // single lookup.
+    const [dl, npmHistory] = await Promise.all([
+      npmDownloads(cand),
+      npmDownloadsRange(cand),
+    ]);
+    if (dl !== null) {
+      return { npmPkg: cand, npmLast30: dl, npmHistory };
     }
-    return NONE;
-  })();
-  // Hard cap TOTAL npm spend so a slow registry can never push the /r/ render
-  // past its maxDuration: npm is best-effort (the panel falls back to clones and
-  // stars) and a transient miss simply re-resolves on the next 15-min
-  // revalidation. Bounding the whole resolution (not per-call) is what keeps a
-  // multi-candidate, no-package repo from stacking several 8s timeouts.
-  const cap = new Promise<typeof NONE>((resolve) => setTimeout(() => resolve(NONE), 8000));
-  return Promise.race([work, cap]);
+  }
+  return { npmPkg: null, npmLast30: null, npmHistory: null };
 }
 
 // standalone cached dossier for routes that don't run the full explorer
