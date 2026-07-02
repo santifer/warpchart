@@ -114,7 +114,10 @@ export async function fetchDossier(owner: string, name: string): Promise<Dossier
 export const getCachedDossier = (owner: string, name: string) =>
   unstable_cache(
     () => fetchDossier(owner, name),
-    ["dossier-v7", `${owner}/${name}`.toLowerCase()],
+    // v8: invalidate entries cached by the short-lived npm total-cap that stored
+    // a null npm (unstable_cache is not deploy-scoped, so the bad entry survived
+    // the fix). Bumping the key forces a fresh resolve on next view.
+    ["dossier-v8", `${owner}/${name}`.toLowerCase()],
     { revalidate: 900 },
   )();
 
