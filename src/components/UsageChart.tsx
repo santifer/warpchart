@@ -45,6 +45,10 @@ export default function UsageChart({
   const [mode, setMode] = useState<"cum" | "daily">("cum");
 
   const hasClones = !!clones && clones.length > 0;
+  // npm channel is only real when it has non-zero days; otherwise (npm outage or
+  // a clone-only repo) suppress it so we never draw a flat-zero npm series or an
+  // empty "since" date on a panel titled "installs, not applause".
+  const hasNpm = (npm ?? []).some((p) => p.d > 0);
   if ((!npm || npm.length < 2) && !hasClones) return null;
 
   const byDay = new Map<string, { npm: number; clones: number }>();
@@ -117,7 +121,7 @@ export default function UsageChart({
         </span>
         <TipRow dot={C.white} k="total" v={np + cl} />
         {hasClones ? <TipRow dot={C.warn} k="git clones" v={cl} /> : null}
-        <TipRow dot={C.accent} k="npm installs" v={np} />
+        {hasNpm ? <TipRow dot={C.accent} k="npm installs" v={np} /> : null}
       </div>
     );
   };
@@ -174,19 +178,21 @@ export default function UsageChart({
                 lifts off zero on its launch day instead of riding a false line. */}
             {mode === "cum" ? (
               <>
-                <Area
-                  type="monotone"
-                  dataKey="npmCum"
-                  name="npm installs"
-                  stackId="1"
-                  stroke={C.accent}
-                  strokeWidth={1.4}
-                  fill={C.accent}
-                  fillOpacity={0.22}
-                  isAnimationActive
-                  animationDuration={1200}
-                  dot={false}
-                />
+                {hasNpm ? (
+                  <Area
+                    type="monotone"
+                    dataKey="npmCum"
+                    name="npm installs"
+                    stackId="1"
+                    stroke={C.accent}
+                    strokeWidth={1.4}
+                    fill={C.accent}
+                    fillOpacity={0.22}
+                    isAnimationActive
+                    animationDuration={1200}
+                    dot={false}
+                  />
+                ) : null}
                 {hasClones ? (
                   <Area
                     type="monotone"
@@ -217,7 +223,9 @@ export default function UsageChart({
               </>
             ) : (
               <>
-                <Bar dataKey="npm" name="npm installs" stackId="1" fill={C.accent} fillOpacity={0.65} isAnimationActive animationDuration={900} />
+                {hasNpm ? (
+                  <Bar dataKey="npm" name="npm installs" stackId="1" fill={C.accent} fillOpacity={0.65} isAnimationActive animationDuration={900} />
+                ) : null}
                 {hasClones ? (
                   <Bar dataKey="clones" name="git clones · unique" stackId="1" fill={C.warn} fillOpacity={0.55} isAnimationActive animationDuration={900} />
                 ) : null}
@@ -237,10 +245,12 @@ export default function UsageChart({
             <span className="inline-block h-2 w-2 rounded-full" style={{ background: C.warn }} />
             <span className="numeral text-micro text-dim">git clones · unique · since {fmtDay(firstClone)}</span>
           </span>
-          <span className="flex items-center gap-1.5">
-            <span className="inline-block h-2 w-2 rounded-full" style={{ background: C.accent }} />
-            <span className="numeral text-micro text-dim">npm installs · since {fmtDay(firstNpm)}</span>
-          </span>
+          {hasNpm ? (
+            <span className="flex items-center gap-1.5">
+              <span className="inline-block h-2 w-2 rounded-full" style={{ background: C.accent }} />
+              <span className="numeral text-micro text-dim">npm installs · since {fmtDay(firstNpm)}</span>
+            </span>
+          ) : null}
         </div>
       ) : null}
     </div>

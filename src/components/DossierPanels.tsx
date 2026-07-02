@@ -114,7 +114,12 @@ export function UsagePanel({
   const d = dossier;
   const withDownloads = (d?.releases ?? []).filter((r) => r.downloads > 0).slice(0, 4);
   const maxDl = Math.max(1, ...withDownloads.map((r) => r.downloads));
-  const hasUsage = Boolean(d && (d.npmLast30 !== null || withDownloads.length));
+  // clones are real usage too: a clone-and-run repo (no npm, no release binaries)
+  // still shows its acquisition signal, and a transient npm null must not blank
+  // the panel when clones are present.
+  const hasUsage = Boolean(
+    d && (d.npmLast30 !== null || withDownloads.length || d.clonesHistory?.length),
+  );
   return (
     <Panel
       index={index}

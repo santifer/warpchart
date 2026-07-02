@@ -447,7 +447,9 @@ export async function npmDownloads(pkg: string): Promise<number | null> {
   try {
     const res = await fetch(
       `https://api.npmjs.org/downloads/point/last-month/${encodeURIComponent(pkg)}`,
-      { signal: AbortSignal.timeout(4000) }
+      // 8s (was 4s): npm is slow under Vercel load and a timeout returns null,
+      // which poisons the 15-min dossier cache and blanks the Real usage panel.
+      { signal: AbortSignal.timeout(8000) }
     );
     if (!res.ok) return null;
     const j = (await res.json()) as { downloads?: number };
@@ -467,7 +469,7 @@ export async function npmDownloadsRange(
   try {
     const res = await fetch(
       `https://api.npmjs.org/downloads/range/last-year/${encodeURIComponent(pkg)}`,
-      { signal: AbortSignal.timeout(4500) }
+      { signal: AbortSignal.timeout(8000) }
     );
     if (!res.ok) return null;
     const j = (await res.json()) as { downloads?: { day: string; downloads: number }[] };

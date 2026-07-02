@@ -44,18 +44,32 @@ async function resolveNpmUsage(
   name: string,
   rootPkg: string | null,
 ): Promise<{ npmPkg: string | null; npmLast30: number | null; npmHistory: { day: string; d: number }[] | null }> {
+  const NONE: { npmPkg: string | null; npmLast30: number | null; npmHistory: { day: string; d: number }[] | null } = {
+    npmPkg: null,
+    npmLast30: null,
+    npmHistory: null,
+  };
   const candidates = [
     ...(rootPkg ? [rootPkg] : []),
     `@${owner.toLowerCase()}/${name.toLowerCase()}`,
   ];
-  for (const cand of candidates) {
-    const dl = await npmDownloads(cand);
-    if (dl !== null) {
-      const npmHistory = await npmDownloadsRange(cand);
-      return { npmPkg: cand, npmLast30: dl, npmHistory };
+  const work = (async () => {
+    for (const cand of candidates) {
+      const dl = await npmDownloads(cand);
+      if (dl !== null) {
+        const npmHistory = await npmDownloadsRange(cand);
+        return { npmPkg: cand, npmLast30: dl, npmHistory };
+      }
     }
-  }
-  return { npmPkg: null, npmLast30: null, npmHistory: null };
+    return NONE;
+  })();
+  // Hard cap TOTAL npm spend so a slow registry can never push the /r/ render
+  // past its maxDuration: npm is best-effort (the panel falls back to clones and
+  // stars) and a transient miss simply re-resolves on the next 15-min
+  // revalidation. Bounding the whole resolution (not per-call) is what keeps a
+  // multi-candidate, no-package repo from stacking several 8s timeouts.
+  const cap = new Promise<typeof NONE>((resolve) => setTimeout(() => resolve(NONE), 8000));
+  return Promise.race([work, cap]);
 }
 
 // standalone cached dossier for routes that don't run the full explorer
