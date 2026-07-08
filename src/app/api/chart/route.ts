@@ -6,7 +6,7 @@
 //   /api/chart?repo=owner/name         -> ANY repository (sampled history)
 //   /api/chart?w=600&h=200&theme=dark  -> size and scheme overrides
 import { cachedSampleCurve, tenantCurve, isTenantRepo, withLiveTotal, curveTailV, type Curve } from "@/lib/curve";
-import { loadRoute } from "@/lib/history";
+import { loadRoute, loadHistory } from "@/lib/history";
 import { reqLog } from "@/lib/log";
 import { fmt, fmtCompact } from "@/lib/format";
 import { fmtEmbed, adaptiveTtl, embedCache, TENANT_EMBED_CACHE } from "@/lib/embed";
@@ -17,6 +17,9 @@ export const maxDuration = 60;
 
 const DARK = "--bg:#060c12;--bd:#11263b;--gr:#0d1c2b;--dm:#8aa3ba;--ac:#53d6e8;--st:#f5fbff;--wn:#f2c46a;";
 const LIGHT = "--bg:#f6f9fc;--bd:#c9d8e4;--gr:#dde7ef;--dm:#43607a;--ac:#0c7d92;--st:#3a5268;--wn:#a05a00;";
+
+// GitHub mark (Octocat), 16x16 viewBox, for the optional ?rank=1 world-rank line.
+const GH_MARK = "M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z";
 
 function schemeStyle(theme: string | null): string {
   if (theme === "light") return `:root{${LIGHT}}`;
@@ -99,6 +102,21 @@ export async function GET(req: Request) {
   }
 
   const { repo, total, pts } = curve;
+  // Optional WORLD RANK line under the repo label (?rank=1). Cache-only, same
+  // sources as the badge: the tenant reads its last hourly snapshot, a top-1000
+  // repo reads its registry position. Anything deeper stays blank -- never a
+  // new GitHub call, so the chart's no-fetch guarantee holds.
+  let worldRank: number | null = null;
+  if (url.searchParams.get("rank") === "1") {
+    if (exact) {
+      const hist = loadHistory();
+      worldRank = hist.length ? hist[hist.length - 1].rank : null;
+    } else {
+      const route = loadRoute();
+      const idx = route ? route.repos.findIndex((p) => p.r.toLowerCase() === repo.toLowerCase()) : -1;
+      worldRank = idx >= 0 ? idx + 1 : null;
+    }
+  }
   const archiveFrom = curve.archiveFrom ?? null;
   const exactFrom = curve.exactFrom ?? null;
   // The reveal is one continuous pen. An exact-recent tail (our own daily
@@ -262,6 +280,7 @@ export async function GET(req: Request) {
 <path d="M ${w - 8} ${h - 0.5} H ${w - 0.5} V ${h - 8}" style="stroke:var(--ac)" fill="none" opacity="0.5"/>
 ${specks}
 <text x="${padL}" y="22" font-family="${mono}" font-size="13" letter-spacing="2" style="fill:var(--dm)">${esc(repo.toUpperCase())}</text>
+${worldRank !== null ? `<g transform="translate(${padL},29.9) scale(0.85)" style="fill:var(--dm)"><path d="${GH_MARK}"/></g><text x="${padL + 20}" y="41" font-family="${mono}" font-size="12.5" letter-spacing="0.8" style="fill:var(--dm)"><tspan font-weight="700" style="fill:var(--ac)">#${fmt(worldRank)}</tspan> WORLDWIDE</text>` : ""}
 ${branding}
 <text class="cp" x="${w - 16}" y="22" text-anchor="end" font-family="${mono}" font-size="15" font-weight="700" style="fill:var(--ac)">${exact ? fmt(total) : fmtEmbed(total)} ★</text>
 ${yMarks}
