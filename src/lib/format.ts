@@ -35,6 +35,22 @@ export function fmtEtaDays(days: number | null): string {
   return `${years}y ${months}mo`;
 }
 
+// Format ETA with confidence band: "12d" (firm) or "~10-18d" (soft/noisy).
+// The ~ prefix signals "honesty layer" — uncertainty, not false precision.
+export function fmtEtaRange(
+  etaDays: number | null,
+  etaRange?: { min: number; max: number } | null
+): string {
+  if (!etaRange) return fmtEtaDays(etaDays);
+  // Format range as "~Xd-Yd" when min and max are both in days
+  if (etaRange.min < 1 && etaRange.max < 1) return "~" + Math.max(1, Math.round(etaRange.min * 24)) + "-" + Math.round(etaRange.max * 24) + "h";
+  if (etaRange.min < 60 && etaRange.max < 60) {
+    return "~" + Math.max(1, Math.round(etaRange.min)) + "-" + Math.round(etaRange.max) + "d";
+  }
+  // If range spans units (e.g., 55d-2mo), use point estimate with ~ prefix
+  return "~" + fmtEtaDays(etaDays);
+}
+
 export function etaDate(days: number | null, from = new Date()): string | null {
   if (days === null || days > 365) return null;
   const d = new Date(from.getTime() + days * 86_400_000);

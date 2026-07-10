@@ -17,7 +17,7 @@ import type { ChartInputs, RouteRepo } from "@/lib/types";
 import type { Palette } from "@/lib/theme";
 import { usePalette } from "@/lib/usePalette";
 import { dopplerTilt } from "@/lib/doppler";
-import { fmt, fmtCompact, fmtEtaDays, etaDate, shortName } from "@/lib/format";
+import { fmt, fmtCompact, fmtEtaDays, fmtEtaRange, etaDate, shortName } from "@/lib/format";
 import { neighborEtas, type NeighborEta } from "@/lib/projections";
 import { sound } from "@/lib/sound";
 
@@ -1352,10 +1352,10 @@ export default function GalacticChart({
                       <text x={x} y={tierY + 14} fontSize={11 * fs} textAnchor="middle"
                         fill={hunts ? color : n.receding ? C.warn : C.accent}>
                         {hunts
-                          ? `catches you in ${fmtEtaDays(n.catchDays)}`
+                          ? `catches you in ${fmtEtaRange(n.catchDays, n.etaRange)}`
                           : n.receding
                             ? "pulling away"
-                            : `eta ${fmtEtaDays(n.etaDays)}`}
+                            : `eta ${fmtEtaRange(n.etaDays, n.etaRange)}`}
                       </text>
                     ) : null}
                   </g>
@@ -1790,7 +1790,7 @@ function ScanContent({ scan, ownV, nowMs, rank }: { scan: Scan; ownV: number; no
                 scan.n.gap <= 0
                   ? "done"
                   : scan.n.etaDays !== null
-                    ? `${fmtEtaDays(scan.n.etaDays)} · ${etaDate(scan.n.etaDays, new Date(nowMs)) ?? ""}`
+                    ? `${fmtEtaRange(scan.n.etaDays, scan.n.etaRange)} · ${etaDate(scan.n.etaDays, new Date(nowMs)) ?? ""}`
                     : "out of reach"
               }
             />

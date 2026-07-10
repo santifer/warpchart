@@ -16,7 +16,7 @@ import type { ChartInputs } from "@/lib/types";
 import type { Palette } from "@/lib/theme";
 import { usePalette } from "@/lib/usePalette";
 import { dopplerTilt } from "@/lib/doppler";
-import { fmt, fmtCompact, fmtEtaDays, shortName } from "@/lib/format";
+import { fmt, fmtCompact, fmtEtaDays, fmtEtaRange, shortName } from "@/lib/format";
 import { neighborEtas, type NeighborEta } from "@/lib/projections";
 
 const W = 390;
@@ -428,12 +428,12 @@ export default function VerticalChart({
                   }
                 >
                   {n.catchDays !== null && !isAhead
-                    ? `catches you in ${fmtEtaDays(n.catchDays)}`
+                    ? `catches you in ${fmtEtaRange(n.catchDays, n.etaRange)}`
                     : !isAhead
                       ? "passed"
                       : n.receding
                         ? "pulling away"
-                        : `eta ${fmtEtaDays(n.etaDays)}`}
+                        : `eta ${fmtEtaRange(n.etaDays, n.etaRange)}`}
                 </tspan>
                 {signal ? <tspan fill={C.accent}> · ◌</tspan> : null}
               </text>

@@ -32,6 +32,8 @@ export interface MilestoneEta {
   gap: number;
   drift: number | null; // null = still calibrating
   etaDays: number | null; // null = not reachable at current pace
+  confidence?: "firm" | "soft" | "noisy";
+  etaRange?: { min: number; max: number } | null;
 }
 
 export function milestoneEta(
@@ -44,7 +46,25 @@ export function milestoneEta(
   const gap = Math.max(0, threshold - stars);
   const net = vOwn - (drift ?? 0);
   const etaDays = gap === 0 ? 0 : net > 0 ? Math.round((gap / net) * 10) / 10 : null;
-  return { rank, threshold, gap, drift, etaDays };
+
+  // confidence similar to projectCrossing
+  let confidence: MilestoneEta["confidence"] = "firm";
+  if (etaDays === null) confidence = "noisy";
+  else if (net < 3 || etaDays > 25) confidence = "noisy";
+  else if (etaDays > 8) confidence = "soft";
+
+  // Calculate range for soft/noisy projections
+  let etaRange: { min: number; max: number } | null = null;
+  if (etaDays !== null && (confidence === "soft" || confidence === "noisy")) {
+    const pct = confidence === "soft" ? 0.4 : 0.6;
+    const delta = Math.max(1, Math.round(etaDays * pct));
+    etaRange = {
+      min: Math.max(0, Math.round((etaDays - delta) * 10) / 10),
+      max: Math.round((etaDays + delta) * 10) / 10,
+    };
+  }
+
+  return { rank, threshold, gap, drift, etaDays, confidence, etaRange };
 }
 
 export interface NeighborEta extends Neighbor {
@@ -55,6 +75,8 @@ export interface NeighborEta extends Neighbor {
   // urgent number on the chart, it must never hide inside "passed".
   catchDays: number | null;
   receding: boolean;
+  confidence?: "firm" | "soft" | "noisy"; // confidence of the ETA
+  etaRange?: { min: number; max: number } | null; // range when soft/noisy
 }
 
 export function neighborEtas(neighbors: Neighbor[], stars: number, vOwn: number): NeighborEta[] {
@@ -64,13 +86,17 @@ export function neighborEtas(neighbors: Neighbor[], stars: number, vOwn: number)
   return neighbors.map((n) => {
     const x = projectCrossing(stars, vOwn, n.s, n.v);
     const ahead = x.gap > 0;
+    const isEta = ahead && x.closing > 0; // we pass them
+    const isCatch = !ahead && x.closing < 0; // they catch us
     return {
       ...n,
       gap: x.gap,
       closing: x.closing,
-      etaDays: ahead && x.closing > 0 ? x.etaDays : null, // we pass them
-      catchDays: !ahead && x.closing < 0 ? x.etaDays : null, // they catch us
+      etaDays: isEta ? x.etaDays : null,
+      catchDays: isCatch ? x.etaDays : null,
       receding: ahead && x.closing <= 0,
+      confidence: x.confidence,
+      etaRange: (isEta || isCatch) ? x.etaRange : null,
     };
   });
 }

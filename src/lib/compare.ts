@@ -121,6 +121,7 @@ export interface Crossing {
   closing: number; // aVel - bVel (positive = A is gaining on B)
   etaDays: number | null; // days until they meet (>= 0); null = not converging
   confidence: "firm" | "soft" | "noisy";
+  etaRange?: { min: number; max: number } | null; // range when soft/noisy; null if not applicable
 }
 
 export function projectCrossing(
@@ -144,7 +145,20 @@ export function projectCrossing(
   else if (Math.abs(closing) < 3 || etaDays > 25) confidence = "noisy";
   else if (etaDays > 8) confidence = "soft";
 
-  return { gap, closing, etaDays, confidence };
+  // Calculate confidence range for soft/noisy projections
+  let etaRange: { min: number; max: number } | null = null;
+  if (etaDays !== null && (confidence === "soft" || confidence === "noisy")) {
+    // soft: ±40% band around the point estimate
+    // noisy: ±60% band (wider uncertainty)
+    const pct = confidence === "soft" ? 0.4 : 0.6;
+    const delta = Math.max(1, Math.round(etaDays * pct));
+    etaRange = {
+      min: Math.max(0, Math.round((etaDays - delta) * 10) / 10),
+      max: Math.round((etaDays + delta) * 10) / 10,
+    };
+  }
+
+  return { gap, closing, etaDays, confidence, etaRange };
 }
 
 export function shortRepo(repo: string): string {

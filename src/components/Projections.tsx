@@ -4,7 +4,7 @@
 // so the effective chase speed is own v7d minus the threshold drift.
 import { useLive } from "./LiveProvider";
 import type { DashboardBundle } from "@/lib/bundle";
-import { fmt, fmtEtaDays, etaDate } from "@/lib/format";
+import { fmt, fmtEtaDays, fmtEtaRange, etaDate } from "@/lib/format";
 import { milestoneEta } from "@/lib/projections";
 
 export default function Projections({ bundle, compact }: { bundle: DashboardBundle; compact?: boolean }) {
@@ -24,8 +24,8 @@ export default function Projections({ bundle, compact }: { bundle: DashboardBund
                 TOP {m.rank}
               </span>
               <span className="numeral text-sm text-accent glow-accent">
-                {e.gap === 0 ? "crossed" : fmtEtaDays(e.etaDays)}
-                {date && e.gap > 0 ? <span className="ml-2 text-dim">{date}</span> : null}
+                {e.gap === 0 ? "crossed" : fmtEtaRange(e.etaDays, e.etaRange)}
+                {date && e.gap > 0 && e.etaDays && e.etaDays <= 365 ? <span className="ml-2 text-dim">{date}</span> : null}
               </span>
             </div>
             <div className="mt-2 h-[3px] w-full bg-grid/60">

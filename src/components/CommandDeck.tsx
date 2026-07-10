@@ -25,7 +25,7 @@ import { useLive } from "./LiveProvider";
 import type { DashboardBundle } from "@/lib/bundle";
 import type { Dossier } from "@/lib/explorer";
 import type { ChartInputs } from "@/lib/types";
-import { fmt, fmtCompact, fmtEtaDays, shortName } from "@/lib/format";
+import { fmt, fmtCompact, fmtEtaDays, fmtEtaRange, shortName } from "@/lib/format";
 import { neighborEtas, milestoneEta } from "@/lib/projections";
 
 // Big glanceable number for the KPI strip.
@@ -246,7 +246,7 @@ export default function CommandDeck({
               label="NEXT GATE"
               tone="accent"
               name={`TOP ${nextGate.rank}`}
-              sub={`${fmt(nextGate.gap)} to go · eta ${fmtEtaDays(nextGate.etaDays)}`}
+              sub={`${fmt(nextGate.gap)} to go · eta ${fmtEtaRange(nextGate.etaDays, nextGate.etaRange)}`}
             />
           ) : null}
           {chase ? (
@@ -254,14 +254,14 @@ export default function CommandDeck({
               label="CHASE TARGET"
               tone="accent"
               name={shortName(chase.r)}
-              sub={chase.gap <= 0 ? "passed" : `gap ${fmt(chase.gap)} · eta ${chase.etaDays !== null ? fmtEtaDays(chase.etaDays) : "n/a"}`}
+              sub={chase.gap <= 0 ? "passed" : `gap ${fmt(chase.gap)} · eta ${chase.etaDays !== null ? fmtEtaRange(chase.etaDays, chase.etaRange) : "n/a"}`}
             />
           ) : nextOvertake ? (
             <Pill
               label="NEXT OVERTAKE"
               tone="accent"
               name={shortName(nextOvertake.r)}
-              sub={`gap ${fmt(nextOvertake.gap)} · eta ${fmtEtaDays(nextOvertake.etaDays!)}`}
+              sub={`gap ${fmt(nextOvertake.gap)} · eta ${fmtEtaRange(nextOvertake.etaDays!, nextOvertake.etaRange)}`}
             />
           ) : null}
           {threat ? (
@@ -269,7 +269,7 @@ export default function CommandDeck({
               label="INBOUND THREAT"
               tone="warn"
               name={shortName(threat.r)}
-              sub={`catches you in ${fmtEtaDays(threat.catchDays)} · ${Math.round(threat.v)}/d`}
+              sub={`catches you in ${fmtEtaRange(threat.catchDays, threat.etaRange)} · ${Math.round(threat.v)}/d`}
             />
           ) : null}
         </div>
