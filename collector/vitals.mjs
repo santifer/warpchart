@@ -234,6 +234,125 @@ async function prAnalysis(repo, want = 500) {
   return { leadTime, community };
 }
 
+// ---- responsiveness (CHAOSS time-to-first-response) -------------------------
+// Median time from an issue opened to the FIRST reply by a maintainer
+// (OWNER/MEMBER/COLLABORATOR, non-bot, not the author), over recent issues, 90d.
+// "the system attends to the community, fast" — a quality-of-maintenance signal
+// that scales attention, not just code. Public timeline, no search.
+const MAINTAINER_ASSOC = new Set(["OWNER", "MEMBER", "COLLABORATOR"]);
+async function responsiveness(repo, pages = 2) {
+  const [owner, name] = repo.split("/");
+  const since = Date.now() - 90 * DAY;
+  const hrs = [];
+  let cursor = null;
+  for (let p = 0; p < pages; p++) {
+    const d = await gqlRetry(
+      `query($owner:String!,$name:String!,$after:String){
+        repository(owner:$owner,name:$name){
+          issues(first:50, orderBy:{field:CREATED_AT,direction:DESC}, after:$after){
+            pageInfo{ hasNextPage endCursor }
+            nodes{ createdAt author{ login }
+              comments(first:12){ nodes{ createdAt authorAssociation author{ login } } } }
+          }
+        }
+      }`,
+      { owner, name, after: cursor },
+    );
+    const iss = d.repository?.issues;
+    if (!iss) break;
+    let allOld = true;
+    for (const n of iss.nodes) {
+      if (!n.createdAt) continue;
+      const created = Date.parse(n.createdAt);
+      if (created < since) continue;
+      allOld = false;
+      const authorLc = n.author?.login?.toLowerCase();
+      const first = (n.comments?.nodes ?? []).find(
+        (c) =>
+          MAINTAINER_ASSOC.has(c.authorAssociation) &&
+          !isBot(c.author?.login) &&
+          c.author?.login?.toLowerCase() !== authorLc,
+      );
+      if (first?.createdAt) {
+        const h = (Date.parse(first.createdAt) - created) / 36e5;
+        if (h >= 0) hrs.push(h);
+      }
+    }
+    if (allOld || !iss.pageInfo.hasNextPage) break;
+    cursor = iss.pageInfo.endCursor;
+    if (PACE_MS) await sleep(PACE_MS);
+  }
+  if (hrs.length < 5) return null;
+  hrs.sort((a, b) => a - b);
+  const q = (pp) => {
+    const k = (hrs.length - 1) * pp;
+    const f = Math.floor(k);
+    return hrs[f] + (hrs[Math.min(f + 1, hrs.length - 1)] - hrs[f]) * (k - f);
+  };
+  return {
+    medianH: Math.round(q(0.5) * 10) / 10,
+    p90H: Math.round(q(0.9) * 10) / 10,
+    sample: hrs.length,
+    pctUnder24h: Math.round((hrs.filter((h) => h <= 24).length / hrs.length) * 100),
+    pctUnder48h: Math.round((hrs.filter((h) => h <= 48).length / hrs.length) * 100),
+  };
+}
+
+// ---- automation footprint: the unattended machinery, made visible -----------
+// Over a sample of recent merged PRs: median status checks per PR (CI rigor),
+// the share authored by bots (dependency/automation lane), and the distinct bots
+// orchestrated. Shows "there is a SYSTEM here, not a hero." Public, no search.
+async function automation(repo, pages = 2) {
+  const [owner, name] = repo.split("/");
+  const checks = [];
+  const botLogins = new Set();
+  let botPRs = 0;
+  let total = 0;
+  let cursor = null;
+  for (let p = 0; p < pages; p++) {
+    const d = await gqlRetry(
+      `query($owner:String!,$name:String!,$after:String){
+        repository(owner:$owner,name:$name){
+          pullRequests(states:MERGED, first:50, orderBy:{field:CREATED_AT,direction:DESC}, after:$after){
+            pageInfo{ hasNextPage endCursor }
+            nodes{ author{ login }
+              commits(last:1){ nodes{ commit{ statusCheckRollup{ contexts{ totalCount } } } } } }
+          }
+        }
+      }`,
+      { owner, name, after: cursor },
+    );
+    const pr = d.repository?.pullRequests;
+    if (!pr) break;
+    for (const n of pr.nodes) {
+      total++;
+      const login = n.author?.login;
+      if (isBot(login)) {
+        botPRs++;
+        if (login) botLogins.add(login.toLowerCase().replace(/\[bot\]$/, ""));
+      }
+      const c = n.commits?.nodes?.[0]?.commit?.statusCheckRollup?.contexts?.totalCount;
+      if (typeof c === "number") checks.push(c);
+    }
+    if (!pr.pageInfo.hasNextPage) break;
+    cursor = pr.pageInfo.endCursor;
+    if (PACE_MS) await sleep(PACE_MS);
+  }
+  if (!total) return null;
+  const median = (arr) => {
+    if (!arr.length) return null;
+    const s = [...arr].sort((a, b) => a - b);
+    const m = Math.floor(s.length / 2);
+    return s.length % 2 ? s[m] : Math.round((s[m - 1] + s[m]) / 2);
+  };
+  return {
+    statusChecksPerPR: median(checks),
+    botPRPct: Math.round((botPRs / total) * 100),
+    bots: [...botLogins].slice(0, 8),
+    sampled: total,
+  };
+}
+
 // ---- agent-readiness: is this repo agent-NATIVE, not just active? -----------
 // Pure file-existence from the PUBLIC tree (no owner-reported input, no
 // estimation): CLAUDE.md, AGENTS.md, the .claude/ machinery (skills, commands,
@@ -492,6 +611,8 @@ async function main() {
       // stay under the GraphQL search cap (30/min)
       await sleep(Math.max(PACE_MS, 1200));
       const quality = await revertRate(repo).catch(() => null);
+      const ttfr = await responsiveness(repo).catch(() => null);
+      const auto = await automation(repo).catch(() => null);
       const creator = await creatorInfo(repo.split("/")[0]);
       const perWeek = Math.round((act.releases90 / 90) * 7 * 10) / 10;
       const deploy = {
@@ -521,6 +642,8 @@ async function main() {
         community: cm,
         agentReadiness: ar,
         quality,
+        responsiveness: ttfr,
+        automation: auto,
       };
       await writeBlob(blobKey(repo), vitals);
       wrote++;
@@ -529,7 +652,9 @@ async function main() {
           (lt ? ` · lead ${lt.medianH}h ${lt.tier}` : "") +
           (cm ? ` · ${cm.contributors} contribs · ${cm.mergedByDistinct} merger(s)` : "") +
           (ar?.agentNative ? ` · agent-native [${ar.chips.join(" · ")}]` : "") +
-          (quality ? ` · revert ${quality.revertPct}% (${quality.reverts}/${quality.mergedPRs})` : "") +
+          (quality ? ` · revert ${quality.revertPct}%` : "") +
+          (ttfr ? ` · ttfr ${ttfr.medianH}h` : "") +
+          (auto ? ` · ${auto.statusChecksPerPR} checks/PR · ${auto.bots.length} bots` : "") +
           ` · ${vitals.verdict}`,
       );
     } catch (e) {

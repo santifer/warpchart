@@ -140,6 +140,8 @@ export default function VitalSignsPanel({
   const cm = vitals.community;
   const ar = vitals.agentReadiness;
   const q = vitals.quality;
+  const ttfr = vitals.responsiveness;
+  const auto = vitals.automation;
   const alive = vitals.verdict === "ALIVE";
   // the community avatar row shows OTHERS (the maintainer is already the
   // "operated by" link) — stronger social proof: all these people build this.
@@ -212,7 +214,7 @@ export default function VitalSignsPanel({
         </div>
 
         {/* DORA velocity + the engine */}
-        <div className="grid grid-cols-2 gap-x-6 gap-y-4 border-t border-grid pt-4 sm:grid-cols-3 lg:grid-cols-5">
+        <div className="grid grid-cols-2 gap-x-6 gap-y-4 border-t border-grid pt-4 sm:grid-cols-3">
           {lt ? (
             <Block
               label="LEAD TIME"
@@ -294,7 +296,35 @@ export default function VitalSignsPanel({
               tone={q.revertPct <= 0.5 ? "accent" : "ink"}
             />
           ) : null}
+          {/* CHAOSS time-to-first-response: the system attends the community */}
+          {ttfr ? (
+            <Block
+              label="1ST RESPONSE"
+              value={leadLabel(ttfr.medianH)}
+              hint={`${ttfr.pctUnder24h}% under 24h · ${fmtCompact(ttfr.sample)} issues`}
+              tone={ttfr.medianH < 48 ? "accent" : "ink"}
+            />
+          ) : null}
         </div>
+
+        {/* automation footprint: the unattended machinery, made visible */}
+        {auto && (auto.statusChecksPerPR || auto.bots.length) ? (
+          <div className="numeral text-micro leading-relaxed text-faint">
+            {auto.statusChecksPerPR ? (
+              <>
+                <span className="text-dim">{auto.statusChecksPerPR}</span> status checks per merged PR
+              </>
+            ) : null}
+            {auto.bots.length ? (
+              <>
+                {auto.statusChecksPerPR ? " · " : ""}
+                <span className="text-dim">{auto.bots.length}</span> bots orchestrated (
+                {auto.bots.slice(0, 5).join(", ")})
+              </>
+            ) : null}
+            {auto.botPRPct > 0 ? <> · {auto.botPRPct}% of merges automated</> : null}
+          </div>
+        ) : null}
 
         {/* the human engine: contributors (social proof) + the implicit flex */}
         {cm ? (

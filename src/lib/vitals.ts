@@ -91,6 +91,24 @@ export interface VitalsQuality {
   revertPct: number;
 }
 
+// time-to-first-response (CHAOSS): median hours from an issue opened to the first
+// maintainer reply, 90d. Attention scales, not just code. Public timeline.
+export interface VitalsResponsiveness {
+  medianH: number;
+  p90H: number;
+  sample: number;
+  pctUnder24h: number;
+  pctUnder48h: number;
+}
+
+// automation footprint: the unattended machinery, made visible. Public PR history.
+export interface VitalsAutomation {
+  statusChecksPerPR: number | null;
+  botPRPct: number;
+  bots: string[];
+  sampled: number;
+}
+
 export interface Vitals {
   repo: string;
   computedAt: string;
@@ -104,6 +122,8 @@ export interface Vitals {
   community: VitalsCommunity | null;
   agentReadiness?: VitalsAgentReadiness | null;
   quality?: VitalsQuality | null;
+  responsiveness?: VitalsResponsiveness | null;
+  automation?: VitalsAutomation | null;
 }
 
 const blobKey = (repo: string) => `vitals/${repo.toLowerCase().replace("/", "--")}.json`;
@@ -130,6 +150,6 @@ async function readVitals(owner: string, name: string): Promise<Vitals | null> {
 export const loadVitals = (owner: string, name: string): Promise<Vitals | null> =>
   unstable_cache(
     () => readVitals(owner, name),
-    ["vitals-v4", `${owner}/${name}`.toLowerCase()],
+    ["vitals-v5", `${owner}/${name}`.toLowerCase()],
     { revalidate: 900 },
   )();
