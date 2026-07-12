@@ -63,6 +63,19 @@ async function writeBlob(key, obj) {
   });
 }
 
+// Append one daily snapshot of an unlocked repo's headline signals so a REAL
+// trend can be drawn later (no backfill exists — the honest 30d/90d trend has to
+// accrue from here). Dedup by day (idempotent within a day), cap to ~180 points.
+const histKey = (repo) => `vitals/hist--${repo.toLowerCase().replace("/", "--")}.json`;
+async function appendHistory(repo, point) {
+  const key = histKey(repo);
+  const prev = (await readBlob(key)) || { repo, points: [] };
+  const points = (Array.isArray(prev.points) ? prev.points : []).filter((p) => p.day !== point.day);
+  points.push(point);
+  points.sort((a, b) => (a.day < b.day ? -1 : 1));
+  await writeBlob(key, { repo, points: points.slice(-180) });
+}
+
 // GraphQL with backoff on rate-limit / transient errors — the top-1000
 // distribution sweep makes ~1000 calls; a secondary-rate-limit blip must retry,
 // not silently drop a repo from the distribution.
@@ -646,6 +659,15 @@ async function main() {
         automation: auto,
       };
       await writeBlob(blobKey(repo), vitals);
+      // seed the honest trend: one snapshot per day of the headline signals
+      await appendHistory(repo, {
+        day: today,
+        rank: compositeRank,
+        pct: compositePct,
+        v7: act.v7,
+        ttfr: ttfr?.medianH ?? null,
+        revert: quality?.revertPct ?? null,
+      }).catch(() => {});
       wrote++;
       console.log(
         `[vitals] ${repo}: activity top ${100 - compositePct}% (#${compositeRank}/${dist.universe})` +
