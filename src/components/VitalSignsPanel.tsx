@@ -13,6 +13,10 @@ import type { Vitals } from "@/lib/vitals";
 
 const avatar = (login: string, size = 48) => `https://github.com/${login}.png?size=${size}`;
 const topPct = (pct: number) => `top ${Math.max(1, Math.round(100 - pct))}%`;
+// the headline tier is derived from the DISPLAYED rank (ceil, never overclaims),
+// so "top N%" can never contradict "#R of U": #14 of 999 = 1.4% -> top 2%.
+const rankTier = (rank: number, universe: number) =>
+  `top ${Math.max(1, Math.ceil((rank / universe) * 100))}%`;
 const leadLabel = (h: number) => (h < 48 ? `${h.toFixed(1)}h` : `${(h / 24).toFixed(1)}d`);
 
 function OperatedBy({ login }: { login: string }) {
@@ -248,7 +252,7 @@ export default function VitalSignsPanel({
           </span>
           <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1">
             <span className="numeral leading-none text-accent" style={{ fontSize: "2.7rem" }}>
-              {topPct(a.compositePct).toUpperCase()}
+              {rankTier(a.compositeRank, vitals.universe).toUpperCase()}
             </span>
             <span className="numeral text-body text-ink">
               #{fmtCompact(a.compositeRank)}{" "}
