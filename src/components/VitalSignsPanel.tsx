@@ -190,6 +190,13 @@ export default function VitalSignsPanel({
             {topPct(a.compositePct)} · a living project, not a star monument
             {since ? <> · maintained since {since}</> : null}
           </div>
+          {/* methodology, in the open: what the rank is and that it is a live
+              daily snapshot — makes the number verifiable and explains its drift */}
+          <div className="numeral text-micro leading-relaxed text-faint/70">
+            a daily composite of commits, merged PRs, issues closed, releases and star velocity,
+            ranked against the {fmtCompact(vitals.universe)} most-starred repositories · a live
+            snapshot, not a fixed title
+          </div>
         </div>
 
         {/* agent-native badge: file-existence from the public tree, nothing said */}
