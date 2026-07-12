@@ -206,12 +206,45 @@ export default function VitalSignsPanel({
             <Block label="COMMITS · 30D" value={fmtCompact(a.commits30)} hint="default branch" />
           )}
           {cm ? (
-            <Block
-              label="THE GATE"
-              value={`${cm.mergedByDistinct === 1 ? "1" : fmtCompact(cm.mergedByDistinct)}`}
-              hint={`maintainer · ${fmtCompact(cm.prsSampled)} PRs merged`}
-              tone="warn"
-            />
+            (() => {
+              const gate =
+                (cm.maintainers ?? []).length > 0 ? cm.maintainers : [vitals.creator.login];
+              const extra = cm.mergedByDistinct - gate.length;
+              return (
+                <div className="flex min-w-0 flex-col gap-1">
+                  <span className="numeral text-micro tracking-[0.2em] text-faint">THE GATE</span>
+                  <div className="flex items-center gap-2 leading-none">
+                    <div className="flex -space-x-2">
+                      {gate.slice(0, 4).map((m) => (
+                        <a
+                          key={m}
+                          href={`https://github.com/${m}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          title={`${m} · maintainer`}
+                        >
+                          <img
+                            src={avatar(m, 56)}
+                            alt={m}
+                            width={30}
+                            height={30}
+                            className="rounded-full ring-2 ring-panel transition-transform hover:scale-110"
+                            loading="lazy"
+                          />
+                        </a>
+                      ))}
+                    </div>
+                    {extra > 0 ? (
+                      <span className="numeral text-metric leading-none text-warn">+{extra}</span>
+                    ) : null}
+                  </div>
+                  <span className="numeral truncate text-micro text-dim">
+                    {cm.mergedByDistinct === 1 ? "sole maintainer" : `${cm.mergedByDistinct} maintainers`} ·{" "}
+                    {fmtCompact(cm.prsSampled)} PRs merged
+                  </span>
+                </div>
+              );
+            })()
           ) : (
             <Block label="MERGED PRS · 30D" value={fmtCompact(a.prs30)} hint="pull requests" />
           )}
@@ -230,7 +263,13 @@ export default function VitalSignsPanel({
         {cm ? (
           <div className="flex flex-col gap-2.5 border-t border-grid pt-4">
             <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
-              <div className="flex items-center gap-3">
+              <a
+                href={`https://github.com/${repo}/graphs/contributors`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="group flex items-center gap-3"
+                title="Contributors on GitHub"
+              >
                 <div className="flex -space-x-2">
                   {faces.map((c) => (
                     <img
@@ -245,10 +284,10 @@ export default function VitalSignsPanel({
                     />
                   ))}
                 </div>
-                <span className="numeral text-label text-ink">
-                  {fmtCompact(cm.contributors)} contributors
+                <span className="numeral text-label text-ink transition-colors group-hover:text-accent">
+                  {fmtCompact(cm.contributors)} contributors ↗
                 </span>
-              </div>
+              </a>
               {cm.cohorts.length >= 2 ? (
                 <span className="numeral text-micro text-faint">
                   returning devs{" "}

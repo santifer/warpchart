@@ -219,11 +219,13 @@ async function prAnalysis(repo, want = 500) {
       au.forEach((l) => seen.add(l));
       return { month: m, new: nw, returning: rt };
     });
+  const maintainers = [...mergers].filter((l) => !isBot(l)).slice(0, 6);
   const community = hrs.length
     ? {
         contributors: humans.length,
         prsSampled: hrs.length,
         mergedByDistinct: mergers.size || 1,
+        maintainers, // the actual merge-gate keepers, for their avatars
         topContributors: humans.slice(0, 10).map(([login]) => ({ login })),
         cohorts,
       }

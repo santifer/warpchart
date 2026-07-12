@@ -55,6 +55,7 @@ export interface VitalsCommunity {
   contributors: number; // unique human PR authors (bots excluded)
   prsSampled: number;
   mergedByDistinct: number; // 1 = single maintainer gate
+  maintainers: string[]; // logins of the actual merge-gate keepers (bot-excluded)
   topContributors: { login: string }[]; // bot-excluded, most PRs first
   cohorts: { month: string; new: number; returning: number }[];
 }
@@ -83,7 +84,10 @@ async function readVitals(owner: string, name: string): Promise<Vitals | null> {
   const token = process.env.BLOB_READ_WRITE_TOKEN;
   if (!token) return null;
   try {
-    const res = await get(blobKey(`${owner}/${name}`), { access: "private", token });
+    // useCache:false — @vercel/blob get() caches at the CDN (~1mo TTL) by
+    // default, which would freeze the daily-rewritten vitals for weeks. The
+    // 15-min unstable_cache below is the real dedup; each refresh reads fresh.
+    const res = await get(blobKey(`${owner}/${name}`), { access: "private", token, useCache: false });
     if (res?.statusCode === 200 && res.stream) {
       return JSON.parse(await new Response(res.stream).text()) as Vitals;
     }
