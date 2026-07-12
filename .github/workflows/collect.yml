@@ -112,6 +112,21 @@ jobs:
           TRAFFIC_TOKEN: ${{ secrets.TRAFFIC_TOKEN }}
           TRAFFIC_TOKENS: ${{ secrets.TRAFFIC_TOKENS }}
 
+      # 4c-bis. Vital Signs: the derived-intelligence moat. Refresh the top-N
+      #     activity DISTRIBUTION (commits/PRs/issues/releases/velocity) once per
+      #     UTC day, then compute full vitals (activity percentile + DORA lead
+      #     time + clone-conversion + ALIVE/MONUMENT verdict) for the OWNED repos
+      #     and PAID tenants -> vitals/{owner}--{name}.json. Runs AFTER velocity7
+      #     (route v7) and traffic.mjs (the vault). Self-gates per day; never
+      #     fails the run. VITALS_UNIVERSE caps the distribution set.
+      - name: Compute Vital Signs
+        run: node collector/vitals.mjs
+        continue-on-error: true
+        env:
+          BLOB_READ_WRITE_TOKEN: ${{ secrets.BLOB_READ_WRITE_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VITALS_UNIVERSE: "1000"
+
       # 4d. Spike attribution: detect HOURLY star surges from the fresh timestamps
       #     and name each one by diffing the Traffic Vault referrer snapshots that
       #     bracket it ("+67 stars at 11h · Twitter"). Writes data/attribution.json

@@ -32,6 +32,8 @@ import PinButton from "@/components/PinButton";
 import FirstLightBanner from "@/components/FirstLightBanner";
 import SpaceBackdrop from "@/components/SpaceBackdrop";
 import TrafficPanel from "@/components/TrafficPanel";
+import VitalSignsPanel from "@/components/VitalSignsPanel";
+import { loadVitals } from "@/lib/vitals";
 import { getCachedCodex, listCodexes } from "@/lib/codex";
 import { loadExplorerData, getCachedDossier } from "@/lib/explorer";
 import { fmt, fmtCompact, fmtEtaDays } from "@/lib/format";
@@ -337,6 +339,13 @@ export default async function ExplorerPage({
           </span>
         </div>
       </header>
+
+      {/* VITAL SIGNS: the derived-intelligence verdict (ALIVE vs MONUMENT), full
+          width above the console. Cache-only (collector-computed); null vitals
+          renders the locked upsell. Free for owned repos, paid for the rest. */}
+      <div className="mb-4">
+        <VitalSignsPanel repo={repoLabel} name={repoName} vitals={await loadVitals(owner, name)} />
+      </div>
 
       <RaceProvider repo={repoLabel}>
         <ConsoleLayout
