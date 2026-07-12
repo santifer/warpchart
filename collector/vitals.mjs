@@ -300,8 +300,8 @@ async function agentReadiness(repo) {
 // ---- revert rate: throughput is only half the story ("does a lot") — this is
 // the other half ("and doesn't break things"). Public: merged PRs whose TITLE
 // carries a revert, over all merged PRs, 90d window. Two search aliases, one
-// call. Paired with throughput it makes the quadrant: high volume AND low revert
-// is the pair a hiring lead fears they can't get from an agentic SDLC.
+// call. Shown as one quiet stat (a title-revert rate is a shallow, floor-heavy
+// signal — not a headline), never ranked against other repos.
 async function revertRate(repo) {
   const day = new Date(Date.now() - 90 * DAY).toISOString().slice(0, 10);
   const d = await gqlRetry(
@@ -323,15 +323,6 @@ async function revertRate(repo) {
     revertPct: mergedPRs ? Math.round((reverts / mergedPRs) * 1000) / 10 : 0,
   };
 }
-
-// Peer anchors for the throughput × merge-quality quadrant: household-name
-// engineering orgs. Their revert rate is the same for every unlocked repo, so we
-// compute it ONCE per run and reuse it.
-const QUALITY_ANCHORS = [
-  { repo: "microsoft/vscode", label: "VS Code" },
-  { repo: "vercel/next.js", label: "Next.js" },
-  { repo: "grafana/grafana", label: "Grafana" },
-];
 
 // ---- creator: followers (a rare, verifiable signal for the profile link) ----
 async function creatorInfo(owner) {
@@ -471,21 +462,6 @@ async function main() {
   for (const t of tenants) unlocked.add(t);
 
   const byName = new Map(route.repos.map((p) => [p.r.toLowerCase(), p]));
-
-  // peer quality (revert rate + throughput) for the quadrant, computed ONCE and
-  // shared across every unlocked repo. Spaced out to respect the GraphQL search
-  // limit (30/min). A flaky anchor is skipped, never fatal.
-  const anchorQuality = [];
-  for (const a of QUALITY_ANCHORS) {
-    try {
-      const q = await revertRate(a.repo);
-      anchorQuality.push({ repo: a.repo, label: a.label, mergedPRs: q.mergedPRs, revertPct: q.revertPct });
-    } catch (e) {
-      console.error(`[vitals] anchor ${a.repo} quality failed (non-fatal): ${e?.message ?? e}`);
-    }
-    await sleep(Math.max(PACE_MS, 2200));
-  }
-
   let wrote = 0;
   for (const repoLc of unlocked) {
     const routeEntry = byName.get(repoLc);
@@ -515,10 +491,7 @@ async function main() {
       // revert rate is search-bearing like lightActivity above — space it out to
       // stay under the GraphQL search cap (30/min)
       await sleep(Math.max(PACE_MS, 1200));
-      const rr = await revertRate(repo).catch(() => null);
-      const quality = rr
-        ? { ...rr, peers: anchorQuality.filter((p) => p.repo.toLowerCase() !== repoLc) }
-        : null;
+      const quality = await revertRate(repo).catch(() => null);
       const creator = await creatorInfo(repo.split("/")[0]);
       const perWeek = Math.round((act.releases90 / 90) * 7 * 10) / 10;
       const deploy = {

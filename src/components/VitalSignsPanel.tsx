@@ -79,99 +79,6 @@ function Block({
   );
 }
 
-// THROUGHPUT × MERGE QUALITY — the scatter that turns "does a lot" into "does a
-// lot AND doesn't break things". X = merged PRs (log, more = right), Y = revert
-// rate INVERTED (0% at top = cleanest). The repo sits against household-name orgs
-// so the reader deduces the tier, never told. Pure public git history.
-function QualityQuadrant({
-  self,
-  peers,
-}: {
-  self: { label: string; mergedPRs: number; revertPct: number };
-  peers: { label: string; mergedPRs: number; revertPct: number }[];
-}) {
-  const pts = [{ ...self, me: true }, ...peers.map((p) => ({ ...p, me: false }))].filter(
-    (p) => p.mergedPRs > 0,
-  );
-  if (pts.length < 2) return null;
-
-  const W = 340;
-  const H = 158;
-  const padL = 12;
-  const padR = 96;
-  const padT = 14;
-  const padB = 24;
-  const lg = (v: number) => Math.log10(Math.max(1, v));
-  const xs = pts.map((p) => lg(p.mergedPRs));
-  const minX = Math.min(...xs);
-  const spanX = Math.max(0.35, Math.max(...xs) - minX);
-  const x = (v: number) => padL + ((lg(v) - minX) / spanX) * (W - padL - padR);
-  const maxR = Math.max(2, ...pts.map((p) => p.revertPct));
-  const y = (v: number) => padT + (v / maxR) * (H - padT - padB); // 0% at top
-
-  return (
-    <svg viewBox={`0 0 ${W} ${H}`} className="w-full" role="img" aria-label="throughput versus revert rate">
-      {/* recessive frame + top (cleanest) guide */}
-      <line x1={padL} y1={padT} x2={W - padR} y2={padT} style={{ stroke: "var(--grid)" }} strokeWidth={1} />
-      <line
-        x1={padL}
-        y1={H - padB}
-        x2={W - padR}
-        y2={H - padB}
-        style={{ stroke: "var(--grid)" }}
-        strokeWidth={1}
-      />
-      {/* y ticks: cleaner is up */}
-      <text x={padL} y={padT - 4} style={{ fill: "var(--faint)", fontSize: 8 }} className="numeral">
-        0% reverted
-      </text>
-      <text x={padL} y={H - padB + 12} style={{ fill: "var(--faint)", fontSize: 8 }} className="numeral">
-        {maxR}%
-      </text>
-      <text
-        x={W - padR}
-        y={H - 4}
-        textAnchor="end"
-        style={{ fill: "var(--faint)", fontSize: 8 }}
-        className="numeral"
-      >
-        merged PRs · 90d →
-      </text>
-      {pts.map((p) => {
-        const cx = x(p.mergedPRs);
-        const cy = y(p.revertPct);
-        return (
-          <g key={p.label}>
-            {p.me ? (
-              <>
-                <circle cx={cx} cy={cy} r={9} style={{ fill: "var(--accent)", opacity: 0.16 }} />
-                <circle cx={cx} cy={cy} r={4.5} style={{ fill: "var(--accent)" }} />
-              </>
-            ) : (
-              <circle
-                cx={cx}
-                cy={cy}
-                r={3.5}
-                fill="none"
-                style={{ stroke: "var(--faint)" }}
-                strokeWidth={1.5}
-              />
-            )}
-            <text
-              x={cx + 8}
-              y={cy + 3}
-              style={{ fill: p.me ? "var(--accent)" : "var(--dim)", fontSize: 9 }}
-              className="numeral"
-            >
-              {p.label} · {p.revertPct}%
-            </text>
-          </g>
-        );
-      })}
-    </svg>
-  );
-}
-
 export default function VitalSignsPanel({
   repo,
   name,
@@ -211,8 +118,8 @@ export default function VitalSignsPanel({
               ◈ VITAL SIGNS · {name.toUpperCase()}
             </span>
             <span className="numeral max-w-md text-micro text-dim">
-              activity percentile against the top of GitHub, agent-readiness, throughput × revert
-              quadrant, DORA velocity and the contributor engine — already computed. Unlock to reveal.
+              activity percentile against the top of GitHub, agent-readiness, DORA velocity, lead
+              time, merge quality and the contributor engine — already computed. Unlock to reveal.
             </span>
             <a
               href="/pricing"
@@ -305,7 +212,7 @@ export default function VitalSignsPanel({
         </div>
 
         {/* DORA velocity + the engine */}
-        <div className="grid grid-cols-2 gap-x-6 gap-y-4 border-t border-grid pt-4 sm:grid-cols-4">
+        <div className="grid grid-cols-2 gap-x-6 gap-y-4 border-t border-grid pt-4 sm:grid-cols-3 lg:grid-cols-5">
           {lt ? (
             <Block
               label="LEAD TIME"
@@ -378,33 +285,16 @@ export default function VitalSignsPanel({
           ) : (
             <Block label="ISSUES · 30D" value={fmtCompact(a.issues30)} hint="closed" />
           )}
+          {/* merge quality as ONE quiet stat: title-revert rate, no ranking */}
+          {q && q.mergedPRs > 0 ? (
+            <Block
+              label="REVERT · 90D"
+              value={`${q.revertPct}%`}
+              hint={`${fmtCompact(q.reverts)} of ${fmtCompact(q.mergedPRs)} merged`}
+              tone={q.revertPct <= 0.5 ? "accent" : "ink"}
+            />
+          ) : null}
         </div>
-
-        {/* throughput × merge quality: does a lot AND doesn't break things */}
-        {q && q.mergedPRs > 0 && (q.peers?.length ?? 0) >= 1 ? (
-          (() => {
-            const peers = q.peers;
-            const cleanest = peers.every((p) => q.revertPct <= p.revertPct);
-            return (
-              <div className="flex flex-col gap-2 border-t border-grid pt-4">
-                <span className="numeral text-micro tracking-[0.2em] text-faint">
-                  THROUGHPUT × MERGE QUALITY · VS THE GIANTS · 90D
-                </span>
-                <QualityQuadrant self={{ label: name, mergedPRs: q.mergedPRs, revertPct: q.revertPct }} peers={peers} />
-                <div className="numeral text-micro leading-relaxed text-faint">
-                  {cleanest ? (
-                    <span className="text-accent">lowest revert rate of the four. </span>
-                  ) : null}
-                  {fmtCompact(q.mergedPRs)} pull requests merged in the last 90 days,{" "}
-                  <span className="text-dim">
-                    {q.reverts} reverted ({q.revertPct}%)
-                  </span>
-                  . {peers.map((p) => p.label).join(", ")} shown at the same scale.
-                </div>
-              </div>
-            );
-          })()
-        ) : null}
 
         {/* the human engine: contributors (social proof) + the implicit flex */}
         {cm ? (

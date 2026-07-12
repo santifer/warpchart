@@ -81,21 +81,14 @@ export interface VitalsAgentReadiness {
   signals: number; // distinct signal categories present (0-7)
 }
 
-export interface VitalsQualityPeer {
-  repo: string;
-  label: string;
-  mergedPRs: number;
-  revertPct: number;
-}
-
-// throughput × merge-quality: "does a lot AND doesn't break things". Merged PRs
-// whose title carries a revert, over all merged PRs, 90d. Public git history.
+// merge quality, shown as ONE quiet stat: merged PRs whose title carries a
+// revert, over all merged PRs, 90d. Public git history. A title-revert rate is a
+// shallow, floor-heavy signal, so it is a footnote stat, never a ranked map.
 export interface VitalsQuality {
   window: number; // days
   mergedPRs: number;
   reverts: number;
   revertPct: number;
-  peers: VitalsQualityPeer[]; // household-name anchors for the quadrant
 }
 
 export interface Vitals {
@@ -137,6 +130,6 @@ async function readVitals(owner: string, name: string): Promise<Vitals | null> {
 export const loadVitals = (owner: string, name: string): Promise<Vitals | null> =>
   unstable_cache(
     () => readVitals(owner, name),
-    ["vitals-v3", `${owner}/${name}`.toLowerCase()],
+    ["vitals-v4", `${owner}/${name}`.toLowerCase()],
     { revalidate: 900 },
   )();
