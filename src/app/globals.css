@@ -1515,3 +1515,17 @@ body.gx-warping .ghx-lore {
     animation: none;
   }
 }
+
+/* Vital Signs — percentile fingerprint fill sweeps in on mount (telemetry
+   booting), staggered per row via inline animation-delay. Reduced-motion safe. */
+@keyframes fingerFill {
+  from { transform: scaleX(0); }
+  to { transform: scaleX(1); }
+}
+.finger-fill {
+  transform-origin: left center;
+  animation: fingerFill 0.7s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+}
+@media (prefers-reduced-motion: reduce) {
+  .finger-fill { animation: none; }
+}
