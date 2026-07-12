@@ -65,6 +65,39 @@ export interface VitalsCreator {
   followers: number | null;
 }
 
+// agent-readiness: file-existence only, from the public tree — is this repo
+// agent-NATIVE (ships CLAUDE.md / AGENTS.md / .claude machinery / MCP), not just
+// active. Zero owner-reported input.
+export interface VitalsAgentReadiness {
+  agentNative: boolean;
+  claudeMd: boolean;
+  agentsMd: boolean;
+  skills: number;
+  commands: number;
+  subagents: number;
+  mcp: boolean;
+  cursorRules: number;
+  chips: string[]; // ordered display tokens, e.g. ["CLAUDE.md","40 skills","MCP"]
+  signals: number; // distinct signal categories present (0-7)
+}
+
+export interface VitalsQualityPeer {
+  repo: string;
+  label: string;
+  mergedPRs: number;
+  revertPct: number;
+}
+
+// throughput × merge-quality: "does a lot AND doesn't break things". Merged PRs
+// whose title carries a revert, over all merged PRs, 90d. Public git history.
+export interface VitalsQuality {
+  window: number; // days
+  mergedPRs: number;
+  reverts: number;
+  revertPct: number;
+  peers: VitalsQualityPeer[]; // household-name anchors for the quadrant
+}
+
 export interface Vitals {
   repo: string;
   computedAt: string;
@@ -76,6 +109,8 @@ export interface Vitals {
   deploy: VitalsDeploy | null;
   adoption: VitalsAdoption | null;
   community: VitalsCommunity | null;
+  agentReadiness?: VitalsAgentReadiness | null;
+  quality?: VitalsQuality | null;
 }
 
 const blobKey = (repo: string) => `vitals/${repo.toLowerCase().replace("/", "--")}.json`;
@@ -102,6 +137,6 @@ async function readVitals(owner: string, name: string): Promise<Vitals | null> {
 export const loadVitals = (owner: string, name: string): Promise<Vitals | null> =>
   unstable_cache(
     () => readVitals(owner, name),
-    ["vitals-v2", `${owner}/${name}`.toLowerCase()],
+    ["vitals-v3", `${owner}/${name}`.toLowerCase()],
     { revalidate: 900 },
   )();

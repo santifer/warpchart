@@ -234,6 +234,105 @@ async function prAnalysis(repo, want = 500) {
   return { leadTime, community };
 }
 
+// ---- agent-readiness: is this repo agent-NATIVE, not just active? -----------
+// Pure file-existence from the PUBLIC tree (no owner-reported input, no
+// estimation): CLAUDE.md, AGENTS.md, the .claude/ machinery (skills, commands,
+// subagents), an MCP config, cursor rules. One aliased GraphQL call reads the
+// HEAD tree and the relevant subtrees; a non-existent path returns null. Answers
+// "does this codebase ship the artifacts of an agentic SDLC?" — verifiable by
+// anyone who opens the repo.
+async function agentReadiness(repo) {
+  const [owner, name] = repo.split("/");
+  const T = (alias, expr) =>
+    `${alias}: object(expression:${JSON.stringify(expr)}){ ... on Tree { entries{ name type } } }`;
+  const d = await gqlRetry(
+    `query($owner:String!,$name:String!){
+      repository(owner:$owner,name:$name){
+        ${T("root", "HEAD:")}
+        ${T("claude", "HEAD:.claude")}
+        ${T("skills", "HEAD:.claude/skills")}
+        ${T("commands", "HEAD:.claude/commands")}
+        ${T("subagents", "HEAD:.claude/agents")}
+        ${T("cursor", "HEAD:.cursor/rules")}
+      }
+    }`,
+    { owner, name },
+  );
+  const r = d?.repository;
+  if (!r) return null;
+  const rootEntries = r.root?.entries ?? [];
+  const rootNames = new Set(rootEntries.map((e) => e.name));
+  const claudeEntries = r.claude?.entries ?? [];
+  const dirCount = (e) => (e?.entries ?? []).filter((x) => x.type === "tree").length;
+  const count = (e) => (e?.entries ?? []).length;
+
+  const claudeMd = rootNames.has("CLAUDE.md") || claudeEntries.some((e) => e.name === "CLAUDE.md");
+  const agentsMd = rootNames.has("AGENTS.md");
+  // skills live one-dir-per-skill under .claude/skills; fall back to a flat file
+  // layout. commands / subagents are flat .md files.
+  const skills = r.skills ? dirCount(r.skills) || count(r.skills) : 0;
+  const commands = r.commands ? count(r.commands) : 0;
+  const subagents = r.subagents ? count(r.subagents) : 0;
+  const mcp =
+    rootNames.has(".mcp.json") ||
+    rootNames.has("mcp.json") ||
+    claudeEntries.some((e) => /^\.?mcp.*\.json$/i.test(e.name));
+  const cursorRules = (r.cursor ? count(r.cursor) : 0) + (rootNames.has(".cursorrules") ? 1 : 0);
+
+  // display chips, most on-brand first
+  const plural = (n, w) => `${n} ${w}${n > 1 ? "s" : ""}`;
+  const chips = [];
+  if (claudeMd) chips.push("CLAUDE.md");
+  if (agentsMd) chips.push("AGENTS.md");
+  if (skills) chips.push(plural(skills, "skill"));
+  if (commands) chips.push(plural(commands, "command"));
+  if (subagents) chips.push(plural(subagents, "subagent"));
+  if (mcp) chips.push("MCP");
+  if (cursorRules) chips.push(plural(cursorRules, "cursor rule"));
+
+  const signals = [claudeMd, agentsMd, skills > 0, commands > 0, subagents > 0, mcp, cursorRules > 0].filter(
+    Boolean,
+  ).length;
+  const agentNative = claudeMd || agentsMd || skills > 0 || mcp;
+  return { agentNative, claudeMd, agentsMd, skills, commands, subagents, mcp, cursorRules, chips, signals };
+}
+
+// ---- revert rate: throughput is only half the story ("does a lot") — this is
+// the other half ("and doesn't break things"). Public: merged PRs whose TITLE
+// carries a revert, over all merged PRs, 90d window. Two search aliases, one
+// call. Paired with throughput it makes the quadrant: high volume AND low revert
+// is the pair a hiring lead fears they can't get from an agentic SDLC.
+async function revertRate(repo) {
+  const day = new Date(Date.now() - 90 * DAY).toISOString().slice(0, 10);
+  const d = await gqlRetry(
+    `query($qt:String!,$qr:String!){
+      qt: search(query:$qt, type:ISSUE){ issueCount }
+      qr: search(query:$qr, type:ISSUE){ issueCount }
+    }`,
+    {
+      qt: `repo:${repo} type:pr is:merged merged:>${day}`,
+      qr: `repo:${repo} type:pr is:merged merged:>${day} revert in:title`,
+    },
+  );
+  const mergedPRs = d?.qt?.issueCount ?? 0;
+  const reverts = d?.qr?.issueCount ?? 0;
+  return {
+    window: 90,
+    mergedPRs,
+    reverts,
+    revertPct: mergedPRs ? Math.round((reverts / mergedPRs) * 1000) / 10 : 0,
+  };
+}
+
+// Peer anchors for the throughput × merge-quality quadrant: household-name
+// engineering orgs. Their revert rate is the same for every unlocked repo, so we
+// compute it ONCE per run and reuse it.
+const QUALITY_ANCHORS = [
+  { repo: "microsoft/vscode", label: "VS Code" },
+  { repo: "vercel/next.js", label: "Next.js" },
+  { repo: "grafana/grafana", label: "Grafana" },
+];
+
 // ---- creator: followers (a rare, verifiable signal for the profile link) ----
 async function creatorInfo(owner) {
   try {
@@ -372,6 +471,21 @@ async function main() {
   for (const t of tenants) unlocked.add(t);
 
   const byName = new Map(route.repos.map((p) => [p.r.toLowerCase(), p]));
+
+  // peer quality (revert rate + throughput) for the quadrant, computed ONCE and
+  // shared across every unlocked repo. Spaced out to respect the GraphQL search
+  // limit (30/min). A flaky anchor is skipped, never fatal.
+  const anchorQuality = [];
+  for (const a of QUALITY_ANCHORS) {
+    try {
+      const q = await revertRate(a.repo);
+      anchorQuality.push({ repo: a.repo, label: a.label, mergedPRs: q.mergedPRs, revertPct: q.revertPct });
+    } catch (e) {
+      console.error(`[vitals] anchor ${a.repo} quality failed (non-fatal): ${e?.message ?? e}`);
+    }
+    await sleep(Math.max(PACE_MS, 2200));
+  }
+
   let wrote = 0;
   for (const repoLc of unlocked) {
     const routeEntry = byName.get(repoLc);
@@ -397,6 +511,14 @@ async function main() {
         community: null,
       }));
       const ad = await adoption(repo).catch(() => null);
+      const ar = await agentReadiness(repo).catch(() => null);
+      // revert rate is search-bearing like lightActivity above — space it out to
+      // stay under the GraphQL search cap (30/min)
+      await sleep(Math.max(PACE_MS, 1200));
+      const rr = await revertRate(repo).catch(() => null);
+      const quality = rr
+        ? { ...rr, peers: anchorQuality.filter((p) => p.repo.toLowerCase() !== repoLc) }
+        : null;
       const creator = await creatorInfo(repo.split("/")[0]);
       const perWeek = Math.round((act.releases90 / 90) * 7 * 10) / 10;
       const deploy = {
@@ -424,6 +546,8 @@ async function main() {
         deploy,
         adoption: ad,
         community: cm,
+        agentReadiness: ar,
+        quality,
       };
       await writeBlob(blobKey(repo), vitals);
       wrote++;
@@ -431,6 +555,8 @@ async function main() {
         `[vitals] ${repo}: activity top ${100 - compositePct}% (#${compositeRank}/${dist.universe})` +
           (lt ? ` · lead ${lt.medianH}h ${lt.tier}` : "") +
           (cm ? ` · ${cm.contributors} contribs · ${cm.mergedByDistinct} merger(s)` : "") +
+          (ar?.agentNative ? ` · agent-native [${ar.chips.join(" · ")}]` : "") +
+          (quality ? ` · revert ${quality.revertPct}% (${quality.reverts}/${quality.mergedPRs})` : "") +
           ` · ${vitals.verdict}`,
       );
     } catch (e) {
