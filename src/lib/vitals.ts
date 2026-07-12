@@ -109,6 +109,26 @@ export interface VitalsAutomation {
   sampled: number;
 }
 
+// docs / community health: GitHub's own community-health % + which files exist.
+// The most-cited "beyond-code" maintainer signal. Public, one REST call.
+export interface VitalsDocs {
+  healthPct: number | null;
+  readme: boolean;
+  contributing: boolean;
+  codeOfConduct: boolean;
+  security: boolean;
+  issueTemplate: boolean;
+  prTemplate: boolean;
+  license: boolean;
+  chips: string[];
+}
+
+// onboarding: open "good first issue" count — the contributor funnel made
+// visible. Newcomer retention comes from the PR cohorts.
+export interface VitalsOnboarding {
+  goodFirstIssues: number | null;
+}
+
 export interface Vitals {
   repo: string;
   computedAt: string;
@@ -124,6 +144,9 @@ export interface Vitals {
   quality?: VitalsQuality | null;
   responsiveness?: VitalsResponsiveness | null;
   automation?: VitalsAutomation | null;
+  docs?: VitalsDocs | null;
+  onboarding?: VitalsOnboarding | null;
+  createdAt?: string | null;
 }
 
 const blobKey = (repo: string) => `vitals/${repo.toLowerCase().replace("/", "--")}.json`;
@@ -150,6 +173,6 @@ async function readVitals(owner: string, name: string): Promise<Vitals | null> {
 export const loadVitals = (owner: string, name: string): Promise<Vitals | null> =>
   unstable_cache(
     () => readVitals(owner, name),
-    ["vitals-v5", `${owner}/${name}`.toLowerCase()],
+    ["vitals-v6", `${owner}/${name}`.toLowerCase()],
     { revalidate: 900 },
   )();

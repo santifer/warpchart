@@ -25,7 +25,7 @@
 import { readFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import { get, put } from "@vercel/blob";
-import { DATA_DIR, graphql, sleep, token, readConfig } from "./lib.mjs";
+import { DATA_DIR, graphql, ghFetch, sleep, token, readConfig } from "./lib.mjs";
 
 token(); // GitHub token: fail fast
 const blobToken = process.env.BLOB_READ_WRITE_TOKEN;
@@ -130,6 +130,7 @@ async function lightActivity(repo) {
       qc: search(query:$qc, type:ISSUE){ issueCount }
       qm: search(query:$qm, type:ISSUE){ issueCount }
       repository(owner:$owner,name:$name){
+        createdAt
         defaultBranchRef{ target{ ... on Commit{ history(since:$since){ totalCount } } } }
         releases(first:20, orderBy:{field:CREATED_AT,direction:DESC}){ nodes{ publishedAt isPrerelease } }
       }
@@ -147,11 +148,12 @@ async function lightActivity(repo) {
   const prs30 = d.qm?.issueCount ?? 0;
   const issues30 = d.qc?.issueCount ?? 0;
   const commits30 = d.repository?.defaultBranchRef?.target?.history?.totalCount ?? 0;
+  const createdAt = d.repository?.createdAt ?? null;
   const cutoff = Date.now() - 90 * DAY;
   const releases90 = (d.repository?.releases?.nodes ?? []).filter(
     (r) => r.publishedAt && !r.isPrerelease && Date.parse(r.publishedAt) >= cutoff,
   ).length;
-  return { commits30, prs30, issues30, releases90 };
+  return { commits30, prs30, issues30, releases90, createdAt };
 }
 
 // ---- one merged-PR sweep -> DORA lead time + the human engine ---------------
@@ -456,6 +458,70 @@ async function revertRate(repo) {
   };
 }
 
+// ---- docs / community health: the "beyond-code" bar hiring leads look for ----
+// GitHub computes its own community-health % (README, CONTRIBUTING, code of
+// conduct, security policy, issue/PR templates, license). We surface GitHub's
+// own number + which files exist — authoritative, public, one REST call. Docs
+// were the single most-cited "great maintainer" signal across the research.
+async function docsHealth(repo) {
+  const [owner, name] = repo.split("/");
+  try {
+    const p = await ghFetch(`/repos/${owner}/${name}/community/profile`);
+    const f = p?.files ?? {};
+    const has = (k) => Boolean(f[k]);
+    const readme = has("readme");
+    const contributing = has("contributing");
+    const codeOfConduct = has("code_of_conduct") || has("code_of_conduct_file");
+    const security = has("security");
+    const issueTemplate = has("issue_template");
+    const prTemplate = has("pull_request_template");
+    const license = has("license");
+    const chips = [];
+    if (readme) chips.push("README");
+    if (contributing) chips.push("CONTRIBUTING");
+    if (codeOfConduct) chips.push("CoC");
+    if (security) chips.push("SECURITY");
+    if (issueTemplate || prTemplate) chips.push("templates");
+    if (license) chips.push("license");
+    return {
+      healthPct: typeof p?.health_percentage === "number" ? p.health_percentage : null,
+      readme,
+      contributing,
+      codeOfConduct,
+      security,
+      issueTemplate,
+      prTemplate,
+      license,
+      chips,
+    };
+  } catch {
+    return null;
+  }
+}
+
+// ---- onboarding: does the project actively welcome newcomers? ---------------
+// Open "good first issue" count — the concrete, public tell that a maintainer
+// runs a contributor funnel (community leadership, not just code). Two label
+// spellings, one call. Newcomer RETENTION comes free from the PR cohorts.
+async function onboarding(repo) {
+  try {
+    const d = await gqlRetry(
+      `query($q:String!,$q2:String!){
+        a: search(query:$q, type:ISSUE){ issueCount }
+        b: search(query:$q2, type:ISSUE){ issueCount }
+      }`,
+      {
+        q: `repo:${repo} is:issue is:open label:"good first issue"`,
+        q2: `repo:${repo} is:issue is:open label:"good-first-issue"`,
+      },
+    );
+    const gfi = Math.max(d?.a?.issueCount ?? 0, d?.b?.issueCount ?? 0);
+    return { goodFirstIssues: gfi };
+  } catch {
+    return null;
+  }
+}
+
 // ---- creator: followers (a rare, verifiable signal for the profile link) ----
 async function creatorInfo(owner) {
   try {
@@ -626,6 +692,9 @@ async function main() {
       const quality = await revertRate(repo).catch(() => null);
       const ttfr = await responsiveness(repo).catch(() => null);
       const auto = await automation(repo).catch(() => null);
+      const docs = await docsHealth(repo).catch(() => null);
+      await sleep(Math.max(PACE_MS, 1200)); // onboarding is search-bearing
+      const onboard = await onboarding(repo).catch(() => null);
       const creator = await creatorInfo(repo.split("/")[0]);
       const perWeek = Math.round((act.releases90 / 90) * 7 * 10) / 10;
       const deploy = {
@@ -657,6 +726,9 @@ async function main() {
         quality,
         responsiveness: ttfr,
         automation: auto,
+        docs,
+        onboarding: onboard,
+        createdAt: act.createdAt ?? null,
       };
       await writeBlob(blobKey(repo), vitals);
       // seed the honest trend: one snapshot per day of the headline signals
@@ -677,6 +749,8 @@ async function main() {
           (quality ? ` · revert ${quality.revertPct}%` : "") +
           (ttfr ? ` · ttfr ${ttfr.medianH}h` : "") +
           (auto ? ` · ${auto.statusChecksPerPR} checks/PR · ${auto.bots.length} bots` : "") +
+          (docs ? ` · docs ${docs.healthPct}% [${docs.chips.join(",")}]` : "") +
+          (onboard ? ` · ${onboard.goodFirstIssues} GFI` : "") +
           ` · ${vitals.verdict}`,
       );
     } catch (e) {

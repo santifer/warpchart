@@ -118,8 +118,9 @@ export default function VitalSignsPanel({
               ◈ VITAL SIGNS · {name.toUpperCase()}
             </span>
             <span className="numeral max-w-md text-micro text-dim">
-              activity percentile against the top of GitHub, agent-readiness, DORA velocity, lead
-              time, merge quality and the contributor engine — already computed. Unlock to reveal.
+              activity percentile against the top of GitHub, agent-readiness, docs health, DORA
+              velocity, first-response, merge quality and the contributor engine — already computed.
+              Unlock to reveal.
             </span>
             <a
               href="/pricing"
@@ -142,6 +143,11 @@ export default function VitalSignsPanel({
   const q = vitals.quality;
   const ttfr = vitals.responsiveness;
   const auto = vitals.automation;
+  const docs = vitals.docs;
+  const onboard = vitals.onboarding;
+  const since = vitals.createdAt
+    ? new Date(vitals.createdAt).toLocaleDateString("en-US", { month: "short", year: "numeric" })
+    : null;
   const alive = vitals.verdict === "ALIVE";
   // the community avatar row shows OTHERS (the maintainer is already the
   // "operated by" link) — stronger social proof: all these people build this.
@@ -182,6 +188,7 @@ export default function VitalSignsPanel({
           </div>
           <div className="numeral text-micro text-faint">
             {topPct(a.compositePct)} · a living project, not a star monument
+            {since ? <> · maintained since {since}</> : null}
           </div>
         </div>
 
@@ -193,6 +200,22 @@ export default function VitalSignsPanel({
             </span>
             <div className="flex flex-wrap items-center gap-1.5">
               {ar.chips.map((c) => (
+                <span key={c} className="numeral bg-grid/50 px-1.5 py-0.5 text-micro text-dim">
+                  {c}
+                </span>
+              ))}
+            </div>
+          </div>
+        ) : null}
+
+        {/* docs / community health: GitHub's own health %, files from the tree */}
+        {docs && docs.chips.length > 0 ? (
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+            <span className="numeral inline-flex items-center gap-1.5 border border-grid px-2 py-0.5 text-micro tracking-[0.18em] text-dim">
+              ◇ DOCS{docs.healthPct !== null ? ` ${docs.healthPct}%` : ""}
+            </span>
+            <div className="flex flex-wrap items-center gap-1.5">
+              {docs.chips.map((c) => (
                 <span key={c} className="numeral bg-grid/50 px-1.5 py-0.5 text-micro text-dim">
                   {c}
                 </span>
@@ -355,18 +378,32 @@ export default function VitalSignsPanel({
                   {fmtCompact(cm.contributors)} contributors ↗
                 </span>
               </a>
-              {cm.cohorts.length >= 2 ? (
-                <span className="numeral text-micro text-faint">
-                  returning devs{" "}
-                  <span className="text-accent">
-                    {cm.cohorts
-                      .slice(-3)
-                      .map((c) => c.returning)
-                      .join(" → ")}
-                  </span>{" "}
-                  month over month
-                </span>
-              ) : null}
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
+                {onboard && (onboard.goodFirstIssues ?? 0) > 0 ? (
+                  <a
+                    href={`https://github.com/${repo}/issues?q=is%3Aopen+is%3Aissue+label%3A%22good+first+issue%22`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="numeral text-micro text-faint transition-colors hover:text-accent"
+                    title="Open good first issues on GitHub"
+                  >
+                    <span className="text-dim">{fmtCompact(onboard.goodFirstIssues ?? 0)}</span> good first
+                    issues ↗
+                  </a>
+                ) : null}
+                {cm.cohorts.length >= 2 ? (
+                  <span className="numeral text-micro text-faint">
+                    returning devs{" "}
+                    <span className="text-accent">
+                      {cm.cohorts
+                        .slice(-3)
+                        .map((c) => c.returning)
+                        .join(" → ")}
+                    </span>{" "}
+                    month over month
+                  </span>
+                ) : null}
+              </div>
             </div>
             {/* the sentence: pure facts, top-tier by deduction */}
             <div className="numeral text-micro leading-relaxed text-faint">
