@@ -140,6 +140,7 @@ export default async function ExplorerPage({
         <Dashboard
           bundle={tBundle}
           dossier={await getCachedDossier(owner, name)}
+          vitals={await loadVitals(owner, name)}
           charted={chartedRepos}
         />
       </>
@@ -177,6 +178,7 @@ export default async function ExplorerPage({
             bundle={hBundle}
             polling={false}
             dossier={await getCachedDossier(owner, name)}
+            vitals={await loadVitals(owner, name)}
             charted={chartedRepos}
           />
         </>

@@ -20,6 +20,8 @@ import Heatmap from "./Heatmap";
 import RankChart from "./RankChart";
 import MissionLog from "./MissionLog";
 import TrafficPanel from "./TrafficPanel";
+import VitalSignsPanel from "./VitalSignsPanel";
+import type { Vitals } from "@/lib/vitals";
 import DailyBriefing from "./DailyBriefing";
 import TargetHud from "./TargetHud";
 import SoundController from "./SoundController";
@@ -77,11 +79,13 @@ export default function Dashboard({
   bundle,
   polling = true,
   dossier = null,
+  vitals = null,
   charted,
 }: {
   bundle: DashboardBundle;
   polling?: boolean;
   dossier?: Dossier | null;
+  vitals?: Vitals | null;
   charted?: string[];
 }) {
   const repo = bundle.meta?.repo;
@@ -120,6 +124,7 @@ export default function Dashboard({
         </div>
         <StatusBar bundle={bundle} />
         <DailyBriefing bundle={bundle} />
+        <VitalSignsPanel repo={repo ?? ""} name={repo?.split("/")[1] ?? ""} vitals={vitals} />
         {target ? (
           <TargetHud bundle={bundle} target={target} onClear={() => pinTarget(null)} />
         ) : null}
