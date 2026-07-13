@@ -595,7 +595,13 @@ async function main() {
   // the aliased activity call, v7 free from route.json. The PR/issue searches
   // make the full sweep ~1h (search is capped at 30/min), so Phase A refreshes
   // WEEKLY, not daily; Phase B (unlocked repos) stays daily-fresh.
+  // M = every dimension kept in the distribution (v7 stays so the fingerprint can
+  // still show a star-velocity percentile). COMPOSITE_M = the dimensions that make
+  // up the "development activity" RANK — star velocity is popularity, not
+  // development, so it is deliberately EXCLUDED from the rank (it would make the
+  // rank sag as viral hype cools even when engineering is unchanged).
   const M = ["commits30", "prs30", "issues30", "releases90", "v7"];
+  const COMPOSITE_M = ["commits30", "prs30", "issues30", "releases90"];
   const dims = (a, repo) => ({ ...a, v7: v7Of(repo) });
 
   // ---- PHASE A: refresh the reference distribution (idempotent, WEEKLY) ------
@@ -604,8 +610,30 @@ async function main() {
   // or older than a week. Most daily runs skip straight to Phase B.
   let dist = await readBlob("vitals/_dist.json");
   const ageDays = dist?.day ? (Date.parse(today) - Date.parse(dist.day)) / DAY : Infinity;
-  const need = !dist || !dist.composite || (dist.universe || 0) < 100 || ageDays >= 7;
-  if (need) {
+  // rebuild if the composite definition changed (e.g. star velocity removed) so
+  // the new rank basis takes effect at once, not on the next weekly refresh.
+  const compDefChanged = (dist?.compositeMetrics ?? []).join(",") !== COMPOSITE_M.join(",");
+  const need =
+    !dist || !dist.composite || (dist.universe || 0) < 100 || ageDays >= 7 || compDefChanged;
+
+  // Fast path: ONLY the composite definition changed and we still have the raw
+  // per-repo rows + a fresh distribution — recompute the composite in-memory, no
+  // ~1h re-sweep. (First run after this ships has no stored raw, so it sweeps
+  // once and stores raw; every later definition tweak is free.)
+  const canRecompute =
+    compDefChanged &&
+    dist?.metrics &&
+    Array.isArray(dist.raw) &&
+    (dist.universe || 0) >= 100 &&
+    ageDays < 7;
+  if (canRecompute) {
+    const composite = dist.raw
+      .map((a) => COMPOSITE_M.reduce((s, k) => s + pctRank(dist.metrics[k], a[k] ?? 0), 0) / COMPOSITE_M.length)
+      .sort((x, y) => x - y);
+    dist = { ...dist, composite, compositeMetrics: COMPOSITE_M, computedAt: new Date().toISOString() };
+    await writeBlob("vitals/_dist.json", dist);
+    console.log(`[vitals] composite recomputed from stored raw (${COMPOSITE_M.join("+")}), no sweep`);
+  } else if (need) {
     const target = repos.slice(0, UNIVERSE);
     const raw = []; // per-repo full dims, kept for the composite pass
     let done = 0;
@@ -629,9 +657,25 @@ async function main() {
       // so a composite RANK must be measured against the composite distribution,
       // not linearly approximated from the composite percentile.
       const composite = raw
-        .map((a) => M.reduce((s, k) => s + pctRank(metrics[k], a[k] ?? 0), 0) / M.length)
+        .map((a) => COMPOSITE_M.reduce((s, k) => s + pctRank(metrics[k], a[k] ?? 0), 0) / COMPOSITE_M.length)
         .sort((x, y) => x - y);
-      dist = { day: today, computedAt: new Date().toISOString(), universe: done, metrics, composite };
+      dist = {
+        day: today,
+        computedAt: new Date().toISOString(),
+        universe: done,
+        metrics,
+        composite,
+        compositeMetrics: COMPOSITE_M,
+        // keep the per-repo rows so a later composite-definition change (drop or
+        // add a metric) can recompute the composite WITHOUT a full re-sweep.
+        raw: raw.map((a) => ({
+          commits30: a.commits30,
+          prs30: a.prs30,
+          issues30: a.issues30,
+          releases90: a.releases90,
+          v7: a.v7,
+        })),
+      };
       await writeBlob("vitals/_dist.json", dist);
       console.log(`[vitals] distribution refreshed: ${done} repos`);
     } else {
@@ -671,11 +715,13 @@ async function main() {
       const prsPct = pctRank(dist.metrics.prs30 ?? [0], act.prs30);
       const issuesPct = pctRank(dist.metrics.issues30 ?? [0], act.issues30);
       const releasesPct = pctRank(dist.metrics.releases90 ?? [0], act.releases90);
-      const velocityPct = pctRank(dist.metrics.v7 ?? [0], act.v7);
-      // composite over ALL dimensions the distribution carries, ranked against
-      // the composite distribution — skew-correct, not linearly guessed.
-      const dm = Object.keys(dist.metrics);
-      const compRaw = dm.reduce((s, k) => s + pctRank(dist.metrics[k], act[k] ?? 0), 0) / dm.length;
+      const velocityPct = pctRank(dist.metrics.v7 ?? [0], act.v7); // fingerprint only
+      // composite over the DEVELOPMENT dimensions only (star velocity excluded —
+      // it is popularity, not development), ranked against the composite
+      // distribution — skew-correct, not linearly guessed.
+      const compMetrics = (dist.compositeMetrics ?? COMPOSITE_M).filter((k) => dist.metrics[k]);
+      const compRaw =
+        compMetrics.reduce((s, k) => s + pctRank(dist.metrics[k], act[k] ?? 0), 0) / compMetrics.length;
       const cdist = dist.composite ?? [];
       const compositePct = cdist.length ? pctRank(cdist, compRaw) : Math.round(compRaw);
       const above = cdist.length ? cdist.filter((c) => c > compRaw).length : 0;

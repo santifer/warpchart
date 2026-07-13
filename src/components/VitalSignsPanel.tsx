@@ -260,8 +260,8 @@ export default function VitalSignsPanel({
             </span>
           </div>
           <span className="numeral text-micro leading-relaxed text-faint/70">
-            a live daily composite of commits, merged PRs, issues closed, releases &amp; star velocity —
-            a snapshot, not a fixed title{since ? ` · maintained since ${since}` : ""}
+            a live daily composite of commits, merged PRs, issues closed &amp; releases — development
+            work, not stars — a snapshot, not a fixed title{since ? ` · maintained since ${since}` : ""}
           </span>
         </div>
 
