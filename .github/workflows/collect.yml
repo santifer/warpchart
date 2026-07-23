@@ -122,6 +122,7 @@ jobs:
       - name: Compute Vital Signs
         run: node collector/vitals.mjs
         continue-on-error: true
+        timeout-minutes: 3
         env:
           BLOB_READ_WRITE_TOKEN: ${{ secrets.BLOB_READ_WRITE_TOKEN }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
