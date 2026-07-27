@@ -56,18 +56,45 @@ async function readJson(key) {
   return null;
 }
 
-// pick the recorded point closest to `targetMs` without overshooting the
-// present; returns [dayMs, stars] or null. series = [[isoDay, rank, stars], ...]
-function pointNear(series, targetMs, todayMs) {
+// A star PURGE (GitHub deleting farmed stars, or a repo transfer) drops a repo
+// by thousands in a single day. That step is a one-off correction, not growth,
+// but a naive 7-day rate spreads it over the whole window: odysseus-dev/odysseus
+// lost 21.8k on 2026-07-24 and read -2903/d for days while actually growing at
+// ~120/d. A negative rate that large poisons every projection downstream (a
+// rival "losing" 2900/d makes projectCrossing report an overtake in hours, and
+// it stays wrong until the step falls out of the window). So: find the step and
+// measure only AFTER it.
+const PURGE_PCT = 0.02; // a single-day drop of >=2% of the count...
+const PURGE_ABS = 300; // ...and >=300 stars, so ordinary unstar noise is ignored
+
+// Baseline for the trailing rate. Returns { then: [dayMs, stars], purge } where
+// `purge` is the ISO day of the most recent step inside the window, or null.
+// series = [[isoDay, rank, stars], ...]
+function baselineFor(series, targetMs, todayMs) {
+  const pts = series
+    .map((p) => [Date.parse(`${p[0]}T12:00:00Z`), p[2], p[0]])
+    .filter((p) => Number.isFinite(p[0]) && p[1] != null && p[0] < todayMs - 0.5 * DAY)
+    .sort((a, b) => a[0] - b[0]); // ignore today; oldest first
+  if (!pts.length) return null;
+
+  // most recent purge step inside [targetMs, now]
+  let purgeIdx = -1;
+  for (let i = 1; i < pts.length; i++) {
+    if (pts[i][0] < targetMs) continue;
+    const drop = pts[i - 1][1] - pts[i][1];
+    if (drop >= PURGE_ABS && drop >= pts[i - 1][1] * PURGE_PCT) purgeIdx = i;
+  }
+  // measure from the first post-purge point: that count is the corrected one
+  if (purgeIdx >= 0) return { then: [pts[purgeIdx][0], pts[purgeIdx][1]], purge: pts[purgeIdx][2] };
+
+  // no step: the recorded point closest to the 7-day target
   let best = null;
-  for (const p of series) {
-    const t = Date.parse(`${p[0]}T12:00:00Z`);
-    if (!Number.isFinite(t) || t >= todayMs - 0.5 * DAY) continue; // ignore today
-    if (best === null || Math.abs(t - targetMs) < Math.abs(best[0] - targetMs)) {
-      best = [t, p[2]];
+  for (const p of pts) {
+    if (best === null || Math.abs(p[0] - targetMs) < Math.abs(best[0] - targetMs)) {
+      best = [p[0], p[1]];
     }
   }
-  return best;
+  return best ? { then: best, purge: null } : null;
 }
 
 async function main() {
@@ -96,6 +123,7 @@ async function main() {
   for (const p of repos) if (p?.r) byShard[shardOf(p.r)].push(p);
 
   let withV7 = 0;
+  let purged = 0;
   for (let i = 0; i < SHARDS; i++) {
     const list = byShard[i];
     if (!list.length) continue;
@@ -106,11 +134,31 @@ async function main() {
     for (const p of list) {
       const s = lc.get(p.r.toLowerCase());
       if (!s || !s.length) continue;
-      const then = pointNear(s, targetMs, todayMs);
-      if (!then) continue;
-      const days = (todayMs - then[0]) / DAY;
-      if (days < 1) continue; // too short a baseline to be meaningful
-      p.v7 = Math.round(((p.s - then[1]) / days) * 10) / 10;
+      const base = baselineFor(s, targetMs, todayMs);
+      if (!base) continue;
+      const days = (todayMs - base.then[0]) / DAY;
+      if (base.purge) {
+        p.purge = base.purge;
+        purged++;
+      }
+      if (days < 1) {
+        // Baseline too short to measure. Normally we just leave `v` alone, but a
+        // purge poisons `v` too (it is a ~1-day diff and the step IS that day),
+        // so pin the rate to 0: "no measurable momentum" beats a false crash.
+        if (base.purge) p.v7 = 0;
+        continue;
+      }
+      let v7 = Math.round(((p.s - base.then[1]) / days) * 10) / 10;
+      // Backstop for a step the series could not show (a gap in the history, a
+      // rename): no real repo sheds >5% of its stars per day as growth.
+      if (v7 < -Math.max(PURGE_ABS, p.s * 0.05)) {
+        v7 = 0;
+        if (!p.purge) {
+          p.purge = "unknown";
+          purged++;
+        }
+      }
+      p.v7 = v7;
       withV7++;
     }
   }
@@ -121,6 +169,7 @@ async function main() {
   const sample = repos.find((p) => p.r?.toLowerCase() === "santifer/career-ops");
   console.log(
     `[velocity7] ${withV7}/${repos.length} repos got a 7d velocity` +
+      ` · ${purged} measured from after a star purge` +
       (sample ? ` · career-ops v=${sample.v}/d v7=${sample.v7 ?? "n/a"}/d` : "")
   );
 }
