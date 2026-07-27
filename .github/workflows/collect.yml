@@ -199,3 +199,15 @@ jobs:
             git pull --rebase
             git push
           }
+
+      # 6. Mutual attestation. health.yml checks production; this checks that
+      #    health.yml is still running at all - otherwise a stopped watchdog is
+      #    indistinguishable from a healthy system, since both are silent.
+      #    LAST, and deliberately WITHOUT continue-on-error: a red run mails the
+      #    owner, and by this point the deploy has already shipped, so failing
+      #    here costs nothing but attention.
+      - name: Verify the watchdog is alive
+        run: node collector/watchdog-alive.mjs
+        timeout-minutes: 1
+        env:
+          BLOB_READ_WRITE_TOKEN: ${{ secrets.BLOB_READ_WRITE_TOKEN }}
