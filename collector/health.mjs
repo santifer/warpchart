@@ -454,6 +454,10 @@ async function checkContracts() {
         // A probe this runner cannot make is not a change in the world.
         if (unmeasurable(now[k]) || now[k] === "unmeasurable") return false;
         if (unmeasurable(prev[k]) || prev[k] === "unmeasurable") return false;
+        // First successful measurement of a probe is a baseline, not a change.
+        // Without this, every new probe (and every probe that was previously
+        // unmeasurable) announces itself as an upstream moving under us.
+        if (prev[k] === undefined) return false;
         return String(prev[k]) !== String(now[k]);
       });
       for (const k of moved) {
