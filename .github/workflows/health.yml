@@ -1,0 +1,111 @@
+name: health
+
+# The watchdog. Runs against PRODUCTION, not against the repo, because every
+# outage this month was invisible from the code: the data was stale, or an
+# upstream had quietly changed what it would answer. Deliberately a separate
+# workflow from `collect` so a hung collector cannot take the watchdog down
+# with it (2026-07-19: a step overran the job timeout and killed the deploy,
+# and nothing noticed for days).
+#
+# Findings land in a single GitHub issue that is updated in place and closed
+# automatically when everything goes green, so a recurring problem never turns
+# into a stream of duplicate notifications.
+
+on:
+  schedule:
+    # every 2h at :37, offset from collect's :07 so it observes a settled state
+    - cron: "37 */2 * * *"
+  workflow_dispatch:
+    inputs:
+      base:
+        description: "Origin to probe (defaults to production)"
+        type: string
+        default: "https://warpchart.dev"
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: health
+  cancel-in-progress: false
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+      - run: npm install @vercel/blob --no-save --no-audit --no-fund
+
+      # Never let the probe's own exit code end the job here: the report has to
+      # be published first. The final step re-reads it and decides.
+      - name: Run health checks
+        id: health
+        continue-on-error: true
+        run: |
+          # pipefail matters: without it `tee` would swallow the probe's exit
+          # code and a critical finding would look like a clean run.
+          set -o pipefail
+          node collector/health.mjs \
+            --base="${{ inputs.base || 'https://warpchart.dev' }}" \
+            --report=health-report.md \
+            | tee health-console.txt
+        env:
+          BLOB_READ_WRITE_TOKEN: ${{ secrets.BLOB_READ_WRITE_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Publish findings
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          # The report always exists; "All checks pass" is its healthy form.
+          if grep -q "^All checks pass" health-report.md; then
+            HEALTHY=1
+          else
+            HEALTHY=0
+          fi
+
+          EXISTING=$(gh issue list --repo "$REPO" --label health --state open \
+            --json number --jq '.[0].number // empty')
+
+          if [ "$HEALTHY" = "1" ]; then
+            if [ -n "$EXISTING" ]; then
+              gh issue comment "$EXISTING" --repo "$REPO" \
+                --body "All health checks pass as of $(date -u +%Y-%m-%dT%H:%MZ). Closing."
+              gh issue close "$EXISTING" --repo "$REPO"
+              echo "recovered: closed #$EXISTING"
+            else
+              echo "healthy, nothing to report"
+            fi
+            exit 0
+          fi
+
+          # Ensure the label exists before first use (idempotent).
+          gh label create health --repo "$REPO" --color B60205 \
+            --description "Automated production health findings" 2>/dev/null || true
+
+          RUN_URL="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          printf '\n---\n_Updated automatically by the health workflow. [Run log](%s)_\n' "$RUN_URL" >> health-report.md
+
+          if [ -n "$EXISTING" ]; then
+            gh issue edit "$EXISTING" --repo "$REPO" --body-file health-report.md
+            echo "updated #$EXISTING"
+          else
+            gh issue create --repo "$REPO" --label health \
+              --title "Health: production checks failing" \
+              --body-file health-report.md
+          fi
+
+      # Turn the job red only for critical findings, so a warning does not cry
+      # wolf every two hours while still being visible in the issue.
+      - name: Fail on critical findings
+        if: steps.health.outcome == 'failure'
+        run: |
+          echo "::error::Critical health findings are open. See the health issue."
+          exit 1

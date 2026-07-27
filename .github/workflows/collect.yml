@@ -12,6 +12,10 @@ on:
         description: "Recompute v7 even if route.json has not refreshed (use after fixing the velocity math)"
         type: boolean
         default: false
+      force_collisions:
+        description: "Re-scan overtakes for the current registry (use after fixing how crossings are scored)"
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -69,6 +73,19 @@ jobs:
         env:
           BLOB_READ_WRITE_TOKEN: ${{ secrets.BLOB_READ_WRITE_TOKEN }}
           V7_FORCE: ${{ inputs.force_v7 && '1' || '' }}
+
+      # 3b-bis. Imminent overtakes. MUST run after velocity7: it used to run
+      #     inside collect.mjs, before `v7` existed, so every crossing was scored
+      #     with the noisy 1-day rate and /api/v1/overtakes publicly contradicted
+      #     /api/v1/velocity for the same repo. Self-skips when the registry did
+      #     not refresh (the baseline diff needs two generations).
+      - name: Scan imminent overtakes
+        run: node collector/collisions.mjs ${{ inputs.force_collisions && '--force' || '' }}
+        continue-on-error: true
+        timeout-minutes: 4
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          WARM_BASE_URL: ${{ vars.WARM_BASE_URL }}
 
       # 3c. Ping IndexNow (Bing/Yandex) with the refreshed corpus so new charted
       #     repos and the daily rank/velocity updates get crawled in hours. Once

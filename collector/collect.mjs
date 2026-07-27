@@ -149,38 +149,12 @@ try {
   console.error(`[collect] route refresh failed: ${err.message}`);
 }
 
-// 6b. Collision scan (best effort, only on the daily route refresh):
-// today vs yesterday gives every top-1000 repo a velocity for free, and
-// imminent overtakes ranked by tweetability land in data/collisions.json.
-if (routeRefreshed && !dryRun) {
-  try {
-    const { runCollisionScan } = await import("./collisions.mjs");
-    const scan = await runCollisionScan();
-    // pre-warm the day's top stories: when the overtake tweet goes out,
-    // both the victim's page (where the hunter shows orange) and its
-    // curve/embed are already hot for the crowd
-    const base = (process.env.WARM_BASE_URL ?? "").replace(/\/$/, "");
-    if (base && scan?.collisions?.length) {
-      const targets = new Set();
-      for (const c of scan.collisions.slice(0, 3)) {
-        targets.add(c.victim.r);
-        targets.add(c.hunter.r);
-      }
-      for (const r of targets) {
-        const q = encodeURIComponent(r);
-        for (const path of [`/r/${r}`, `/api/curve?repo=${q}`, `/api/chart?repo=${q}`]) {
-          try {
-            await fetch(`${base}${path}`);
-          } catch { /* best effort */ }
-          await new Promise((ok) => setTimeout(ok, 1500));
-        }
-      }
-      console.log(`[collect] collision stories warmed: ${targets.size} repos`);
-    }
-  } catch (err) {
-    console.error(`[collect] collision scan failed: ${err.message}`);
-  }
-}
+// 6b. The collision scan USED to run here, and that was a real bug: this point
+// is BEFORE velocity7.mjs writes `v7`, so every overtake was scored with the
+// noisy ~1-day rate while the rest of the site showed the stable 7-day one.
+// The public API contradicted itself as a result (worldmonitor read 1842/d on
+// /api/v1/velocity and 640/d on /api/v1/overtakes, 2026-07-27). It now runs as
+// its own workflow step after velocity7, so it inherits the canonical rate.
 
 // 7. Spike forensics: refresh at most once a day (best effort).
 const forensicsPath = join(DATA_DIR, "forensics.json");

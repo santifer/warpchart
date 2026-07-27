@@ -1,0 +1,663 @@
+// HEALTH: the watchdog that catches what nobody is looking at.
+//
+// Two production failures on 2026-07-27 shared one root cause, and it was not
+// the bugs themselves: NOTHING NOTICED. A star purge made a rival read -2903
+// stars/day for days (so the site promised an overtake "in 2 hours"), and
+// GitHub silently closed third-party stargazer listing weeks earlier, which
+// left /compare unable to add any repo. Both were found by a human looking at
+// the screen. For a product that sells itself as the source of truth on other
+// people's growth, that is the real defect.
+//
+// So this file asserts, every run, the things a person would otherwise have to
+// remember to check:
+//   FRESH     is the data actually recent, or is the site quietly frozen?
+//   DATA      are the numbers possible? (a repo cannot shed 4% of its stars a
+//             day as "growth" - that was the purge)
+//   CONTRACT  do our upstreams still behave as they did last run? Reported as
+//             TRANSITIONS, not just failures, because the thing that hurt us
+//             was a capability disappearing without a single error on our side
+//   PUBLIC    do the endpoints a visitor touches actually answer? (this is the
+//             check that would have caught /compare the same day)
+//   COHERENCE does the same repo show the same velocity everywhere? One number
+//             with two values on two pages is a credibility bug, not a rounding
+//             detail
+//   CURVE     are the charts we serve shaped like real history?
+//
+// Every finding carries a REMEDY: what to do, and where. A watchdog that only
+// says "something is wrong" just moves the diagnosis work onto the person it
+// was supposed to help.
+//
+// Runs standalone (no build step, no framework): node collector/health.mjs
+//   --json     machine-readable findings on stdout
+//   --no-fail  always exit 0 (for exploratory local runs)
+//   --base=X   probe another origin (a preview deployment, say)
+// Exit code 1 when a critical finding is open, so CI turns red by itself.
+import { writeFileSync } from "node:fs";
+
+const args = process.argv.slice(2);
+const JSON_OUT = args.includes("--json");
+const NO_FAIL = args.includes("--no-fail");
+const BASE = (args.find((a) => a.startsWith("--base="))?.slice(7) ?? "https://warpchart.dev").replace(/\/$/, "");
+const REPORT_PATH = args.find((a) => a.startsWith("--report="))?.slice(9) ?? null;
+
+const BLOB_TOKEN = process.env.BLOB_READ_WRITE_TOKEN;
+const GH_TOKEN = process.env.GH_TOKEN ?? process.env.GITHUB_TOKEN;
+const HOUR = 3_600_000;
+const DAY = 24 * HOUR;
+
+// The tenant, plus foreign repos spanning the interesting cases: huge, mid,
+// tiny, and the one that got purged. Foreign coverage is the point - every
+// bug we shipped this month only showed up on repos we do not own.
+const TENANT = "santifer/career-ops";
+const FOREIGN = ["facebook/react", "vercel/next.js", "mem0ai/mem0", "odysseus-dev/odysseus"];
+
+// ---------------------------------------------------------------- findings --
+const findings = [];
+const checked = [];
+
+// severity: "critical" (lying or down, fix now) | "warn" (degrading, look
+// today) | "info" (a fact worth knowing, e.g. an upstream capability changed)
+function fail(id, area, severity, detail, remedy, evidence) {
+  findings.push({ id, area, severity, detail, remedy, evidence: evidence ?? null });
+}
+function pass(id, area, detail) {
+  checked.push({ id, area, detail: detail ?? "ok" });
+}
+
+// A check that throws is itself a finding: silent watchdogs are worse than no
+// watchdog, because they read as "all clear".
+async function check(id, area, fn) {
+  try {
+    await fn();
+  } catch (err) {
+    fail(id, area, "warn", `the check itself failed: ${err?.message ?? err}`,
+      `Fix or delete the ${id} check in collector/health.mjs - a check that cannot run is reporting nothing, not "healthy".`);
+  }
+}
+
+// ------------------------------------------------------------------- utils --
+async function fetchJson(url, opts = {}) {
+  const res = await fetch(url, { signal: AbortSignal.timeout(opts.timeoutMs ?? 20_000), headers: opts.headers });
+  const text = await res.text();
+  let body = null;
+  try { body = JSON.parse(text); } catch { /* not json */ }
+  return { status: res.status, ok: res.ok, body, text };
+}
+
+async function gh(path, opts = {}) {
+  if (!GH_TOKEN) return { status: 0, ok: false, body: null, text: "no token" };
+  return fetchJson(`https://api.github.com${path}`, {
+    headers: { Authorization: `Bearer ${GH_TOKEN}`, Accept: opts.accept ?? "application/vnd.github+json", "User-Agent": "warpchart-health" },
+    timeoutMs: 15_000,
+  });
+}
+
+async function ghGraphql(query) {
+  if (!GH_TOKEN) return { status: 0, ok: false, body: null };
+  const res = await fetch("https://api.github.com/graphql", {
+    method: "POST",
+    body: JSON.stringify({ query }),
+    headers: { Authorization: `Bearer ${GH_TOKEN}`, "User-Agent": "warpchart-health", "Content-Type": "application/json" },
+    signal: AbortSignal.timeout(15_000),
+  });
+  return { status: res.status, ok: res.ok, body: await res.json().catch(() => null) };
+}
+
+async function blobJson(key) {
+  if (!BLOB_TOKEN) return null;
+  const { get } = await import("@vercel/blob");
+  const res = await get(key, { access: "private", token: BLOB_TOKEN }).catch(() => null);
+  if (!res?.stream) return null;
+  return JSON.parse(await new Response(res.stream).text());
+}
+
+async function blobPut(key, value) {
+  if (!BLOB_TOKEN) return;
+  const { put } = await import("@vercel/blob");
+  await put(key, JSON.stringify(value), {
+    access: "private", token: BLOB_TOKEN, contentType: "application/json",
+    addRandomSuffix: false, allowOverwrite: true,
+  });
+}
+
+const ageH = (iso) => (Date.now() - Date.parse(iso)) / HOUR;
+const pct = (a, b) => (b === 0 ? 0 : Math.abs(a - b) / Math.abs(b));
+
+// =========================================================== FRESH ==========
+// The collector hung once and the site froze for days while still looking
+// perfectly normal: every number was there, just old. Age is the only thing
+// that exposes that failure mode.
+async function checkFreshness(route) {
+  await check("fresh.snapshot", "FRESH", async () => {
+    const { body } = await fetchJson(`${BASE}/api/health`);
+    const iso = body?.collector?.lastSnapshot;
+    if (!iso) {
+      return fail("fresh.snapshot", "FRESH", "critical", "/api/health did not report a last snapshot",
+        "Check the collect workflow ran at all: gh run list -R santifer/warpchart -w collect.yml", body);
+    }
+    const h = ageH(iso);
+    if (h > 6) {
+      fail("fresh.snapshot", "FRESH", "critical", `last snapshot is ${h.toFixed(1)}h old (cron is every 2h)`,
+        "The collector is failing or being cancelled. Check the run log, especially step timeouts: a job-level timeout kills 'Trigger deploy' silently (that is what froze the site on 2026-07-19).", { lastSnapshot: iso });
+    } else if (h > 4) {
+      fail("fresh.snapshot", "FRESH", "warn", `last snapshot is ${h.toFixed(1)}h old`,
+        "One missed cron is tolerable; two in a row is not. Watch the next run.", { lastSnapshot: iso });
+    } else pass("fresh.snapshot", "FRESH", `${h.toFixed(1)}h old`);
+  });
+
+  await check("fresh.route", "FRESH", async () => {
+    if (!route?.generated_at) {
+      return fail("fresh.route", "FRESH", "critical", "route.json has no generated_at",
+        "The registry is the backbone of rank and velocity. Inspect collector/collect.mjs output.");
+    }
+    const h = ageH(route.generated_at);
+    if (h > 48) {
+      fail("fresh.route", "FRESH", "critical", `the top-1000 registry is ${(h / 24).toFixed(1)} days old`,
+        "Rank and velocity are stale sitewide. The registry refreshes ~daily inside collect.mjs; check whether the search step is erroring.", { generated_at: route.generated_at });
+    } else if (h > 30) {
+      fail("fresh.route", "FRESH", "warn", `the registry is ${h.toFixed(0)}h old (refreshes ~daily)`,
+        "If it crosses 48h, rank and velocity are formally stale.", { generated_at: route.generated_at });
+    } else pass("fresh.route", "FRESH", `${h.toFixed(1)}h old`);
+  });
+
+  // v7 is computed once per registry refresh. If the stamp lags the registry,
+  // every velocity on the site is one generation behind its own star counts.
+  await check("fresh.v7", "FRESH", async () => {
+    if (!route) return;
+    if (!route.v7_at) {
+      return fail("fresh.v7", "FRESH", "warn", "route.json carries no v7_at stamp",
+        "collector/velocity7.mjs did not run or bailed early. Velocities fall back to the noisy 1-day diff.");
+    }
+    if (route.v7_at !== route.generated_at) {
+      fail("fresh.v7", "FRESH", "warn", `v7 was computed for ${route.v7_at} but the registry is ${route.generated_at}`,
+        "Velocities lag their star counts. Re-run collect with force_v7=true: gh workflow run collect.yml -R santifer/warpchart -f force_v7=true", { v7_at: route.v7_at, generated_at: route.generated_at });
+    } else pass("fresh.v7", "FRESH", "v7 matches the registry");
+  });
+}
+
+// =========================================================== DATA ===========
+// Invariants over the registry. These are the assertions that would have
+// screamed on 2026-07-24, the day a purge turned into "-2903 stars/day".
+async function checkData(route) {
+  const repos = route?.repos ?? [];
+  await check("data.size", "DATA", async () => {
+    if (repos.length < 990) {
+      fail("data.size", "DATA", "critical", `the registry holds ${repos.length} repos, expected ~1000`,
+        "A truncated registry silently distorts every rank. Check the search/pagination step in collector/collect.mjs.");
+    } else pass("data.size", "DATA", `${repos.length} repos`);
+  });
+
+  await check("data.impossible-velocity", "DATA", async () => {
+    // THE 2026-07-24 CHECK. Nothing sheds (or gains) 5% of its stars per day
+    // as organic growth; that shape is a correction, not a rate.
+    const bad = repos.filter((p) => p.v7 != null && Math.abs(p.v7) > Math.max(300, p.s * 0.05));
+    if (bad.length) {
+      fail("data.impossible-velocity", "DATA", "critical",
+        `${bad.length} repo(s) report an impossible rate: ${bad.slice(0, 5).map((p) => `${p.r} ${p.v7}/d on ${p.s} stars`).join(" · ")}`,
+        "A rate that large is a star purge or a corrupted history point, and it poisons every ETA that touches the repo. collector/velocity7.mjs should have caught the step; if it did not, the daily series probably has a gap - widen the purge window or check the rank-history shard for that repo.",
+        bad.slice(0, 10).map((p) => ({ repo: p.r, stars: p.s, v7: p.v7 })));
+    } else pass("data.impossible-velocity", "DATA", "no impossible rates");
+  });
+
+  await check("data.v7-coverage", "DATA", async () => {
+    const withV7 = repos.filter((p) => p.v7 != null).length;
+    const share = repos.length ? withV7 / repos.length : 0;
+    if (share < 0.9) {
+      fail("data.v7-coverage", "DATA", "warn", `only ${(share * 100).toFixed(0)}% of repos have a 7-day velocity`,
+        "The rest fall back to the noisy 1-day diff, which is what made ETAs contradict each other across pages. Check the rank-history shards are readable from the collector.", { withV7, total: repos.length });
+    } else pass("data.v7-coverage", "DATA", `${(share * 100).toFixed(0)}% have v7`);
+  });
+
+  await check("data.ordering", "DATA", async () => {
+    let broken = 0;
+    for (let i = 1; i < repos.length; i++) if (repos[i].s > repos[i - 1].s) broken++;
+    if (broken > 0) {
+      fail("data.ordering", "DATA", "critical", `${broken} position(s) are out of star order`,
+        "Rank IS the position in this array. If it is not sorted by stars descending, every rank on the site is wrong.");
+    } else pass("data.ordering", "DATA", "sorted by stars");
+  });
+
+  await check("data.duplicates", "DATA", async () => {
+    const seen = new Set();
+    const dupes = [];
+    for (const p of repos) {
+      const k = p.r?.toLowerCase();
+      if (!k) continue;
+      if (seen.has(k)) dupes.push(p.r);
+      seen.add(k);
+    }
+    if (dupes.length) {
+      fail("data.duplicates", "DATA", "warn", `duplicated entries: ${dupes.slice(0, 5).join(", ")}`,
+        "A repo appearing twice shifts every rank below it by one. Dedupe by lowercased name in collector/collect.mjs.", dupes.slice(0, 10));
+    } else pass("data.duplicates", "DATA", "no duplicates");
+  });
+
+  await check("data.tenant", "DATA", async () => {
+    const t = repos.find((p) => p.r?.toLowerCase() === TENANT);
+    if (!t) {
+      fail("data.tenant", "DATA", "critical", `${TENANT} is missing from the registry`,
+        "The tenant drives the home page and the OG card. If it dropped out of the top-1000 that is news, not a bug - but verify before assuming.");
+    } else if (t.v7 != null && t.v7 < 0) {
+      fail("data.tenant", "DATA", "warn", `${TENANT} shows a negative velocity (${t.v7}/d)`,
+        "Either a real unstar run or a purge in the window. Cross-check against GitHub before publishing anything.", t);
+    } else pass("data.tenant", "DATA", `${t.s} stars, v7=${t.v7}/d`);
+  });
+
+  // The overtake scan is a separate artifact built from the registry. If it was
+  // built from a DIFFERENT velocity than the registry now carries, the public
+  // API contradicts itself (the 2026-07-27 worldmonitor case: 1842/d on one
+  // endpoint, 640/d on another, because the scan ran before v7 existed).
+  await check("data.collisions-source", "DATA", async () => {
+    const col = await blobJson("data/collisions.json").catch(() => null);
+    if (!col?.collisions?.length) return pass("data.collisions-source", "DATA", "no collisions recorded");
+    const canon = new Map(repos.map((p) => [p.r?.toLowerCase(), p.v7 ?? p.v ?? null]));
+    const off = [];
+    for (const c of col.collisions.slice(0, 40)) {
+      for (const side of ["hunter", "victim"]) {
+        const want = canon.get(c[side]?.r?.toLowerCase());
+        const got = c[side]?.v;
+        if (want == null || got == null) continue;
+        if (Math.abs(want - got) > Math.max(1, Math.abs(want) * 0.02)) {
+          off.push({ repo: c[side].r, inScan: got, inRegistry: want });
+        }
+      }
+    }
+    if (off.length) {
+      fail("data.collisions-source", "DATA", "critical",
+        `the overtake scan used a different velocity than the registry for ${off.length} entr(ies): ` +
+        off.slice(0, 3).map((o) => `${o.repo} scan=${o.inScan} registry=${o.inRegistry}`).join(" · "),
+        "collector/collisions.mjs must run AFTER collector/velocity7.mjs so it inherits `v7`. Check the step order in .github/workflows/collect.yml - if the scan moved back inside collect.mjs it will silently score every crossing with the noisy 1-day rate again. Re-scan with: gh workflow run collect.yml -R santifer/warpchart -f force_collisions=true",
+        off.slice(0, 8));
+    } else pass("data.collisions-source", "DATA", "scan matches the registry velocity");
+  });
+
+  // Purges are INFO, not failure: they are real events. The point is that a
+  // human learns about them the same day, instead of through a wrong ETA.
+  await check("data.purges", "DATA", async () => {
+    const purged = repos.filter((p) => p.purge);
+    if (!purged.length) return pass("data.purges", "DATA", "none in the current window");
+    const prev = (await blobJson("health/latest.json").catch(() => null))?.purges ?? [];
+    const known = new Set(prev.map((p) => `${p.repo}@${p.day}`));
+    const fresh = purged.filter((p) => !known.has(`${p.r}@${p.purge}`));
+    if (fresh.length) {
+      fail("data.purges", "DATA", "info",
+        `star purge detected: ${fresh.map((p) => `${p.r} (${p.purge}, now ${p.v7}/d)`).join(" · ")}`,
+        "GitHub removed farmed stars from this repo. The 7-day rate is already measured from after the step, so no action is needed - but if it is a neighbour, its chart will show a long flat stretch where the inflated period used to be. Worth knowing before you tweet a comparison.",
+        fresh.map((p) => ({ repo: p.r, day: p.purge, v7: p.v7, stars: p.s })));
+    } else pass("data.purges", "DATA", `${purged.length} known, none new`);
+  });
+}
+
+// =========================================================== CONTRACT =======
+// What our upstreams can do TODAY, compared with what they could do last run.
+// This is the check that exists because GitHub closed foreign stargazer
+// listing weeks before we noticed: nothing errored on our side, a capability
+// simply vanished. Transitions are the signal, in both directions.
+async function checkContracts() {
+  const now = {};
+
+  await check("contract.probe", "CONTRACT", async () => {
+    const repoRest = await gh(`/repos/${TENANT}`);
+    now.restRepo = repoRest.status;
+
+    const own = await gh(`/repos/santifer/warpchart/stargazers?per_page=1`, { accept: "application/vnd.github.star+json" });
+    now.stargazersOwn = own.status;
+
+    const foreign = await gh(`/repos/facebook/react/stargazers?per_page=1`, { accept: "application/vnd.github.star+json" });
+    now.stargazersForeign = foreign.status;
+
+    const g = await ghGraphql(`{repository(owner:"facebook",name:"react"){stargazerCount stargazers(last:3){edges{starredAt}}}}`);
+    now.graphqlCount = g.body?.data?.repository?.stargazerCount ? "ok" : "missing";
+    now.graphqlForeignEdges = (g.body?.data?.repository?.stargazers?.edges ?? []).length;
+
+    const oss = await fetchJson("https://api.ossinsight.io/q/analyze-stars-history?repoId=10270250", { timeoutMs: 20_000 }).catch(() => ({ status: 0 }));
+    now.ossInsight = oss.status;
+
+    const rl = await gh("/rate_limit");
+    now.rateRemaining = rl.body?.resources?.core?.remaining ?? null;
+  });
+
+  const prevDoc = await blobJson("health/contracts.json").catch(() => null);
+  const prev = prevDoc?.state ?? null;
+
+  // Absolute expectations: things that must hold regardless of history.
+  await check("contract.rest-repo", "CONTRACT", async () => {
+    if (now.restRepo !== 200) {
+      fail("contract.rest-repo", "CONTRACT", "critical", `GET /repos returned ${now.restRepo}`,
+        "This is the one GitHub call every curve depends on. If it is down, /api/curve will 502 for everything. Check token health and GitHub status.", now);
+    } else pass("contract.rest-repo", "CONTRACT", "200");
+  });
+
+  await check("contract.graphql-count", "CONTRACT", async () => {
+    if (now.graphqlCount !== "ok") {
+      fail("contract.graphql-count", "CONTRACT", "critical", "GraphQL no longer returns stargazerCount",
+        "Live star totals come from here. Without it the site can only show cached counts.", now);
+    } else pass("contract.graphql-count", "CONTRACT", "stargazerCount alive");
+  });
+
+  await check("contract.fuel", "CONTRACT", async () => {
+    if (now.rateRemaining != null && now.rateRemaining < 500) {
+      fail("contract.fuel", "CONTRACT", "warn", `GitHub rate limit down to ${now.rateRemaining}`,
+        "Curve sampling pauses under low fuel and cold repos start serving stale copies. If this is recurring, the token pool needs another PAT.", now);
+    } else pass("contract.fuel", "CONTRACT", `${now.rateRemaining ?? "?"} remaining`);
+  });
+
+  // Transitions: the actual point of this area.
+  await check("contract.transitions", "CONTRACT", async () => {
+    if (!prev) {
+      pass("contract.transitions", "CONTRACT", "baseline recorded (first run)");
+    } else {
+      const moved = Object.keys(now).filter((k) => k !== "rateRemaining" && String(prev[k]) !== String(now[k]));
+      for (const k of moved) {
+        const from = prev[k], to = now[k];
+        // The one transition that is GOOD news, and it deserves a concrete plan.
+        if (k === "stargazersForeign" && to === 200) {
+          fail("contract.transitions", "CONTRACT", "info",
+            `GitHub REOPENED stargazer listing for foreign repos (${from} -> ${to})`,
+            "Opportunity, not a bug: per-star history for any repo is available again. The probe in restSample (src/lib/curve.ts) already reactivates sampling automatically, so charts will deepen on the next cache cycle - but consider bumping CURVE_VERSION to purge the shallow curves built while it was closed.", { key: k, from, to });
+        } else if (k === "stargazersOwn" && to !== 200) {
+          fail("contract.transitions", "CONTRACT", "critical",
+            `we lost stargazer listing on our OWN repos (${from} -> ${to})`,
+            "The tenant's exact curve depends on this. Check the token first (an expired PAT looks exactly like this), then GitHub's changelog.", { key: k, from, to });
+        } else if (k === "stargazersForeign" && to !== 200) {
+          fail("contract.transitions", "CONTRACT", "warn",
+            `foreign stargazer listing changed (${from} -> ${to})`,
+            "Foreign per-star history is unavailable; curves fall back to our own daily snapshots. Expected since jun-2026, but verify src/lib/curve.ts still degrades instead of throwing.", { key: k, from, to });
+        } else {
+          fail("contract.transitions", "CONTRACT", "warn", `upstream capability changed: ${k} ${from} -> ${to}`,
+            "An upstream moved under us. Decide whether any source in src/lib/curve.ts depends on the old behaviour before it shows up as a user-visible break.", { key: k, from, to });
+        }
+      }
+      if (!moved.length) pass("contract.transitions", "CONTRACT", "no change since last run");
+    }
+    await blobPut("health/contracts.json", { at: new Date().toISOString(), state: now });
+  });
+
+  return now;
+}
+
+// =========================================================== PUBLIC =========
+// What a visitor actually touches. /compare stayed broken for weeks because
+// nothing ever asked it a question.
+async function checkPublic() {
+  await check("public.curve", "PUBLIC", async () => {
+    const broken = [];
+    for (const repo of [...FOREIGN, TENANT]) {
+      const { status, body } = await fetchJson(`${BASE}/api/curve?repo=${encodeURIComponent(repo)}`, { timeoutMs: 30_000 });
+      if (status !== 200 || !body?.pts?.length) {
+        broken.push({ repo, status, error: body?.error ?? null, pts: body?.pts?.length ?? 0 });
+      }
+    }
+    if (broken.length) {
+      fail("public.curve", "PUBLIC", "critical",
+        `/api/curve fails for ${broken.length}/${FOREIGN.length + 1} repos: ${broken.map((b) => `${b.repo} ${b.status}${b.error ? ` (${b.error})` : ""}`).join(" · ")}`,
+        "This is the /compare outage of 2026-07-27 recurring: the page cannot add repos. sampleCurve in src/lib/curve.ts must never throw except on a real 404 - find which cascade stage started throwing. Note foreign repos failing while the tenant works points at a permission change upstream, not at our code.",
+        broken);
+    } else pass("public.curve", "PUBLIC", `${FOREIGN.length + 1} repos answer`);
+  });
+
+  await check("public.chart", "PUBLIC", async () => {
+    const broken = [];
+    for (const repo of [FOREIGN[0], FOREIGN[3], TENANT]) {
+      const res = await fetch(`${BASE}/api/chart?repo=${encodeURIComponent(repo)}`, { signal: AbortSignal.timeout(30_000) });
+      const text = await res.text();
+      if (!res.ok || !text.startsWith("<svg")) broken.push({ repo, status: res.status, head: text.slice(0, 60) });
+    }
+    if (broken.length) {
+      fail("public.chart", "PUBLIC", "critical", `the SVG embed fails for: ${broken.map((b) => `${b.repo} (${b.status})`).join(" · ")}`,
+        "Every README embed is served by this route, so a failure here is visible on other people's repos, not just ours.", broken);
+    } else pass("public.chart", "PUBLIC", "svg embeds render");
+  });
+
+  await check("public.pages", "PUBLIC", async () => {
+    const pages = ["/", "/compare", "/velocity", "/explore", "/pricing", `/r/${TENANT}`];
+    const broken = [];
+    for (const p of pages) {
+      const res = await fetch(`${BASE}${p}`, { signal: AbortSignal.timeout(30_000) }).catch(() => null);
+      if (!res || !res.ok) broken.push({ page: p, status: res?.status ?? "network" });
+    }
+    if (broken.length) {
+      fail("public.pages", "PUBLIC", "critical", `pages not serving: ${broken.map((b) => `${b.page} (${b.status})`).join(" · ")}`,
+        "Check the latest Vercel deployment for a build or render error: vercel ls --prod", broken);
+    } else pass("public.pages", "PUBLIC", `${pages.length} pages serve`);
+  });
+
+  await check("public.api", "PUBLIC", async () => {
+    const eps = [`/api/v1/repo?repo=${TENANT}`, "/api/v1/velocity?limit=5", "/api/v1/overtakes?limit=5", "/api/v1/leaderboard?limit=5", "/api/og"];
+    const broken = [];
+    for (const e of eps) {
+      const res = await fetch(`${BASE}${e}`, { signal: AbortSignal.timeout(30_000) }).catch(() => null);
+      if (!res || !res.ok) broken.push({ endpoint: e, status: res?.status ?? "network" });
+    }
+    if (broken.length) {
+      fail("public.api", "PUBLIC", "critical", `API endpoints failing: ${broken.map((b) => `${b.endpoint} (${b.status})`).join(" · ")}`,
+        "The public API is a distribution surface (MCP server and CLI read it). A failure here breaks integrations silently.", broken);
+    } else pass("public.api", "PUBLIC", `${eps.length} endpoints answer`);
+  });
+}
+
+// =========================================================== COHERENCE ======
+// One repo, one velocity, everywhere. Two pages disagreeing about the same
+// number is the credibility bug: it tells a visitor that neither is measured.
+async function checkCoherence(route) {
+  await check("coherence.velocity", "COHERENCE", async () => {
+    const [vel, lead, over] = await Promise.all([
+      fetchJson(`${BASE}/api/v1/velocity?limit=50`),
+      fetchJson(`${BASE}/api/v1/leaderboard?limit=100`),
+      fetchJson(`${BASE}/api/v1/overtakes?limit=50`),
+    ]);
+    const seen = new Map(); // repo -> { surface -> v }
+    const note = (repo, surface, v) => {
+      if (v == null || !repo) return;
+      const k = repo.toLowerCase();
+      if (!seen.has(k)) seen.set(k, {});
+      seen.get(k)[surface] = v;
+    };
+    for (const r of vel.body?.fastest ?? []) note(r.repo, "velocity", r.velocityPerDay);
+    for (const r of lead.body?.leaderboard ?? []) note(r.repo, "leaderboard", r.velocityPerDay);
+    for (const o of over.body?.overtakes ?? []) {
+      note(o.hunter?.repo, "overtakes", o.hunter?.velocityPerDay);
+      note(o.victim?.repo, "overtakes", o.victim?.velocityPerDay);
+    }
+    const conflicts = [];
+    for (const [repo, surfaces] of seen) {
+      const vals = Object.entries(surfaces);
+      if (vals.length < 2) continue;
+      const nums = vals.map(([, v]) => v);
+      const min = Math.min(...nums), max = Math.max(...nums);
+      // tolerate 1 star/day of rounding, nothing more: these must be the same
+      // canonical number, not two estimates that happen to be close
+      if (max - min > 1) conflicts.push({ repo, surfaces, spread: max - min });
+    }
+    if (conflicts.length) {
+      conflicts.sort((a, b) => b.spread - a.spread);
+      fail("coherence.velocity", "COHERENCE", "critical",
+        `${conflicts.length} repo(s) show different velocities on different surfaces: ` +
+        conflicts.slice(0, 4).map((c) => `${c.repo} (${Object.entries(c.surfaces).map(([s, v]) => `${s}=${v}`).join(", ")})`).join(" · "),
+        "Some surface is not reading canonicalVelocity() from src/lib/velocity.ts - it is using the noisy 1-day `v` instead of the canonical 7-day `v7`, or computing its own. Grep for `.v` reads on route entries outside src/lib/velocity.ts. The methodology page publicly promises one trailing 7-day rate, so this is a broken promise, not a detail.",
+        conflicts.slice(0, 10));
+    } else pass("coherence.velocity", "COHERENCE", `${seen.size} repos agree across surfaces`);
+  });
+
+  // An ETA must follow from the numbers shown next to it. If gap/closing does
+  // not reproduce the published eta, the projection is reading other inputs.
+  await check("coherence.eta", "COHERENCE", async () => {
+    const { body } = await fetchJson(`${BASE}/api/v1/overtakes?limit=20`);
+    const bad = [];
+    for (const o of body?.overtakes ?? []) {
+      const closing = (o.hunter?.velocityPerDay ?? 0) - (o.victim?.velocityPerDay ?? 0);
+      if (closing <= 0 || o.etaDays == null) continue;
+      const expected = o.gap / closing;
+      if (pct(expected, o.etaDays) > 0.15) bad.push({ pair: `${o.hunter.repo} -> ${o.victim.repo}`, gap: o.gap, closing, published: o.etaDays, expected: Math.round(expected * 100) / 100 });
+    }
+    if (bad.length) {
+      fail("coherence.eta", "COHERENCE", "critical",
+        `${bad.length} published ETA(s) do not follow from the gap and velocities shown beside them: ` +
+        bad.slice(0, 3).map((b) => `${b.pair} says ${b.published}d, the numbers give ${b.expected}d`).join(" · "),
+        "projectCrossing in src/lib/compare.ts is the single source for crossings. If the endpoint's own numbers do not reproduce its ETA, it is projecting from a different velocity than the one it displays.", bad.slice(0, 8));
+    } else pass("coherence.eta", "COHERENCE", "ETAs follow from their inputs");
+  });
+
+  // Our stars vs GitHub's stars right now: the ultimate reality check.
+  await check("coherence.reality", "COHERENCE", async () => {
+    const { body } = await fetchJson(`${BASE}/api/v1/repo?repo=${TENANT}`);
+    const live = await gh(`/repos/${TENANT}`);
+    const ours = body?.stars, theirs = live.body?.stargazers_count;
+    if (!ours || !theirs) return pass("coherence.reality", "COHERENCE", "skipped (missing token or data)");
+    const drift = pct(ours, theirs);
+    if (drift > 0.02) {
+      fail("coherence.reality", "COHERENCE", "critical", `we show ${ours} stars, GitHub says ${theirs} (${(drift * 100).toFixed(1)}% off)`,
+        "Beyond normal collection lag. Either the snapshot is frozen or the tenant archive is not being updated - check the collector before anything else.", { ours, theirs });
+    } else if (drift > 0.005) {
+      fail("coherence.reality", "COHERENCE", "warn", `star count drifting: ours ${ours}, GitHub ${theirs}`,
+        "Usually just collection lag between runs. Escalates if it keeps growing across runs.", { ours, theirs });
+    } else pass("coherence.reality", "COHERENCE", `within ${(drift * 100).toFixed(2)}% of GitHub`);
+  });
+
+  // Rank is a position in a sorted list; it must match the list we publish.
+  await check("coherence.rank", "COHERENCE", async () => {
+    const { body } = await fetchJson(`${BASE}/api/v1/repo?repo=${TENANT}`);
+    const idx = (route?.repos ?? []).findIndex((p) => p.r?.toLowerCase() === TENANT);
+    if (idx < 0 || !body?.rank) return pass("coherence.rank", "COHERENCE", "skipped");
+    if (Math.abs(body.rank - (idx + 1)) > 1) {
+      fail("coherence.rank", "COHERENCE", "warn", `the API says rank #${body.rank}, the registry position is #${idx + 1}`,
+        "The API is serving a different (probably cached) registry than the one in the Blob. Confirm the deploy pulled fresh data: the build's prebuild step downloads data/ from the Blob.", { api: body.rank, registry: idx + 1 });
+    } else pass("coherence.rank", "COHERENCE", `#${body.rank} matches the registry`);
+  });
+}
+
+// =========================================================== CURVE ==========
+// Are the charts shaped like real history, or like a placeholder?
+async function checkCurves() {
+  await check("curve.shape", "CURVE", async () => {
+    const problems = [];
+    for (const repo of FOREIGN) {
+      const { status, body } = await fetchJson(`${BASE}/api/curve?repo=${encodeURIComponent(repo)}`, { timeoutMs: 30_000 });
+      if (status !== 200 || !body?.pts?.length) continue; // already reported by public.curve
+      const pts = body.pts;
+      if (pts.some((p, i) => i > 0 && p.t < pts[i - 1].t)) {
+        problems.push({ repo, issue: "points are not in chronological order" });
+      }
+      const last = pts[pts.length - 1];
+      if (body.total && pct(last.v, body.total) > 0.02) {
+        problems.push({ repo, issue: `the curve ends at ${last.v} but the total is ${body.total}` });
+      }
+      if (body.degraded) {
+        problems.push({ repo, issue: "served the two-point floor (no per-day source reached)" });
+      }
+      // a top-1000 repo must be using our own daily record; if it is not, the
+      // moat is not reaching the chart and we are back to third-party shape
+      if (body.exactFrom == null) {
+        problems.push({ repo, issue: "no exact daily window from our own rank-history" });
+      }
+    }
+    if (problems.length) {
+      fail("curve.shape", "CURVE", "warn",
+        problems.map((p) => `${p.repo}: ${p.issue}`).join(" · "),
+        "A top-1000 repo should always reach stage 2 of the cascade (repoRankTrajectory). If it does not, the rank-history shards are unreadable from the render path, or the curve cache predates the fix - bump CURVE_VERSION in src/lib/curve.ts to purge.",
+        problems);
+    } else pass("curve.shape", "CURVE", `${FOREIGN.length} curves well-formed`);
+  });
+}
+
+// =========================================================== report =========
+function severityRank(s) { return s === "critical" ? 0 : s === "warn" ? 1 : 2; }
+
+function renderMarkdown(summary) {
+  const L = [];
+  L.push(`# Health report - ${summary.at}`);
+  L.push("");
+  L.push(`Target: ${BASE} · checks run: ${summary.total} · passed: ${summary.passed}`);
+  L.push("");
+  if (!summary.findings.length) {
+    L.push("All checks pass. Nothing to do.");
+    return L.join("\n");
+  }
+  const icon = { critical: "🔴", warn: "🟡", info: "🔵" };
+  for (const f of summary.findings) {
+    L.push(`## ${icon[f.severity]} ${f.id} · ${f.area}`);
+    L.push("");
+    L.push(`**What happened:** ${f.detail}`);
+    L.push("");
+    L.push(`**What to do:** ${f.remedy}`);
+    if (f.evidence) {
+      L.push("");
+      L.push("<details><summary>Evidence</summary>");
+      L.push("");
+      L.push("```json");
+      L.push(JSON.stringify(f.evidence, null, 2).slice(0, 2500));
+      L.push("```");
+      L.push("");
+      L.push("</details>");
+    }
+    L.push("");
+  }
+  return L.join("\n");
+}
+
+function renderConsole(summary) {
+  const icon = { critical: "🔴", warn: "🟡", info: "🔵" };
+  const L = [`\nHEALTH ${BASE} · ${summary.passed}/${summary.total} checks pass\n`];
+  for (const f of summary.findings) {
+    L.push(`${icon[f.severity]} [${f.area}] ${f.id}`);
+    L.push(`   ${f.detail}`);
+    L.push(`   -> ${f.remedy}`);
+    L.push("");
+  }
+  if (!summary.findings.length) L.push("everything green\n");
+  return L.join("\n");
+}
+
+// =========================================================== main ===========
+async function main() {
+  const route = await blobJson("data/route.json").catch(() => null);
+  if (!route) {
+    fail("bootstrap.route", "DATA", "warn", "could not read data/route.json from the Blob",
+      "DATA and COHERENCE checks that need the registry were skipped. Verify BLOB_READ_WRITE_TOKEN is set for this job.");
+  }
+
+  await checkFreshness(route);
+  if (route) await checkData(route);
+  await checkContracts();
+  await checkPublic();
+  await checkCoherence(route);
+  await checkCurves();
+
+  findings.sort((a, b) => severityRank(a.severity) - severityRank(b.severity));
+  const counts = {
+    critical: findings.filter((f) => f.severity === "critical").length,
+    warn: findings.filter((f) => f.severity === "warn").length,
+    info: findings.filter((f) => f.severity === "info").length,
+  };
+  const summary = {
+    at: new Date().toISOString(),
+    base: BASE,
+    total: checked.length + findings.length,
+    passed: checked.length,
+    counts,
+    findings,
+    checked,
+    purges: (route?.repos ?? []).filter((p) => p.purge).map((p) => ({ repo: p.r, day: p.purge })),
+  };
+
+  if (JSON_OUT) console.log(JSON.stringify(summary, null, 2));
+  else console.log(renderConsole(summary));
+
+  if (REPORT_PATH) writeFileSync(REPORT_PATH, renderMarkdown(summary));
+
+  // Persist for trend analysis and for the next run's purge/contract diffing.
+  await blobPut("health/latest.json", summary).catch(() => {});
+  try {
+    const hist = (await blobJson("health/history.json").catch(() => null)) ?? { runs: [] };
+    hist.runs.push({ at: summary.at, counts, ids: findings.map((f) => f.id) });
+    hist.runs = hist.runs.slice(-500);
+    await blobPut("health/history.json", hist);
+  } catch { /* history is a nicety, never a failure */ }
+
+  if (!NO_FAIL && counts.critical > 0) process.exit(1);
+}
+
+main().catch((err) => {
+  console.error(`[health] the watchdog itself crashed: ${err?.stack ?? err}`);
+  process.exit(NO_FAIL ? 0 : 1);
+});

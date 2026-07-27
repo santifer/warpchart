@@ -77,8 +77,20 @@ function ageLabel(createdAt) {
   return `${(days / 365).toFixed(0)}y`;
 }
 
-export async function runCollisionScan({ enrich = true } = {}) {
+export async function runCollisionScan({ enrich = true, force = false } = {}) {
   const current = JSON.parse(readFileSync(ROUTE, "utf8"));
+  // Idempotent per registry generation. The scan runs as its own step now (it
+  // needs velocity7's `v7` to exist first), so the 2-hourly cron would other-
+  // wise re-scan and re-enrich the same registry all day for nothing.
+  if (!force && existsSync(OUT)) {
+    try {
+      const done = JSON.parse(readFileSync(OUT, "utf8"));
+      if (done?.baseline?.to && done.baseline.to === current.generated_at) {
+        console.log(`[collisions] already scanned registry ${current.generated_at}, skipping`);
+        return done;
+      }
+    } catch { /* unreadable output: just rescan */ }
+  }
   const prev = loadPrevRoute(current);
   if (!prev) {
     console.log("[collisions] no previous registry yet, baseline pending");
@@ -240,12 +252,38 @@ export async function runCollisionScan({ enrich = true } = {}) {
     console.log(`\n  IMMINENT (<24h, beyond the score top 10):`);
     for (const c of imminent) console.log(line(c));
   }
+
+  // Pre-warm the day's top stories: when the overtake tweet goes out, both the
+  // victim's page (where the hunter shows orange) and its curve/embed are
+  // already hot for the crowd. Lives here, next to the data that decides which
+  // stories matter, rather than in the caller.
+  const base = (process.env.WARM_BASE_URL ?? "").replace(/\/$/, "");
+  if (base && collisions.length) {
+    const targets = new Set();
+    for (const c of collisions.slice(0, 3)) {
+      targets.add(c.victim.r);
+      targets.add(c.hunter.r);
+    }
+    for (const r of targets) {
+      const q = encodeURIComponent(r);
+      for (const path of [`/r/${r}`, `/api/curve?repo=${q}`, `/api/chart?repo=${q}`]) {
+        try {
+          await fetch(`${base}${path}`);
+        } catch { /* best effort */ }
+        await sleep(1500);
+      }
+    }
+    console.log(`[collisions] stories warmed: ${targets.size} repos`);
+  }
   return out;
 }
 
 // CLI entry
 if (process.argv[1] && process.argv[1].endsWith("collisions.mjs")) {
-  runCollisionScan({ enrich: !process.argv.includes("--no-enrich") }).catch((err) => {
+  runCollisionScan({
+    enrich: !process.argv.includes("--no-enrich"),
+    force: process.argv.includes("--force"),
+  }).catch((err) => {
     console.error(`[collisions] failed: ${err.message}`);
     process.exit(1);
   });
