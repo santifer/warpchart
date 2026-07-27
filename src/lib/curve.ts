@@ -26,6 +26,10 @@ export interface Curve {
   // cost: the data is already collected daily for the rank moat. Rendered
   // solid; also marks the END of any estimated/archive middle band.
   exactFrom?: number | null;
+  // true when no per-star source was reachable and the shape is a floor
+  // (creation -> now) rather than a reconstruction. Callers cache these for
+  // minutes, not hours, so a repo recovers as soon as a real source returns.
+  degraded?: boolean;
 }
 
 // Place an archive's MONTHLY shape between two EXACT anchor points, rescaled so
@@ -95,36 +99,57 @@ async function fetchArchiveMonthly(repoId: number): Promise<{ t: number; total: 
   }
 }
 
-// Sampled curve for arbitrary repos: spaced stargazer pages, the same
-// reconstruction star-history uses (they hide the estimated stretch; we
-// label it). 24 samples give the interactive chart a decent shape.
-async function sampleCurve(owner: string, name: string): Promise<Curve> {
-  // a cold curve costs ~24 REST calls; when the fuel is nearly gone the
-  // edge keeps serving stale copies and cold repos wait for the reset
-  if (lowFuel()) throw new Error("high traffic: curve sampling paused, retry in a few minutes");
-  const basic = await repoBasic(owner, name);
-  const reachable = Math.min(basic.s, 40_000);
+// Spaced stargazer pages, the same reconstruction star-history uses (they hide
+// the estimated stretch; we label it). Returns [] when the list is unavailable
+// instead of throwing: since GitHub closed third-party stargazer listing (jun-26)
+// this is a BONUS source for repos we own, not the backbone of the curve.
+async function restSample(owner: string, name: string, stars: number, repo: string) {
+  // a cold sample costs ~24 REST calls; when the fuel is nearly gone the edge
+  // keeps serving stale copies and cold repos wait for the reset
+  if (lowFuel()) return [];
+  // One cheap probe first. Listing another account's stargazers now 404s on
+  // every page (verified 2026-07-27: own repos at 10 and 61.8K stars list fine,
+  // foreign repos at 389 and 246K stars 404 alike, so it is permission, not
+  // size). Probing costs 1 call instead of burning 24 on a certain failure —
+  // and it self-heals the day GitHub reopens the endpoint.
+  const probe = await stargazerPageFirst(owner, name, 1).catch(() => null);
+  if (!probe) return [];
+
+  const reachable = Math.min(stars, 40_000);
   const totalPages = Math.max(1, Math.ceil(reachable / 100));
   const SAMPLES = Math.min(24, totalPages);
-  const pages = new Set<number>();
+  const pages = new Set<number>([1]);
   for (let i = 0; i < SAMPLES; i++)
     pages.add(Math.max(1, Math.round(1 + (i * (totalPages - 1)) / Math.max(SAMPLES - 1, 1))));
   const sorted = [...pages].sort((a, b) => a - b);
   const samples = await Promise.all(
     sorted.map(async (p) => ({
       p,
-      at: await stargazerPageFirst(owner, name, p).catch(() => null),
+      at: p === 1 ? probe : await stargazerPageFirst(owner, name, p).catch(() => null),
     }))
   );
   const failed = samples.filter((s) => !s.at).length;
   if (failed > 0) {
-    reqLog("curve", { repo: basic.r }).warn("sample.pages-failed", { failed, asked: sorted.length });
+    reqLog("curve", { repo }).warn("sample.pages-failed", { failed, asked: sorted.length });
   }
-  const pts = samples
+  return samples
     .filter((s) => s.at)
     .map((s) => ({ t: Date.parse(s.at as string), v: (s.p - 1) * 100 + 1 }))
     .sort((a, b) => a.t - b.t);
-  if (!pts.length) throw new Error("no stargazer data");
+}
+
+// Curve for an arbitrary repo. Cascade, most authoritative first, and it only
+// throws when the repo itself is gone: a chart that degrades is worth more than
+// a 502. Sources, in order:
+//   1. REST stargazer sampling  - exact per-star history, own repos only now
+//   2. our own rank-history     - exact DAILY stars for the worldwide top-10k,
+//                                 free (already collected for the rank moat)
+//   3. the public event archive - monthly shape for the deep past, non-fatal
+//   4. a two-point floor        - creation -> now, dashed and marked degraded
+async function sampleCurve(owner: string, name: string): Promise<Curve> {
+  const basic = await repoBasic(owner, name);
+  const log = reqLog("curve", { repo: basic.r });
+  const pts = await restSample(owner, name, basic.s, basic.r);
 
   // ---- Tail reconstruction: the most authoritative source per era ----
   //   [0 .. cap]            exact REST stargazer timestamps (truth, <=40K)
@@ -134,18 +159,24 @@ async function sampleCurve(owner: string, name: string): Promise<Curve> {
   let dashedFrom: number | null = null;
   let archiveFrom: number | null = null;
   let exactFrom: number | null = null;
+  let degraded = false;
 
-  if (basic.s > pts[pts.length - 1].v) {
-    const log = reqLog("curve", { repo: basic.r });
-    const lastExact = pts[pts.length - 1];
-
-    // Exact daily stars we recorded ourselves, above the REST cap and within
-    // the live total (defensive against unstars / late corrections). Free:
-    // already collected daily for the worldwide-rank moat, zero GitHub cost.
+  const restLast = pts.length ? pts[pts.length - 1] : null;
+  if (!restLast || basic.s > restLast.v) {
+    // Exact daily stars we recorded ourselves, above whatever REST reached and
+    // within the live total (defensive against unstars / late corrections).
+    // Free: already collected daily for the worldwide-rank moat, zero GitHub
+    // cost, and for a foreign repo it is now the ONLY per-day source there is.
     const traj = await repoRankTrajectory(basic.r).catch(() => []);
     const exactRecent = traj
-      .filter((p) => p.t > lastExact.t && p.stars > lastExact.v && p.stars <= basic.s + 50)
+      .filter((p) => (!restLast || p.t > restLast.t) && p.stars > (restLast?.v ?? 0))
+      .filter((p) => p.stars <= basic.s + 50)
       .map((p) => ({ t: p.t, v: p.stars }));
+
+    // Where the exact part ends. With no REST sample the repo's creation (zero
+    // stars) is the only anchor we can honestly claim.
+    const lastExact = restLast ?? { t: Date.parse(basic.created), v: 0 };
+    if (!restLast) pts.push(lastExact);
 
     if (exactRecent.length >= 2) {
       // We own the recent window exactly. Only the middle between the REST cap
@@ -194,11 +225,15 @@ async function sampleCurve(owner: string, name: string): Promise<Curve> {
       if (!stitched) {
         dashedFrom = pts.length - 1;
         pts.push({ t: Date.now(), v: basic.s });
-        log.info("archive.skipped", { archiveTotal, live: basic.s, reliable });
+        // No per-star source at all: this is the honest floor (it went from 0
+        // at creation to today's count), not a reconstruction. Flagged so it
+        // is cached for minutes and recovers as soon as a source returns.
+        degraded = !restLast;
+        log.info("archive.skipped", { archiveTotal, live: basic.s, reliable, degraded });
       }
     }
   }
-  return { repo: basic.r, total: basic.s, pts, dashedFrom, archiveFrom, exactFrom };
+  return { repo: basic.r, total: basic.s, pts, dashedFrom, archiveFrom, exactFrom, degraded };
 }
 
 // Version of the curve reconstruction. Bump on ANY change to the data shape
@@ -206,12 +241,18 @@ async function sampleCurve(owner: string, name: string): Promise<Curve> {
 // on its next request, so pre-fix curves never linger out their TTL.
 // v2: seam-anchored archive normalization. v3: per-repo tags + live total.
 // v4: exact daily recent tail spliced from the rank-history moat.
-const CURVE_VERSION = 4;
+// v5: cascade that never 502s (REST stargazer listing closed for foreign repos).
+const CURVE_VERSION = 5;
 
 export function curveTag(owner: string, name: string): string {
   return `curve:${owner.toLowerCase()}/${name.toLowerCase()}`;
 }
 
+// Cached for 6h, degraded curves included: a repo outside the worldwide top-10k
+// has no per-day source at all, so its floor is a STABLE answer, not a transient
+// failure to retry. Re-deriving it per visit would multiply cost without ever
+// improving the shape. The rank collector adds repos to the moat daily, and the
+// version bump purges everything when the reconstruction itself changes.
 export function cachedSampleCurve(owner: string, name: string): Promise<Curve> {
   return unstable_cache(sampleCurve, [`embed-chart-curve-v${CURVE_VERSION}`], {
     revalidate: 21_600,
