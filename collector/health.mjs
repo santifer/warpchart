@@ -700,6 +700,104 @@ async function checkCurves() {
   });
 }
 
+// =========================================================== INVENTORY ======
+// Coverage by construction rather than by memory. Every check above exists
+// because a specific thing broke; that is a list of past symptoms, not of the
+// system. Three separate outages (the tenant series, the collision scan, the
+// Vital Signs panel) were each found by a human, and each time the honest
+// answer to "what else is stale?" was "I would have to remember to look".
+//
+// So: enumerate what the system actually STORES, and require every family to be
+// declared with the cadence it is supposed to keep. A family nobody declared is
+// itself a finding - it means an artifact exists that no one is watching. That
+// is the property the curated checks cannot have.
+const ARTIFACTS = [
+  // periodic: produced on a schedule; silence past maxAgeH means it stopped
+  { prefix: "data/route.json", kind: "periodic", maxAgeH: 36, what: "the top-1000 registry" },
+  { prefix: "data/history.jsonl", kind: "periodic", maxAgeH: 6, what: "tenant snapshots" },
+  { prefix: "data/stargazer_timestamps.txt", kind: "periodic", maxAgeH: 6, what: "the tenant's per-star series" },
+  { prefix: "data/meta.json", kind: "periodic", maxAgeH: 6, what: "tenant repo metadata" },
+  { prefix: "data/milestones.json", kind: "periodic", maxAgeH: 36, what: "rank milestones" },
+  { prefix: "data/collisions.json", kind: "periodic", maxAgeH: 36, what: "the overtake scan" },
+  { prefix: "data/catalog.json", kind: "periodic", maxAgeH: 36, what: "the rising catalog" },
+  { prefix: "data/route-prev.json", kind: "periodic", maxAgeH: 72, what: "the previous registry (velocity baseline)" },
+  { prefix: "data/enrichment.json", kind: "periodic", maxAgeH: 72, what: "repo enrichment" },
+  { prefix: "data/forensics.json", kind: "periodic", maxAgeH: 72, what: "spike forensics" },
+  { prefix: "data/attribution.json", kind: "periodic", maxAgeH: 72, what: "spike attribution" },
+  { prefix: "data/indexnow-stamp.txt", kind: "periodic", maxAgeH: 48, what: "the IndexNow ping stamp" },
+  { prefix: "route-history/", kind: "periodic", maxAgeH: 36, what: "the daily rank moat" },
+  { prefix: "vitals/", kind: "periodic", maxAgeH: 72, what: "the Vital Signs panel" },
+  { prefix: "traffic/", kind: "periodic", maxAgeH: 12, what: "the Traffic Vault" },
+  { prefix: "health/", kind: "periodic", maxAgeH: 6, what: "this watchdog's own output" },
+  { prefix: "live/", kind: "periodic", maxAgeH: 12, what: "live star polling" },
+  { prefix: "badges-earned.json", kind: "periodic", maxAgeH: 36, what: "earned badges" },
+  // event: written only when something happens outside; silence is information,
+  // never a failure
+  { prefix: "embeds/", kind: "event", what: "first sighting of an embed on GitHub" },
+  { prefix: "codex/", kind: "event", what: "LLM dossiers, written on first visit to a repo" },
+  { prefix: "alerts/", kind: "event", what: "alert dedup state" },
+  // config: edited by a human, age means nothing
+  { prefix: "data/tenants.json", kind: "config", what: "the paying-tenant list" },
+];
+
+async function checkInventory() {
+  await check("inventory.coverage", "INVENTORY", async () => {
+    if (!BLOB_TOKEN) return pass("inventory.coverage", "INVENTORY", "no Blob token, skipped");
+    const { list } = await import("@vercel/blob");
+    let cursor, blobs = [];
+    do {
+      const r = await list({ token: BLOB_TOKEN, cursor, limit: 1000 });
+      blobs.push(...r.blobs);
+      cursor = r.cursor;
+    } while (cursor);
+
+    // newest upload per declared family, so one live file proves the family runs
+    const newest = new Map();
+    const undeclared = new Map();
+    for (const b of blobs) {
+      const t = new Date(b.uploadedAt).getTime();
+      const decl = ARTIFACTS.find((a) => b.pathname === a.prefix || (a.prefix.endsWith("/") && b.pathname.startsWith(a.prefix)));
+      const key = decl ? decl.prefix : (b.pathname.includes("/") ? b.pathname.split("/")[0] + "/" : b.pathname);
+      const bag = decl ? newest : undeclared;
+      if (!bag.has(key) || bag.get(key) < t) bag.set(key, t);
+    }
+
+    const stale = [];
+    const missing = [];
+    for (const a of ARTIFACTS) {
+      if (a.kind !== "periodic") continue;
+      const t = newest.get(a.prefix);
+      if (t === undefined) { missing.push(a); continue; }
+      const h = (Date.now() - t) / HOUR;
+      if (h > a.maxAgeH) stale.push({ ...a, ageH: h });
+    }
+
+    if (stale.length) {
+      stale.sort((x, y) => y.ageH / y.maxAgeH - x.ageH / x.maxAgeH);
+      fail("inventory.coverage", "INVENTORY", "critical",
+        `${stale.length} artifact family(ies) stopped updating: ` +
+        stale.map((s) => `${s.prefix} (${s.what}) ${s.ageH > 48 ? (s.ageH / 24).toFixed(1) + "d" : s.ageH.toFixed(0) + "h"} old, expected <${s.maxAgeH}h`).join(" · "),
+        "Find the collector step that writes it and read its log. Remember the step may report success: continue-on-error rewrites a failed step to success, so check the run's ANNOTATIONS, not the step conclusion.",
+        stale.map((s) => ({ prefix: s.prefix, ageHours: Math.round(s.ageH), maxAgeH: s.maxAgeH })));
+    } else if (missing.length) {
+      fail("inventory.coverage", "INVENTORY", "warn",
+        `declared but absent: ${missing.map((m) => m.prefix).join(", ")}`,
+        "Either the producer never ran, or the artifact was renamed and this declaration is stale. Both are worth a minute.");
+    } else {
+      pass("inventory.coverage", "INVENTORY", `${ARTIFACTS.filter((a) => a.kind === "periodic").length} periodic families current`);
+    }
+
+    // The point of the whole area: something exists that nobody declared.
+    if (undeclared.size) {
+      const rows = [...undeclared.entries()].map(([k, t]) => ({ family: k, ageHours: Math.round((Date.now() - t) / HOUR) }));
+      fail("inventory.undeclared", "INVENTORY", "warn",
+        `${undeclared.size} artifact family(ies) nobody is watching: ${rows.map((r) => `${r.family} (newest ${r.ageHours}h old)`).join(" · ")}`,
+        "Add each to ARTIFACTS in collector/health.mjs with its expected cadence (periodic/event/config), or delete it if it is an orphan from an older design. An undeclared artifact is one nobody would notice going stale - which is exactly how the Vital Signs panel sat frozen for eight days.",
+        rows);
+    }
+  });
+}
+
 // =========================================================== PIPELINE =======
 // Reading our own build logs. Almost every collector step is `continue-on-error`
 // (correct: one flaky upstream must not cost the whole snapshot), which means a
@@ -720,8 +818,20 @@ async function checkPipeline() {
       if (!jobs.body?.jobs) continue;
       inspected++;
       for (const j of jobs.body.jobs) {
-        for (const s of j.steps ?? []) {
-          if (s.conclusion === "failure") failCount.set(s.name, (failCount.get(s.name) ?? 0) + 1);
+        // steps[].conclusion is USELESS here: continue-on-error rewrites a
+        // failed step to "success" in the API. This check exists precisely to
+        // find failures masked by continue-on-error, so reading conclusion made
+        // it blind to its own subject - it reported "no chronic failures" while
+        // Compute Vital Signs timed out on every single run for eight days.
+        // Annotations keep the truth.
+        const url = (j.check_run_url ?? "").replace("https://api.github.com", "");
+        if (!url) continue;
+        const ann = await gh(`${url}/annotations`);
+        for (const a of ann.body ?? []) {
+          if (a.annotation_level !== "failure") continue;
+          // "The action 'X' has timed out..." / "Process completed with exit code N"
+          const step = /action '([^']+)'/.exec(a.message ?? "")?.[1] ?? (a.title || "unnamed step");
+          failCount.set(step, (failCount.get(step) ?? 0) + 1);
         }
       }
     }
@@ -821,6 +931,7 @@ async function main() {
   await checkPublic();
   await checkCoherence(route);
   await checkCurves();
+  await checkInventory();
   await checkPipeline();
 
   await annotateRecurrence(findings).catch(() => {});
