@@ -84,23 +84,44 @@ async function fetchJson(url, opts = {}) {
   return { status: res.status, ok: res.ok, body, text };
 }
 
+// The same pool the collector carries, in the same order. CONTRACT must answer
+// "can the collector do this?", and the collector fails over between tokens, so
+// probing with only the first one would report a FORBIDDEN it recovers from.
+const GH_POOL = [GH_TOKEN, process.env.GH_TOKEN_FALLBACKS]
+  .filter(Boolean).flatMap((v) => v.split(/[\s,]+/)).filter(Boolean)
+  .filter((t, i, a) => a.indexOf(t) === i);
+
+// Best result across the pool: a call the collector can make with SOME token is
+// a call the collector can make.
 async function gh(path, opts = {}) {
-  if (!GH_TOKEN) return { status: 0, ok: false, body: null, text: "no token" };
-  return fetchJson(`https://api.github.com${path}`, {
-    headers: { Authorization: `Bearer ${GH_TOKEN}`, Accept: opts.accept ?? "application/vnd.github+json", "User-Agent": "warpchart-health" },
-    timeoutMs: 15_000,
-  });
+  if (!GH_POOL.length) return { status: 0, ok: false, body: null, text: "no token" };
+  let last = { status: 0, ok: false, body: null, text: "no token" };
+  for (const tok of GH_POOL) {
+    last = await fetchJson(`https://api.github.com${path}`, {
+      headers: { Authorization: `Bearer ${tok}`, Accept: opts.accept ?? "application/vnd.github+json", "User-Agent": "warpchart-health" },
+      timeoutMs: 15_000,
+    });
+    if (last.ok) return last;
+  }
+  return last;
 }
 
 async function ghGraphql(query) {
-  if (!GH_TOKEN) return { status: 0, ok: false, body: null };
-  const res = await fetch("https://api.github.com/graphql", {
-    method: "POST",
-    body: JSON.stringify({ query }),
-    headers: { Authorization: `Bearer ${GH_TOKEN}`, "User-Agent": "warpchart-health", "Content-Type": "application/json" },
-    signal: AbortSignal.timeout(15_000),
-  });
-  return { status: res.status, ok: res.ok, body: await res.json().catch(() => null) };
+  if (!GH_POOL.length) return { status: 0, ok: false, body: null };
+  let last = { status: 0, ok: false, body: null };
+  for (const tok of GH_POOL) {
+    const res = await fetch("https://api.github.com/graphql", {
+      method: "POST",
+      body: JSON.stringify({ query }),
+      headers: { Authorization: `Bearer ${tok}`, "User-Agent": "warpchart-health", "Content-Type": "application/json" },
+      signal: AbortSignal.timeout(15_000),
+    });
+    last = { status: res.status, ok: res.ok, body: await res.json().catch(() => null) };
+    // GraphQL reports permission failures as 200 + FORBIDDEN, so "ok" is not
+    // enough: only a body with no errors means this token could do the job.
+    if (last.ok && !last.body?.errors) return last;
+  }
+  return last;
 }
 
 async function blobJson(key) {

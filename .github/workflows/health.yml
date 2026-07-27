@@ -63,6 +63,7 @@ jobs:
           # lose stargazer access and the finding got dismissed as a token-scope
           # artefact.
           GH_TOKEN: ${{ secrets.STARGAZER_TOKEN || secrets.TRAFFIC_TOKEN || secrets.GITHUB_TOKEN }}
+          GH_TOKEN_FALLBACKS: ${{ secrets.TRAFFIC_TOKEN }} ${{ secrets.GITHUB_TOKEN }}
 
       - name: Publish findings
         env:
