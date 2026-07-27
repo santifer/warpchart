@@ -56,7 +56,13 @@ jobs:
             | tee health-console.txt
         env:
           BLOB_READ_WRITE_TOKEN: ${{ secrets.BLOB_READ_WRITE_TOKEN }}
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # The SAME token cascade the collector uses, deliberately: CONTRACT is
+          # only meaningful if it measures what the collector can actually do.
+          # Probing with a more powerful token than the collector's is how the
+          # frozen tenant series went unnoticed - the watchdog saw the collector
+          # lose stargazer access and the finding got dismissed as a token-scope
+          # artefact.
+          GH_TOKEN: ${{ secrets.STARGAZER_TOKEN || secrets.TRAFFIC_TOKEN || secrets.GITHUB_TOKEN }}
 
       - name: Publish findings
         env:

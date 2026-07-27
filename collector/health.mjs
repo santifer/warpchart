@@ -160,6 +160,56 @@ async function checkFreshness(route) {
     } else pass("fresh.route", "FRESH", `${h.toFixed(1)}h old`);
   });
 
+  // THE CHECK THIS FILE SHOULD HAVE HAD ON DAY ONE. The tenant's per-star
+  // series is the home page: the daily ladder, the night floor, the hourly
+  // panels. It froze on 2026-07-22 (the collector's backwalk started getting
+  // FORBIDDEN) and the site kept drawing a chart with the last five days simply
+  // MISSING - no error anywhere, every other number still moving, so nothing
+  // looked wrong. Santiago spotted the empty bars. Age of the last recorded
+  // star is the one assertion that catches this regardless of the cause.
+  await check("fresh.tenant-series", "FRESH", async () => {
+    const { body } = await fetchJson(`${BASE}/api/curve?repo=${encodeURIComponent(TENANT)}`, { timeoutMs: 30_000 });
+    const pts = body?.pts ?? [];
+    if (!pts.length) {
+      return fail("fresh.tenant-series", "FRESH", "critical", "the tenant curve has no points at all",
+        "The home page charts are empty. Check data/stargazer_timestamps.txt exists in the Blob and that the build hydrated it.");
+    }
+    const last = pts[pts.length - 1];
+    const h = (Date.now() - last.t) / HOUR;
+    // The exact tail should reach today; a day of lag is collection cadence,
+    // more than that means the per-star feed stopped.
+    if (h > 36) {
+      fail("fresh.tenant-series", "FRESH", "critical",
+        `the tenant's star history stops ${(h / 24).toFixed(1)} days ago (last point ${new Date(last.t).toISOString().slice(0, 10)}, ${last.v} stars vs ${body.total} live)`,
+        "The daily ladder is drawing missing days as empty bars. Read the collector log for the backwalk line: `gh run list -R santifer/warpchart -w collect.yml` then `gh run view <id> --log | grep backwalk`. A FORBIDDEN there means the token cannot read stargazers any more - the Actions installation token lost that power in 2026, so the job needs a user-scoped secret (STARGAZER_TOKEN). The gap self-heals on the first successful run, because backwalk resumes from the last known timestamp.",
+        { lastPoint: new Date(last.t).toISOString(), lastValue: last.v, liveTotal: body.total, missing: (body.total ?? 0) - last.v });
+    } else if (h > 26) {
+      fail("fresh.tenant-series", "FRESH", "warn", `the tenant's star history is ${h.toFixed(0)}h behind`,
+        "One missed backwalk. If it grows past 36h the per-star feed has stopped, not slowed.", { lastPoint: new Date(last.t).toISOString() });
+    } else pass("fresh.tenant-series", "FRESH", `last star ${h.toFixed(1)}h ago`);
+  });
+
+  // A snapshot marked partial means some step gave up. One is noise; a run of
+  // them is a subsystem that has quietly stopped working.
+  await check("fresh.partial-snapshots", "FRESH", async () => {
+    const hist = await blobJson("data/history.jsonl").catch(() => null);
+    // history.jsonl is line-delimited, so blobJson cannot parse it; read raw.
+    if (hist === null && BLOB_TOKEN) {
+      const { get } = await import("@vercel/blob");
+      const res = await get("data/history.jsonl", { access: "private", token: BLOB_TOKEN }).catch(() => null);
+      if (!res?.stream) return pass("fresh.partial-snapshots", "FRESH", "history unavailable");
+      const lines = (await new Response(res.stream).text()).trimEnd().split("\n").filter(Boolean);
+      const recent = lines.slice(-12).map((l) => { try { return JSON.parse(l); } catch { return null; } }).filter(Boolean);
+      const partial = recent.filter((s) => s.partial).length;
+      if (recent.length && partial / recent.length >= 0.5) {
+        fail("fresh.partial-snapshots", "FRESH", "critical",
+          `${partial} of the last ${recent.length} snapshots are marked partial`,
+          "`partial` means a collector step failed and the run carried old values forward instead. Sustained partials are a subsystem that stopped working while the site kept looking normal. Find the failing step: gh run view <id> --log | grep -E 'failed|FORBIDDEN'",
+          { partial, of: recent.length });
+      } else pass("fresh.partial-snapshots", "FRESH", `${partial}/${recent.length} recent snapshots partial`);
+    }
+  });
+
   // v7 is computed once per registry refresh. If the stamp lags the registry,
   // every velocity on the site is one generation behind its own star counts.
   await check("fresh.v7", "FRESH", async () => {
@@ -348,6 +398,22 @@ async function checkContracts() {
       fail("contract.graphql-count", "CONTRACT", "critical", "GraphQL no longer returns stargazerCount",
         "Live star totals come from here. Without it the site can only show cached counts. Confirm from a second identity before acting: PUBLIC checks measure what the app can actually do, this one measures what this runner's token can do.", now);
     } else pass("contract.graphql-count", "CONTRACT", "stargazerCount alive");
+  });
+
+  // The collector runs with this same token cascade, and its incremental
+  // backwalk is what keeps the tenant's per-star series alive. If we cannot
+  // list our own stargazers, neither can it: that is not a scope curiosity,
+  // it is the home page quietly freezing. Dismissing exactly this signal as a
+  // token artefact is how the 2026-07-22 freeze survived five days.
+  await check("contract.collector-token", "CONTRACT", async () => {
+    if (now.stargazersOwn === 200) {
+      return pass("contract.collector-token", "CONTRACT", "can read our own stargazers");
+    }
+    const forbidden = now.stargazersOwn === 403 || now.stargazersOwn === 401;
+    fail("contract.collector-token", "CONTRACT", forbidden ? "critical" : "warn",
+      `cannot list our own stargazers with the ${identity} token (${now.stargazersOwn})`,
+      "The collector uses this same cascade, so its incremental backwalk is failing too and the tenant's daily star series is frozen even though every other number keeps updating. Fix: add a user-scoped STARGAZER_TOKEN secret with public repo read access (gh secret set STARGAZER_TOKEN -R santifer/warpchart). Confirm with: gh run view <collect run id> --log | grep backwalk",
+      { probe: now.stargazersOwn, identity });
   });
 
   await check("contract.fuel", "CONTRACT", async () => {

@@ -55,9 +55,15 @@ jobs:
       - name: Collect snapshot
         run: node collector/collect.mjs
         env:
-          # The automatic Actions token covers public-data reads (1,000 req/h,
-          # the collector uses ~12). No PAT or secret setup needed.
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # The automatic Actions token used to cover every public-data read the
+          # collector needs. It no longer does: since GitHub restricted stargazer
+          # access, an installation token gets FORBIDDEN ("Resource not
+          # accessible by integration") on `stargazers`, which silently froze the
+          # tenant's daily star series on 2026-07-22 while every other number
+          # kept updating. A USER-scoped token can still read them, so prefer one
+          # and keep the Actions token as the fallback that covers everything
+          # else (a fork with no secrets still works, minus the per-star series).
+          GH_TOKEN: ${{ secrets.STARGAZER_TOKEN || secrets.TRAFFIC_TOKEN || secrets.GITHUB_TOKEN }}
           # Optional: a Discord or Slack incoming-webhook URL for milestone /
           # overtake alerts.
           ALERT_WEBHOOK_URL: ${{ secrets.ALERT_WEBHOOK_URL }}
