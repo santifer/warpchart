@@ -109,8 +109,10 @@ async function main() {
     console.log("[velocity7] empty route, skipping");
     return;
   }
-  // idempotent per route refresh: the heavy 32-shard read runs once a day
-  if (route.v7_at && route.v7_at === route.generated_at) {
+  // idempotent per route refresh: the heavy 32-shard read runs once a day.
+  // V7_FORCE=1 overrides it, so a fix to the rate math can be applied to the
+  // live route without waiting for the next registry refresh.
+  if (!process.env.V7_FORCE && route.v7_at && route.v7_at === route.generated_at) {
     console.log(`[velocity7] already computed for ${route.generated_at}, skipping`);
     return;
   }

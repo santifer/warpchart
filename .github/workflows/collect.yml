@@ -7,6 +7,11 @@ on:
     # the real-time layer between builds. :07 avoids the :00 Actions congestion.
     - cron: "7 */2 * * *"
   workflow_dispatch:
+    inputs:
+      force_v7:
+        description: "Recompute v7 even if route.json has not refreshed (use after fixing the velocity math)"
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -63,6 +68,7 @@ jobs:
         continue-on-error: true
         env:
           BLOB_READ_WRITE_TOKEN: ${{ secrets.BLOB_READ_WRITE_TOKEN }}
+          V7_FORCE: ${{ inputs.force_v7 && '1' || '' }}
 
       # 3c. Ping IndexNow (Bing/Yandex) with the refreshed corpus so new charted
       #     repos and the daily rank/velocity updates get crawled in hours. Once
