@@ -64,6 +64,12 @@ jobs:
           # and keep the Actions token as the fallback that covers everything
           # else (a fork with no secrets still works, minus the per-star series).
           GH_TOKEN: ${{ secrets.STARGAZER_TOKEN || secrets.TRAFFIC_TOKEN || secrets.GITHUB_TOKEN }}
+          # Every other token we have, so the collector can fail over per CALL
+          # when the preferred one is FORBIDDEN for that endpoint. Configuring
+          # the "right" secret is not something anyone should have to get right:
+          # a fine-grained PAT cannot read stargazers at all, and it is
+          # indistinguishable from a working one until a call 403s.
+          GH_TOKEN_FALLBACKS: ${{ secrets.TRAFFIC_TOKEN }} ${{ secrets.GITHUB_TOKEN }}
           # Optional: a Discord or Slack incoming-webhook URL for milestone /
           # overtake alerts.
           ALERT_WEBHOOK_URL: ${{ secrets.ALERT_WEBHOOK_URL }}

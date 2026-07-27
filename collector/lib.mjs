@@ -10,13 +10,34 @@ export const DATA_DIR = join(ROOT, "data");
 
 const API = "https://api.github.com";
 
-export function token() {
-  const t = process.env.GH_TOKEN || process.env.GITHUB_TOKEN;
-  if (!t) {
+// Tokens, best first. Not every token can do every job and you cannot tell by
+// looking: GitHub's stargazer endpoints reject an Actions installation token
+// ("Resource not accessible by integration") AND a fine-grained PAT ("...by
+// personal access token", 403 on REST and GraphQL alike, even with public-repo
+// read) while accepting a classic/OAuth one. Guessing which secret to configure
+// froze the tenant's star series twice in one day, so the collector stops
+// guessing: it carries every token it was given and, when one is FORBIDDEN for
+// a call, retries that call with the next.
+export function tokens() {
+  const all = [
+    process.env.GH_TOKEN,
+    process.env.GH_TOKEN_FALLBACKS,
+    process.env.GITHUB_TOKEN,
+  ]
+    .filter(Boolean)
+    .flatMap((v) => v.split(/[\s,]+/))
+    .filter(Boolean);
+  const seen = new Set();
+  const out = all.filter((t) => !seen.has(t) && seen.add(t));
+  if (!out.length) {
     console.error("Missing GH_TOKEN / GITHUB_TOKEN env var");
     process.exit(1);
   }
-  return t;
+  return out;
+}
+
+export function token() {
+  return tokens()[0];
 }
 
 export function readConfig() {
@@ -29,8 +50,12 @@ export function readConfig() {
 
 export const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
+// Which token index is currently working. Sticky, so a permission failover
+// costs one retry per process rather than one per call.
+let tokenIdx = 0;
+
 // Fetch with retries and rate-limit awareness.
-export async function ghFetch(path, { method = "GET", body } = {}) {
+export async function ghFetch(path, { method = "GET", body, tokenOverride = null } = {}) {
   const url = path.startsWith("http") ? path : API + path;
   const delays = [2000, 8000, 30000];
   for (let attempt = 0; ; attempt++) {
@@ -40,7 +65,7 @@ export async function ghFetch(path, { method = "GET", body } = {}) {
         method,
         body: body ? JSON.stringify(body) : undefined,
         headers: {
-          Authorization: `Bearer ${token()}`,
+          Authorization: `Bearer ${tokenOverride ?? tokens()[tokenIdx] ?? token()}`,
           Accept: "application/vnd.github+json",
           "User-Agent": "mission-control",
           ...(body ? { "Content-Type": "application/json" } : {}),
@@ -68,10 +93,30 @@ export async function ghFetch(path, { method = "GET", body } = {}) {
   }
 }
 
+const isForbidden = (errors) =>
+  Array.isArray(errors) && errors.some((e) => e?.type === "FORBIDDEN");
+
 export async function graphql(query, variables) {
-  const data = await ghFetch("/graphql", { method: "POST", body: { query, variables } });
-  if (data.errors) throw new Error("GraphQL: " + JSON.stringify(data.errors).slice(0, 400));
-  return data.data;
+  const pool = tokens();
+  let lastErrors = null;
+  // GraphQL answers 200 with a FORBIDDEN error object rather than an HTTP 403,
+  // so the permission failover has to live here, not in ghFetch's status check.
+  for (let i = 0; i < pool.length; i++) {
+    const idx = (tokenIdx + i) % pool.length;
+    const data = await ghFetch("/graphql", {
+      method: "POST", body: { query, variables }, tokenOverride: pool[idx],
+    });
+    if (!data.errors) {
+      if (idx !== tokenIdx) {
+        console.log(`[lib] token #${tokenIdx} is FORBIDDEN for this call, using #${idx} from now on`);
+        tokenIdx = idx; // stick to the one that works
+      }
+      return data.data;
+    }
+    lastErrors = data.errors;
+    if (!isForbidden(data.errors)) break; // a real query error: another token will not help
+  }
+  throw new Error("GraphQL: " + JSON.stringify(lastErrors).slice(0, 400));
 }
 
 // Search API is limited to 30 req/min: enforce a global gap between calls.
