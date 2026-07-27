@@ -118,6 +118,16 @@ A one-time bootstrap walks your entire stargazer history (one timestamp per star
 
 No database. No paid APIs. No collector secrets (it uses the automatic Actions token).
 
+### The watchdog
+
+A telemetry product is only worth the trust you can place in it, and the failure that matters is not a crash: it is the site confidently showing a number that stopped being true. So `collector/health.mjs` runs every two hours against production and asserts what a person would otherwise have to remember to check: that the data is actually recent, that the numbers are possible at all (nothing gains or loses 5% of its stars a day as growth), that upstreams still answer what they answered last run, that the endpoints a visitor touches still respond for repos we do not own, and that the same repo shows the same velocity on every surface.
+
+Findings carry a remedy, not just an alarm, and land in a single auto-updating GitHub issue that closes itself on recovery. Run it yourself against any instance:
+
+```bash
+node collector/health.mjs --base=https://your-instance.vercel.app --no-fail
+```
+
 ## Tech Stack
 
 ![Next.js](https://img.shields.io/badge/Next.js-000000?style=flat&logo=nextdotjs&logoColor=white)
@@ -214,6 +224,16 @@ curl "https://warpchart.dev/api/v1/overtakes?repo=d3/d3"   # quién está cazand
 5. Listo. El workflow horario `collect` mantiene el histórico y redespliega solo.
 
 Sin base de datos, sin APIs de pago, sin secrets para el collector.
+
+### El vigilante
+
+Un producto de telemetría vale lo que vale la confianza que puedes depositar en él, y el fallo que importa no es que se caiga: es que enseñe con total seguridad un número que dejó de ser cierto. Por eso `collector/health.mjs` se ejecuta cada dos horas contra producción y comprueba lo que si no habría que acordarse de mirar a mano: que los datos sean recientes de verdad, que los números sean siquiera posibles (nada gana ni pierde un 5% de sus estrellas al día como crecimiento), que las fuentes externas sigan respondiendo lo mismo que la última vez, que los endpoints que toca un visitante sigan funcionando para repos que no son tuyos, y que un mismo repo muestre la misma velocidad en todas las superficies.
+
+Cada hallazgo lleva un remedio, no solo una alarma, y aterriza en un único issue de GitHub que se actualiza solo y se cierra cuando todo vuelve a estar bien. Puedes ejecutarlo contra cualquier instancia:
+
+```bash
+node collector/health.mjs --base=https://tu-instancia.vercel.app --no-fail
+```
 
 ## Licencia
 

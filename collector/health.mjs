@@ -560,6 +560,65 @@ async function checkCurves() {
   });
 }
 
+// =========================================================== PIPELINE =======
+// Reading our own build logs. Almost every collector step is `continue-on-error`
+// (correct: one flaky upstream must not cost the whole snapshot), which means a
+// step can fail on EVERY run forever and the workflow still shows green. That is
+// a blind spot by construction, so somebody has to read the logs. This does.
+async function checkPipeline() {
+  const repo = process.env.GITHUB_REPOSITORY ?? "santifer/warpchart";
+  await check("pipeline.chronic-step", "PIPELINE", async () => {
+    const runs = await gh(`/repos/${repo}/actions/workflows/collect.yml/runs?per_page=8&status=completed`);
+    const list = runs.body?.workflow_runs ?? [];
+    if (!list.length) return pass("pipeline.chronic-step", "PIPELINE", "no runs to inspect");
+
+    const failCount = new Map();
+    const cancelled = list.filter((r) => r.conclusion === "cancelled").length;
+    let inspected = 0;
+    for (const r of list.slice(0, 6)) {
+      const jobs = await gh(`/repos/${repo}/actions/runs/${r.id}/jobs`);
+      if (!jobs.body?.jobs) continue;
+      inspected++;
+      for (const j of jobs.body.jobs) {
+        for (const s of j.steps ?? []) {
+          if (s.conclusion === "failure") failCount.set(s.name, (failCount.get(s.name) ?? 0) + 1);
+        }
+      }
+    }
+    const chronic = [...failCount.entries()].filter(([, n]) => inspected && n / inspected >= 0.5);
+
+    if (chronic.length) {
+      fail("pipeline.chronic-step", "PIPELINE", "warn",
+        `step(s) failing on most recent runs while the workflow still reports success: ` +
+        chronic.map(([name, n]) => `"${name}" (${n}/${inspected})`).join(" · "),
+        "These are masked by continue-on-error, so nobody sees them. Either the step is genuinely broken (fix it) or it is dead weight (delete it) - a step that always fails is telling you its output is not actually being used. Read one run: gh run view <id> --log",
+        chronic.map(([name, n]) => ({ step: name, failedRuns: n, inspected })));
+    } else pass("pipeline.chronic-step", "PIPELINE", `${inspected} runs inspected, no chronic step failures`);
+
+    if (cancelled >= 2) {
+      fail("pipeline.cancelled", "PIPELINE", "critical",
+        `${cancelled} of the last ${list.length} collector runs were CANCELLED`,
+        "A cancelled run usually means the job hit its timeout, which kills the remaining steps silently - including 'Trigger deploy'. That is exactly how the site froze on 2026-07-19. Find the step that overran and give it its own timeout-minutes rather than raising the job's.",
+        { cancelled, of: list.length });
+    }
+  });
+}
+
+// Findings that keep coming back do not need the same remedy repeated every two
+// hours: they need a structural fix. Recurrence is what tells them apart.
+async function annotateRecurrence(findings) {
+  const hist = (await blobJson("health/history.json").catch(() => null))?.runs ?? [];
+  if (hist.length < 3) return;
+  const recent = hist.slice(-5);
+  for (const f of findings) {
+    const seen = recent.filter((r) => (r.ids ?? []).includes(f.id)).length;
+    if (seen >= 3) {
+      f.recurring = seen;
+      f.remedy += ` [RECURRING: seen in ${seen} of the last ${recent.length} runs. A finding this persistent is not an incident, it is a design problem - fix the cause or change the check, but do not keep paying attention to it twice an hour.]`;
+    }
+  }
+}
+
 // =========================================================== report =========
 function severityRank(s) { return s === "critical" ? 0 : s === "warn" ? 1 : 2; }
 
@@ -622,7 +681,9 @@ async function main() {
   await checkPublic();
   await checkCoherence(route);
   await checkCurves();
+  await checkPipeline();
 
+  await annotateRecurrence(findings).catch(() => {});
   findings.sort((a, b) => severityRank(a.severity) - severityRank(b.severity));
   const counts = {
     critical: findings.filter((f) => f.severity === "critical").length,
