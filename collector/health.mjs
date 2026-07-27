@@ -295,6 +295,14 @@ async function checkData(route) {
 // simply vanished. Transitions are the signal, in both directions.
 async function checkContracts() {
   const now = {};
+  // WHOSE capability are we measuring? Actions hands the job a restricted
+  // installation token that 403s where a user token gets 200 or 404, so a
+  // baseline recorded locally and compared in CI invents transitions that never
+  // happened (observed on this check's own first CI run). Baselines are keyed by
+  // identity, and a 403 is recorded as "cannot measure" rather than as a change:
+  // a watchdog that cries wolf gets muted, which is worse than having none.
+  const identity = process.env.GITHUB_ACTIONS ? "actions" : "local";
+  const unmeasurable = (v) => v === 403 || v === 401 || v === 0;
 
   await check("contract.probe", "CONTRACT", async () => {
     const repoRest = await gh(`/repos/${TENANT}`);
@@ -307,8 +315,10 @@ async function checkContracts() {
     now.stargazersForeign = foreign.status;
 
     const g = await ghGraphql(`{repository(owner:"facebook",name:"react"){stargazerCount stargazers(last:3){edges{starredAt}}}}`);
-    now.graphqlCount = g.body?.data?.repository?.stargazerCount ? "ok" : "missing";
-    now.graphqlForeignEdges = (g.body?.data?.repository?.stargazers?.edges ?? []).length;
+    now.graphqlCount = g.body?.data?.repository?.stargazerCount ? "ok"
+      : unmeasurable(g.status) || g.body?.errors ? "unmeasurable" : "missing";
+    now.graphqlForeignEdges = now.graphqlCount === "unmeasurable" ? "unmeasurable"
+      : (g.body?.data?.repository?.stargazers?.edges ?? []).length;
 
     const oss = await fetchJson("https://api.ossinsight.io/q/analyze-stars-history?repoId=10270250", { timeoutMs: 20_000 }).catch(() => ({ status: 0 }));
     now.ossInsight = oss.status;
@@ -317,7 +327,8 @@ async function checkContracts() {
     now.rateRemaining = rl.body?.resources?.core?.remaining ?? null;
   });
 
-  const prevDoc = await blobJson("health/contracts.json").catch(() => null);
+  const BASELINE_KEY = `health/contracts-${identity}.json`;
+  const prevDoc = await blobJson(BASELINE_KEY).catch(() => null);
   const prev = prevDoc?.state ?? null;
 
   // Absolute expectations: things that must hold regardless of history.
@@ -329,9 +340,13 @@ async function checkContracts() {
   });
 
   await check("contract.graphql-count", "CONTRACT", async () => {
-    if (now.graphqlCount !== "ok") {
+    if (now.graphqlCount === "unmeasurable") {
+      // Not a failure and not a pass: this runner's token cannot ask the
+      // question. Say so plainly instead of guessing in either direction.
+      pass("contract.graphql-count", "CONTRACT", `not measurable with the ${identity} token`);
+    } else if (now.graphqlCount !== "ok") {
       fail("contract.graphql-count", "CONTRACT", "critical", "GraphQL no longer returns stargazerCount",
-        "Live star totals come from here. Without it the site can only show cached counts.", now);
+        "Live star totals come from here. Without it the site can only show cached counts. Confirm from a second identity before acting: PUBLIC checks measure what the app can actually do, this one measures what this runner's token can do.", now);
     } else pass("contract.graphql-count", "CONTRACT", "stargazerCount alive");
   });
 
@@ -345,9 +360,15 @@ async function checkContracts() {
   // Transitions: the actual point of this area.
   await check("contract.transitions", "CONTRACT", async () => {
     if (!prev) {
-      pass("contract.transitions", "CONTRACT", "baseline recorded (first run)");
+      pass("contract.transitions", "CONTRACT", `baseline recorded for the ${identity} identity (first run)`);
     } else {
-      const moved = Object.keys(now).filter((k) => k !== "rateRemaining" && String(prev[k]) !== String(now[k]));
+      const moved = Object.keys(now).filter((k) => {
+        if (k === "rateRemaining") return false;
+        // A probe this runner cannot make is not a change in the world.
+        if (unmeasurable(now[k]) || now[k] === "unmeasurable") return false;
+        if (unmeasurable(prev[k]) || prev[k] === "unmeasurable") return false;
+        return String(prev[k]) !== String(now[k]);
+      });
       for (const k of moved) {
         const from = prev[k], to = now[k];
         // The one transition that is GOOD news, and it deserves a concrete plan.
@@ -370,7 +391,13 @@ async function checkContracts() {
       }
       if (!moved.length) pass("contract.transitions", "CONTRACT", "no change since last run");
     }
-    await blobPut("health/contracts.json", { at: new Date().toISOString(), state: now });
+    // Merge, do not overwrite: a probe this runner could not make must keep the
+    // last value somebody DID measure, or the baseline decays to nothing.
+    const merged = { ...(prev ?? {}) };
+    for (const [k, v] of Object.entries(now)) {
+      if (!unmeasurable(v) && v !== "unmeasurable") merged[k] = v;
+    }
+    await blobPut(BASELINE_KEY, { at: new Date().toISOString(), identity, state: merged, raw: now });
   });
 
   return now;
