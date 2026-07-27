@@ -27,7 +27,11 @@ concurrency:
 jobs:
   snapshot:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    # Room for every step's own cap to apply BEFORE the job's: a job-level
+    # timeout cancels the remaining steps silently (that is what killed
+    # 'Trigger deploy' and froze the site on 2026-07-19), whereas a step-level
+    # one is contained and visible.
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-node@v5
@@ -154,14 +158,22 @@ jobs:
       #     and PAID tenants -> vitals/{owner}--{name}.json. Runs AFTER velocity7
       #     (route v7) and traffic.mjs (the vault). Self-gates per day; never
       #     fails the run. VITALS_UNIVERSE caps the distribution set.
+      # The 3-minute cap added on 2026-07-23 stopped this step from starving
+      # 'Trigger deploy', but it also guaranteed it could never finish: the
+      # distribution sweep restarted from zero each run and was killed before
+      # writing, taking Phase B (the panel refresh) with it. The sweep is now
+      # resumable with its own internal budget, so the cap only has to leave
+      # room for that budget plus Phase B.
       - name: Compute Vital Signs
         run: node collector/vitals.mjs
         continue-on-error: true
-        timeout-minutes: 3
+        timeout-minutes: 5
         env:
           BLOB_READ_WRITE_TOKEN: ${{ secrets.BLOB_READ_WRITE_TOKEN }}
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.STARGAZER_TOKEN || secrets.TRAFFIC_TOKEN || secrets.GITHUB_TOKEN }}
+          GH_TOKEN_FALLBACKS: ${{ secrets.TRAFFIC_TOKEN }} ${{ secrets.GITHUB_TOKEN }}
           VITALS_UNIVERSE: "1000"
+          VITALS_DEADLINE_MS: "150000"
 
       # 4d. Spike attribution: detect HOURLY star surges from the fresh timestamps
       #     and name each one by diffing the Traffic Vault referrer snapshots that

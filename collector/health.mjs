@@ -231,6 +231,28 @@ async function checkFreshness(route) {
     }
   });
 
+  // Vital Signs is a whole panel computed by its own collector step, and it sat
+  // frozen for 8 days (2026-07-19 to 2026-07-27) showing a rank as if it were
+  // current: the sweep it depends on could never finish inside a CI job, died
+  // before writing, and took the panel refresh down with it - while the
+  // workflow reported success every two hours. Any artifact with its own
+  // compute step needs its own freshness assertion; success of the run that
+  // produces it proves nothing.
+  await check("fresh.vitals", "FRESH", async () => {
+    const v = await blobJson("vitals/santifer--career-ops.json").catch(() => null);
+    if (!v) return pass("fresh.vitals", "FRESH", "no vitals artifact (panel not in use)");
+    const h = ageH(v.computedAt);
+    if (h > 72) {
+      fail("fresh.vitals", "FRESH", "critical",
+        `the Vital Signs panel was computed ${(h / 24).toFixed(1)} days ago (universe ${v.universe})`,
+        "The panel is publishing a stale rank as if it were live. Read the step: gh run view <collect run id> --log | grep vitals. A 'timed out' there means Phase A (the ~1h reference sweep) is eating the step budget before Phase B refreshes the panel - the sweep is resumable, so check VITALS_DEADLINE_MS leaves room, and that the step timeout is above it.",
+        { computedAt: v.computedAt, universe: v.universe });
+    } else if (h > 30) {
+      fail("fresh.vitals", "FRESH", "warn", `Vital Signs is ${h.toFixed(0)}h old`,
+        "It refreshes daily. One miss is fine; a trend means Phase B is not being reached.", { computedAt: v.computedAt });
+    } else pass("fresh.vitals", "FRESH", `computed ${h.toFixed(1)}h ago`);
+  });
+
   // v7 is computed once per registry refresh. If the stamp lags the registry,
   // every velocity on the site is one generation behind its own star counts.
   await check("fresh.v7", "FRESH", async () => {

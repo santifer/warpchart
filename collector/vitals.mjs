@@ -36,6 +36,10 @@ if (!blobToken) {
 
 const UNIVERSE = Math.max(50, Number(process.env.VITALS_UNIVERSE || 1000));
 const DIST_MAX = Math.max(1, Number(process.env.VITALS_DIST_MAX || 1000));
+// Time budget for the resumable distribution sweep. Must leave room inside the
+// STEP timeout for Phase B, which is the part that actually refreshes the
+// panel; Phase A only rebuilds the reference population, once a week.
+const DEADLINE_MS = Math.max(10_000, Number(process.env.VITALS_DEADLINE_MS || 150_000));
 const PACE_MS = Math.max(0, Number(process.env.VITALS_PACE_MS || 700));
 const DAY = 864e5;
 const today = new Date().toISOString().slice(0, 10);
@@ -635,22 +639,44 @@ async function main() {
     console.log(`[vitals] composite recomputed from stored raw (${COMPOSITE_M.join("+")}), no sweep`);
   } else if (need) {
     const target = repos.slice(0, UNIVERSE);
-    const raw = []; // per-repo full dims, kept for the composite pass
-    let done = 0;
-    for (const repo of target) {
-      if (done >= DIST_MAX) {
-        console.log(`[vitals] dist per-run cap ${DIST_MAX} reached, will resume next run`);
-        break;
-      }
+    // RESUMABLE. The sweep is search-limited to ~15 repos/min, so a full 999
+    // takes about an hour - it can NEVER finish inside one CI job. It used to
+    // restart from zero every run, get killed by the step timeout before
+    // writing anything, and take Phase B down with it: the whole Vital Signs
+    // panel sat frozen from 2026-07-19 to 2026-07-27 while the workflow
+    // reported success every two hours. Now each run spends a fixed time
+    // budget, PERSISTS what it collected, and the next one picks up where it
+    // stopped. Roughly a day and a half to a full sweep, once a week.
+    const started = Date.now();
+    let prog = await readBlob("vitals/_dist-progress.json");
+    if (!prog || prog.universe !== UNIVERSE || !Array.isArray(prog.raw) || prog.repos !== target.length) {
+      prog = { startedDay: today, universe: UNIVERSE, repos: target.length, idx: 0, raw: [] };
+    }
+    const raw = prog.raw;
+    let done = raw.length;
+    let i = prog.idx;
+    for (; i < target.length; i++) {
+      if (Date.now() - started > DEADLINE_MS) break;
+      if (done - prog.raw.length >= DIST_MAX) break;
       try {
-        raw.push(dims(await lightActivity(repo), repo));
+        raw.push(dims(await lightActivity(target[i]), target[i]));
         done++;
       } catch (e) {
         // one flaky repo must not sink the distribution
       }
       if (PACE_MS) await sleep(PACE_MS);
     }
-    if (done >= 30) {
+    const complete = i >= target.length;
+    if (!complete) {
+      // Save and hand over to Phase B: a partial sweep must never cost the
+      // tenant its daily refresh, which is the whole point of the panel.
+      await writeBlob("vitals/_dist-progress.json", { ...prog, idx: i, raw });
+      console.log(`[vitals] distribution sweep at ${i}/${target.length} (${done} measured), resuming next run`);
+    }
+    // Only publish a distribution built from the WHOLE universe: a rank of
+    // "#24 of 30" read as "#24 of 999" would be a lie, and a rank is the one
+    // number on this panel that cannot be approximated.
+    if (complete && done >= 30) {
       const metrics = {};
       for (const k of M) metrics[k] = raw.map((a) => a[k] ?? 0).sort((x, y) => x - y);
       // composite distribution: activity is heavily skewed (most repos near 0),
@@ -677,8 +703,10 @@ async function main() {
         })),
       };
       await writeBlob("vitals/_dist.json", dist);
-      console.log(`[vitals] distribution refreshed: ${done} repos`);
-    } else {
+      // progress consumed: the next weekly refresh starts a clean sweep
+      await writeBlob("vitals/_dist-progress.json", { startedDay: today, universe: UNIVERSE, repos: 0, idx: 0, raw: [] });
+      console.log(`[vitals] distribution refreshed: ${done} repos (full sweep complete)`);
+    } else if (complete) {
       console.log(`[vitals] distribution refresh too thin (${done}); keeping previous`);
     }
   } else {
