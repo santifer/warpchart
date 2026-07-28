@@ -178,6 +178,9 @@ async function readVitals(owner: string, name: string): Promise<Vitals | null> {
 export const loadVitals = (owner: string, name: string): Promise<Vitals | null> =>
   unstable_cache(
     () => readVitals(owner, name),
-    ["vitals-v6", `${owner}/${name}`.toLowerCase()],
+    // v7: repo-wide contributors + merged total, cohorts over the full history,
+    // 90-day lead-time window. Bumped so entries cached under the old shape
+    // (sample counts passing for totals) are purged rather than lingering 15min.
+    ["vitals-v7", `${owner}/${name}`.toLowerCase()],
     { revalidate: 900 },
   )();
