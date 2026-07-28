@@ -124,7 +124,10 @@ export const getCachedDossier = (owner: string, name: string) =>
     // v8: invalidate entries cached by the short-lived npm total-cap that stored
     // a null npm (unstable_cache is not deploy-scoped, so the bad entry survived
     // the fix). Bumping the key forces a fresh resolve on next view.
-    ["dossier-v8", `${owner}/${name}`.toLowerCase()],
+    // v9: entries stored while both channels were truncated to the slowest one
+    // hold clone days that were already discarded at write time - a redeploy
+    // alone cannot recover them, only a new key can.
+    ["dossier-v9", `${owner}/${name}`.toLowerCase()],
     { revalidate: 900 },
   )();
 
