@@ -66,17 +66,25 @@ export default function UsageChart({
   }
   const days = [...byDay.keys()].sort();
   if (days.length < 2) return null;
-  // Channels publish at different speeds (npm's daily series lands 3-4 days
-  // after GitHub's traffic API). Past a channel's last real day the value is
-  // UNKNOWN, not zero: drawing it as zero made npm look like it collapsed,
-  // which is why the panel used to truncate every series to the slowest one and
-  // read days stale. Recharts breaks a line on null, so each channel simply
-  // ends where its data does and the faster one keeps running.
+  // Channels publish at different speeds: npm's daily series lands 3-4 days
+  // after GitHub's traffic API. Past a channel's last real day the value is
+  // UNKNOWN, not zero - drawing it as zero made npm look like it collapsed.
   const lastNpmDay = (npm ?? []).reduce<string | null>((m, p) => (!m || p.day > m ? p.day : m), null);
   const lastCloneDay = (clones ?? []).reduce<string | null>((m, p) => (!m || p.day > m ? p.day : m), null);
+  // The CURVE stops on the last day every active channel has closed, so it
+  // keeps a clean common horizon instead of a stretch where one band ends
+  // mid-plot and reads as a glitch. This is a DRAWING decision only: the
+  // panel's totals above run to each channel's own latest day and name it
+  // ("through Jul 27"). That separation is the fix - clipping the DATA to the
+  // slowest channel was throwing away real clone days, which is what made the
+  // panel show 2026-07-24 while GitHub already had 07-27.
+  const chartEnd =
+    lastNpmDay && lastCloneDay && hasNpm && hasClones
+      ? [lastNpmDay, lastCloneDay].sort()[0]
+      : (lastCloneDay ?? lastNpmDay);
   let cn = 0;
   let cc = 0;
-  const rows: Row[] = days.map((day) => {
+  const rows: Row[] = days.filter((day) => !chartEnd || day <= chartEnd).map((day) => {
     const e = byDay.get(day)!;
     const npmKnown = lastNpmDay !== null && day <= lastNpmDay;
     const cloneKnown = lastCloneDay !== null && day <= lastCloneDay;
