@@ -57,7 +57,9 @@ export async function buildDemoSpotlight(): Promise<DemoSpotlight | null> {
       .filter((v) => v.r.toLowerCase() !== hero.r.toLowerCase())
       .map((v) => {
         const rv = routeV7.get(v.r.toLowerCase());
-        return { r: v.r, s: v.s, v: rv != null ? rv : v.v, d: v.d, l: v.l };
+        // v.v is null when GitHub would not let us measure that repo; the
+        // registry rate is the answer, and 0 only when we have neither.
+        return { r: v.r, s: v.s, v: rv ?? v.v ?? 0, d: v.d, l: v.l };
       });
   } catch {
     /* route-only degradation */

@@ -449,7 +449,13 @@ export async function reposVelocity(fullNames, now = new Date()) {
     const d = data[`r${i}`];
     if (!d) continue;
     const edges = d.stargazers.edges;
-    let v = 0;
+    // UNKNOWN is not ZERO. Since GitHub closed stargazer listing for repos we
+    // do not own, this query returns an EMPTY edges array instead of an error,
+    // and reading that as "grew by 0" published a measured-looking zero for
+    // every neighbour of the tenant. A repo with 61,000 stars did not stop
+    // growing; we simply lost the window to see it. Null says so, and the
+    // caller substitutes the canonical 7-day rate from the registry.
+    let v = edges.length >= 2 ? 0 : d.stargazerCount > 0 ? null : 0;
     if (edges.length >= 2) {
       const oldest = new Date(edges[0].starredAt);
       // Floor only guards near-simultaneous timestamps (div-by-~0); keep it
@@ -463,7 +469,7 @@ export async function reposVelocity(fullNames, now = new Date()) {
     out.push({
       r: d.nameWithOwner,
       s: d.stargazerCount,
-      v: Math.round(v * 10) / 10,
+      v: v === null ? null : Math.round(v * 10) / 10,
       d: d.description ? d.description.slice(0, 90) : null,
       l: d.primaryLanguage?.name ?? null,
     });

@@ -75,7 +75,30 @@ let neighbors = null;
 try {
   const names = await findNeighbors(meta.nameWithOwner, stars);
   neighbors = await reposVelocity(names, now);
-  console.log(`[collect] ${neighbors.length} neighbors measured`);
+  // reposVelocity returns null where GitHub no longer lets us count a foreign
+  // repo's recent stars. Fill those from the registry's canonical 7-day rate,
+  // which is measured from OUR OWN daily snapshots and needs no permission.
+  // Doing it HERE means the snapshot on disk is already right, instead of every
+  // reader having to remember to patch it (one that forgot is what put a row of
+  // zeroes in front of Santiago on 2026-07-28).
+  let filled = 0;
+  try {
+    const routeNow = JSON.parse(readFileSync(join(DATA_DIR, "route.json"), "utf8"));
+    const canon = new Map((routeNow.repos ?? []).map((p) => [p.r.toLowerCase(), p.v7 ?? p.v ?? null]));
+    neighbors = neighbors.map((n) => {
+      if (n.v != null) return n;
+      const c = canon.get(n.r.toLowerCase());
+      if (c == null) return n;
+      filled++;
+      return { ...n, v: c };
+    });
+  } catch { /* no registry yet: leave the nulls, they are honest */ }
+  const unknown = neighbors.filter((n) => n.v == null).length;
+  console.log(
+    `[collect] ${neighbors.length} neighbors measured` +
+      (filled ? ` · ${filled} from the registry (stargazer listing closed)` : "") +
+      (unknown ? ` · ${unknown} still unknown` : ""),
+  );
 } catch (err) {
   console.error(`[collect] neighbors failed: ${err.message}`);
   neighbors = null;

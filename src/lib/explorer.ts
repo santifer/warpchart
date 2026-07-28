@@ -19,6 +19,7 @@ import {
 import { loadTrafficVault } from "./traffic";
 import { reqLog } from "./log";
 import { nextMilestones } from "./milestones";
+import { canonicalVelocity } from "./velocity";
 import { buildRouteLayers, forkRatioPercentile } from "./bundle";
 import type { ChartInputs, Neighbor, RouteRepo } from "./types";
 
@@ -202,8 +203,19 @@ export async function getExplorerData(owner: string, name: string): Promise<Expl
     if (lowFuel() && inTop1000) throw new Error("low fuel: serving registry data");
     const vel = await neighborsVelocity([repoName, ...neighborNames]);
     const self = vel.find((v) => v.r.toLowerCase() === repoName.toLowerCase());
-    neighbors = vel.filter((v) => v.r.toLowerCase() !== repoName.toLowerCase());
-    v7d = self?.v ?? 0;
+    // A null rate means GitHub would not let us count that repo's recent stars,
+    // which is now the normal answer for anything we do not own. Substitute the
+    // registry's canonical 7-day rate; only fall back to 0 for a repo we have
+    // never tracked, where 0 is genuinely all we know.
+    const canon = new Map(
+      (loadRoute()?.repos ?? []).map((p) => [p.r.toLowerCase(), canonicalVelocity(p)] as const),
+    );
+    const settle = (n: { r: string; v: number | null }) =>
+      n.v ?? canon.get(n.r.toLowerCase()) ?? 0;
+    neighbors = vel
+      .filter((v) => v.r.toLowerCase() !== repoName.toLowerCase())
+      .map((n) => ({ ...n, v: settle(n) }));
+    v7d = self ? settle(self) : 0;
     if (self) {
       repoName = self.r;
       stars = self.s;

@@ -236,7 +236,10 @@ interface VelocityRepoNode {
 export async function neighborsVelocity(
   fullNames: string[],
   now = Date.now()
-): Promise<{ r: string; s: number; v: number; d: string | null; l: string | null }[]> {
+  // v is NULL when the rate is not measurable (GitHub no longer lists a foreign
+  // repo's stargazers). Callers must substitute the canonical registry rate or
+  // render nothing - never coerce it to 0, which reads as "this repo is dead".
+): Promise<{ r: string; s: number; v: number | null; d: string | null; l: string | null }[]> {
   if (!fullNames.length) return [];
   const names = fullNames.slice(0, 25);
   // 5 aliases with last:30 keep each query cheap enough to survive the
@@ -274,13 +277,18 @@ export async function neighborsVelocity(
     })
   );
 
-  const out: { r: string; s: number; v: number; d: string | null; l: string | null }[] = [];
+  const out: { r: string; s: number; v: number | null; d: string | null; l: string | null }[] = [];
   for (const data of results) {
     if (!data) continue;
     for (const d of Object.values(data)) {
       if (!d) continue;
       const edges = d.stargazers.edges;
-      let v = 0;
+      // UNKNOWN is not ZERO: GitHub returns an EMPTY edges array (not an error)
+      // for repos we do not own, so treating that as "grew by 0" publishes a
+      // measured-looking zero. Callers that know the canonical 7-day rate
+      // substitute it; the ones that do not should show nothing rather than a
+      // confident lie.
+      let v: number | null = edges.length >= 2 ? 0 : d.stargazerCount > 0 ? null : 0;
       if (edges.length >= 2) {
         // Span of the last ~30 stars. The floor ONLY guards degenerate
         // near-simultaneous timestamps (div-by-~0); it must stay tiny, because
@@ -296,7 +304,7 @@ export async function neighborsVelocity(
       out.push({
         r: d.nameWithOwner,
         s: d.stargazerCount,
-        v: Math.round(v * 10) / 10,
+        v: v === null ? null : Math.round(v * 10) / 10,
         d: d.description ? d.description.slice(0, 90) : null,
         l: d.primaryLanguage?.name ?? null,
       });
