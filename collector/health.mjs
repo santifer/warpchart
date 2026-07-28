@@ -574,6 +574,30 @@ async function checkPublic() {
     } else pass("public.chart", "PUBLIC", "svg embeds render");
   });
 
+  // The live layer OVERWRITES the server-rendered numbers as soon as a page
+  // flips from SYNCING to LIVE, so it can undo a correct render. It did: the
+  // neighbour band went to 0/day the moment the indicator cleared, because this
+  // endpoint returned the raw unmeasurable nulls while every other consumer
+  // filled them from the registry. A live endpoint that disagrees with the page
+  // it patches is worse than one that is down.
+  await check("public.live-neighbors", "PUBLIC", async () => {
+    const { status, body } = await fetchJson(`${BASE}/api/live/neighbors`, { timeoutMs: 30_000 });
+    const ns = body?.neighbors ?? [];
+    if (status !== 200 || !ns.length) {
+      return fail("public.live-neighbors", "PUBLIC", "warn", `/api/live/neighbors returned ${status} with ${ns.length} neighbours`,
+        "The dashboard keeps the server-rendered band when this is empty, so nothing breaks visibly - but the live layer is dead. Check src/app/api/live/neighbors/route.ts and the snapshot's neighbour list.");
+    }
+    const blank = ns.filter((n) => n.v == null || n.v === 0);
+    // Some neighbours genuinely sit at 0 (mature, stalled repos), so only a
+    // WHOLESALE blank band is a fault.
+    if (blank.length >= Math.max(3, ns.length * 0.8)) {
+      fail("public.live-neighbors", "PUBLIC", "critical",
+        `${blank.length}/${ns.length} live neighbours have no velocity (${blank.slice(0, 3).map((n) => n.r).join(", ")})`,
+        "This response replaces the server-rendered band on LIVE, so the whole local band will read 0/day for visitors. GitHub no longer lets us measure a foreign repo's recent stars, so the nulls are expected: the endpoint must fill them from the registry's canonical velocity (canonicalVelocity over loadRoute), like collect.mjs and explorer.ts do.",
+        blank.slice(0, 6).map((n) => ({ repo: n.r, v: n.v })));
+    } else pass("public.live-neighbors", "PUBLIC", `${ns.length - blank.length}/${ns.length} live neighbours carry a rate`);
+  });
+
   await check("public.pages", "PUBLIC", async () => {
     const pages = ["/", "/compare", "/velocity", "/explore", "/pricing", `/r/${TENANT}`];
     const broken = [];

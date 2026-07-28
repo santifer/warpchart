@@ -1,5 +1,7 @@
 import { neighborsVelocity } from "@/lib/github";
-import { lastSnapshot, lastNeighborsSnapshot } from "@/lib/history";
+import { lastSnapshot, lastNeighborsSnapshot, loadRoute } from "@/lib/history";
+import { canonicalVelocity } from "@/lib/velocity";
+import type { Neighbor } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
@@ -20,7 +22,21 @@ export async function GET() {
         { headers: { "Cache-Control": CACHE } }
       );
     }
-    const neighbors = await neighborsVelocity(names);
+    const measured = await neighborsVelocity(names);
+    // neighborsVelocity returns null where GitHub no longer lets us count a
+    // foreign repo's recent stars, which since jun-2026 is EVERY neighbour.
+    // This response OVERWRITES the server-rendered band the instant the page
+    // flips from SYNCING to LIVE, so shipping those nulls made the whole local
+    // band read 0/day right after the indicator cleared: the server had it
+    // right and the live layer undid it. Fill from the registry's canonical
+    // 7-day rate - the same source collect.mjs and the console already use.
+    const canon = new Map(
+      (loadRoute()?.repos ?? []).map((p) => [p.r.toLowerCase(), canonicalVelocity(p)] as const)
+    );
+    const neighbors: Neighbor[] = measured.map((n) => ({
+      ...n,
+      v: n.v ?? canon.get(n.r.toLowerCase()) ?? 0,
+    }));
     return Response.json(
       { neighbors, fetchedAt: new Date().toISOString() },
       { headers: { "Cache-Control": CACHE } }
