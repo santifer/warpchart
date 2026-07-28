@@ -242,7 +242,9 @@ async function sampleCurve(owner: string, name: string): Promise<Curve> {
 // v2: seam-anchored archive normalization. v3: per-repo tags + live total.
 // v4: exact daily recent tail spliced from the rank-history moat.
 // v5: cascade that never 502s (REST stargazer listing closed for foreign repos).
-const CURVE_VERSION = 5;
+// v6: daily points clamped to now, so a curve built in the morning no longer
+// carries today's noon-stamped point as a future timestamp.
+const CURVE_VERSION = 6;
 
 export function curveTag(owner: string, name: string): string {
   return `curve:${owner.toLowerCase()}/${name.toLowerCase()}`;
