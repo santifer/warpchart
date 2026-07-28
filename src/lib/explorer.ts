@@ -98,15 +98,21 @@ export async function fetchDossier(owner: string, name: string): Promise<Dossier
     const todayUTC = new Date().toISOString().slice(0, 10);
     const past = <T extends { day: string }>(xs: T[] | null) =>
       xs ? xs.filter((x) => x.day < todayUTC) : xs;
-    let np = past(npmHistory);
-    let cl = past(clonesHistory);
-    if (np && np.length && cl && cl.length) {
-      const maxDay = (xs: { day: string }[]) => xs.reduce((m, x) => (x.day > m ? x.day : m), xs[0].day);
-      const bound = [maxDay(np), maxDay(cl)].sort()[0]; // the earlier of the two latest days
-      np = np.filter((x) => x.day <= bound);
-      cl = cl.filter((x) => x.day <= bound);
-    }
-    return { ...raw, npmPkg, npmLast30, npmHistory: np, clonesHistory: cl };
+    // Each channel runs to its OWN latest day. They used to be truncated to the
+    // earlier of the two, so that a day only appeared once every channel had
+    // closed it - which meant the slowest channel aged the whole panel: npm
+    // publishes its daily series 3-4 days late (stuck at 2026-07-24 while GitHub
+    // traffic already had 07-26), so perfectly good clone data was thrown away
+    // and the panel read as stale. The real problem was the CHART drawing a
+    // missing npm day as zero; UsageChart now ends each line at its own last
+    // real day instead, so nothing has to be discarded to keep it honest.
+    return {
+      ...raw,
+      npmPkg,
+      npmLast30,
+      npmHistory: past(npmHistory),
+      clonesHistory: past(clonesHistory),
+    };
   } catch {
     return null;
   }

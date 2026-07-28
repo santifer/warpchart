@@ -135,20 +135,29 @@ export function UsagePanel({
               const ch = d!.clonesHistory;
               const cloneTotal = ch ? ch.reduce((s, x) => s + x.c, 0) : 0;
               const cloneUnique = ch ? ch.reduce((s, x) => s + x.u, 0) : 0;
-              const since =
-                ch && ch.length
-                  ? new Date(`${ch[0].day}T00:00:00Z`).toLocaleDateString("en-US", {
-                      month: "short",
-                      day: "numeric",
-                    })
-                  : "";
+              const fmtDay = (day: string) =>
+                new Date(`${day}T00:00:00Z`).toLocaleDateString("en-US", {
+                  month: "short",
+                  day: "numeric",
+                });
+              const since = ch && ch.length ? fmtDay(ch[0].day) : "";
+              // Name the last day each channel actually covers. Without it a
+              // silently stalled feed looks identical to a live one, which is
+              // how this panel sat on 2026-07-24 data unnoticed.
+              const lastClone = ch && ch.length ? fmtDay(ch[ch.length - 1].day) : "";
+              const nh = d!.npmHistory;
+              const lastNpm = nh && nh.length ? fmtDay(nh[nh.length - 1].day) : "";
               return (
                 <div className="flex flex-wrap gap-x-8 gap-y-3">
                   {d!.npmLast30 !== null ? (
                     <Metric
                       label="NPM INSTALLS · 30D"
                       value={fmtCompact(d!.npmLast30)}
-                      hint={d!.npmPkg ?? undefined}
+                      hint={
+                        lastNpm
+                          ? `${d!.npmPkg ?? ""} · through ${lastNpm}`.trim()
+                          : (d!.npmPkg ?? undefined)
+                      }
                       tone="accent"
                     />
                   ) : null}
@@ -156,7 +165,7 @@ export function UsagePanel({
                     <Metric
                       label={`UNIQUE CLONERS · SINCE ${since}`}
                       value={fmtCompact(cloneUnique)}
-                      hint={`${fmtCompact(cloneTotal)} clones total`}
+                      hint={`${fmtCompact(cloneTotal)} clones total · through ${lastClone}`}
                       tone="warn"
                     />
                   ) : null}

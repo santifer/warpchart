@@ -253,6 +253,31 @@ async function checkFreshness(route) {
     } else pass("fresh.vitals", "FRESH", `computed ${h.toFixed(1)}h ago`);
   });
 
+  // The Traffic Vault is the only record of clones and referrers that survives:
+  // GitHub deletes them after 14 days, so a stalled feed is not just stale, it
+  // is data permanently lost. The "Real usage" panel read 4 days old before
+  // anyone noticed, because nothing asserted the vault's newest DAY (its file
+  // timestamp kept refreshing on every run regardless).
+  await check("fresh.traffic-days", "FRESH", async () => {
+    const vault = await blobJson("traffic/santifer--career-ops.json").catch(() => null);
+    if (!vault?.clones) return pass("fresh.traffic-days", "FRESH", "no vault (traffic not enabled)");
+    const days = Object.keys(vault.clones).sort();
+    if (!days.length) {
+      return fail("fresh.traffic-days", "FRESH", "critical", "the Traffic Vault has no daily data",
+        "collector/traffic.mjs is writing an empty series. Check TRAFFIC_TOKEN: the traffic API needs push access, and a token without it returns 403 while the run still reports success.");
+    }
+    const newest = days[days.length - 1];
+    const ageDays = (Date.now() - Date.parse(`${newest}T00:00:00Z`)) / DAY;
+    // GitHub publishes a day's traffic with ~1 day of lag, so 2 is normal and 3+
+    // means the feed stopped. Anything older than 14 days is unrecoverable.
+    if (ageDays > 3) {
+      fail("fresh.traffic-days", "FRESH", ageDays > 6 ? "critical" : "warn",
+        `the Traffic Vault's newest day is ${newest} (${ageDays.toFixed(1)} days old)`,
+        "Clones and referrers are DELETED by GitHub after 14 days, so days lost here are lost forever. Read the step: gh run view <id> --log | grep traffic. A 403 means the token lost push access to the repo.",
+        { newestDay: newest, days: days.length });
+    } else pass("fresh.traffic-days", "FRESH", `newest day ${newest} (${ageDays.toFixed(1)}d)`);
+  });
+
   // v7 is computed once per registry refresh. If the stamp lags the registry,
   // every velocity on the site is one generation behind its own star counts.
   await check("fresh.v7", "FRESH", async () => {

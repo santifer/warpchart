@@ -26,8 +26,10 @@ import { fmt, fmtCompact } from "@/lib/format";
 
 interface Row {
   t: number;
-  npm: number;
-  clones: number;
+  // null past a channel's last published day: unknown, not zero. Recharts
+  // breaks the line there instead of drawing a drop to the axis.
+  npm: number | null;
+  clones: number | null;
   npmCum: number;
   clonesCum: number;
   total: number;
@@ -64,19 +66,34 @@ export default function UsageChart({
   }
   const days = [...byDay.keys()].sort();
   if (days.length < 2) return null;
+  // Channels publish at different speeds (npm's daily series lands 3-4 days
+  // after GitHub's traffic API). Past a channel's last real day the value is
+  // UNKNOWN, not zero: drawing it as zero made npm look like it collapsed,
+  // which is why the panel used to truncate every series to the slowest one and
+  // read days stale. Recharts breaks a line on null, so each channel simply
+  // ends where its data does and the faster one keeps running.
+  const lastNpmDay = (npm ?? []).reduce<string | null>((m, p) => (!m || p.day > m ? p.day : m), null);
+  const lastCloneDay = (clones ?? []).reduce<string | null>((m, p) => (!m || p.day > m ? p.day : m), null);
   let cn = 0;
   let cc = 0;
   const rows: Row[] = days.map((day) => {
     const e = byDay.get(day)!;
-    cn += e.npm;
-    cc += e.clones;
+    const npmKnown = lastNpmDay !== null && day <= lastNpmDay;
+    const cloneKnown = lastCloneDay !== null && day <= lastCloneDay;
+    if (npmKnown) cn += e.npm;
+    if (cloneKnown) cc += e.clones;
     return {
       t: Date.parse(`${day}T00:00:00Z`),
-      npm: e.npm,
-      clones: e.clones,
+      // DAILY: a day with no published figure is a gap, not a zero.
+      npm: npmKnown ? e.npm : null,
+      clones: cloneKnown ? e.clones : null,
+      // CUMULATIVE: hold the last known total. The areas are stacked, so a null
+      // would drop the band above it to the floor; and "N installs so far"
+      // stays true when no newer figure has been published - it just stops
+      // growing, which is exactly what we know.
       npmCum: cn,
       clonesCum: cc,
-      total: e.npm + e.clones,
+      total: (npmKnown ? e.npm : 0) + (cloneKnown ? e.clones : 0),
       totalCum: cn + cc,
     };
   });
@@ -119,9 +136,11 @@ export default function UsageChart({
         <span style={{ color: C.dim }}>
           {new Date(Number(props.label)).toLocaleDateString("en-US", { dateStyle: "medium" })}
         </span>
-        <TipRow dot={C.white} k="total" v={np + cl} />
-        {hasClones ? <TipRow dot={C.warn} k="git clones" v={cl} /> : null}
-        {hasNpm ? <TipRow dot={C.accent} k="npm installs" v={np} /> : null}
+        {/* a channel with no data yet for this day is omitted from the tooltip
+            rather than shown as 0, which would read as "nobody installed it" */}
+        <TipRow dot={C.white} k="total" v={(np ?? 0) + (cl ?? 0)} />
+        {hasClones && cl !== null ? <TipRow dot={C.warn} k="git clones" v={cl} /> : null}
+        {hasNpm && np !== null ? <TipRow dot={C.accent} k="npm installs" v={np} /> : null}
       </div>
     );
   };
