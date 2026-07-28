@@ -167,18 +167,51 @@ async function lightActivity(repo) {
 const BOTS = new Set(["github-actions", "renovate", "dependabot", "renovate-bot", "codecov"]);
 const isBot = (l) => !l || BOTS.has(l.toLowerCase()) || l.toLowerCase().endsWith("[bot]");
 
-async function prAnalysis(repo, want = 500) {
+// TRUE number of contributors, the same one github.com/{repo}/graphs/contributors
+// shows. The PR sample below can only ever see the authors inside its window
+// (138 of the real 213 on 2026-07-28), and the panel links straight to that
+// GitHub page - so publishing the sample's count meant the figure contradicted
+// itself the moment anyone clicked it.
+async function contributorsCount(repo) {
+  try {
+    let total = 0;
+    for (let page = 1; page <= 6; page++) {
+      const rows = await ghFetch(`/repos/${repo}/contributors?per_page=100&anon=0&page=${page}`);
+      if (!Array.isArray(rows)) break;
+      total += rows.length;
+      if (rows.length < 100) break; // last page
+    }
+    return total || null;
+  } catch {
+    return null; // fall back to the sample count rather than invent one
+  }
+}
+
+// want=1000 covers a repo's ENTIRE merged history up to that size (career-ops
+// has 707), which is what makes the month-over-month cohorts real instead of an
+// artefact of where the window happened to stop. Above 1000 the oldest month is
+// dropped as truncated, so the series never claims to know what it cannot.
+async function prAnalysis(repo, want = 1000) {
   const [owner, name] = repo.split("/");
   const hrs = [];
   const authorCount = new Map();
   const mergers = new Set();
   const monthAuthors = new Map(); // "YYYY-MM" -> Set(login)
   let cursor = null;
-  while (hrs.length < want) {
+  let mergedTotal = null;
+  // Two different windows on purpose. COHORTS need the whole history to say who
+  // came back; LEAD TIME is a statement about how the project works NOW, so it
+  // only counts PRs merged in the last 90 days. Measuring it over all 707 mixed
+  // in the slower early months and dropped the repo from Elite to High while
+  // nothing about today had changed.
+  const LEAD_WINDOW = Date.now() - 90 * DAY;
+  let scanned = 0;
+  while (scanned < want) {
     const d = await gqlRetry(
       `query($owner:String!,$name:String!,$after:String){
         repository(owner:$owner,name:$name){
           pullRequests(states:MERGED, first:100, orderBy:{field:CREATED_AT,direction:DESC}, after:$after){
+            totalCount
             pageInfo{ hasNextPage endCursor }
             nodes{ createdAt mergedAt author{ login } mergedBy{ login } }
           }
@@ -188,10 +221,13 @@ async function prAnalysis(repo, want = 500) {
     );
     const pr = d.repository?.pullRequests;
     if (!pr) break;
+    if (mergedTotal === null) mergedTotal = pr.totalCount ?? null;
     for (const n of pr.nodes) {
       if (!n.createdAt || !n.mergedAt) continue;
-      const h = (Date.parse(n.mergedAt) - Date.parse(n.createdAt)) / 36e5;
-      if (h >= 0) hrs.push(h);
+      scanned++;
+      const merged = Date.parse(n.mergedAt);
+      const h = (merged - Date.parse(n.createdAt)) / 36e5;
+      if (h >= 0 && merged >= LEAD_WINDOW) hrs.push(h);
       const au = n.author?.login;
       if (au) {
         authorCount.set(au, (authorCount.get(au) || 0) + 1);
@@ -219,6 +255,7 @@ async function prAnalysis(repo, want = 500) {
       medianH: Math.round(median * 10) / 10,
       p90H: Math.round(q(0.9) * 10) / 10,
       tier: median < 24 ? "Elite" : median < 168 ? "High" : median < 720 ? "Medium" : "Low",
+      windowDays: 90, // the window this median describes, so the panel can say so
       sample: hrs.length,
       pctUnder24h: Math.round((hrs.filter((h) => h <= 24).length / hrs.length) * 100),
       pctUnder7d: Math.round((hrs.filter((h) => h <= 168).length / hrs.length) * 100),
@@ -227,21 +264,32 @@ async function prAnalysis(repo, want = 500) {
 
   // human contributors (bots excluded), top by merged-PR count
   const humans = [...authorCount.entries()].filter(([l]) => !isBot(l)).sort((a, b) => b[1] - a[1]);
+  // Did we stop before reaching the repo's first PR? Then the OLDEST month in
+  // the sample is a lie by construction: nobody can be "returning" in it,
+  // because the algorithm has not seen anyone yet. On 2026-07-28 that published
+  // "returning devs 0 → 18" for a repo whose June returners simply fell outside
+  // the window - and the series jumped from "1 → 7 → 17" to "0 → 18" overnight
+  // as the growing PR volume shrank the window. Drop the truncated month.
+  const truncated = scanned >= want;
+  const months = [...monthAuthors.keys()].sort();
   // new-vs-returning cohorts (chronological)
   const seen = new Set();
-  const cohorts = [...monthAuthors.keys()]
-    .sort()
+  const cohorts = months
     .map((m) => {
       const au = [...monthAuthors.get(m)].filter((l) => !isBot(l));
       const nw = au.filter((l) => !seen.has(l)).length;
       const rt = au.filter((l) => seen.has(l)).length;
       au.forEach((l) => seen.add(l));
       return { month: m, new: nw, returning: rt };
-    });
+    })
+    .filter((c) => !(truncated && c.month === months[0]));
   const maintainers = [...mergers].filter((l) => !isBot(l)).slice(0, 6);
-  const community = hrs.length
+  const community = scanned
     ? {
-        contributors: humans.length,
+        // the real repo-wide figure; `contributorsSampled` is what the window saw
+        contributors: (await contributorsCount(repo)) ?? humans.length,
+        contributorsSampled: humans.length,
+        mergedTotal, // every merged PR ever, not just the sampled window
         prsSampled: hrs.length,
         mergedByDistinct: mergers.size || 1,
         maintainers, // the actual merge-gate keepers, for their avatars
@@ -259,7 +307,14 @@ async function prAnalysis(repo, want = 500) {
 // "the system attends to the community, fast" — a quality-of-maintenance signal
 // that scales attention, not just code. Public timeline, no search.
 const MAINTAINER_ASSOC = new Set(["OWNER", "MEMBER", "COLLABORATOR"]);
-async function responsiveness(repo, pages = 2) {
+// 6 pages, not 2. The newest issues are precisely the ones nobody has answered
+// YET, so a short window is biased toward "no reply" and starves the sample: on
+// 2026-07-28 the first 100 issues yielded 4 measurements (below the threshold,
+// so the panel silently dropped the stat), while 300 issues yield 82 and a
+// median of 28.9h. The 20.5h it printed the day before came from a handful of
+// cases either side of the cutoff - a number that appears and disappears is
+// worse than one that is absent.
+async function responsiveness(repo, pages = 6) {
   const [owner, name] = repo.split("/");
   const since = Date.now() - 90 * DAY;
   const hrs = [];
@@ -301,7 +356,10 @@ async function responsiveness(repo, pages = 2) {
     cursor = iss.pageInfo.endCursor;
     if (PACE_MS) await sleep(PACE_MS);
   }
-  if (hrs.length < 5) return null;
+  // 20, not 5: a median built from five cases is noise wearing a decimal point.
+  // Publishing nothing is honest; publishing a figure that swings by 40% on the
+  // next run is not.
+  if (hrs.length < 20) return null;
   hrs.sort((a, b) => a - b);
   const q = (pp) => {
     const k = (hrs.length - 1) * pp;

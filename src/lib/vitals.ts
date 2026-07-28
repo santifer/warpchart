@@ -37,6 +37,7 @@ export interface VitalsLeadTime {
   sample: number;
   pctUnder24h: number;
   pctUnder7d: number;
+  windowDays?: number; // the window the median describes (a rate needs its window)
 }
 
 export interface VitalsDeploy {
@@ -52,8 +53,12 @@ export interface VitalsAdoption {
 }
 
 export interface VitalsCommunity {
-  contributors: number; // unique human PR authors (bots excluded)
-  prsSampled: number;
+  // repo-wide count, the same one github.com/{repo}/graphs/contributors shows,
+  // because the panel links there and the two must not disagree
+  contributors: number;
+  contributorsSampled?: number; // unique human PR authors inside the sampled window
+  mergedTotal?: number | null; // every merged PR ever
+  prsSampled: number; // size of the window the lead time and merge gate come from
   mergedByDistinct: number; // 1 = single maintainer gate
   maintainers: string[]; // logins of the actual merge-gate keepers (bot-excluded)
   topContributors: { login: string }[]; // bot-excluded, most PRs first

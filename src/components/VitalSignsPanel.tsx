@@ -439,7 +439,13 @@ export default function VitalSignsPanel({
             </div>
             {/* the sentence: pure facts, top-tier by deduction */}
             <div className="numeral text-micro leading-relaxed text-faint">
-              {fmtCompact(cm.prsSampled)} pull requests from{" "}
+              {/* Totals are repo-wide; the merge gate and lead time are measured
+                  over the sampled window, so the sentence says which is which
+                  rather than letting a sample pass for a total. */}
+              {/* Repo-wide totals, and the merge gate verified across all of
+                  them. The lead time names its own window instead of implying
+                  it covers everything. */}
+              {fmtCompact(cm.mergedTotal ?? cm.prsSampled)} pull requests from{" "}
               <span className="text-dim">{fmtCompact(cm.contributors)} contributors</span>, every one
               merged through{" "}
               <span className="text-dim">
@@ -447,8 +453,9 @@ export default function VitalSignsPanel({
               </span>
               {lt ? (
                 <>
-                  , at <span className="text-accent">{leadLabel(lt.medianH)}</span> median lead time (
-                  {lt.pctUnder24h}% merged in under a day)
+                  , at <span className="text-accent">{leadLabel(lt.medianH)}</span> median lead time
+                  {lt.windowDays ? ` over the last ${lt.windowDays} days` : ""} ({lt.pctUnder24h}%
+                  merged in under a day)
                 </>
               ) : null}
               .
