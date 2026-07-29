@@ -66,25 +66,72 @@ async function readJson(key) {
 // measure only AFTER it.
 const PURGE_PCT = 0.02; // a single-day drop of >=2% of the count...
 const PURGE_ABS = 300; // ...and >=300 stars, so ordinary unstar noise is ignored
+// A RESTORE is the same event in reverse: on 2026-07-29 GitHub gave odysseus
+// back the 21.8k it had removed on the 24th (+21,863 in one day), and the rate
+// read +4,587/d - which put it top of the public velocity ranking as the
+// fastest-growing repo on GitHub. Fixing only the drop direction was half a
+// fix: a step is a step whichever way it points.
+//
+// The test is deliberately ASYMMETRIC, because the two directions are not
+// equally suspicious. Nothing sheds 2% of its stars in a day organically, so
+// any drop that size is administrative. But a repo CAN gain that much honestly
+// (a Hacker News front page), so a rise only counts as a step when it
+// REVERSES a drop we already recorded - which is exactly what a restore is,
+// and what viral growth never is.
+const RESTORE_MATCH = 0.25; // a rise within 25% of an earlier drop reverses it
 
 // Baseline for the trailing rate. Returns { then: [dayMs, stars], purge } where
 // `purge` is the ISO day of the most recent step inside the window, or null.
 // series = [[isoDay, rank, stars], ...]
-function baselineFor(series, targetMs, todayMs) {
+function baselineFor(series, targetMs, todayMs, currentStars = null) {
   const pts = series
     .map((p) => [Date.parse(`${p[0]}T12:00:00Z`), p[2], p[0]])
     .filter((p) => Number.isFinite(p[0]) && p[1] != null && p[0] < todayMs - 0.5 * DAY)
     .sort((a, b) => a[0] - b[0]); // ignore today; oldest first
   if (!pts.length) return null;
 
-  // most recent purge step inside [targetMs, now]
+  // The step can land in the gap between the last recorded day and NOW - which
+  // is exactly what happened on 2026-07-29: the restore was excluded as "today"
+  // while `p.s` already carried it, so the numerator jumped 21.8k and the
+  // baseline never moved. Compare the live count against the last recorded day
+  // and, when that gap is itself a step, report it with NO usable baseline:
+  // after a correction we cannot know the real pace until a clean day passes.
+  if (currentStars != null && pts.length) {
+    const last = pts[pts.length - 1];
+    const delta = currentStars - last[1];
+    if (Math.abs(delta) >= PURGE_ABS && Math.abs(delta) >= last[1] * PURGE_PCT) {
+      const drops = [];
+      for (let i = 1; i < pts.length; i++) {
+        const d = pts[i - 1][1] - pts[i][1];
+        if (d >= PURGE_ABS && d >= pts[i - 1][1] * PURGE_PCT) drops.push(d);
+      }
+      const isRestore = delta > 0 && drops.some((d) => Math.abs(d - delta) <= d * RESTORE_MATCH);
+      if (delta < 0 || isRestore) return { then: null, purge: "today" };
+    }
+  }
+
+  // Every drop in the WHOLE series, so a restore can be matched against one
+  // that happened before the current window opened.
+  const drops = [];
+  for (let i = 1; i < pts.length; i++) {
+    const drop = pts[i - 1][1] - pts[i][1];
+    if (drop >= PURGE_ABS && drop >= pts[i - 1][1] * PURGE_PCT) drops.push(drop);
+  }
+
+  // most recent step inside [targetMs, now], in either direction
   let purgeIdx = -1;
   for (let i = 1; i < pts.length; i++) {
     if (pts[i][0] < targetMs) continue;
-    const drop = pts[i - 1][1] - pts[i][1];
-    if (drop >= PURGE_ABS && drop >= pts[i - 1][1] * PURGE_PCT) purgeIdx = i;
+    const delta = pts[i][1] - pts[i - 1][1];
+    const big = Math.abs(delta) >= PURGE_ABS && Math.abs(delta) >= pts[i - 1][1] * PURGE_PCT;
+    if (!big) continue;
+    if (delta < 0) {
+      purgeIdx = i; // a drop of this size is never organic
+    } else if (drops.some((d) => Math.abs(d - delta) <= d * RESTORE_MATCH)) {
+      purgeIdx = i; // a rise that gives back an earlier drop: a restore
+    }
   }
-  // measure from the first post-purge point: that count is the corrected one
+  // measure from the first post-step point: that count is the corrected one
   if (purgeIdx >= 0) return { then: [pts[purgeIdx][0], pts[purgeIdx][1]], purge: pts[purgeIdx][2] };
 
   // no step: the recorded point closest to the 7-day target
@@ -136,13 +183,20 @@ async function main() {
     for (const p of list) {
       const s = lc.get(p.r.toLowerCase());
       if (!s || !s.length) continue;
-      const base = baselineFor(s, targetMs, todayMs);
+      const base = baselineFor(s, targetMs, todayMs, p.s);
       if (!base) continue;
-      const days = (todayMs - base.then[0]) / DAY;
       if (base.purge) {
         p.purge = base.purge;
         purged++;
       }
+      // A step landed between the last recorded day and now: there is no clean
+      // baseline on the far side of it yet. 0 is the honest reading until a
+      // full day passes - "no measurable momentum", not a fabricated surge.
+      if (!base.then) {
+        p.v7 = 0;
+        continue;
+      }
+      const days = (todayMs - base.then[0]) / DAY;
       if (days < 1) {
         // Baseline too short to measure. Normally we just leave `v` alone, but a
         // purge poisons `v` too (it is a ~1-day diff and the step IS that day),
@@ -152,8 +206,12 @@ async function main() {
       }
       let v7 = Math.round(((p.s - base.then[1]) / days) * 10) / 10;
       // Backstop for a step the series could not show (a gap in the history, a
-      // rename): no real repo sheds >5% of its stars per day as growth.
-      if (v7 < -Math.max(PURGE_ABS, p.s * 0.05)) {
+      // rename, a restore whose matching drop was never recorded). No real repo
+      // sheds >5% of its stars per day, and none sustains +5%/day for a whole
+      // week either - at that rate a 60k repo would double inside a month.
+      // Symmetric on purpose: the 2026-07-29 restore proved that trusting only
+      // the downward direction just moves the lie to the other side.
+      if (Math.abs(v7) > Math.max(PURGE_ABS, p.s * 0.05)) {
         v7 = 0;
         if (!p.purge) {
           p.purge = "unknown";
