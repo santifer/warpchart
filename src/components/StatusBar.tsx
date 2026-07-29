@@ -1,6 +1,6 @@
 "use client";
 
-import NumberFlow from "@number-flow/react";
+import LiveNumber from "./LiveNumber";
 import { useLive } from "./LiveProvider";
 import CodexModal from "./CodexModal";
 import BadgeRow from "./BadgeRow";
@@ -104,27 +104,27 @@ export default function StatusBar({ bundle }: { bundle: DashboardBundle }) {
         <div className="flex flex-wrap items-start gap-x-5 gap-y-3 sm:gap-x-6">
           <Metric label="Stars">
             <span className="glow-accent text-accent">
-              <NumberFlow value={live.stars} locales="en-US" />
+              <LiveNumber value={live.stars} locales="en-US" />
             </span>
           </Metric>
           <Metric label="World rank" hint={next ? `top ${next.rank} in ${eta}` : undefined}>
             {live.rank !== null ? (
               <>
                 <span className="text-faint">#</span>
-                <NumberFlow value={live.rank} locales="en-US" />
+                <LiveNumber value={live.rank} locales="en-US" />
               </>
             ) : (
               "n/a"
             )}
           </Metric>
           <Metric label="Last 60 min" hint="stars/hour, sliding">
-            <NumberFlow value={live.starsLastHour} locales="en-US" />
+            <LiveNumber value={live.starsLastHour} locales="en-US" />
           </Metric>
           <Metric
             label="Today UTC"
             hint={`yesterday now: ${fmt(live.yesterdaySameHour)}`}
           >
-            <NumberFlow value={live.todayCount} locales="en-US" />
+            <LiveNumber value={live.todayCount} locales="en-US" />
             {live.deltaPct !== null ? (
               <span
                 className={`ml-2 text-sm ${live.deltaPct >= 0 ? "text-accent" : "text-warn"}`}
@@ -139,7 +139,7 @@ export default function StatusBar({ bundle }: { bundle: DashboardBundle }) {
               {gap === 0 ? (
                 <span className="text-accent">crossed</span>
               ) : (
-                <NumberFlow value={gap ?? 0} locales="en-US" />
+                <LiveNumber value={gap ?? 0} locales="en-US" />
               )}
             </Metric>
           ) : null}

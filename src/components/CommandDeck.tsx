@@ -11,7 +11,7 @@
 // available and falls back to a fixed overlay (iOS Safari has no element
 // fullscreen).
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import NumberFlow from "@number-flow/react";
+import LiveNumber from "./LiveNumber";
 import GalacticChart from "./GalacticChart";
 import Panel from "./Panel";
 import CurveChart from "./CurveChart";
@@ -222,23 +222,23 @@ export default function CommandDeck({
         </div>
         <div className="flex flex-wrap items-center gap-x-7 gap-y-2">
           <Metric label="STARS" accent big>
-            <NumberFlow value={live.stars} locales="en-US" />
+            <LiveNumber value={live.stars} locales="en-US" />
           </Metric>
           <Metric label="WORLD RANK" big>
             {live.rank !== null ? (
               <>
                 <span className="text-faint">#</span>
-                <NumberFlow value={live.rank} locales="en-US" />
+                <LiveNumber value={live.rank} locales="en-US" />
               </>
             ) : (
               "n/a"
             )}
           </Metric>
           <Metric label="LAST 60 MIN">
-            <NumberFlow value={live.starsLastHour} locales="en-US" />
+            <LiveNumber value={live.starsLastHour} locales="en-US" />
           </Metric>
           <Metric label="TODAY UTC">
-            <NumberFlow value={live.todayCount} locales="en-US" />
+            <LiveNumber value={live.todayCount} locales="en-US" />
           </Metric>
           <Metric label="V7D">{`${fmt(Math.round(bundle.v7d))}/d`}</Metric>
           {nextGate ? (

@@ -1529,3 +1529,19 @@ body.gx-warping .ghx-lore {
 @media (prefers-reduced-motion: reduce) {
   .finger-fill { animation: none; }
 }
+
+/* LiveNumber: the accent that replaced @number-flow's digit animation. A tick
+   of lift and brightness when the figure changes, so a live counter still
+   feels alive - but purely decorative. The number is plain text underneath and
+   remains readable if this never runs. */
+@keyframes liveNumberBump {
+  0% { transform: translateY(0.16em); opacity: 0.45; }
+  100% { transform: translateY(0); opacity: 1; }
+}
+.live-number-bump {
+  display: inline-block;
+  animation: liveNumberBump 0.42s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+}
+@media (prefers-reduced-motion: reduce) {
+  .live-number-bump { animation: none; }
+}
