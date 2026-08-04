@@ -8,6 +8,7 @@
 // blurred teaser + upsell (the data already exists in the moat).
 import type { ReactNode } from "react";
 import Panel from "./Panel";
+import ContributorChart from "./ContributorChart";
 import { fmtCompact } from "@/lib/format";
 import type { Vitals } from "@/lib/vitals";
 
@@ -265,40 +266,94 @@ export default function VitalSignsPanel({
           </span>
         </div>
 
-        {/* credentials — verified from public data (agent-native + docs health) */}
-        {ar?.agentNative || (docs && docs.chips.length > 0) ? (
-          <div className="flex flex-col gap-2 border-l-2 border-accent/30 pl-3">
-            <span className="numeral text-micro tracking-[0.22em] text-faint">
-              VERIFIED · PUBLIC GITHUB DATA
-            </span>
-            {ar?.agentNative ? (
-              <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
-                <span className="numeral inline-flex items-center gap-1.5 border border-accent/45 px-2 py-0.5 text-micro tracking-[0.18em] text-accent">
-                  ◇ AGENT-NATIVE
-                </span>
-                <div className="flex flex-wrap items-center gap-1.5">
-                  {ar.chips.map((c) => (
-                    <Chip key={c}>{c}</Chip>
+        {/* ═══ ACT 2 · THE PEOPLE — who builds this, measured daily ═══ */}
+        {cm ? (
+          <div className="flex flex-col gap-3 border-t border-grid pt-5">
+            <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+              <a
+                href={`https://github.com/${repo}/graphs/contributors`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="group flex items-center gap-3"
+                title="Contributors on GitHub"
+              >
+                <div className="flex -space-x-2">
+                  {faces.map((c) => (
+                    <img
+                      key={c.login}
+                      src={avatar(c.login, 48)}
+                      alt={c.login}
+                      title={c.login}
+                      width={28}
+                      height={28}
+                      className="rounded-full ring-2 ring-panel"
+                      loading="lazy"
+                    />
                   ))}
                 </div>
-              </div>
-            ) : null}
-            {docs && docs.chips.length > 0 ? (
-              <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
-                <span className="numeral inline-flex items-center gap-1.5 border border-accent/45 px-2 py-0.5 text-micro tracking-[0.18em] text-accent">
-                  ◇ DOCS{docs.healthPct !== null ? ` ${docs.healthPct}%` : ""}
+                <span className="numeral text-label text-ink transition-colors group-hover:text-accent">
+                  {fmtCompact(cm.contributors)} contributors ↗
                 </span>
-                <div className="flex flex-wrap items-center gap-1.5">
-                  {docs.chips.map((c) => (
-                    <Chip key={c}>{c}</Chip>
-                  ))}
-                </div>
-              </div>
-            ) : null}
+              </a>
+              {cm.cohorts.length >= 2 ? (
+                <span className="numeral text-micro text-faint">
+                  returning devs{" "}
+                  <span className="text-accent">
+                    {cm.cohorts
+                      .slice(-3)
+                      .map((c) => c.returning)
+                      .join(" → ")}
+                  </span>{" "}
+                  month over month
+                </span>
+              ) : null}
+            </div>
+            {/* the evolution strip: daily census curve + rate histogram + toggle.
+                The series comes embedded in the vitals blob (cm.census); when a
+                repo has no census yet the block simply does not render. */}
+            {cm.census ? <ContributorChart census={cm.census} busFactor={cm.busFactor ?? null} /> : null}
+            {/* the sentence: pure facts, top-tier by deduction */}
+            <div className="numeral text-micro leading-relaxed text-faint">
+              {/* Totals are repo-wide; the merge gate and lead time are measured
+                  over the sampled window, so the sentence says which is which
+                  rather than letting a sample pass for a total. */}
+              {/* Repo-wide totals, and the merge gate verified across all of
+                  them. The lead time names its own window instead of implying
+                  it covers everything. */}
+              {fmtCompact(cm.mergedTotal ?? cm.prsSampled)} pull requests from{" "}
+              <span className="text-dim">{fmtCompact(cm.contributors)} contributors</span>, every one
+              merged through{" "}
+              <span className="text-dim">
+                {cm.mergedByDistinct === 1 ? "a single maintainer" : `${cm.mergedByDistinct} maintainers`}
+              </span>
+              {lt ? (
+                <>
+                  , at <span className="text-accent">{leadLabel(lt.medianH)}</span> median lead time
+                  {lt.windowDays ? ` over the last ${lt.windowDays} days` : ""} ({lt.pctUnder24h}%
+                  merged in under a day)
+                </>
+              ) : null}
+              .
+              {auto?.statusChecksPerPR ? (
+                <>
+                  {" "}
+                  <span className="text-dim">{auto.statusChecksPerPR}</span> status checks guard every
+                  merge
+                  {auto.bots.length ? (
+                    <>
+                      {" "}
+                      · <span className="text-dim">{auto.bots.length}</span> bots orchestrated (
+                      {auto.bots.slice(0, 3).join(", ")})
+                    </>
+                  ) : null}
+                  .
+                </>
+              ) : null}
+            </div>
           </div>
         ) : null}
 
-        {/* ═══ ACT 2 · THE PROOF — percentile fingerprint (the centerpiece) ═══ */}
+        {/* ═══ ACT 3 · THE PROOF — percentile fingerprint ═══ */}
         <div className="flex flex-col gap-2.5 border-t border-grid pt-5">
           <span className="numeral text-micro tracking-[0.22em] text-faint">
             ACTIVITY FINGERPRINT · PERCENTILE VS THE {fmtCompact(vitals.universe)} MOST-STARRED
@@ -312,7 +367,7 @@ export default function VitalSignsPanel({
           </span>
         </div>
 
-        {/* ═══ ACT 3 · THE OPERATION — velocity, quality, the human engine ═══ */}
+        {/* ═══ ACT 4 · THE OPERATION — velocity, quality, the gate ═══ */}
         <div className="grid grid-cols-1 gap-x-8 gap-y-6 border-t border-grid pt-5 sm:grid-cols-3">
           <OpsGroup title="VELOCITY">
             {lt ? (
@@ -395,86 +450,37 @@ export default function VitalSignsPanel({
           </OpsGroup>
         </div>
 
-        {/* the human engine: contributor faces (social proof) + the flex sentence */}
-        {cm ? (
-          <div className="flex flex-col gap-3 border-t border-grid pt-5">
-            <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
-              <a
-                href={`https://github.com/${repo}/graphs/contributors`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="group flex items-center gap-3"
-                title="Contributors on GitHub"
-              >
-                <div className="flex -space-x-2">
-                  {faces.map((c) => (
-                    <img
-                      key={c.login}
-                      src={avatar(c.login, 48)}
-                      alt={c.login}
-                      title={c.login}
-                      width={28}
-                      height={28}
-                      className="rounded-full ring-2 ring-panel"
-                      loading="lazy"
-                    />
+        {/* footer credentials — verified from public data. Important, but a
+            reader scanning for traction reads rank and growth first. */}
+        {ar?.agentNative || (docs && docs.chips.length > 0) ? (
+          <div className="flex flex-col gap-2 border-t border-grid pt-5">
+            <span className="numeral text-micro tracking-[0.22em] text-faint">
+              VERIFIED · PUBLIC GITHUB DATA
+            </span>
+            {ar?.agentNative ? (
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
+                <span className="numeral inline-flex items-center gap-1.5 border border-accent/45 px-2 py-0.5 text-micro tracking-[0.18em] text-accent">
+                  ◇ AGENT-NATIVE
+                </span>
+                <div className="flex flex-wrap items-center gap-1.5">
+                  {ar.chips.map((c) => (
+                    <Chip key={c}>{c}</Chip>
                   ))}
                 </div>
-                <span className="numeral text-label text-ink transition-colors group-hover:text-accent">
-                  {fmtCompact(cm.contributors)} contributors ↗
+              </div>
+            ) : null}
+            {docs && docs.chips.length > 0 ? (
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
+                <span className="numeral inline-flex items-center gap-1.5 border border-accent/45 px-2 py-0.5 text-micro tracking-[0.18em] text-accent">
+                  ◇ DOCS{docs.healthPct !== null ? ` ${docs.healthPct}%` : ""}
                 </span>
-              </a>
-              {cm.cohorts.length >= 2 ? (
-                <span className="numeral text-micro text-faint">
-                  returning devs{" "}
-                  <span className="text-accent">
-                    {cm.cohorts
-                      .slice(-3)
-                      .map((c) => c.returning)
-                      .join(" → ")}
-                  </span>{" "}
-                  month over month
-                </span>
-              ) : null}
-            </div>
-            {/* the sentence: pure facts, top-tier by deduction */}
-            <div className="numeral text-micro leading-relaxed text-faint">
-              {/* Totals are repo-wide; the merge gate and lead time are measured
-                  over the sampled window, so the sentence says which is which
-                  rather than letting a sample pass for a total. */}
-              {/* Repo-wide totals, and the merge gate verified across all of
-                  them. The lead time names its own window instead of implying
-                  it covers everything. */}
-              {fmtCompact(cm.mergedTotal ?? cm.prsSampled)} pull requests from{" "}
-              <span className="text-dim">{fmtCompact(cm.contributors)} contributors</span>, every one
-              merged through{" "}
-              <span className="text-dim">
-                {cm.mergedByDistinct === 1 ? "a single maintainer" : `${cm.mergedByDistinct} maintainers`}
-              </span>
-              {lt ? (
-                <>
-                  , at <span className="text-accent">{leadLabel(lt.medianH)}</span> median lead time
-                  {lt.windowDays ? ` over the last ${lt.windowDays} days` : ""} ({lt.pctUnder24h}%
-                  merged in under a day)
-                </>
-              ) : null}
-              .
-              {auto?.statusChecksPerPR ? (
-                <>
-                  {" "}
-                  <span className="text-dim">{auto.statusChecksPerPR}</span> status checks guard every
-                  merge
-                  {auto.bots.length ? (
-                    <>
-                      {" "}
-                      · <span className="text-dim">{auto.bots.length}</span> bots orchestrated (
-                      {auto.bots.slice(0, 3).join(", ")})
-                    </>
-                  ) : null}
-                  .
-                </>
-              ) : null}
-            </div>
+                <div className="flex flex-wrap items-center gap-1.5">
+                  {docs.chips.map((c) => (
+                    <Chip key={c}>{c}</Chip>
+                  ))}
+                </div>
+              </div>
+            ) : null}
           </div>
         ) : null}
       </div>

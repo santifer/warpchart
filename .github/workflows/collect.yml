@@ -151,6 +151,22 @@ jobs:
           TRAFFIC_TOKEN: ${{ secrets.TRAFFIC_TOKEN }}
           TRAFFIC_TOKENS: ${{ secrets.TRAFFIC_TOKENS }}
 
+      # 4c-pre. Contributor census for the unlocked repos: WHO ever landed a
+      #     commit and WHEN their first one landed, from the full commit history
+      #     (complete AND dated, unlike every capped contributors endpoint).
+      #     Feeds the vitals cohorts as a census with no window - defusing the
+      #     want=1000 PR-sample bomb (career-ops crosses it ~late September).
+      #     Incremental after the first backfill (~1-2 calls/run). MUST run
+      #     BEFORE Vital Signs so phase B reads a fresh store.
+      - name: Contributor census
+        run: node collector/contributors.mjs
+        continue-on-error: true
+        timeout-minutes: 4
+        env:
+          BLOB_READ_WRITE_TOKEN: ${{ secrets.BLOB_READ_WRITE_TOKEN }}
+          GH_TOKEN: ${{ secrets.STARGAZER_TOKEN || secrets.TRAFFIC_TOKEN || secrets.GITHUB_TOKEN }}
+          GH_TOKEN_FALLBACKS: ${{ secrets.TRAFFIC_TOKEN }} ${{ secrets.GITHUB_TOKEN }}
+
       # 4c-bis. Vital Signs: the derived-intelligence moat. Refresh the top-N
       #     activity DISTRIBUTION (commits/PRs/issues/releases/velocity) once per
       #     UTC day, then compute full vitals (activity percentile + DORA lead
@@ -174,6 +190,37 @@ jobs:
           GH_TOKEN_FALLBACKS: ${{ secrets.TRAFFIC_TOKEN }} ${{ secrets.GITHUB_TOKEN }}
           VITALS_UNIVERSE: "1000"
           VITALS_DEADLINE_MS: "150000"
+
+      # 4c-ter. Owner standing: follower count + worldwide rank into the PRIVATE
+      #     Blob (private/followers.json). Follower history cannot be backfilled
+      #     (GitHub publishes one integer and no series), so every skipped run is
+      #     a day that can never be recovered. Deliberately NOT public: the key
+      #     sits outside the `data/` prefix the sync mirrors and outside the
+      #     `codex/` prefix anything enumerates, and no route reads it.
+      - name: Snapshot owner standing (private)
+        run: node collector/followers.mjs
+        continue-on-error: true
+        timeout-minutes: 2
+        env:
+          BLOB_READ_WRITE_TOKEN: ${{ secrets.BLOB_READ_WRITE_TOKEN }}
+          GH_TOKEN: ${{ secrets.STARGAZER_TOKEN || secrets.TRAFFIC_TOKEN || secrets.GITHUB_TOKEN }}
+          GH_TOKEN_FALLBACKS: ${{ secrets.TRAFFIC_TOKEN }} ${{ secrets.GITHUB_TOKEN }}
+          FOLLOWERS_LOCATION: spain
+
+      # 4c-quater. Install waves. `npx @santifer/career-ops init` CLONES the repo,
+      #     so an agent-mediated campaign shows up ONLY as unique cloners: no page
+      #     view, no star, no referrer. On 2026-08-01 that was 15,626 cloners from
+      #     one LinkedIn post and the dashboard read it as a quiet Saturday.
+      #     Classifies each closed day against a MAD baseline and pages only for
+      #     waves; machine loops (CI/mirrors looping) are recorded, not paged.
+      #     Runs AFTER traffic.mjs so it reads the freshest vault.
+      - name: Detect install waves
+        run: node collector/installs.mjs
+        continue-on-error: true
+        timeout-minutes: 2
+        env:
+          BLOB_READ_WRITE_TOKEN: ${{ secrets.BLOB_READ_WRITE_TOKEN }}
+          ALERT_WEBHOOK_URL: ${{ secrets.ALERT_WEBHOOK_URL }}
 
       # 4d. Spike attribution: detect HOURLY star surges from the fresh timestamps
       #     and name each one by diffing the Traffic Vault referrer snapshots that

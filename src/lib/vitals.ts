@@ -63,6 +63,29 @@ export interface VitalsCommunity {
   maintainers: string[]; // logins of the actual merge-gate keepers (bot-excluded)
   topContributors: { login: string }[]; // bot-excluded, most PRs first
   cohorts: { month: string; new: number; returning: number }[];
+  cohortsSource?: string; // "commit-census" when the census supersedes the PR sample
+  busFactor?: VitalsBusFactor | null;
+  census?: VitalsCensus | null; // the evolution chart's data, embedded by vitals.mjs
+}
+
+// commit-share concentration, from the commit census (authored commits only)
+export interface VitalsBusFactor {
+  top1Share: number;
+  top5Share: number;
+  humans: number;
+}
+
+// daily cumulative contributor series from the commit census. Two readings:
+// AUTHORS (strict) and CREDITED (authors + Co-authored-by humans, the same
+// definition GitHub's own contributors box uses). AI co-credits are counted
+// apart and never become people.
+export interface VitalsCensus {
+  authorsDaily: [string, number][];
+  creditedDaily: [string, number][];
+  authors: number;
+  credited: number;
+  aiCoCredits: number;
+  measuredAt: string | null;
 }
 
 export interface VitalsCreator {

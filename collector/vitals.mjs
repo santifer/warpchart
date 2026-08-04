@@ -164,7 +164,11 @@ async function lightActivity(repo) {
 // Paginate merged PRs once, gathering createdAt/mergedAt (lead time), author
 // (contributors + cohorts) and mergedBy (the maintainer gate). Two derived
 // panels for the price of one pagination.
-const BOTS = new Set(["github-actions", "renovate", "dependabot", "renovate-bot", "codecov"]);
+const BOTS = new Set([
+  "github-actions", "renovate", "dependabot", "renovate-bot", "codecov",
+  // the manifesto ledger's service account: commits under a human-shaped login
+  "careerops-ledger",
+]);
 const isBot = (l) => !l || BOTS.has(l.toLowerCase()) || l.toLowerCase().endsWith("[bot]");
 
 // TRUE number of contributors, the same one github.com/{repo}/graphs/contributors
@@ -191,6 +195,14 @@ async function contributorsCount(repo) {
 // has 707), which is what makes the month-over-month cohorts real instead of an
 // artefact of where the window happened to stop. Above 1000 the oldest month is
 // dropped as truncated, so the series never claims to know what it cannot.
+//
+// 2026-08-04: career-ops reached 837 merged at ~3.2/day - on course to cross
+// 1000 in late September, at which point this window would silently stop being
+// a census and the cohorts would shift with nothing about the project changing.
+// The cohorts are therefore SUPERSEDED by the commit census in phase B whenever
+// collector/contributors.mjs has published one (a census has no window). The
+// sampled cohorts computed here remain only as the fallback for repos without
+// a census store, still guarded by the truncation drop below.
 async function prAnalysis(repo, want = 1000) {
   const [owner, name] = repo.split("/");
   const hrs = [];
@@ -816,6 +828,33 @@ async function main() {
         leadTime: null,
         community: null,
       }));
+      // Cohorts from the commit census when one exists (collector/contributors.mjs
+      // runs earlier in the same workflow). The census is derived from the full
+      // commit history, so it stays a census forever; the PR-sampled cohorts
+      // above stop covering the whole history once the repo crosses want=1000
+      // merged PRs (career-ops: on course for late September 2026) and start
+      // re-labelling early people as "new". Same {month,new,returning} contract.
+      if (cm) {
+        const census = await readBlob(`contributors/${repo.toLowerCase().replace("/", "--")}.json`);
+        if (census?.months?.length) {
+          cm.cohorts = census.months.map((m) => ({ month: m.month, new: m.new, returning: m.returning }));
+          cm.cohortsSource = "commit-census";
+          cm.busFactor = census.busFactor ?? null;
+          // the evolution chart's data: daily cumulative series for both
+          // readings (strict authors / GitHub-box-style credited), embedded so
+          // the UI keeps reading ONE blob per repo
+          if (census.series?.authorsDaily?.length) {
+            cm.census = {
+              authorsDaily: census.series.authorsDaily,
+              creditedDaily: census.series.creditedDaily ?? census.series.authorsDaily,
+              authors: census.series.authors,
+              credited: census.series.credited ?? census.series.authors,
+              aiCoCredits: census.aiCoCredits ?? 0,
+              measuredAt: census.updated_at ?? null,
+            };
+          }
+        }
+      }
       const ad = await adoption(repo).catch(() => null);
       const ar = await agentReadiness(repo).catch(() => null);
       // revert rate is search-bearing like lightActivity above — space it out to

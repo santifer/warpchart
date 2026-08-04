@@ -776,15 +776,27 @@ const ARTIFACTS = [
   { prefix: "data/indexnow-stamp.txt", kind: "periodic", maxAgeH: 48, what: "the IndexNow ping stamp" },
   { prefix: "route-history/", kind: "periodic", maxAgeH: 36, what: "the daily rank moat" },
   { prefix: "vitals/", kind: "periodic", maxAgeH: 72, what: "the Vital Signs panel" },
+  { prefix: "contributors/", kind: "periodic", maxAgeH: 12, what: "the contributor census (cohorts source)" },
   { prefix: "traffic/", kind: "periodic", maxAgeH: 12, what: "the Traffic Vault" },
   { prefix: "health/", kind: "periodic", maxAgeH: 6, what: "this watchdog's own output" },
   { prefix: "live/", kind: "periodic", maxAgeH: 12, what: "live star polling" },
   { prefix: "badges-earned.json", kind: "periodic", maxAgeH: 36, what: "earned badges" },
+  // Declared so they are WATCHED, not so they are shown: nothing reads these
+  // keys but the owner. Declaring them also keeps `inventory.undeclared` from
+  // naming the `private/` family in the watchdog's PUBLIC issue. If one goes
+  // stale the issue names the file and its age, never a number from inside it.
+  // Listed individually rather than as a `private/` prefix because they have
+  // genuinely different cadences, and one declaration would hide the other:
+  // followers writes every run, installs only when an event fires.
+  { prefix: "private/followers.json", kind: "periodic", maxAgeH: 12, what: "the owner's private standing series" },
   // event: written only when something happens outside; silence is information,
   // never a failure
   { prefix: "embeds/", kind: "event", what: "first sighting of an embed on GitHub" },
   { prefix: "codex/", kind: "event", what: "LLM dossiers, written on first visit to a repo" },
   { prefix: "alerts/", kind: "event", what: "alert dedup state" },
+  // Silence here is the normal state and means "no install wave since the last
+  // one": in 63 days of history exactly one day qualified. Never a failure.
+  { prefix: "private/installs.json", kind: "event", what: "detected install waves (private)" },
   // config: edited by a human, age means nothing
   { prefix: "data/tenants.json", kind: "config", what: "the paying-tenant list" },
 ];
