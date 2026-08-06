@@ -1,7 +1,7 @@
 {
   "name": "warpchart",
-  "version": "0.1.0",
-  "description": "Growth telemetry for any GitHub repository, in your terminal: worldwide rank, star velocity and a braille star-history chart.",
+  "version": "0.2.0",
+  "description": "Growth telemetry for any GitHub repo, in your terminal: worldwide rank, velocity, engineering health, the contributor census, npm installs and clone traffic.",
   "bin": {
     "warpchart": "./warpchart.mjs"
   },

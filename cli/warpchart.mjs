@@ -141,7 +141,8 @@ async function dossierView(repo, args, asJson) {
       console.log("  " + windowLine(s) + dim("  ·  ") + bold(fmt(s.points.at(-1).cumulative)) + dim(" cumulative"));
     }
     if (c.cohorts?.length) {
-      const last = c.cohorts.slice(-4).map((x) => `${x.month.slice(5)} ${accent("+" + x.new)}${x.returning ? dim("/" + x.returning + "r") : ""}`);
+      const MON = ["", "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+      const last = c.cohorts.slice(-4).map((x) => `${MON[Number(x.month.slice(5))] || x.month} ${accent("+" + x.new)}${x.returning ? dim("/" + x.returning + " back") : ""}`);
       console.log("  " + dim("new/returning".padEnd(22)) + last.join(dim(" · ")) + dim("   (" + c.cohortsSource + ")"));
     }
   }
