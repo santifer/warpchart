@@ -2,6 +2,9 @@
 // warpchart — growth telemetry for any GitHub repository, in your terminal.
 //   npx warpchart owner/name          star chart + worldwide rank + who's hunting it
 //   npx warpchart owner/name --json   raw JSON (agent friendly)
+//   npx warpchart dossier owner/name  EVERYTHING: vitals, contributors, usage, traffic
+//   npx warpchart contributors o/n    the contributor census and its curve
+//   npx warpchart usage owner/name    npm installs + git clones over time
 //   npx warpchart hunters owner/name  who's about to pass it (and who it's passing)
 //   npx warpchart top [N] --lang Rust the biggest repos (optionally by language)
 //   npx warpchart velocity [N] --lang the fastest-growing repos right now
@@ -58,6 +61,185 @@ function braille(values, w, h) {
 const chartWidth = () => Math.max(24, Math.min((process.stdout.columns || 80) - 6, 72));
 const banner = (sub) => console.log("\n  " + accent("◤ WARPCHART") + (sub ? dim("  ·  ") + sub : ""));
 const fmtEta = (d) => (d == null ? "" : d < 1 ? `${Math.round(d * 24)}h` : d < 60 ? `${Math.round(d)}d` : `${Math.round(d / 30)}mo`);
+
+// ---- shared formatting for the full-record views ---------------------------
+const pct = (n) => (n == null ? dim("n/a") : `${n}%`);
+const day = (s) => (s ? String(s).slice(0, 10) : "—");
+const kv = (label, value, note) =>
+  console.log(`  ${dim(label.padEnd(22))} ${value}${note ? dim("  " + note) : ""}`);
+const rule = (title) => console.log("\n  " + dim("─── ") + accent(title) + dim(" " + "─".repeat(Math.max(0, 46 - title.length))));
+
+// A window flag set the caller can pass through to the API unchanged, so the
+// server does the trimming and the terminal never downloads a year to print a
+// week. Returns "" when the caller asked for everything.
+function windowQS(args) {
+  const parts = [];
+  for (const [flag, key] of [["--since", "since"], ["--until", "until"], ["--range", "range"], ["--last", "range"]]) {
+    const v = flagVal(args, [flag]);
+    if (v) parts.push(`${key}=${encodeURIComponent(v)}`);
+  }
+  return parts.length ? "&" + parts.join("&") : "";
+}
+
+// sparkline for a day series, sized to the terminal
+function sparkSeries(points, pick) {
+  const vals = points.map(pick);
+  if (vals.length < 3) return null;
+  return braille(vals, Math.max(20, Math.min((process.stdout.columns || 80) - 8, 60)), 4);
+}
+
+function windowLine(w) {
+  if (!w) return dim("no data");
+  return dim(`${day(w.from)} → ${day(w.to)} · ${w.days} day${w.days === 1 ? "" : "s"}`);
+}
+
+async function dossierView(repo, args, asJson) {
+  const d = await getJSON(`/api/v1/dossier?repo=${encodeURIComponent(repo)}${windowQS(args)}`);
+  if (asJson) { process.stdout.write(JSON.stringify(d, null, 2) + "\n"); return; }
+  const r = d.registry;
+  banner(bold(d.repo) + dim(" · the whole record"));
+  if (d.window?.kind !== "full") {
+    console.log("  " + dim("window ") + accent(d.window.since ? `since ${d.window.since}` : "") + (d.window.until ? dim(" until " + d.window.until) : ""));
+  }
+
+  rule("REGISTRY");
+  kv("worldwide rank", accent("#" + fmt(r.rank)));
+  kv("stars", bold(fmt(r.stars)) + (r.velocityPerDay != null ? accent("  ▲ " + r.velocityPerDay + "/day") : ""));
+  kv("forks", fmt(r.forks ?? 0), r.stars ? `${((r.forks / r.stars) * 100).toFixed(1)}% of stars` : "");
+  if (r.nextGate) kv("next gate", accent("top " + r.nextGate.rank), fmt(r.nextGate.gap) + " ★ to go");
+
+  const v = d.vitals;
+  rule("ENGINEERING HEALTH");
+  if (v?.locked) {
+    console.log("  " + dim(v.reason));
+  } else if (v) {
+    kv("activity rank", accent("#" + fmt(v.activityRank)) + dim(" of " + fmt(v.universe)), "top " + Math.max(1, Math.ceil((v.activityRank / v.universe) * 100)) + "%");
+    kv("verdict", v.verdict === "ALIVE" ? accent("● ALIVE") : warn("○ MONUMENT"));
+    if (v.leadTime) kv("lead time", bold(v.leadTime.medianH + "h"), `DORA ${v.leadTime.tier} · ${v.leadTime.pctUnder24h}% under a day · ${v.leadTime.windowDays}d window`);
+    if (v.deploy) kv("deploy freq", bold(v.deploy.perWeek + "/wk"), v.deploy.tier);
+    if (v.responsiveness) kv("1st response", bold(v.responsiveness.medianH + "h"), `n=${v.responsiveness.sample ?? "?"}`);
+    if (v.quality) kv("revert rate", bold(v.quality.revertPct + "%"), `${v.quality.reverts} of ${fmt(v.quality.mergedPRs)} merged`);
+    if (v.automation) kv("checks / PR", bold(String(v.automation.statusChecksPerPR ?? "—")), (v.automation.bots ?? []).length + " bots");
+    if (v.docs) kv("docs health", pct(v.docs.healthPct), (v.docs.chips ?? []).join(" · "));
+    if (v.agentReadiness?.agentNative) kv("agent-native", accent("◇ yes"), (v.agentReadiness.chips ?? []).join(" · "));
+    const f = v.fingerprint || {};
+    const top = (p) => (p == null ? dim("—") : accent("top " + Math.max(1, Math.round(100 - p)) + "%"));
+    console.log("  " + dim("percentile".padEnd(22)) + ["commits " + top(f.commits), "PRs " + top(f.mergedPRs), "issues " + top(f.issues), "releases " + top(f.releases)].join(dim(" · ")));
+  }
+
+  const c = d.contributors;
+  if (c) {
+    rule("WHO BUILDS IT");
+    kv("contributors", bold(fmt(c.total)), c.credited ? `${c.authors} authors · ${c.credited} credited incl. co-authors` : "");
+    if (c.aiCoCredits) kv("AI co-credits", fmt(c.aiCoCredits), "counted, never people");
+    kv("merged PRs", fmt(c.mergedTotal ?? 0), c.mergedByDistinct === 1 ? "a single maintainer gate" : c.mergedByDistinct + " maintainers");
+    if (c.busFactor) kv("bus factor", `${Math.round(c.busFactor.top1Share * 100)}% / ${Math.round(c.busFactor.top5Share * 100)}%`, "top 1 / top 5 of all commits");
+    const s = c.series?.authors;
+    if (s?.points?.length > 2) {
+      const spark = sparkSeries(s.points, (p) => p.cumulative);
+      if (spark) for (const row of spark.split("\n")) console.log("  " + accent(row));
+      console.log("  " + windowLine(s) + dim("  ·  ") + bold(fmt(s.points.at(-1).cumulative)) + dim(" cumulative"));
+    }
+    if (c.cohorts?.length) {
+      const last = c.cohorts.slice(-4).map((x) => `${x.month.slice(5)} ${accent("+" + x.new)}${x.returning ? dim("/" + x.returning + "r") : ""}`);
+      console.log("  " + dim("new/returning".padEnd(22)) + last.join(dim(" · ")) + dim("   (" + c.cohortsSource + ")"));
+    }
+  }
+
+  const u = d.usage;
+  rule("REAL USAGE");
+  if (u.npm) {
+    kv("npm package", bold(u.npm.package));
+    kv("downloads · 30d", bold(fmt(u.npm.last30 ?? 0)));
+    if (u.npm.windowTotal != null && u.npm.series) kv("downloads · window", bold(fmt(u.npm.windowTotal)), windowLine(u.npm.series));
+    if (u.npm.series?.points?.length > 2) {
+      const spark = sparkSeries(u.npm.series.points, (p) => p.d);
+      if (spark) for (const row of spark.split("\n")) console.log("  " + accent(row));
+    }
+  } else {
+    kv("npm package", dim("none resolved"));
+  }
+  if (u.clones?.series) {
+    kv("unique cloners", bold(fmt(u.clones.windowUniqueCloners)), windowLine(u.clones.series));
+    kv("clones", fmt(u.clones.windowClones), `ratio ${(u.clones.windowClones / Math.max(1, u.clones.windowUniqueCloners)).toFixed(2)} per cloner`);
+    console.log("  " + dim(u.clones.note));
+    const spark = sparkSeries(u.clones.series.points, (p) => p.u);
+    if (spark) for (const row of spark.split("\n")) console.log("  " + accent(row));
+  } else if (u.clones) {
+    kv("clone traffic", dim(u.clones.reason));
+  }
+  if (u.adoption?.cloneConvPct != null) kv("view → clone", bold(u.adoption.cloneConvPct + "%"), "last 7 days");
+
+  const a = d.activity30d;
+  if (a) {
+    rule("LAST 30 DAYS");
+    kv("commits", fmt(a.commits ?? 0));
+    kv("PRs merged", fmt(a.prsMerged ?? 0));
+    kv("issues", `${fmt(a.issuesClosed ?? 0)} closed`, `${fmt(a.issuesOpened ?? 0)} opened · ${fmt(a.openIssues ?? 0)} open`);
+    if (a.releases?.length) kv("latest release", bold(a.releases[0].tag), day(a.releases[0].at));
+  }
+
+  console.log("\n  " + dim("→ ") + accent(d.url) + dim("   measured ") + dim(day(d.generatedAt)) + "\n");
+}
+
+async function contributorsView(repo, args, asJson) {
+  const d = await getJSON(`/api/v1/dossier?repo=${encodeURIComponent(repo)}${windowQS(args)}`);
+  const c = d.contributors;
+  if (asJson) { process.stdout.write(JSON.stringify(c ?? { locked: true }, null, 2) + "\n"); return; }
+  banner(bold(d.repo) + dim(" · who builds it"));
+  if (!c) { console.log("\n  " + dim("the contributor census is computed for owned and paid repos") + "\n"); return; }
+  console.log();
+  kv("authors", bold(fmt(c.authors ?? c.total)), "landed a commit");
+  if (c.credited != null) kv("credited", bold(fmt(c.credited)), "incl. co-authors (GitHub's own definition)");
+  if (c.aiCoCredits) kv("AI co-credits", fmt(c.aiCoCredits), "counted, never people");
+  if (c.busFactor) kv("bus factor", `${Math.round(c.busFactor.top1Share * 100)}% / ${Math.round(c.busFactor.top5Share * 100)}%`, "top 1 / top 5 of all commits");
+  const s = c.series?.authors;
+  if (s?.points?.length > 2) {
+    console.log();
+    const spark = sparkSeries(s.points, (p) => p.cumulative);
+    if (spark) for (const row of spark.split("\n")) console.log("  " + accent(row));
+    console.log("  " + windowLine(s) + dim("  ·  ") + bold(fmt(s.points.at(-1).cumulative)) + dim(" cumulative"));
+  }
+  if (c.cohorts?.length) {
+    console.log("\n  " + dim("month      new   returning"));
+    for (const x of c.cohorts.slice(-8)) {
+      console.log(`  ${x.month}   ${accent(String(x.new).padStart(4))}   ${dim(String(x.returning).padStart(6))}`);
+    }
+    console.log("  " + dim("source: " + c.cohortsSource));
+  }
+  if (c.top?.length) console.log("\n  " + dim("most PRs  ") + c.top.slice(0, 6).map((t) => bold(t.login)).join(dim(" · ")));
+  console.log("\n  " + dim("→ ") + accent(d.url) + "\n");
+}
+
+async function usageView(repo, args, asJson) {
+  const d = await getJSON(`/api/v1/dossier?repo=${encodeURIComponent(repo)}${windowQS(args)}`);
+  const u = d.usage;
+  if (asJson) { process.stdout.write(JSON.stringify(u, null, 2) + "\n"); return; }
+  banner(bold(d.repo) + dim(" · real usage"));
+  console.log();
+  if (u.npm) {
+    kv("npm package", bold(u.npm.package));
+    kv("downloads · 30d", bold(fmt(u.npm.last30 ?? 0)));
+    if (u.npm.series) {
+      kv("downloads · window", bold(fmt(u.npm.windowTotal ?? 0)), windowLine(u.npm.series));
+      const spark = sparkSeries(u.npm.series.points, (p) => p.d);
+      if (spark) { console.log(); for (const row of spark.split("\n")) console.log("  " + accent(row)); }
+    }
+  } else {
+    console.log("  " + dim("no npm package resolved for this repo"));
+  }
+  console.log();
+  if (u.clones?.series) {
+    kv("unique cloners", bold(fmt(u.clones.windowUniqueCloners)), windowLine(u.clones.series));
+    kv("clones", fmt(u.clones.windowClones), `ratio ${(u.clones.windowClones / Math.max(1, u.clones.windowUniqueCloners)).toFixed(2)} per cloner`);
+    console.log("  " + dim(u.clones.note));
+    const spark = sparkSeries(u.clones.series.points, (p) => p.u);
+    if (spark) { console.log(); for (const row of spark.split("\n")) console.log("  " + accent(row)); }
+  } else if (u.clones) {
+    console.log("  " + dim("clone traffic: " + u.clones.reason));
+  }
+  console.log("\n  " + dim("→ ") + accent(d.url) + "\n");
+}
 
 async function repoView(repo, asJson) {
   const stats = await getJSON(`/api/v1/repo?repo=${encodeURIComponent(repo)}`);
@@ -206,8 +388,12 @@ const HELP = `
     warpchart ${accent("rising")} ${dim("[category]")}       what is climbing fastest, by domain
     warpchart ${accent("find")} ${dim("<question>")}        best repo for a need (e.g. agentic memory system)
     warpchart ${accent("compare")} a/b c/d       side by side
+    warpchart ${accent("dossier")} <owner/name>  ${bold("the whole record")} — health, people, usage, traffic
+    warpchart ${accent("contributors")} <o/n>     the contributor census and its curve
+    warpchart ${accent("usage")} <owner/name>     npm installs and git clones over time
     warpchart ${accent("embed")} <owner/name>    a README embed snippet
     ${dim("flags: --json (agent output) · --lang <language>")}
+    ${dim("time:  --range 30d|12w|6m · --since YYYY-MM-DD · --until YYYY-MM-DD")}
 
   ${dim("public, cache-only data · no auth · https://warpchart.dev")}
 `;
@@ -227,7 +413,8 @@ async function main() {
   const asJson = raw.includes("--json");
   const lang = flagVal(raw, ["--lang", "--language"]);
   const consumed = new Set();
-  raw.forEach((a, i) => { if (a === "--lang" || a === "--language") consumed.add(i + 1); });
+  const VALUE_FLAGS = ["--lang", "--language", "--since", "--until", "--range", "--last"];
+  raw.forEach((a, i) => { if (VALUE_FLAGS.includes(a)) consumed.add(i + 1); });
   const positional = raw.filter((a, i) => !a.startsWith("-") && !consumed.has(i));
   const cmd = positional[0];
 
@@ -250,6 +437,15 @@ async function main() {
     } else if (cmd === "hunters") {
       if (!/^[\w.-]+\/[\w.-]+$/.test(positional[1] || "")) throw Object.assign(new Error("usage: warpchart hunters owner/name"), { soft: true });
       await huntersView(positional[1]);
+    } else if (cmd === "dossier" || cmd === "all" || cmd === "full") {
+      if (!/^[\w.-]+\/[\w.-]+$/.test(positional[1] || "")) throw Object.assign(new Error("usage: warpchart dossier owner/name [--range 30d]"), { soft: true });
+      await dossierView(positional[1], raw, asJson);
+    } else if (cmd === "contributors" || cmd === "people") {
+      if (!/^[\w.-]+\/[\w.-]+$/.test(positional[1] || "")) throw Object.assign(new Error("usage: warpchart contributors owner/name [--range 6m]"), { soft: true });
+      await contributorsView(positional[1], raw, asJson);
+    } else if (cmd === "usage" || cmd === "installs" || cmd === "clones") {
+      if (!/^[\w.-]+\/[\w.-]+$/.test(positional[1] || "")) throw Object.assign(new Error("usage: warpchart usage owner/name [--range 30d]"), { soft: true });
+      await usageView(positional[1], raw, asJson);
     } else if (cmd === "embed") {
       if (!/^[\w.-]+\/[\w.-]+$/.test(positional[1] || "")) throw Object.assign(new Error("usage: warpchart embed owner/name"), { soft: true });
       await embedView(positional[1]);
