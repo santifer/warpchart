@@ -113,12 +113,36 @@ export async function fetchDossier(owner: string, name: string): Promise<Dossier
       npmHistory: past(npmHistory),
       clonesHistory: past(clonesHistory),
     };
-  } catch {
+  } catch (err) {
+    // A swallowed error here blanks BOTH dossier panels ("NO PUBLIC
+    // DISTRIBUTION ARTIFACTS" + an empty maintenance pulse) with no trace
+    // anywhere, which on 2026-08-07 made the failure unfalsifiable: every
+    // component tested healthy in isolation while the page rendered empty.
+    // The catch stays (one flaky GitHub or npm call must never be page-fatal)
+    // but it no longer hides.
+    reqLog("explorer").warn("dossier.fetch-failed", {
+      repo: `${owner}/${name}`,
+      err: err instanceof Error ? err.message.slice(0, 160) : String(err),
+    });
     return null;
   }
 }
 
-export const getCachedDossier = (owner: string, name: string) =>
+// A null from fetchDossier is a FAILURE, never a fact about the repo - and
+// caching it pins that failure in front of every reader for the full 15-minute
+// window. That is exactly what happened on 2026-08-07: one transient blip left
+// career-ops showing "NO PUBLIC DISTRIBUTION ARTIFACTS" long after every
+// underlying call had recovered, and only a redeploy cleared it. So a cached
+// null is retried live, once. The cost lands only on the failing path; a
+// healthy repo never pays it, and a genuinely broken one degrades exactly as
+// before instead of staying broken for a quarter of an hour.
+export const getCachedDossier = async (owner: string, name: string): Promise<Dossier | null> => {
+  const cached = await cachedDossier(owner, name);
+  if (cached) return cached;
+  return fetchDossier(owner, name);
+};
+
+const cachedDossier = (owner: string, name: string) =>
   unstable_cache(
     () => fetchDossier(owner, name),
     // v8: invalidate entries cached by the short-lived npm total-cap that stored

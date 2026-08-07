@@ -94,6 +94,7 @@ export async function GET(req: NextRequest) {
   if (!/^[\w.-]+\/[\w.-]+$/.test(repo)) return BAD("repo must be owner/name");
   const [owner, name] = repo.split("/");
 
+
   // registry first: it is the only section that decides whether the repo is
   // something we track at all
   const stats = repoStats(repo);
