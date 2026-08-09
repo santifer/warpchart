@@ -577,20 +577,52 @@ async function docsHealth(repo) {
 // Open "good first issue" count — the concrete, public tell that a maintainer
 // runs a contributor funnel (community leadership, not just code). Two label
 // spellings, one call. Newcomer RETENTION comes free from the PR cohorts.
+//
+// COUNT THE FREE ONES, NEVER THE LABELED ONES. A newcomer cannot start on an
+// issue somebody else already took, so a pool of labeled issues is not a pool
+// of entry points. career-ops on 9 Aug 2026: 12 labeled, 11 with an owner, 1
+// actually free - and this collector had been publishing "12 good first
+// issues" as a health signal the whole time. The counter never failed and
+// never errored; it counted signs instead of counting openings. Reported by
+// career-ops-maintainer, who found the same bug in his own radar the same day.
+//
+// `open` stays in the payload because it is the denominator that makes `free`
+// legible ("1 of 12" says something "1" alone does not), but `free` is the
+// headline everywhere downstream.
+//
+// BLIND SPOT, DECLARED: search sees assignees and linked PRs, not people who
+// called an issue in the comments. `free` is therefore an UPPER bound. Measured
+// against career-ops-maintainer's co-claims.mjs on the same 12, this returns
+// his free set plus exactly the one comment-claim, so the bound is tight but
+// it is a bound. A consumer must never read it as "definitely available".
+//
+// A failed lookup returns free:null, never free:open. An outage that silently
+// refills the pool is the same lie in a different costume.
 async function onboarding(repo) {
+  const base = (label) => `repo:${repo} is:issue is:open label:"${label}"`;
   try {
     const d = await gqlRetry(
-      `query($q:String!,$q2:String!){
-        a: search(query:$q, type:ISSUE){ issueCount }
+      `query($q:String!,$q2:String!,$f:String!,$f2:String!){
+        a: search(query:$q,  type:ISSUE){ issueCount }
         b: search(query:$q2, type:ISSUE){ issueCount }
+        c: search(query:$f,  type:ISSUE){ issueCount }
+        d: search(query:$f2, type:ISSUE){ issueCount }
       }`,
       {
-        q: `repo:${repo} is:issue is:open label:"good first issue"`,
-        q2: `repo:${repo} is:issue is:open label:"good-first-issue"`,
+        q: base("good first issue"),
+        q2: base("good-first-issue"),
+        // no:assignee drops the claimed ones; -linked:pr drops the ones that
+        // already have a PR on the way. Both are server-side, so this costs
+        // nothing beyond the two extra search fields.
+        f: `${base("good first issue")} no:assignee -linked:pr`,
+        f2: `${base("good-first-issue")} no:assignee -linked:pr`,
       },
     );
-    const gfi = Math.max(d?.a?.issueCount ?? 0, d?.b?.issueCount ?? 0);
-    return { goodFirstIssues: gfi };
+    const open = Math.max(d?.a?.issueCount ?? 0, d?.b?.issueCount ?? 0);
+    const freeRaw = Math.max(d?.c?.issueCount ?? 0, d?.d?.issueCount ?? 0);
+    // the free set is a subset of the open set by construction; if the two
+    // spellings ever disagree enough to break that, trust the smaller number
+    return { goodFirstIssues: open, goodFirstIssuesFree: Math.min(freeRaw, open) };
   } catch {
     return null;
   }
@@ -921,7 +953,11 @@ async function main() {
           (ttfr ? ` · ttfr ${ttfr.medianH}h` : "") +
           (auto ? ` · ${auto.statusChecksPerPR} checks/PR · ${auto.bots.length} bots` : "") +
           (docs ? ` · docs ${docs.healthPct}% [${docs.chips.join(",")}]` : "") +
-          (onboard ? ` · ${onboard.goodFirstIssues} GFI` : "") +
+          // free-of-labeled, because "12 GFI" is precisely the reading that
+          // kept a one-issue pool looking healthy in this very log
+          (onboard
+            ? ` · GFI ${onboard.goodFirstIssuesFree ?? "?"}/${onboard.goodFirstIssues} free`
+            : "") +
           ` · ${vitals.verdict}`,
       );
     } catch (e) {

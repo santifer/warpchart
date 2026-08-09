@@ -440,8 +440,24 @@ export default function VitalSignsPanel({
               </span>
             </div>
             <div className="flex flex-col gap-1">
+              {/* free of labeled. The bare label count was the panel telling
+                  readers a door was open by counting the signs on it: 12 here
+                  meant 1 actually free. A zero is worth rendering - it is the
+                  loudest thing this stat can say - so the guard is on the
+                  pool existing, not on the number being positive. */}
               {onboard && (onboard.goodFirstIssues ?? 0) > 0 ? (
-                <Stat label="good first issues" value={`${fmtCompact(onboard.goodFirstIssues ?? 0)}`} strong />
+                onboard.goodFirstIssuesFree == null ? (
+                  <Stat
+                    label="good first issues labeled"
+                    value={`${fmtCompact(onboard.goodFirstIssues ?? 0)}`}
+                  />
+                ) : (
+                  <Stat
+                    label="good first issues free"
+                    value={`${fmtCompact(onboard.goodFirstIssuesFree)} of ${fmtCompact(onboard.goodFirstIssues ?? 0)}`}
+                    strong={onboard.goodFirstIssuesFree > 0}
+                  />
+                )
               ) : null}
               {ad && ad.cloneConvPct !== null ? (
                 <Stat label="view → clone" value={`${Math.round(ad.cloneConvPct)}%`} />

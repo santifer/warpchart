@@ -151,10 +151,19 @@ export interface VitalsDocs {
   chips: string[];
 }
 
-// onboarding: open "good first issue" count — the contributor funnel made
-// visible. Newcomer retention comes from the PR cohorts.
+// onboarding: "good first issue" pool — the contributor funnel made visible.
+// Newcomer retention comes from the PR cohorts.
+//
+// `free` is the signal; `goodFirstIssues` is only its denominator. An issue
+// that already has an assignee or an open PR is not an entry point, so a big
+// labeled count with a free count of 1 describes a CLOSED door with a lot of
+// signage on it. Render free, never the total on its own.
+//
+// free is an upper bound: it cannot see issues claimed in the comments. null
+// means the availability lookup failed - it does NOT mean "all of them".
 export interface VitalsOnboarding {
   goodFirstIssues: number | null;
+  goodFirstIssuesFree?: number | null;
 }
 
 export interface Vitals {
