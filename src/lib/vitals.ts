@@ -210,9 +210,11 @@ async function readVitals(owner: string, name: string): Promise<Vitals | null> {
 export const loadVitals = (owner: string, name: string): Promise<Vitals | null> =>
   unstable_cache(
     () => readVitals(owner, name),
-    // v7: repo-wide contributors + merged total, cohorts over the full history,
-    // 90-day lead-time window. Bumped so entries cached under the old shape
-    // (sample counts passing for totals) are purged rather than lingering 15min.
-    ["vitals-v7", `${owner}/${name}`.toLowerCase()],
+    // v8: onboarding carries goodFirstIssuesFree. BUMP THIS WHENEVER THE SHAPE
+    // CHANGES - an entry cached under the old shape does not fail, it serves
+    // the old reading, so a deploy that fixes a number ships looking like it
+    // did nothing. v7 was itself a bump for the same reason (sample counts
+    // passing for totals) and the lesson still cost 15 minutes today.
+    ["vitals-v8", `${owner}/${name}`.toLowerCase()],
     { revalidate: 900 },
   )();
