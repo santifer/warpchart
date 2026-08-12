@@ -7,6 +7,7 @@
 // pointed at different actions (navigate vs render), so they share this.
 import { useEffect, useMemo, useRef, useState } from "react";
 import { fmtCompact } from "@/lib/format";
+import { ghAvatar } from "@/lib/avatar";
 
 export interface CatalogEntry {
   r: string;
@@ -165,7 +166,7 @@ export default function RepoSearch({
                     {hit.s > 0 ? (
                       // eslint-disable-next-line @next/next/no-img-element
                       <img
-                        src={`https://github.com/${ownerName}.png?size=44`}
+                        src={ghAvatar(ownerName, 44)}
                         alt=""
                         width={22}
                         height={22}

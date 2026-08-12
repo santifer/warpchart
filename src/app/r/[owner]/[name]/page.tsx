@@ -37,6 +37,7 @@ import { loadVitals } from "@/lib/vitals";
 import { getCachedCodex, listCodexes } from "@/lib/codex";
 import { loadExplorerData, getCachedDossier } from "@/lib/explorer";
 import { fmt, fmtCompact, fmtEtaDays } from "@/lib/format";
+import { ghAvatar, ghAvatarForRepo } from "@/lib/avatar";
 
 // Same template as the unlocked mission console: identical panels in identical
 // order. The only difference between repos is what is unlocked. Locked
@@ -165,7 +166,7 @@ export default async function ExplorerPage({
         name,
         description: null,
         created_at: tTimestamps[0] ?? tHistory[0].ts,
-        avatar_url: `https://github.com/${owner}.png`,
+        avatar_url: ghAvatar(owner),
         homepage: null,
         language: null,
         forks: 0,
@@ -236,7 +237,7 @@ export default async function ExplorerPage({
           <div className="flex items-start gap-4 min-w-0">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
-              src={`https://github.com/${inputs.repo.split("/")[0]}.png?size=96`}
+              src={ghAvatarForRepo(inputs.repo, 96)}
               alt=""
               width={44}
               height={44}

@@ -23,6 +23,7 @@ import JsonLd, { pricingGraph } from "@/components/JsonLd";
 import LockedRankPreview from "@/components/LockedRankPreview";
 import CompareLab from "@/components/CompareLab";
 import { RaceProvider, RaceToggle } from "@/components/RaceContext";
+import { ghAvatar } from "@/lib/avatar";
 
 // Dynamic: the page reads ?repo=. The expensive GitHub work is paid at most
 // once per repo per 15 min inside loadExplorerData, so render stays cheap.
@@ -486,7 +487,7 @@ export default async function Pricing({
           <div className="flex items-start gap-4">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
-              src={`https://github.com/${repoOwner}.png?size=96`}
+              src={ghAvatar(repoOwner, 96)}
               alt=""
               width={48}
               height={48}

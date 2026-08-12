@@ -20,6 +20,7 @@ import { dopplerTilt } from "@/lib/doppler";
 import { fmt, fmtCompact, fmtEtaDays, fmtEtaRange, etaDate, shortName } from "@/lib/format";
 import { neighborEtas, type NeighborEta } from "@/lib/projections";
 import { sound } from "@/lib/sound";
+import { ghAvatar } from "@/lib/avatar";
 
 const BASE_W = 1200;
 // Panel geometry; the fullscreen COMMAND DECK swaps in a taller AND wider
@@ -280,7 +281,7 @@ export default function GalacticChart({
     const warm = () => {
       for (const o of owners) {
         const img = new Image();
-        img.src = `https://github.com/${o}.png?size=64`;
+        img.src = ghAvatar(o, 64);
       }
     };
     const idle = (window as Window & { requestIdleCallback?: (cb: () => void) => number })
@@ -1752,7 +1753,7 @@ function ScanContent({ scan, ownV, nowMs, rank }: { scan: Scan; ownV: number; no
       <div className="mt-1.5 flex items-center gap-2">
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
-          src={`https://github.com/${owner}.png?size=64`}
+          src={ghAvatar(owner, 64)}
           alt=""
           width={26}
           height={26}

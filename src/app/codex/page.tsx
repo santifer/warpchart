@@ -8,6 +8,7 @@ import Masthead from "@/components/Masthead";
 import SpaceBackdrop from "@/components/SpaceBackdrop";
 import JsonLd, { codexGraph } from "@/components/JsonLd";
 import { listCodexes, getCachedCodex } from "@/lib/codex";
+import { ghAvatar } from "@/lib/avatar";
 
 export const revalidate = 600;
 
@@ -87,7 +88,7 @@ export default async function CodexIndex() {
                 >
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
-                    src={`https://github.com/${owner}.png`}
+                    src={ghAvatar(owner)}
                     alt=""
                     aria-hidden
                     width={40}

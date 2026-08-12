@@ -13,6 +13,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import RepoSearch, { type CatalogEntry } from "./RepoSearch";
 import { fmtCompact } from "@/lib/format";
+import { ghAvatarForRepo } from "@/lib/avatar";
 
 export type { CatalogEntry };
 
@@ -179,7 +180,7 @@ export default function ExploreSearch({ catalog }: { catalog: CatalogEntry[] }) 
                     <span className="numeral w-7 shrink-0 text-label text-faint">{String(i + 1).padStart(2, "0")}</span>
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img
-                      src={`https://github.com/${e.repo.split("/")[0]}.png?size=44`}
+                      src={ghAvatarForRepo(e.repo, 44)}
                       alt=""
                       width={22}
                       height={22}

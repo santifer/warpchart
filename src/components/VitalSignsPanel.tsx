@@ -11,20 +11,10 @@ import Panel from "./Panel";
 import ContributorChart from "./ContributorChart";
 import { fmtCompact } from "@/lib/format";
 import type { Vitals } from "@/lib/vitals";
+import { ghAvatar } from "@/lib/avatar";
 
-// Avatars come straight from the CDN, NOT from github.com/{login}.png.
-// That path is a 302 to this same host, served with `cache-control: no-cache`
-// and `vary: Sec-Fetch-Site`, so every visitor re-walks the redirect on every
-// view and the result is whatever the intermediary decides to do with a
-// cross-site hop. On 2026-08-12 the row rendered as seven broken-image
-// placeholders on iOS while loading fine in headless Chromium - the failure
-// mode of a redirect, not of an image.
-//
-// avatars.githubusercontent.com accepts the LOGIN directly (no numeric id
-// lookup needed): one hop, 200, `max-age=300`. Verified for every login in
-// the row plus the maintainer.
-const avatar = (login: string, size = 48) =>
-  `https://avatars.githubusercontent.com/${encodeURIComponent(login)}?s=${size}`;
+// see lib/avatar.ts for why this never goes through github.com/{login}.png
+const avatar = ghAvatar;
 const topPct = (pct: number) => `top ${Math.max(1, Math.round(100 - pct))}%`;
 // the headline tier is derived from the DISPLAYED rank (ceil, never overclaims),
 // so "top N%" can never contradict "#R of U": #14 of 999 = 1.4% -> top 2%.

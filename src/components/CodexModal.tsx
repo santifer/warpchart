@@ -7,6 +7,7 @@
 // narrative in real telemetry, then unrolls the field log.
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { ghAvatar } from "@/lib/avatar";
 
 interface Codex {
   repo: string;
@@ -122,7 +123,7 @@ export default function CodexModal({ repo, stats }: { repo: string; stats?: Code
                         {avatarOk ? (
                           // eslint-disable-next-line @next/next/no-img-element
                           <img
-                            src={`https://github.com/${owner}.png?size=200`}
+                            src={ghAvatar(owner, 200)}
                             alt={owner}
                             className="absolute inset-0 h-full w-full object-cover"
                             onError={() => setAvatarOk(false)}

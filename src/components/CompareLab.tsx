@@ -21,6 +21,7 @@ import {
 } from "@/lib/compare";
 import { useRace } from "./RaceContext";
 import BadgeSigil from "./BadgeSigil";
+import { ghAvatarForRepo } from "@/lib/avatar";
 
 interface Curve {
   repo: string;
@@ -953,7 +954,7 @@ export default function CompareLab({
                   <div key={repo} className="flex flex-wrap items-center gap-x-4 gap-y-1">
                     <span className="h-3 w-3 shrink-0" style={{ background: colors[i] }} />
                     {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={`https://github.com/${repo.split("/")[0]}.png?size=40`} alt="" width={18} height={18} className="shrink-0 border border-grid" />
+                    <img src={ghAvatarForRepo(repo, 40)} alt="" width={18} height={18} className="shrink-0 border border-grid" />
                     <Link href={`/r/${repo}`} className="numeral text-label text-ink transition-colors hover:text-accent">
                       {repo}
                     </Link>

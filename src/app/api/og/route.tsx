@@ -14,6 +14,7 @@ import { parseRepos, repoColor, shortRepo } from "@/lib/compare";
 import { risingOverall } from "@/lib/catalog";
 import { repoBadges } from "@/lib/badges";
 import { badgeColor } from "@/components/BadgeSigil";
+import { ghAvatar } from "@/lib/avatar";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -490,7 +491,7 @@ export async function GET(req: Request) {
         <div style={{ display: "flex", alignItems: "center", gap: 22, marginTop: 26 }}>
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
-            src={`https://github.com/${owner}.png?size=128`}
+            src={ghAvatar(owner, 128)}
             width={68}
             height={68}
             style={{ border: `2px solid ${C.grid}` }}
