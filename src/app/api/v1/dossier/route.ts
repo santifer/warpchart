@@ -11,9 +11,8 @@
 // loader the page uses, so it carries that loader's rules:
 //   registry  - public, always
 //   vitals    - loadVitals() returns null for locked repos (owned + paid only)
-//   traffic   - ONE aggregate (unique cloners, 30d) for the house repo and
-//               nothing for anyone else. The daily series and the referrers
-//               live behind /api/traffic + key, ours included since 2026-08-12
+//   traffic   - fetchDossier() only fills clonesHistory for the HOUSE repo;
+//               every other repo's traffic stays behind /api/traffic + key
 //   npm       - public registry data, always
 // There is no auth branch in this file on purpose: a second implementation of
 // a gate is a second chance to get it wrong.
@@ -27,6 +26,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { repoStats, repoOvertakes, SITE } from "@/lib/api-v1";
 import { getCachedDossier } from "@/lib/explorer";
 import { loadVitals } from "@/lib/vitals";
+import { loadMeta } from "@/lib/history";
 
 export const revalidate = 900;
 
@@ -107,9 +107,8 @@ export async function GET(req: NextRequest) {
 
   // the window anchors on the newest day any series has, so ?range works even
   // when a feed is a few days behind
-  // clones are deliberately absent from this list: they are no longer a series
-  // here, so they cannot anchor a window
   const newest = [
+    dossier?.clonesHistory?.at(-1)?.day,
     dossier?.npmHistory?.at(-1)?.day,
     vitals?.community?.census?.authorsDaily?.at(-1)?.[0],
   ]
@@ -118,6 +117,7 @@ export async function GET(req: NextRequest) {
     .at(-1) as string | undefined;
   const win = resolveWindow(req, newest ?? null);
 
+  const clones = windowed(dossier?.clonesHistory ?? null, win);
   const npm = windowed(dossier?.npmHistory ?? null, win);
 
   // the contributor census arrives as [day, cumulative] pairs; reshape to the
@@ -128,9 +128,9 @@ export async function GET(req: NextRequest) {
   const authors = windowed(censusRows(cen?.authorsDaily), win);
   const credited = windowed(censusRows(cen?.creditedDaily), win);
 
-  // NO house branch here any more. fetchDossier decides whether the aggregate
-  // exists at all; a second house check in this file would be a second place to
-  // get the policy wrong, which is how the old exception survived its premise.
+  const house = loadMeta()?.repo ?? "";
+  const isHouse = !!house && repo.toLowerCase() === house.toLowerCase();
+
   return NextResponse.json(
     {
       repo: stats.repo,
@@ -209,23 +209,21 @@ export async function GET(req: NextRequest) {
               series: npm,
             }
           : null,
-        // ONE NUMBER, NO SERIES, NO REFERRERS - for every repo including ours.
-        // ?since/?until/?range deliberately do NOT apply here: an aggregate a
-        // caller can re-window is a series delivered one request at a time.
-        clones:
-          dossier?.uniqueCloners30 != null
-            ? {
-                uniqueCloners30d: dossier.uniqueCloners30,
-                // a per-DAY unique count summed over days is not distinct people;
-                // saying so here is cheaper than a wrong headline downstream
-                note: "per-day uniques summed over 30 closed days; an upper bound on distinct people, not a headcount",
-                series: null,
-                reason: "daily traffic and referrers require the repo's vault key",
-              }
-            : {
-                locked: true,
-                reason: "traffic is private to the repo owner",
-              },
+        clones: clones
+          ? {
+              public: isHouse,
+              windowUniqueCloners: sum(clones.points, "u"),
+              windowClones: sum(clones.points, "c"),
+              // a per-DAY unique count summed over days is not distinct people;
+              // saying so here is cheaper than a wrong headline downstream
+              note: "u is unique cloners PER DAY; summing days does not yield distinct people",
+              series: clones,
+            }
+          : {
+              public: isHouse,
+              locked: !isHouse,
+              reason: isHouse ? "no traffic recorded yet" : "traffic is private to the repo owner",
+            },
         adoption: vitals?.adoption ?? null,
       },
 

@@ -118,7 +118,7 @@ export function UsagePanel({
   // still shows its acquisition signal, and a transient npm null must not blank
   // the panel when clones are present.
   const hasUsage = Boolean(
-    d && (d.npmLast30 !== null || withDownloads.length || d.uniqueCloners30 !== null),
+    d && (d.npmLast30 !== null || withDownloads.length || d.clonesHistory?.length),
   );
   return (
     <Panel
@@ -132,19 +132,19 @@ export function UsagePanel({
         {hasUsage ? (
           <>
             {(() => {
-              // Clones are a single 30-day total now, not a series: the daily
-              // shape moved behind the vault key on 2026-08-12. A total still
-              // answers "is this thing actually used", which is what a reader
-              // (or a sponsor) is here for.
-              const cloners = d!.uniqueCloners30;
+              const ch = d!.clonesHistory;
+              const cloneTotal = ch ? ch.reduce((s, x) => s + x.c, 0) : 0;
+              const cloneUnique = ch ? ch.reduce((s, x) => s + x.u, 0) : 0;
               const fmtDay = (day: string) =>
                 new Date(`${day}T00:00:00Z`).toLocaleDateString("en-US", {
                   month: "short",
                   day: "numeric",
                 });
+              const since = ch && ch.length ? fmtDay(ch[0].day) : "";
               // Name the last day each channel actually covers. Without it a
               // silently stalled feed looks identical to a live one, which is
               // how this panel sat on 2026-07-24 data unnoticed.
+              const lastClone = ch && ch.length ? fmtDay(ch[ch.length - 1].day) : "";
               const nh = d!.npmHistory;
               const lastNpm = nh && nh.length ? fmtDay(nh[nh.length - 1].day) : "";
               return (
@@ -161,22 +161,20 @@ export function UsagePanel({
                       tone="accent"
                     />
                   ) : null}
-                  {cloners !== null ? (
+                  {ch && ch.length ? (
                     <Metric
-                      label="UNIQUE CLONERS · 30D"
-                      value={fmtCompact(cloners)}
-                      hint="git clones, per-day uniques summed"
+                      label={`UNIQUE CLONERS · SINCE ${since}`}
+                      value={fmtCompact(cloneUnique)}
+                      hint={`${fmtCompact(cloneTotal)} clones total · through ${lastClone}`}
                       tone="warn"
                     />
                   ) : null}
                 </div>
               );
             })()}
-            {/* npm only: npm's daily series is public on the registry, so
-                drawing it gives away nothing. The clone curve is ours alone
-                and no longer renders anywhere public. */}
-            {d!.npmHistory && d!.npmHistory.length >= 2 ? (
-              <UsageChart npm={d!.npmHistory} clones={null} />
+            {(d!.npmHistory && d!.npmHistory.length >= 2) ||
+            (d!.clonesHistory && d!.clonesHistory.length >= 2) ? (
+              <UsageChart npm={d!.npmHistory ?? []} clones={d!.clonesHistory} />
             ) : null}
             {withDownloads.length ? (
               <div className="flex flex-col gap-1.5">

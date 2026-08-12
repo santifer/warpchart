@@ -28,18 +28,10 @@ export interface Dossier extends DossierRaw {
   // daily download history (since launch) of the resolved npm package, so the
   // panel can draw the usage curve climbing over time, not just one number
   npmHistory: { day: string; d: number }[] | null;
-  // ONE NUMBER, NEVER A SERIES. Unique cloners over the last 30 complete days
-  // for the house repo: enough for a reader to verify scale, and useless as
-  // competitive intelligence because it carries no daily shape (no launch
-  // spikes, no weekday pattern, no response to a post) and no referrers.
-  //
-  // This replaced a full daily clone series on 2026-08-12. The series is not
-  // gone, it moved behind the vault key like every tenant's — see the note in
-  // api/traffic/route.ts for why the shape was the sensitive part.
-  //
-  // Summed per-day uniques, so it is an upper bound on distinct people, not a
-  // headcount. The label must say "unique cloners", never "users".
-  uniqueCloners30: number | null;
+  // daily git clones (the other acquisition channel for clone-and-run repos),
+  // from the Traffic Vault. Only populated for the public house repo — every
+  // other repo's traffic stays private. u = unique cloners, c = raw count.
+  clonesHistory: { day: string; u: number; c: number }[] | null;
 }
 
 // Resolve a repo's real npm usage. Tries the repo's own PUBLIC package name
@@ -81,23 +73,30 @@ export async function fetchDossier(owner: string, name: string): Promise<Dossier
   try {
     const raw = await repoDossier(owner, name);
     const { npmPkg, npmLast30, npmHistory } = await resolveNpmUsage(owner, name, raw.npmPkg);
-    // git clones are the owner's PRIVATE traffic. The house repo surfaces a
-    // single 30-day total here and nothing else; the daily series and the
-    // referrers stay behind the vault key, for us as for every tenant.
-    // Unique cloners = the real-people proxy (the raw count includes CI/mirrors).
+    // git clones are the owner's PRIVATE traffic — surface them as a second
+    // acquisition channel ONLY for the public house repo (its vault is the
+    // opt-in demo). Unique cloners/day = the real-people proxy (raw count
+    // includes CI/mirrors).
+    //
+    // THE SPLIT IS DELIBERATE, DO NOT "HARMONISE" IT. /api/traffic is key-gated
+    // for every repo including this one (2026-08-12), but the clone SERIES
+    // still renders here. That looks inconsistent and is not: the two surfaces
+    // carry different things. This one is clones only; the vault endpoint also
+    // carries views and the referrer breakdown, which is the channel mix and
+    // the piece that actually helps a competitor. Santiago made this call on
+    // 2026-08-12 with sponsor emails already out, weighing a complete public
+    // report above the leak this reopens.
+    //
+    // Known and accepted: a cumulative total polled daily can be differenced
+    // back into the daily series. Anything that draws a chart on a public page
+    // ships that chart's data in the page payload anyway, so hiding it from the
+    // API while rendering it here would be theatre, not protection.
     const repo = `${owner}/${name}`;
     const house = loadMeta()?.repo ?? "";
-    let uniqueCloners30: number | null = null;
+    let clonesHistory: { day: string; u: number; c: number }[] | null = null;
     if (house && repo.toLowerCase() === house.toLowerCase()) {
       const vault = await loadTrafficVault(repo);
-      // drop today (still accumulating) BEFORE taking the window, so the total
-      // covers 30 closed days rather than 29 plus a partial one
-      const closed = (vault?.days ?? []).filter(
-        (dd) => dd.d < new Date().toISOString().slice(0, 10),
-      );
-      uniqueCloners30 = closed.length
-        ? closed.slice(-30).reduce((s, dd) => s + dd.clonesU, 0)
-        : null;
+      clonesHistory = vault?.days.map((dd) => ({ day: dd.d, u: dd.clonesU, c: dd.clones })) ?? null;
     }
     // only surface COMPLETE days.
     // (1) the current UTC day is still accumulating -> drop it, so a partial
@@ -126,7 +125,7 @@ export async function fetchDossier(owner: string, name: string): Promise<Dossier
       npmPkg,
       npmLast30,
       npmHistory: past(npmHistory),
-      uniqueCloners30,
+      clonesHistory: past(clonesHistory),
     };
   } catch (err) {
     // A swallowed error here blanks BOTH dossier panels ("NO PUBLIC
@@ -346,7 +345,7 @@ export async function getExplorerData(owner: string, name: string): Promise<Expl
     const { npmPkg, npmLast30, npmHistory } = await resolveNpmUsage(o, n, raw.npmPkg);
     // clones (private traffic) are surfaced only via the cached dossier path
     // (getCachedDossier -> fetchDossier), which the panels actually render
-    dossier = { ...raw, npmPkg, npmLast30, npmHistory, uniqueCloners30: null };
+    dossier = { ...raw, npmPkg, npmLast30, npmHistory, clonesHistory: null };
   } catch (err) {
     log.warn("dossier.failed", { err: err instanceof Error ? err.message.slice(0, 120) : String(err) });
   }
