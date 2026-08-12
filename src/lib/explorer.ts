@@ -165,7 +165,12 @@ const cachedDossier = (owner: string, name: string) =>
     // v9: entries stored while both channels were truncated to the slowest one
     // hold clone days that were already discarded at write time - a redeploy
     // alone cannot recover them, only a new key can.
-    ["dossier-v9", `${owner}/${name}`.toLowerCase()],
+    // v10: the 30-day-total shape (uniqueCloners30, no clonesHistory) was live
+    // for about an hour. Restoring the series without bumping this served that
+    // shape from cache, so the panel came back with NO clone metric at all -
+    // worse than either state. Third time this exact miss has cost a deploy:
+    // CHANGE THE SHAPE, CHANGE THE KEY, IN THE SAME COMMIT.
+    ["dossier-v10", `${owner}/${name}`.toLowerCase()],
     { revalidate: 900 },
   )();
 
