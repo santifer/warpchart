@@ -4,9 +4,12 @@
 // PRIVATE data, so it is NEVER server-rendered into the public console. The
 // public panel is a value-prop teaser; the real numbers are fetched client-side
 // from /api/traffic ONLY when the URL carries a valid ?vault=<key> (the private
-// link the owner gets in their welcome email). No key -> no numbers, ever —
-// EXCEPT the house repo, which the API serves publicly (radical transparency +
-// the live demo of the product), flagged by `public: true` in the response.
+// link the owner gets in their welcome email). No key -> no numbers, ever, and
+// since 2026-08-12 that includes the house repo: it used to be served publicly
+// here as the live demo, until the policy that justified it was reversed.
+//
+// The capped panel IS the free tier now: what a visitor sees is exactly what a
+// tenant buys the key to unlock.
 import { useEffect, useState } from "react";
 import {
   ComposedChart, Bar, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
@@ -25,23 +28,22 @@ const SEARCH = /^(google|bing|yahoo|duckduckgo|ecosia|baidu|yandex|search\.brave
 export default function TrafficPanel({ repo }: { repo: string }) {
   const C = usePalette();
   const [vault, setVault] = useState<TrafficVault | null>(null);
-  const [isPublic, setIsPublic] = useState(false);
 
   useEffect(() => {
     if (!repo) return;
-    // The owner's private vault link carries ?vault=<key>. The house repo needs
-    // no key (the API serves it publicly), so we ALWAYS try the fetch and let
-    // the endpoint decide: a non-house repo with no key just fails and we keep
-    // the teaser.
+    // The owner's private vault link carries ?vault=<key>. No key -> no request
+    // at all: the endpoint would 400 anyway now that no repo is exempt, and not
+    // asking is the clearer statement of the invariant (it also drops one
+    // request from every public page view).
     const key = new URLSearchParams(window.location.search).get("vault");
-    const url = `/api/traffic?repo=${encodeURIComponent(repo)}${key ? `&key=${encodeURIComponent(key)}` : ""}`;
+    if (!key) return;
+    const url = `/api/traffic?repo=${encodeURIComponent(repo)}&key=${encodeURIComponent(key)}`;
     let cancelled = false;
     fetch(url, { cache: "no-store" })
       .then((r) => (r.ok ? r.json() : null))
       .then((j) => {
         if (cancelled || !j?.vault?.days?.length) return;
         setVault(j.vault as TrafficVault);
-        setIsPublic(!!j.public);
       })
       .catch(() => {});
     return () => {
@@ -76,7 +78,7 @@ export default function TrafficPanel({ repo }: { repo: string }) {
           <span className="text-faint">{vault.daysKept} days kept</span>
         </span>
         <span className="numeral text-micro tracking-[0.15em] text-faint">
-          {isPublic ? "public · github erases 14 days · we kept it all" : "private · github keeps 14 days · you keep all of it"}
+          {"private · github keeps 14 days · you keep all of it"}
         </span>
       </div>
 
