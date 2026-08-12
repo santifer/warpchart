@@ -277,6 +277,15 @@ export default function VitalSignsPanel({
                 className="group flex items-center gap-3"
                 title="Contributors on GitHub"
               >
+                {/* The ring must be the PANEL BACKGROUND so overlapping faces
+                    read as cut out of it. It said ring-panel, and there is no
+                    `panel` colour in @theme, so Tailwind dropped the class and
+                    ring-2 fell back to currentColor = --ink: a near-white halo
+                    on a near-black panel in dark mode, near-black on white in
+                    light. Exactly inverted from the intent in both themes, and
+                    silent, because an unknown utility is not an error. --void
+                    is the token that actually matches the panel background in
+                    both themes (measured, not assumed). */}
                 <div className="flex -space-x-2">
                   {faces.map((c) => (
                     <img
@@ -286,7 +295,7 @@ export default function VitalSignsPanel({
                       title={c.login}
                       width={28}
                       height={28}
-                      className="rounded-full ring-2 ring-panel"
+                      className="rounded-full ring-2 ring-void"
                       loading="lazy"
                     />
                   ))}
@@ -427,7 +436,7 @@ export default function VitalSignsPanel({
                       alt={m}
                       width={34}
                       height={34}
-                      className="rounded-full ring-2 ring-panel transition-transform hover:scale-110"
+                      className="rounded-full ring-2 ring-void transition-transform hover:scale-110"
                       loading="lazy"
                     />
                   </a>
