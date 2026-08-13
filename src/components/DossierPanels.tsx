@@ -133,8 +133,13 @@ export function UsagePanel({
           <>
             {(() => {
               const ch = d!.clonesHistory;
+              // Sum `c` (clone events) and NEVER `u` (per-day uniques). A person
+              // who clones on ten days contributes ten to a sum of `u`, so the
+              // old headline read 92K "UNIQUE CLONERS" while GitHub's own
+              // deduplicated count was 29,837 - a 3x overstatement, live, on the
+              // page linked in sponsor emails. Clone events accumulate honestly;
+              // people do not accumulate from this data at all.
               const cloneTotal = ch ? ch.reduce((s, x) => s + x.c, 0) : 0;
-              const cloneUnique = ch ? ch.reduce((s, x) => s + x.u, 0) : 0;
               const fmtDay = (day: string) =>
                 new Date(`${day}T00:00:00Z`).toLocaleDateString("en-US", {
                   month: "short",
@@ -163,10 +168,25 @@ export function UsagePanel({
                   ) : null}
                   {ch && ch.length ? (
                     <Metric
-                      label={`UNIQUE CLONERS · SINCE ${since}`}
-                      value={fmtCompact(cloneUnique)}
-                      hint={`${fmtCompact(cloneTotal)} clones total · through ${lastClone}`}
+                      label={`CLONES · SINCE ${since}`}
+                      value={fmtCompact(cloneTotal)}
+                      hint={`clone events, not people · through ${lastClone}`}
                       tone="warn"
+                    />
+                  ) : null}
+                  {/* The deduplicated headcount, and the only place the word
+                      "unique" is allowed. Renders nothing when the vault
+                      predates its collection: an absent number beats a summed
+                      one wearing the same label. */}
+                  {d!.uniqueCloners14d !== null ? (
+                    <Metric
+                      label="UNIQUE CLONERS · 14D"
+                      value={fmtCompact(d!.uniqueCloners14d)}
+                      hint={
+                        d!.uniqueCloners14dAt
+                          ? `deduplicated by GitHub · as of ${fmtDay(d!.uniqueCloners14dAt)}`
+                          : "deduplicated by GitHub"
+                      }
                     />
                   ) : null}
                 </div>

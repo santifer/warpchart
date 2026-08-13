@@ -161,8 +161,14 @@ async function dossierView(repo, args, asJson) {
     kv("npm package", dim("none resolved"));
   }
   if (u.clones?.series) {
-    kv("unique cloners", bold(fmt(u.clones.windowUniqueCloners)), windowLine(u.clones.series));
-    kv("clones", fmt(u.clones.windowClones), `ratio ${(u.clones.windowClones / Math.max(1, u.clones.windowUniqueCloners)).toFixed(2)} per cloner`);
+    // clone EVENTS accumulate; people do not. The old lines printed a sum of
+    // per-day uniques as "unique cloners" and divided by it for a "per cloner"
+    // ratio, which counted one person once per day they showed up.
+    kv("clones", bold(fmt(u.clones.windowClones)), windowLine(u.clones.series));
+    if (u.clones.uniqueCloners14d != null) {
+      kv("unique cloners", bold(fmt(u.clones.uniqueCloners14d)),
+         `deduplicated by GitHub, 14d${u.clones.uniqueCloners14dAt ? ` · as of ${u.clones.uniqueCloners14dAt}` : ""}`);
+    }
     console.log("  " + dim(u.clones.note));
     const spark = sparkSeries(u.clones.series.points, (p) => p.u);
     if (spark) for (const row of spark.split("\n")) console.log("  " + accent(row));
@@ -231,8 +237,14 @@ async function usageView(repo, args, asJson) {
   }
   console.log();
   if (u.clones?.series) {
-    kv("unique cloners", bold(fmt(u.clones.windowUniqueCloners)), windowLine(u.clones.series));
-    kv("clones", fmt(u.clones.windowClones), `ratio ${(u.clones.windowClones / Math.max(1, u.clones.windowUniqueCloners)).toFixed(2)} per cloner`);
+    // clone EVENTS accumulate; people do not. The old lines printed a sum of
+    // per-day uniques as "unique cloners" and divided by it for a "per cloner"
+    // ratio, which counted one person once per day they showed up.
+    kv("clones", bold(fmt(u.clones.windowClones)), windowLine(u.clones.series));
+    if (u.clones.uniqueCloners14d != null) {
+      kv("unique cloners", bold(fmt(u.clones.uniqueCloners14d)),
+         `deduplicated by GitHub, 14d${u.clones.uniqueCloners14dAt ? ` · as of ${u.clones.uniqueCloners14dAt}` : ""}`);
+    }
     console.log("  " + dim(u.clones.note));
     const spark = sparkSeries(u.clones.series.points, (p) => p.u);
     if (spark) { console.log(); for (const row of spark.split("\n")) console.log("  " + accent(row)); }

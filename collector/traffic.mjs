@@ -112,6 +112,21 @@ for (const repo of repos) {
     for (const c of clones.clones ?? []) {
       vault.clones[c.timestamp.slice(0, 10)] = { c: c.count, u: c.uniques };
     }
+    // THE ONLY DEDUPLICATED HEADCOUNT GITHUB GIVES. The per-day rows above carry
+    // per-DAY uniques: summing them counts one person once per day they showed
+    // up, so a 72-day sum ran 3x the real figure (91,685 vs 29,837 on
+    // 2026-08-13) and the public panel was labelling it "unique cloners".
+    // These two top-level fields are deduplicated across the API's own 14-day
+    // window and are the only numbers that may ever carry the word "unique".
+    // They cannot be accumulated either: two 14-day windows overlap in people,
+    // not just in days, so we keep the LATEST reading and its date, never a sum.
+    vault.uniq14 = {
+      cloners: clones?.uniques ?? null,
+      visitors: views?.uniques ?? null,
+      // the window GitHub actually answered for, so a stale vault is visible
+      // rather than silently passing for today
+      at: new Date().toISOString().slice(0, 10),
+    };
     const stamp = new Date().toISOString();
     vault.referrers = (referrers ?? [])
       .slice(0, 10)

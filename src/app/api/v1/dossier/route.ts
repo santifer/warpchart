@@ -212,11 +212,20 @@ export async function GET(req: NextRequest) {
         clones: clones
           ? {
               public: isHouse,
-              windowUniqueCloners: sum(clones.points, "u"),
               windowClones: sum(clones.points, "c"),
-              // a per-DAY unique count summed over days is not distinct people;
-              // saying so here is cheaper than a wrong headline downstream
-              note: "u is unique cloners PER DAY; summing days does not yield distinct people",
+              // NAMED FOR WHAT IT IS. This used to ship as
+              // `windowUniqueCloners` with a note explaining it was not a
+              // headcount, which fooled nobody who reads JSON: consumers read
+              // field names, not prose. Our own CLI printed it as "unique
+              // cloners" and divided by it to get "clones per cloner". One
+              // person cloning on ten days adds ten here.
+              windowClonerDays: sum(clones.points, "u"),
+              // the deduplicated count, straight from GitHub's own 14-day
+              // window. The only figure here that counts PEOPLE. null on
+              // vaults collected before it was stored.
+              uniqueCloners14d: dossier?.uniqueCloners14d ?? null,
+              uniqueCloners14dAt: dossier?.uniqueCloners14dAt ?? null,
+              note: "windowClonerDays sums per-day uniques and is NOT a headcount; uniqueCloners14d is",
               series: clones,
             }
           : {

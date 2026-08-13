@@ -13,6 +13,7 @@ interface RawVault {
   referrers: { r: string; c: number; u: number }[];
   referrersAt: string | null;
   updatedAt: string | null;
+  uniq14?: { cloners: number | null; visitors: number | null; at: string };
 }
 
 export interface TrafficDay {
@@ -30,6 +31,19 @@ export interface TrafficVault {
   totalClones: number;
   daysKept: number;
   updatedAt: string | null;
+  // GitHub's own deduplicated 14-day headcount, straight from the API's
+  // top-level `uniques`. THE ONLY FIGURE ALLOWED TO SAY "UNIQUE".
+  //
+  // The per-day `u` fields in `days` are uniques PER DAY. Summing them counts a
+  // person once for every day they appeared, so the 72-day sum read 91,685 while
+  // the real deduplicated count was 29,837 (2026-08-13). The public panel was
+  // publishing that sum under the label "UNIQUE CLONERS". A cumulative CLONE
+  // count is fine and is what totalClones is for; a cumulative PEOPLE count
+  // cannot be built from this data at all.
+  //
+  // null when the vault predates collection of these fields: render nothing
+  // rather than falling back to a sum.
+  uniq14: { cloners: number | null; visitors: number | null; at: string } | null;
 }
 
 function blobKey(repo: string): string {
@@ -62,6 +76,7 @@ async function readVault(repo: string): Promise<TrafficVault | null> {
       totalClones: days.reduce((s, d) => s + d.clones, 0),
       daysKept: days.length,
       updatedAt: raw.updatedAt ?? null,
+      uniq14: raw.uniq14 ?? null,
     };
   } catch {
     return null;

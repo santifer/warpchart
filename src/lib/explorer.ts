@@ -30,8 +30,18 @@ export interface Dossier extends DossierRaw {
   npmHistory: { day: string; d: number }[] | null;
   // daily git clones (the other acquisition channel for clone-and-run repos),
   // from the Traffic Vault. Only populated for the public house repo — every
-  // other repo's traffic stays private. u = unique cloners, c = raw count.
+  // other repo's traffic stays private.
+  //
+  // `u` is uniques PER DAY. IT MAY NOT BE SUMMED INTO A PEOPLE COUNT. Summing
+  // counts a person once per day they appeared: the 72-day sum read 91,685
+  // while GitHub's own deduplicated figure was 29,837 (2026-08-13), and the
+  // panel was publishing that sum as "UNIQUE CLONERS". Sum `c` for clones,
+  // never `u` for people.
   clonesHistory: { day: string; u: number; c: number }[] | null;
+  // GitHub's deduplicated 14-day headcount, the only figure that may carry the
+  // word "unique". null on vaults collected before this was stored.
+  uniqueCloners14d: number | null;
+  uniqueCloners14dAt: string | null;
 }
 
 // Resolve a repo's real npm usage. Tries the repo's own PUBLIC package name
@@ -94,9 +104,13 @@ export async function fetchDossier(owner: string, name: string): Promise<Dossier
     const repo = `${owner}/${name}`;
     const house = loadMeta()?.repo ?? "";
     let clonesHistory: { day: string; u: number; c: number }[] | null = null;
+    let uniqueCloners14d: number | null = null;
+    let uniqueCloners14dAt: string | null = null;
     if (house && repo.toLowerCase() === house.toLowerCase()) {
       const vault = await loadTrafficVault(repo);
       clonesHistory = vault?.days.map((dd) => ({ day: dd.d, u: dd.clonesU, c: dd.clones })) ?? null;
+      uniqueCloners14d = vault?.uniq14?.cloners ?? null;
+      uniqueCloners14dAt = vault?.uniq14?.at ?? null;
     }
     // only surface COMPLETE days.
     // (1) the current UTC day is still accumulating -> drop it, so a partial
@@ -126,6 +140,8 @@ export async function fetchDossier(owner: string, name: string): Promise<Dossier
       npmLast30,
       npmHistory: past(npmHistory),
       clonesHistory: past(clonesHistory),
+      uniqueCloners14d,
+      uniqueCloners14dAt,
     };
   } catch (err) {
     // A swallowed error here blanks BOTH dossier panels ("NO PUBLIC
@@ -170,7 +186,8 @@ const cachedDossier = (owner: string, name: string) =>
     // shape from cache, so the panel came back with NO clone metric at all -
     // worse than either state. Third time this exact miss has cost a deploy:
     // CHANGE THE SHAPE, CHANGE THE KEY, IN THE SAME COMMIT.
-    ["dossier-v10", `${owner}/${name}`.toLowerCase()],
+    // v11: adds uniqueCloners14d. CHANGE THE SHAPE, CHANGE THE KEY, SAME COMMIT.
+    ["dossier-v11", `${owner}/${name}`.toLowerCase()],
     { revalidate: 900 },
   )();
 
@@ -350,7 +367,8 @@ export async function getExplorerData(owner: string, name: string): Promise<Expl
     const { npmPkg, npmLast30, npmHistory } = await resolveNpmUsage(o, n, raw.npmPkg);
     // clones (private traffic) are surfaced only via the cached dossier path
     // (getCachedDossier -> fetchDossier), which the panels actually render
-    dossier = { ...raw, npmPkg, npmLast30, npmHistory, clonesHistory: null };
+    dossier = { ...raw, npmPkg, npmLast30, npmHistory, clonesHistory: null,
+                uniqueCloners14d: null, uniqueCloners14dAt: null };
   } catch (err) {
     log.warn("dossier.failed", { err: err instanceof Error ? err.message.slice(0, 120) : String(err) });
   }
