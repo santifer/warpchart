@@ -3,10 +3,21 @@
 // Traffic Vault panel. Traffic (views, clones, referrers) is the repo OWNER's
 // PRIVATE data, so it is NEVER server-rendered into the public console. The
 // public panel is a value-prop teaser; the real numbers are fetched client-side
-// from /api/traffic ONLY when the URL carries a valid ?vault=<key> (the private
-// link the owner gets in their welcome email). No key -> no numbers, ever, and
-// since 2026-08-12 that includes the house repo: it used to be served publicly
-// here as the live demo, until the policy that justified it was reversed.
+// from /api/traffic ONLY when this browser holds a valid key. No key -> no
+// numbers, ever, and since 2026-08-12 that includes the house repo: it used to
+// be served publicly here as the live demo, until the policy that justified it
+// was reversed.
+//
+// TWO WAYS TO HOLD THE KEY, ONE PLACE IT LIVES:
+//   - ?vault=<key> in the URL: the private link a tenant gets on provisioning.
+//     A link is a DELIVERY mechanism, not a place to keep a secret, so the key
+//     is moved into localStorage and stripped from the address bar on arrival.
+//     Left in the URL it rides along in history sync, screenshots, shared
+//     screens and any copy-pasted link.
+//   - localStorage "wc_vault": set by the link above, or by /unlock?v=<key> for
+//     the owner master key. Survives reloads, never travels.
+// The server re-validates the key on every request either way (/api/traffic):
+// nothing here grants access, it only decides which key to present.
 //
 // The capped panel IS the free tier now: what a visitor sees is exactly what a
 // tenant buys the key to unlock.
@@ -15,7 +26,7 @@ import {
   ComposedChart, Bar, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
 } from "recharts";
 import { usePalette } from "@/lib/usePalette";
-import { fmt } from "@/lib/format";
+import { fmt, fmtCompact } from "@/lib/format";
 import type { TrafficVault } from "@/lib/traffic";
 
 const WINDOW = 60; // most recent ~2 months on screen
@@ -25,31 +36,85 @@ const WINDOW = 60; // most recent ~2 months on screen
 // to the repo, so they are what the attribution line surfaces.
 const SEARCH = /^(google|bing|yahoo|duckduckgo|ecosia|baidu|yandex|search\.brave\.com|github\.com)$/i;
 
+const TOKEN = "wc_vault";
+
+const read = (): string | null => {
+  try {
+    return localStorage.getItem(TOKEN);
+  } catch {
+    return null; // private mode / storage disabled: behave like no key
+  }
+};
+
 export default function TrafficPanel({ repo }: { repo: string }) {
   const C = usePalette();
   const [vault, setVault] = useState<TrafficVault | null>(null);
+  // a key this browser holds that the server refused, or that returned nothing.
+  // Falling back to the teaser here would be an absence that lies: it reads as
+  // "no data for this repo" when the truth is "your key did not work".
+  const [failed, setFailed] = useState<null | "denied" | "empty">(null);
+  const [held, setHeld] = useState(false);
 
   useEffect(() => {
     if (!repo) return;
-    // The owner's private vault link carries ?vault=<key>. No key -> no request
-    // at all: the endpoint would 400 anyway now that no repo is exempt, and not
-    // asking is the clearer statement of the invariant (it also drops one
-    // request from every public page view).
-    const key = new URLSearchParams(window.location.search).get("vault");
+    // A private link delivers the key once; from then on it lives in this
+    // browser and not in the address bar.
+    const url = new URL(window.location.href);
+    const fromLink = url.searchParams.get("vault");
+    if (fromLink) {
+      try {
+        localStorage.setItem(TOKEN, fromLink);
+      } catch {}
+      url.searchParams.delete("vault");
+      history.replaceState(null, "", `${url.pathname}${url.search}${url.hash}`);
+    }
+    // No key -> no request at all: the endpoint would 400 anyway now that no
+    // repo is exempt, and not asking is the clearer statement of the invariant
+    // (it also drops one request from every public page view).
+    const key = fromLink || read();
     if (!key) return;
-    const url = `/api/traffic?repo=${encodeURIComponent(repo)}&key=${encodeURIComponent(key)}`;
+    setHeld(true);
     let cancelled = false;
-    fetch(url, { cache: "no-store" })
-      .then((r) => (r.ok ? r.json() : null))
+    fetch(`/api/traffic?repo=${encodeURIComponent(repo)}&key=${encodeURIComponent(key)}`, {
+      cache: "no-store",
+    })
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
       .then((j) => {
-        if (cancelled || !j?.vault?.days?.length) return;
+        if (cancelled) return;
+        if (!j?.vault?.days?.length) return setFailed("empty");
         setVault(j.vault as TrafficVault);
       })
-      .catch(() => {});
+      .catch(() => !cancelled && setFailed("denied"));
     return () => {
       cancelled = true;
     };
   }, [repo]);
+
+  const lock = () => {
+    try {
+      localStorage.removeItem(TOKEN);
+    } catch {}
+    location.reload();
+  };
+
+  // a key that does not work is worth saying out loud, with the way out
+  if (failed) {
+    return (
+      <div className="flex h-[230px] flex-col items-center justify-center gap-2 text-center">
+        <span className="font-display text-label tracking-[0.3em] text-warn">
+          {failed === "denied" ? "◈ VAULT KEY REJECTED" : "◈ VAULT EMPTY"}
+        </span>
+        <span className="numeral max-w-[46ch] text-label leading-relaxed text-faint">
+          {failed === "denied"
+            ? "This browser holds a key the server did not accept for this repo."
+            : `No traffic collected for ${repo} yet.`}
+        </span>
+        <button onClick={lock} className="numeral text-micro tracking-[0.24em] text-dim hover:text-accent">
+          FORGET KEY
+        </button>
+      </div>
+    );
+  }
 
   // teaser: shown to everyone on the public console (privacy is the pitch)
   if (!vault) {
@@ -80,14 +145,35 @@ export default function TrafficPanel({ repo }: { repo: string }) {
         <span className="numeral text-micro tracking-[0.15em] text-faint">
           {"private · github keeps 14 days · you keep all of it"}
         </span>
+        {/* unmistakable that THIS browser is holding a key: the same screen is
+            a teaser for everyone else, and that difference must never be
+            something you have to remember while sharing a screen. */}
+        {held ? (
+          <span className="numeral ml-auto text-micro tracking-[0.24em] text-accent/70">
+            ◈ UNLOCKED HERE ·{" "}
+            <button onClick={lock} className="tracking-[0.24em] text-dim hover:text-accent">
+              LOCK
+            </button>
+          </span>
+        ) : null}
       </div>
 
       <div className="h-[160px] w-full">
         <ResponsiveContainer width="100%" height="100%">
-          <ComposedChart data={rows} margin={{ top: 6, right: 4, left: -16, bottom: 0 }}>
+          {/* left margin + YAxis width are paired: a busy repo puts 5 digits on
+              the axis, and the old -16/40 clipped them to their last 3 ("18377"
+              read as "377"). */}
+          <ComposedChart data={rows} margin={{ top: 6, right: 4, left: -6, bottom: 0 }}>
             <CartesianGrid stroke={C.grid} strokeDasharray="2 6" vertical={false} />
             <XAxis dataKey="label" tick={{ fill: C.faint, fontSize: 9 }} tickLine={false} axisLine={{ stroke: C.grid }} interval={Math.ceil(rows.length / 8)} />
-            <YAxis domain={[0, Math.ceil(maxV * 1.05)]} tick={{ fill: C.faint, fontSize: 9 }} tickLine={false} axisLine={false} width={40} />
+            <YAxis
+              domain={[0, Math.ceil(maxV * 1.05)]}
+              tickFormatter={(v: number) => fmtCompact(v)}
+              tick={{ fill: C.faint, fontSize: 9 }}
+              tickLine={false}
+              axisLine={false}
+              width={38}
+            />
             <Tooltip
               cursor={{ fill: C.accentSoft }}
               contentStyle={{ background: C.hull, border: `1px solid ${C.grid}`, borderRadius: 0, fontSize: 11, fontFamily: "var(--font-jbmono)" }}
