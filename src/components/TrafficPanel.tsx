@@ -54,6 +54,7 @@ export default function TrafficPanel({ repo }: { repo: string }) {
   // "no data for this repo" when the truth is "your key did not work".
   const [failed, setFailed] = useState<null | "denied" | "empty">(null);
   const [held, setHeld] = useState(false);
+  const [arming, setArming] = useState(false);
 
   useEffect(() => {
     if (!repo) return;
@@ -90,12 +91,23 @@ export default function TrafficPanel({ repo }: { repo: string }) {
     };
   }, [repo]);
 
-  const lock = () => {
+  const forget = () => {
     try {
       localStorage.removeItem(TOKEN);
     } catch {}
     location.reload();
   };
+
+  // LOCK asks twice. It sits at the end of a text line in a panel people read,
+  // one stray click destroys the only copy of a key this browser holds, and
+  // there is no undo: the key cannot be read back out of Vercel. Santiago hit
+  // it by accident within minutes of the first deploy.
+  const lock = () => (arming ? forget() : setArming(true));
+  useEffect(() => {
+    if (!arming) return;
+    const t = setTimeout(() => setArming(false), 4000);
+    return () => clearTimeout(t);
+  }, [arming]);
 
   // a key that does not work is worth saying out loud, with the way out
   if (failed) {
@@ -109,7 +121,9 @@ export default function TrafficPanel({ repo }: { repo: string }) {
             ? "This browser holds a key the server did not accept for this repo."
             : `No traffic collected for ${repo} yet.`}
         </span>
-        <button onClick={lock} className="numeral text-micro tracking-[0.24em] text-dim hover:text-accent">
+        {/* no confirmation here: a key the server rejects is worth nothing, so
+            dropping it costs nothing either */}
+        <button onClick={forget} className="numeral text-micro tracking-[0.24em] text-dim hover:text-accent">
           FORGET KEY
         </button>
       </div>
@@ -151,8 +165,12 @@ export default function TrafficPanel({ repo }: { repo: string }) {
         {held ? (
           <span className="numeral ml-auto text-micro tracking-[0.24em] text-accent/70">
             ◈ UNLOCKED HERE ·{" "}
-            <button onClick={lock} className="tracking-[0.24em] text-dim hover:text-accent">
-              LOCK
+            <button
+              onClick={lock}
+              title={arming ? "click again to forget the key on this browser" : "forget the key on this browser"}
+              className={`tracking-[0.24em] ${arming ? "text-warn" : "text-dim hover:text-accent"}`}
+            >
+              {arming ? "SURE? · FORGETS THE KEY" : "LOCK"}
             </button>
           </span>
         ) : null}
