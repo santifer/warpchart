@@ -55,6 +55,7 @@ export default function TrafficPanel({ repo }: { repo: string }) {
   const [failed, setFailed] = useState<null | "denied" | "empty">(null);
   const [held, setHeld] = useState(false);
   const [arming, setArming] = useState(false);
+  const [people, setPeople] = useState(false);
 
   useEffect(() => {
     if (!repo) return;
@@ -145,19 +146,70 @@ export default function TrafficPanel({ repo }: { repo: string }) {
   }
 
   const view = vault.days.slice(-WINDOW);
-  const rows = view.map((d) => ({ label: d.d.slice(5).replace("-", "/"), views: d.views, clones: d.clones }));
-  const maxV = Math.max(1, ...rows.map((r) => Math.max(r.views, r.clones)));
+  const rows = view.map((d) => ({
+    label: d.d.slice(5).replace("-", "/"),
+    views: people ? d.viewsU : d.views,
+    clones: people ? d.clonesU : d.clones,
+  }));
+  const u14 = vault.uniq14;
+  const vLabel = people ? "unique visitors" : "views";
+  const cLabel = people ? "unique cloners" : "clones";
 
   return (
     <div className="flex h-full flex-col gap-2">
       <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1">
-        <span className="numeral text-data text-dim">
-          <span className="text-accent">{fmt(vault.totalViews)}</span> views ·{" "}
-          <span className="text-ink">{fmt(vault.totalClones)}</span> clones ·{" "}
-          <span className="text-faint">{vault.daysKept} days kept</span>
+        {/* PER-DAY totals are addable; per-day UNIQUES are not (a person who
+            comes back on Tuesday is two of them). So the people view heads with
+            GitHub's own 14-day dedup instead of a sum it has no right to make.
+            Summing them is exactly how this panel once published 91,685 when
+            the real headcount was 29,837. */}
+        {people ? (
+          <span className="numeral text-data text-dim">
+            {u14?.visitors != null ? (
+              <>
+                <span className="text-accent">{fmt(u14.visitors)}</span> visitors ·{" "}
+              </>
+            ) : null}
+            {u14?.cloners != null ? (
+              <>
+                <span className="text-ink">{fmt(u14.cloners)}</span> cloners ·{" "}
+              </>
+            ) : null}
+            <span className="text-faint">{"github's own 14-day dedup"}</span>
+          </span>
+        ) : (
+          <span className="numeral text-data text-dim">
+            <span className="text-accent">{fmt(vault.totalViews)}</span> views ·{" "}
+            <span className="text-ink">{fmt(vault.totalClones)}</span> clones ·{" "}
+            <span className="text-faint">{vault.daysKept} days kept</span>
+          </span>
+        )}
+        {/* The switch exists because CI inflates the raw count: every
+            actions/checkout is a clone, so on a busy PR day most of the clone
+            line is the repo's own runners. Uniques cut that down but do NOT
+            remove it (runners are cloners too), and the label says so rather
+            than promising a clean number. */}
+        <span className="numeral flex gap-1 text-micro tracking-[0.2em]">
+          {([["TOTAL", false], ["UNIQUE", true]] as const).map(([label, on]) => (
+            <button
+              key={label}
+              onClick={() => setPeople(on)}
+              // bordered like the referrer chips: an unboxed word in a line of
+              // notes reads as prose, not as something you can press
+              className={`border px-1.5 py-0.5 ${
+                people === on
+                  ? "border-accent/50 text-accent"
+                  : "border-grid text-faint hover:border-dim hover:text-dim"
+              }`}
+            >
+              {label}
+            </button>
+          ))}
         </span>
         <span className="numeral text-micro tracking-[0.15em] text-faint">
-          {"private · github keeps 14 days · you keep all of it"}
+          {people
+            ? "per day, not addable · ci runners count as cloners too"
+            : "private · github keeps 14 days · you keep all of it"}
         </span>
         {/* unmistakable that THIS browser is holding a key: the same screen is
             a teaser for everyone else, and that difference must never be
@@ -185,7 +237,9 @@ export default function TrafficPanel({ repo }: { repo: string }) {
             <CartesianGrid stroke={C.grid} strokeDasharray="2 6" vertical={false} />
             <XAxis dataKey="label" tick={{ fill: C.faint, fontSize: 9 }} tickLine={false} axisLine={{ stroke: C.grid }} interval={Math.ceil(rows.length / 8)} />
             <YAxis
-              domain={[0, Math.ceil(maxV * 1.05)]}
+              // "auto" so recharts picks round ticks; a hard max forced ugly
+              // ones (4.5K / 9K / 14K instead of 4K / 8K / 12K / 16K)
+              domain={[0, "auto"]}
               tickFormatter={(v: number) => fmtCompact(v)}
               tick={{ fill: C.faint, fontSize: 9 }}
               tickLine={false}
@@ -196,11 +250,11 @@ export default function TrafficPanel({ repo }: { repo: string }) {
               cursor={{ fill: C.accentSoft }}
               contentStyle={{ background: C.hull, border: `1px solid ${C.grid}`, borderRadius: 0, fontSize: 11, fontFamily: "var(--font-jbmono)" }}
               labelStyle={{ color: C.dim }}
-              formatter={(value, name) => [`${value}`, name === "views" ? "views" : "clones"]}
+              formatter={(value, name) => [`${value}`, String(name)]}
             />
             <Legend wrapperStyle={{ fontSize: 10, fontFamily: "var(--font-jbmono)", color: C.dim }} />
-            <Bar dataKey="views" fill={C.accent} fillOpacity={0.5} maxBarSize={14} isAnimationActive={false} />
-            <Line dataKey="clones" stroke={C.ink} strokeWidth={1.4} dot={false} type="monotone" isAnimationActive={false} />
+            <Bar dataKey="views" name={vLabel} fill={C.accent} fillOpacity={0.5} maxBarSize={14} isAnimationActive={false} />
+            <Line dataKey="clones" name={cLabel} stroke={C.ink} strokeWidth={1.4} dot={false} type="monotone" isAnimationActive={false} />
           </ComposedChart>
         </ResponsiveContainer>
       </div>
