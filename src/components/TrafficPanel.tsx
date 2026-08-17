@@ -155,6 +155,17 @@ export default function TrafficPanel({ repo }: { repo: string }) {
   const vLabel = people ? "unique visitors" : "views";
   const cLabel = people ? "unique cloners" : "clones";
 
+  // How old the DATA is, not how recently the collector ran. GitHub publishes a
+  // day's traffic about a day late, so being 1 day behind is the normal state
+  // and saying so would be noise. Past that it is worth saying out loud: on
+  // 2026-08-16 GitHub's traffic API started 503ing and stopped publishing new
+  // days entirely, and the panel had no way to tell the reader that the last
+  // two days were missing rather than empty.
+  const lagDays = vault.newestDay
+    ? Math.floor((Date.now() - Date.parse(`${vault.newestDay}T00:00:00Z`)) / 86_400_000)
+    : 0;
+  const stale = lagDays >= 2;
+
   return (
     <div className="flex h-full flex-col gap-2">
       <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1">
@@ -184,6 +195,15 @@ export default function TrafficPanel({ repo }: { repo: string }) {
             <span className="text-faint">{vault.daysKept} days kept</span>
           </span>
         )}
+        {/* only when it matters: a day behind is how GitHub always works */}
+        {stale ? (
+          <span
+            className={`numeral text-micro tracking-[0.15em] ${lagDays >= 3 ? "text-warn" : "text-dim"}`}
+            title="GitHub publishes traffic with about a day of lag. Longer than that means its feed stalled, not that your repo went quiet."
+          >
+            ◈ THROUGH {vault.newestDay} · {lagDays}d BEHIND
+          </span>
+        ) : null}
         {/* The switch exists because CI inflates the raw count: every
             actions/checkout is a clone, so on a busy PR day most of the clone
             line is the repo's own runners. Uniques cut that down but do NOT

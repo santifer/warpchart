@@ -30,7 +30,18 @@ export interface TrafficVault {
   totalViews: number;
   totalClones: number;
   daysKept: number;
+  // When the collector last RAN. Not the same thing as how fresh the data is,
+  // and the difference is not academic: on 2026-08-16/17 GitHub's traffic API
+  // went 503 and stopped publishing new days, so the vault kept stamping
+  // updatedAt on every 2-hour run while its newest day stayed frozen at the
+  // 15th. A panel that reports this field alone tells the reader "updated
+  // today" over two-day-old numbers.
   updatedAt: string | null;
+  // The newest day the series actually contains. THIS is the freshness the
+  // reader cares about. GitHub publishes a day with ~1 day of lag, so 1-2 days
+  // behind is normal and only 3+ means the feed stalled (same threshold the
+  // watchdog's fresh.traffic-days check uses).
+  newestDay: string | null;
   // GitHub's own deduplicated 14-day headcount, straight from the API's
   // top-level `uniques`. THE ONLY FIGURE ALLOWED TO SAY "UNIQUE".
   //
@@ -76,6 +87,7 @@ async function readVault(repo: string): Promise<TrafficVault | null> {
       totalClones: days.reduce((s, d) => s + d.clones, 0),
       daysKept: days.length,
       updatedAt: raw.updatedAt ?? null,
+      newestDay: days[days.length - 1]?.d ?? null,
       uniq14: raw.uniq14 ?? null,
     };
   } catch {
@@ -84,7 +96,11 @@ async function readVault(repo: string): Promise<TrafficVault | null> {
 }
 
 export function loadTrafficVault(repo: string): Promise<TrafficVault | null> {
-  return unstable_cache(() => readVault(repo), ["traffic-vault", repo.toLowerCase()], {
+  // BUMP THIS KEY WHENEVER THE SHAPE CHANGES. unstable_cache is not scoped to a
+  // deploy: without a new key the old shape keeps being served by the very
+  // deploy that added the field, and the new one reads as "missing data".
+  // v2 = added newestDay.
+  return unstable_cache(() => readVault(repo), ["traffic-vault-v2", repo.toLowerCase()], {
     revalidate: 300,
   })();
 }
