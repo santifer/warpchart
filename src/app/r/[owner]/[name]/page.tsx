@@ -98,8 +98,12 @@ export async function generateMetadata({
   if (idx >= 0 && route) {
     const p = route.repos[idx];
     const vel = Math.round(p.v7 ?? p.v ?? 0);
+    // count above, not array index: the registry reorders once a day while the
+    // star counts inside it refresh every 2 hours, so the index is last night's
+    // position wearing this morning's stars (see the same fix in /api/og)
+    const rank = route.repos.reduce((n, q) => (q.s > p.s ? n + 1 : n), 1);
     description =
-      `${repo} ranks #${fmt(idx + 1)} of every public GitHub repository — ${fmtCompact(p.s)} stars` +
+      `${repo} ranks #${fmt(rank)} of every public GitHub repository — ${fmtCompact(p.s)} stars` +
       `${vel ? `, climbing ${fmt(vel)}/day` : ""}. Live worldwide rank, velocity and the repos closing in.`;
   }
   return {

@@ -90,7 +90,19 @@ async function repoData(repoParam: string): Promise<CardData | null> {
     // canonical velocity (route v7 keystone, v fallback) so the card carries the
     // same number as the rest of the site instead of hiding it
     const rv = canonicalVelocity(e);
-    return { repo: e.r, desc: e.d ?? null, rank: idx + 1, stars: e.s, vPerDay: rv != null ? Math.round(rv) : null };
+    // Rank by COUNTING repos above, never by the array index. The registry
+    // reorders at most once every 20 hours while each repo's star count is
+    // refreshed every 2, so the index is a position from last night attached to
+    // this morning's stars. That shipped a card reading "65,139 stars · #307"
+    // on the morning career-ops was actually #301 and climbing: the two numbers
+    // in the same image came from different clocks, and the stale one was the
+    // headline. Counting keeps both on the same clock and costs nothing.
+    //
+    // Still slightly generous (their counts are last night's too), but it is
+    // the same basis the site, the API and the collector already use, so the
+    // card can no longer contradict the page it links to.
+    const rank = route!.repos.reduce((n, p) => (p.s > e.s ? n + 1 : n), 1);
+    return { repo: e.r, desc: e.d ?? null, rank, stars: e.s, vPerDay: rv != null ? Math.round(rv) : null };
   }
   const [owner, name] = repoParam.split("/");
   const lite = await repoLite(owner, name);
