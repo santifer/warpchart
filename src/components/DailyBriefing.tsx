@@ -40,12 +40,12 @@ export default function DailyBriefing({ bundle }: { bundle: DashboardBundle }) {
 
   const dStars = live.stars - prev.stars;
   const dRank = prev.rank !== null && live.rank !== null ? prev.rank - live.rank : null;
-  const next = bundle.milestones[0] ?? null;
+  const next = bundle.milestones.find((m) => m.threshold > live.stars) ?? null;
   let eta: string | null = null;
   if (next) {
     const net = bundle.v7d - (next.drift ?? 0);
     const gap = Math.max(0, next.threshold - live.stars);
-    eta = gap === 0 ? "crossed" : net > 0 ? fmtEtaDays(gap / net) : null;
+    eta = net > 0 ? fmtEtaDays(gap / net) : null;
   }
   const hours = Math.round((Date.now() - prev.ts) / 3600_000);
 

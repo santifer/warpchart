@@ -28,14 +28,17 @@ function Metric({
 export default function StatusBar({ bundle }: { bundle: DashboardBundle }) {
   const live = useLive();
   const repo = bundle.meta?.repo ?? "unknown/unknown";
-  const next = bundle.milestones[0] ?? null;
+  // the NEXT gate, never one already cleared: the header's job is to point
+  // forward. Uses live stars so it flips the instant the gate is passed.
+  const next = bundle.milestones.find((m) => m.threshold > live.stars) ?? null;
 
   let gap: number | null = null;
   let eta: string | null = null;
   if (next) {
     gap = Math.max(0, next.threshold - live.stars);
     const net = bundle.v7d - (next.drift ?? 0);
-    eta = gap === 0 ? "now" : net > 0 ? fmtEtaDays(gap / net) : "n/a";
+    // gap is always > 0 now: `next` is by definition a gate not yet cleared
+    eta = net > 0 ? fmtEtaDays(gap / net) : "n/a";
   }
 
   return (
@@ -136,11 +139,7 @@ export default function StatusBar({ bundle }: { bundle: DashboardBundle }) {
           </Metric>
           {next ? (
             <Metric label={`Gap to top ${next.rank}`} hint={`threshold ${fmt(next.threshold)}`}>
-              {gap === 0 ? (
-                <span className="text-accent">crossed</span>
-              ) : (
-                <LiveNumber value={gap ?? 0} locales="en-US" />
-              )}
+              <LiveNumber value={gap ?? 0} locales="en-US" />
             </Metric>
           ) : null}
         </div>

@@ -5,15 +5,18 @@
 import { useLive } from "./LiveProvider";
 import type { DashboardBundle } from "@/lib/bundle";
 import { fmt, fmtEtaDays, fmtEtaRange, etaDate } from "@/lib/format";
-import { milestoneEta } from "@/lib/projections";
+import { milestoneEta, pendingMilestones } from "@/lib/projections";
 
 export default function Projections({ bundle, compact }: { bundle: DashboardBundle; compact?: boolean }) {
   const live = useLive();
   const vOwn = bundle.v7d;
+  // only the gates still ahead: a crossed one sat here reading "crossed · gap 0"
+  // above three real targets, which is the least useful row on the panel
+  const ahead = pendingMilestones(bundle.milestones, live.stars);
 
   return (
     <div className="flex flex-col gap-3">
-      {bundle.milestones.map((m) => {
+      {ahead.map((m) => {
         const e = milestoneEta(m.rank, m.threshold, live.stars, vOwn, m.drift);
         const pct = Math.min(100, (live.stars / m.threshold) * 100);
         const date = e.etaDays !== null ? etaDate(e.etaDays, new Date(live.nowMs)) : null;
@@ -24,7 +27,7 @@ export default function Projections({ bundle, compact }: { bundle: DashboardBund
                 TOP {m.rank}
               </span>
               <span className="numeral text-sm text-accent glow-accent">
-                {e.gap === 0 ? "crossed" : fmtEtaRange(e.etaDays, e.etaRange)}
+                {fmtEtaRange(e.etaDays, e.etaRange)}
                 {date && e.gap > 0 && e.etaDays && e.etaDays <= 365 ? <span className="ml-2 text-dim">{date}</span> : null}
               </span>
             </div>
@@ -47,6 +50,14 @@ export default function Projections({ bundle, compact }: { bundle: DashboardBund
           </div>
         );
       })}
+      {!ahead.length ? (
+        <div className="border border-grid bg-hull/40 px-4 py-3">
+          <span className="numeral text-label text-dim">
+            every gate on this route is behind you. the next one appears when the
+            registry recomputes this repo's rank.
+          </span>
+        </div>
+      ) : null}
       {!compact ? (
         <p className="numeral text-micro leading-relaxed text-faint">
           eta = gap / (own v7d - threshold drift). Thresholds are the star count

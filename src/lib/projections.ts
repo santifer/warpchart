@@ -100,3 +100,18 @@ export function neighborEtas(neighbors: Neighbor[], stars: number, vOwn: number)
     };
   });
 }
+
+// A milestone the repo has already passed is not a projection, it is history:
+// the Mission Log records the crossing and the panel should be pointing at what
+// is next. Thresholds MOVE (the repo holding rank N keeps gaining stars), so a
+// gate can legitimately go back to being ahead of you after you crossed it, and
+// this filter re-adds it on its own when that happens.
+//
+// Filtered against the LIVE star count, not the snapshot's: the gate must clear
+// the moment it is truly cleared, not on the collector's next pass.
+export function pendingMilestones<T extends { threshold: number }>(
+  milestones: T[],
+  liveStars: number
+): T[] {
+  return milestones.filter((m) => m.threshold > liveStars);
+}
