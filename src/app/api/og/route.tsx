@@ -79,6 +79,16 @@ async function tenantData(): Promise<CardData | null> {
   };
 }
 
+// Worldwide rank for a star count, by counting the registry rather than reading
+// a position out of it. The registry reorders at most once every 20 hours while
+// the star counts around it move constantly, so a stored index goes stale the
+// moment anything changes. Counting is always consistent with the number shown.
+function rankByStars(stars: number): number | null {
+  const route = loadRoute();
+  if (!route?.repos.length) return null;
+  return route.repos.reduce((n, p) => (p.s > stars ? n + 1 : n), 1);
+}
+
 async function repoData(repoParam: string): Promise<CardData | null> {
   if (!/^[\w.-]+\/[\w.-]+$/.test(repoParam)) return null;
   const route = loadRoute();
@@ -101,7 +111,7 @@ async function repoData(repoParam: string): Promise<CardData | null> {
     // Still slightly generous (their counts are last night's too), but it is
     // the same basis the site, the API and the collector already use, so the
     // card can no longer contradict the page it links to.
-    const rank = route!.repos.reduce((n, p) => (p.s > e.s ? n + 1 : n), 1);
+    const rank = rankByStars(e.s);
     return { repo: e.r, desc: e.d ?? null, rank, stars: e.s, vPerDay: rv != null ? Math.round(rv) : null };
   }
   const [owner, name] = repoParam.split("/");
@@ -435,7 +445,16 @@ export async function GET(req: Request) {
       const [owner, name] = repoParam.split("/");
       curve = await withLiveTotal(await cachedSampleCurve(owner, name), owner, name);
     }
-    if (curve) data.stars = Math.max(data.stars, curve.total);
+    if (curve) {
+      const fresh = Math.max(data.stars, curve.total);
+      // Re-rank against the count we are ABOUT TO PRINT. This line is the whole
+      // bug: the card refreshed its star total from the live curve and left the
+      // rank computed from the registry's older total, so it published
+      // "65,139 stars · #307" when 65,139 stars meant #301. Two numbers, one
+      // image, different clocks.
+      if (fresh !== data.stars) data.rank = rankByStars(fresh) ?? data.rank;
+      data.stars = fresh;
+    }
   } catch {
     curve = null;
   }
