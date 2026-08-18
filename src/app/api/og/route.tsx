@@ -444,9 +444,24 @@ export async function GET(req: Request) {
       // other repo went through withLiveTotal below, while this branch stopped
       // at the collector's 2-hourly reconstruction. So the card most likely to
       // be shared was the one showing the oldest number. Same treatment now.
+      // The house card was the only one not showing GitHub's current count.
+      // withLiveTotal cannot help here: it only refreshes when the live count
+      // exceeds the curve's last y value, and the tenant curve counts STAR
+      // EVENTS (about 65.4k) rather than net stars (65.2k), because ~640 people
+      // un-starred since April. The event count is permanently higher, so the
+      // check never fires. Refresh the total directly instead; the 160-point
+      // shape does not change for a few dozen stars.
       const t = tenantCurve(160);
-      const [tOwner, tName] = (repoParam ?? loadMeta()?.repo ?? "/").split("/");
-      curve = t && tOwner && tName ? await withLiveTotal(t, tOwner, tName) : t;
+      if (t) {
+        try {
+          const [tOwner, tName] = (repoParam ?? loadMeta()?.repo ?? "/").split("/");
+          if (tOwner && tName) {
+            const liveStars = (await repoLite(tOwner, tName)).stargazerCount;
+            if (liveStars > t.total) t.total = liveStars;
+          }
+        } catch { /* keep the collector's total */ }
+      }
+      curve = t;
     } else {
       const [owner, name] = repoParam.split("/");
       curve = await withLiveTotal(await cachedSampleCurve(owner, name), owner, name);
