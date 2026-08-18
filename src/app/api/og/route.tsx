@@ -440,7 +440,13 @@ export async function GET(req: Request) {
   let curve: Curve | null = null;
   try {
     if (!repoParam || isTenantRepo(repoParam)) {
-      curve = tenantCurve(160);
+      // The house repo was the ONLY one whose card missed the live total: every
+      // other repo went through withLiveTotal below, while this branch stopped
+      // at the collector's 2-hourly reconstruction. So the card most likely to
+      // be shared was the one showing the oldest number. Same treatment now.
+      const t = tenantCurve(160);
+      const [tOwner, tName] = (repoParam ?? loadMeta()?.repo ?? "/").split("/");
+      curve = t && tOwner && tName ? await withLiveTotal(t, tOwner, tName) : t;
     } else {
       const [owner, name] = repoParam.split("/");
       curve = await withLiveTotal(await cachedSampleCurve(owner, name), owner, name);
