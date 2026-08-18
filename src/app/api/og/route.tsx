@@ -473,7 +473,14 @@ export async function GET(req: Request) {
       // rank computed from the registry's older total, so it published
       // "65,139 stars · #307" when 65,139 stars meant #301. Two numbers, one
       // image, different clocks.
-      if (fresh !== data.stars) data.rank = rankByStars(fresh) ?? data.rank;
+      if (fresh !== data.stars) {
+        // ONE definition of rank across the product. The page asks GitHub how
+        // many repos are above this count (exact, live); the card used to count
+        // the local registry, whose numbers are from last night's reorder, so
+        // it read one place better than the page it links to. Same question,
+        // same answer now. Registry count stays as the offline fallback.
+        data.rank = await worldwideRank(fresh).catch(() => rankByStars(fresh) ?? data.rank);
+      }
       data.stars = fresh;
     }
   } catch {
