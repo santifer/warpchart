@@ -682,8 +682,9 @@ export default async function Pricing({
       <section className="rise flex flex-col gap-3" style={{ animationDelay: "360ms" }}>
         <h2 className="module-title">NOT A CUSTOMER, A PATRON?</h2>
         <p className="max-w-[700px] text-data font-light leading-relaxed text-dim">
-          If you just want the public telemetry to stay free and independent, that path exists too:
-          sponsorship funds the mission and buys exactly zero influence.
+          If you just want to support the work behind all of this, that path exists too. It funds
+          the maintainer of career-ops, the open source project this console was built to measure,
+          and it buys exactly zero influence over what any chart says.
         </p>
         <a
           href="https://github.com/sponsors/santifer"
@@ -692,7 +693,7 @@ export default async function Pricing({
           className="hud flex max-w-[700px] items-center justify-center border-dashed px-4 py-3 transition-colors hover:border-accent/50"
         >
           <span className="numeral text-label tracking-[0.2em] text-accent">
-            BECOME A MISSION PATRON · from $5/mo →
+            SPONSOR THE MAINTAINER · from $1/mo →
           </span>
         </a>
       </section>

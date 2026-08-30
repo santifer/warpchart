@@ -30,7 +30,11 @@ export default function VelocityChart({ fill }: { fill?: boolean }) {
       const h = Math.floor(Date.parse(iso) / HOUR) * HOUR;
       counts.set(h, (counts.get(h) ?? 0) + 1);
     }
-    const currentHour = Math.floor(live.nowMs / HOUR) * HOUR;
+    // windowMs, not nowMs: until the first velocity sync the merged
+    // timestamps only reach the bundle boundary, so bucketing against real
+    // time shifted the 24h frame forward and blanked the freshest bars on
+    // every refresh (they "reappeared" when the poll landed).
+    const currentHour = Math.floor(live.windowMs / HOUR) * HOUR;
     const rows: Row[] = [];
     for (let i = 23; i >= 0; i--) {
       const t = currentHour - i * HOUR;
@@ -42,7 +46,7 @@ export default function VelocityChart({ fill }: { fill?: boolean }) {
       });
     }
     return rows;
-  }, [live.merged, live.nowMs]);
+  }, [live.merged, live.windowMs]);
 
   return (
     <div className={fill ? "h-full min-h-0 w-full" : "h-[230px] w-full"}>

@@ -40,7 +40,10 @@ export default function DailyLadder({ bundle, fill }: { bundle: DashboardBundle;
     const causeByDay = new Map(
       bundle.spikes.filter((s) => s.causes.length).map((s) => [s.date, s.causes[0].title]),
     );
-    const todayKey = new Date(live.nowMs).toISOString().slice(0, 10);
+    // windowMs keeps the day key on the same clock as live.todayCount: with
+    // a pre-midnight bundle and a failing velocity feed, nowMs would label
+    // yesterday's frozen count as today.
+    const todayKey = new Date(live.windowMs).toISOString().slice(0, 10);
     return bundle.daily.map((p, i) => {
       const stars = p.d === todayKey ? live.todayCount : p.c;
       const cause = causeByDay.get(p.d) ?? null;
@@ -54,7 +57,7 @@ export default function DailyLadder({ bundle, fill }: { bundle: DashboardBundle;
         cause,
       };
     });
-  }, [bundle.daily, bundle.ma7, bundle.floor, bundle.spikes, live.todayCount, live.nowMs]);
+  }, [bundle.daily, bundle.ma7, bundle.floor, bundle.spikes, live.todayCount, live.windowMs]);
 
   const visible = Math.min(fill ? VISIBLE_FILL : VISIBLE_COMPACT, all.length);
   const latestOff = Math.max(0, all.length - visible);

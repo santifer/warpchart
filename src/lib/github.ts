@@ -16,13 +16,22 @@ const ghlog = reqLog("github");
 // whole maxDuration (observed 11-jun: 60s renders during a 502 storm).
 async function ghFetch<T>(
   path: string,
-  init?: { method?: string; body?: unknown; accept?: string; delays?: number[]; timeoutMs?: number }
+  init?: { method?: string; body?: unknown; accept?: string; delays?: number[]; timeoutMs?: number; auth?: "pat" }
 ): Promise<T> {
   const delays = init?.delays ?? [400, 900, 2000];
   const timeoutMs = init?.timeoutMs ?? 12_000;
   for (let attempt = 0; ; attempt++) {
     let res: Response | null = null;
-    const auth = await pickAuth();
+    // auth:"pat" pins the classic token: the stargazers REST endpoint answers
+    // GitHub Apps with 403 "Resource not accessible by integration".
+    const auth =
+      init?.auth === "pat"
+        ? (() => {
+            const t = process.env.GITHUB_TOKEN || process.env.GH_TOKEN;
+            if (!t) throw new Error("Missing GITHUB_TOKEN env var for PAT-only endpoint");
+            return { token: t, source: "pat" as const };
+          })()
+        : await pickAuth();
     try {
       res = await fetch(API + path, {
         method: init?.method ?? "GET",
@@ -65,13 +74,17 @@ async function ghFetch<T>(
   }
 }
 
-export async function graphql<T>(query: string, variables?: Record<string, unknown>): Promise<T> {
+export async function graphql<T>(
+  query: string,
+  variables?: Record<string, unknown>,
+  opts?: { auth?: "pat" }
+): Promise<T> {
   // Single short retry: heavy stargazer queries already retry at the chunk
   // level, and stacking both retry ladders is what turned GitHub's bad days
   // into 60-second page renders.
   const data = await ghFetch<{ data: T | null; errors?: { type?: string; message?: string }[] }>(
     "/graphql",
-    { method: "POST", body: { query, variables }, delays: [700], timeoutMs: 9_000 }
+    { method: "POST", body: { query, variables }, delays: [700], timeoutMs: 9_000, auth: opts?.auth }
   );
   if (data.errors?.length) {
     // GitHub returns PARTIAL errors (e.g. NOT_FOUND for one renamed repo in
@@ -203,7 +216,11 @@ export async function backwalkSince(
   let complete = false;
   const chunks: string[][] = [];
   for (let page = 0; page < maxPages; page++) {
-    const d: StargazersResp = await graphql<StargazersResp>(STARGAZERS_QUERY, { owner, name, before });
+    // auth:"pat" pinned: the App token resolves the repository but not its
+    // stargazer edges, so the auth pool's App-first preference made this walk
+    // fail whenever the App budget was fresh (the "sometimes empty bars"
+    // intermittency was auth alternation, not only upstream turbulence).
+    const d: StargazersResp = await graphql<StargazersResp>(STARGAZERS_QUERY, { owner, name, before }, { auth: "pat" });
     if (!d.repository) throw new Error("repository not found");
     stars = d.repository.stargazerCount;
     const { pageInfo, edges } = d.repository.stargazers;

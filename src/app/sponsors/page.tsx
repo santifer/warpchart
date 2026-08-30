@@ -56,8 +56,33 @@ export default function Sponsors() {
         </div>
       </section>
 
+      {/* career-ops is the large asset: ~141K monthly README impressions against
+          Warpchart's much smaller surface. A commercial sponsor arriving here was
+          previously shown only the Warpchart inventory, so the bigger, better-priced
+          offer was invisible. This block routes that intent to the right place
+          WITHOUT removing the Warpchart tiers below. */}
+      <section className="rise flex flex-col gap-3" style={{ animationDelay: "120ms" }}>
+        <h2 className="module-title">SPONSORING THE WORK BEHIND IT</h2>
+        <a
+          href="https://career-ops.org/founding-sponsor.pdf"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="hud flex flex-col gap-2 px-4 py-3 transition-colors hover:border-accent/50"
+        >
+          <span className="numeral text-label tracking-[0.25em] text-accent">
+            CAREER-OPS · FOUNDING SPONSOR →
+          </span>
+          <p className="text-data font-light leading-relaxed text-dim">
+            Warpchart exists because career-ops needed telemetry. career-ops is the
+            open source AI job search it measures: 68K+ stars, 328 contributors, and a
+            README seen by tens of thousands of developers every month. Founding sponsor
+            slots are limited and priced there, not here.
+          </p>
+        </a>
+      </section>
+
       <section className="rise flex flex-col gap-3" style={{ animationDelay: "160ms" }}>
-        <h2 className="module-title">PLACEMENTS · scarce on purpose</h2>
+        <h2 className="module-title">WARPCHART PLACEMENTS · scarce on purpose</h2>
         <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
           {TIERS.map((t) => (
             <div key={t.name} className="hud px-4 py-3">
@@ -84,7 +109,7 @@ export default function Sponsors() {
             className="hud flex items-center justify-center gap-2 border-dashed px-4 py-3 transition-colors hover:border-accent/50"
           >
             <span className="numeral text-label tracking-[0.2em] text-accent">
-              BECOME THE FIRST MISSION PATRON →
+              SUPPORT THE WORK BEHIND ALL OF THIS →
             </span>
           </a>
         </div>

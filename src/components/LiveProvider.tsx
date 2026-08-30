@@ -26,6 +26,12 @@ export interface LiveState {
   offline: boolean; // live fetches failing, showing bundled data
   lastSync: string | null;
   nowMs: number;
+  // The clock every WINDOWED read of `merged` must use. Stays on the bundle's
+  // build time until the first velocity sync lands, then follows real time.
+  // Using nowMs instead of this to bucket `merged` is the bug that emptied the
+  // hourly bars on refresh: real time races ahead of bundle-only data and the
+  // freshest hours render as zero until the poll catches up.
+  windowMs: number;
 }
 
 const LiveContext = createContext<LiveState | null>(null);
@@ -84,11 +90,20 @@ export default function LiveProvider({
     let stop = false;
 
     async function pollFast() {
+      // since = THIS bundle's newest timestamp. The server's history can be
+      // newer than the HTML the CDN served us; asking for "new since the
+      // server's boundary" left a gap between the two (missing bars, low
+      // TODAY). Asking since OUR boundary makes merged complete by
+      // construction.
+      const boundary =
+        bundle.recent48h[bundle.recent48h.length - 1] ?? bundle.generatedAt;
       const [summary, velocity] = await Promise.all([
         getJson<{ stars: number; rank: number; fetchedAt: string; stale?: boolean }>(
           "/api/live/summary"
         ),
-        getJson<{ newTimestamps: string[]; partial: boolean }>("/api/live/velocity"),
+        getJson<{ newTimestamps: string[]; partial: boolean }>(
+          `/api/live/velocity?since=${encodeURIComponent(boundary)}`
+        ),
       ]);
       if (stop) return;
       if (summary) {
@@ -100,9 +115,10 @@ export default function LiveProvider({
         setNewTs(velocity.newTimestamps);
         setWinSynced(true);
       }
-      // stale = either feed degraded: summary fell back to the last snapshot
-      // (GitHub unreachable) or velocity could not walk back to the boundary
-      setStale(Boolean(summary?.stale) || Boolean(velocity?.partial));
+      // stale = any feed degraded: summary fell back to the last snapshot
+      // (GitHub unreachable), velocity failed outright (today/hourly frozen at
+      // the last good window), or velocity could not reach the boundary
+      setStale(Boolean(summary?.stale) || velocity === null || Boolean(velocity.partial));
       failures.current = summary && velocity ? 0 : failures.current + 1;
       setOffline(failures.current >= 3);
     }
@@ -173,6 +189,7 @@ export default function LiveProvider({
       offline,
       lastSync,
       nowMs,
+      windowMs: winMs,
     };
   }, [bundle.recent48h, bundle.generatedAt, winSynced, newTs, stars, rank, neighbors, neighborsFresh, stale, offline, lastSync, nowMs]);
 
