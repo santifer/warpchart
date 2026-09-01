@@ -1,5 +1,6 @@
 import type { MetadataRoute } from "next";
 import { loadRoute } from "@/lib/history";
+import { canonicalRepo } from "@/lib/aliases";
 import { listCodexes } from "@/lib/codex";
 import { listCategories } from "@/lib/catalog";
 
@@ -39,11 +40,15 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const route = loadRoute();
   const routeMod = route?.generated_at ? new Date(route.generated_at) : now;
   const charted = await listCodexes().catch(() => []);
-  const chartedAt = new Map(charted.map((c) => [c.repo.toLowerCase(), c.chartedAt]));
+  const chartedAt = new Map(charted.map((c) => [canonicalRepo(c.repo).toLowerCase(), c.chartedAt]));
 
   const seen = new Set<string>();
   const repos: MetadataRoute.Sitemap = [];
-  for (const r of [...(route?.repos ?? []).slice(0, TOP).map((p) => p.r), ...charted.map((c) => c.repo)]) {
+  for (const raw of [...(route?.repos ?? []).slice(0, TOP).map((p) => p.r), ...charted.map((c) => c.repo)]) {
+    // canonicalize renames: never list a URL that 308s (a sitemap entry that
+    // redirects reads as a soft error in Search Console), and dedupe old/new
+    // names of the same repo into one entry.
+    const r = canonicalRepo(raw);
     const k = r.toLowerCase();
     if (seen.has(k) || !REPO_RE.test(r)) continue;
     seen.add(k);
