@@ -1,10 +1,23 @@
 import type { NextConfig } from "next";
+import repoAliases from "./mission.aliases.json";
 
 const nextConfig: NextConfig = {
   // galaxy hero -> /r/ warp jump (React <ViewTransition> over the browser's
   // View Transitions API; browsers without support just don't animate)
   experimental: {
     viewTransition: true,
+  },
+  // Renamed/transferred repos (mission.aliases.json): a REAL 308 at the edge,
+  // before any rendering. The in-page permanentRedirect guard cannot produce
+  // one — generateMetadata streams the 200 shell first, so it degrades to a
+  // client-side hop, which search engines treat as duplicate content. A rename
+  // requires a commit anyway (curated map), so build-time redirects fit.
+  async redirects() {
+    return Object.entries(repoAliases as Record<string, string>).map(([oldName, canonical]) => ({
+      source: `/r/${oldName}/:rest*`,
+      destination: `/r/${canonical}/:rest*`,
+      permanent: true,
+    }));
   },
   // The public JSON API is meant to be consumed from anywhere (browser apps,
   // notebooks, agents), so it advertises open CORS. It is read-only, cache-only
