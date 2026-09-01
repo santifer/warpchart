@@ -16,7 +16,7 @@ type SP = Promise<{ repos?: string; metric?: string; align?: string; log?: strin
 function resolveRepos(repos?: string): string[] {
   const fromUrl = parseRepos(repos);
   if (fromUrl.length) return fromUrl;
-  return [loadMeta()?.repo ?? "santifer/career-ops"];
+  return [loadMeta()?.repo ?? "career-ops-hq/career-ops"];
 }
 
 export async function generateMetadata({ searchParams }: { searchParams: SP }): Promise<Metadata> {

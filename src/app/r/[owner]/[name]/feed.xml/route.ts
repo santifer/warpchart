@@ -12,6 +12,7 @@ import {
   loadTenantTimestamps,
 } from "@/lib/history";
 import { isOwnedBy } from "@/lib/config";
+import { canonicalRepo, isAliasOf } from "@/lib/aliases";
 import { repoEvents, eventsToItems, rssXml, RSS_HEADERS } from "@/lib/feed";
 
 export const dynamic = "force-dynamic";
@@ -23,10 +24,16 @@ export async function GET(
   { params }: { params: Promise<{ owner: string; name: string }> },
 ) {
   const { owner, name } = await params;
-  const repo = `${owner}/${name}`;
-  if (!/^[\w.-]+\/[\w.-]+$/.test(repo)) {
+  const requested = `${owner}/${name}`;
+  if (!/^[\w.-]+\/[\w.-]+$/.test(requested)) {
     return new Response("bad repo", { status: 400, headers: { "Cache-Control": "no-store" } });
   }
+  // RSS readers keep polling a subscribed URL forever: a renamed repo's old
+  // feed URL 301s to the canonical one instead of dying.
+  if (isAliasOf(requested)) {
+    return Response.redirect(`${SITE}/r/${canonicalRepo(requested)}/feed.xml`, 301);
+  }
+  const repo = requested;
   const meta = loadMeta();
   const isHouse = meta?.repo?.toLowerCase() === repo.toLowerCase();
   const tracked = isHouse || isHostedRepo(repo) || isOwnedBy(owner);

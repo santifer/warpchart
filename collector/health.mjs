@@ -48,7 +48,7 @@ const DAY = 24 * HOUR;
 // The tenant, plus foreign repos spanning the interesting cases: huge, mid,
 // tiny, and the one that got purged. Foreign coverage is the point - every
 // bug we shipped this month only showed up on repos we do not own.
-const TENANT = "santifer/career-ops";
+const TENANT = "career-ops-hq/career-ops"; // transferred from santifer/career-ops 2026-08-31
 const FOREIGN = ["facebook/react", "vercel/next.js", "mem0ai/mem0", "odysseus-dev/odysseus"];
 
 // ---------------------------------------------------------------- findings --
@@ -239,7 +239,8 @@ async function checkFreshness(route) {
   // compute step needs its own freshness assertion; success of the run that
   // produces it proves nothing.
   await check("fresh.vitals", "FRESH", async () => {
-    const v = await blobJson("vitals/santifer--career-ops.json").catch(() => null);
+    const v = (await blobJson("vitals/career-ops-hq--career-ops.json").catch(() => null))
+      ?? (await blobJson("vitals/santifer--career-ops.json").catch(() => null)); // pre-transfer key
     if (!v) return pass("fresh.vitals", "FRESH", "no vitals artifact (panel not in use)");
     const h = ageH(v.computedAt);
     if (h > 72) {
@@ -259,7 +260,8 @@ async function checkFreshness(route) {
   // anyone noticed, because nothing asserted the vault's newest DAY (its file
   // timestamp kept refreshing on every run regardless).
   await check("fresh.traffic-days", "FRESH", async () => {
-    const vault = await blobJson("traffic/santifer--career-ops.json").catch(() => null);
+    const vault = (await blobJson("traffic/career-ops-hq--career-ops.json").catch(() => null))
+      ?? (await blobJson("traffic/santifer--career-ops.json").catch(() => null)); // pre-transfer key
     if (!vault?.clones) return pass("fresh.traffic-days", "FRESH", "no vault (traffic not enabled)");
     const days = Object.keys(vault.clones).sort();
     if (!days.length) {

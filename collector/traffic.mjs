@@ -16,7 +16,7 @@
 import { readFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import { put, get } from "@vercel/blob";
-import { DATA_DIR, readConfig } from "./lib.mjs";
+import { DATA_DIR, readConfig, allNamesOf, canonicalRepo } from "./lib.mjs";
 
 const blobToken = process.env.BLOB_READ_WRITE_TOKEN;
 if (!blobToken) {
@@ -28,7 +28,9 @@ function tokenFor(repo) {
   try {
     if (process.env.TRAFFIC_TOKENS) {
       const map = JSON.parse(process.env.TRAFFIC_TOKENS);
-      const k = Object.keys(map).find((x) => x.toLowerCase() === repo.toLowerCase());
+      // alias-aware: a map entry keyed by the repo's pre-rename name still applies
+      const want = canonicalRepo(repo).toLowerCase();
+      const k = Object.keys(map).find((x) => canonicalRepo(x).toLowerCase() === want);
       if (k && map[k]) return map[k];
     }
   } catch {
@@ -40,13 +42,21 @@ function tokenFor(repo) {
 const blobKey = (repo) => `traffic/${repo.toLowerCase().replace("/", "--")}.json`;
 
 async function readVault(repo) {
-  try {
-    const res = await get(blobKey(repo), { access: "private", token: blobToken });
-    if (res?.statusCode === 200 && res.stream) {
-      return JSON.parse(await new Response(res.stream).text());
+  // After a rename/transfer the accumulated vault lives under the OLD name's
+  // key: seed from every historical name (newest first) so the un-replicable
+  // history migrates into the canonical key on the first post-rename write
+  // instead of restarting from empty.
+  for (const name of [...allNamesOf(repo)].reverse()) {
+    try {
+      const res = await get(blobKey(name), { access: "private", token: blobToken });
+      if (res?.statusCode === 200 && res.stream) {
+        const v = JSON.parse(await new Response(res.stream).text());
+        v.repo = repo;
+        return v;
+      }
+    } catch {
+      /* first run / transient: try the previous name */
     }
-  } catch {
-    /* first run / transient */
   }
   return { repo, views: {}, clones: {}, referrers: [], referrersAt: null, updatedAt: null };
 }

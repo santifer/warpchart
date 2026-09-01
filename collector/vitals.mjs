@@ -25,7 +25,7 @@
 import { readFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import { get, put } from "@vercel/blob";
-import { DATA_DIR, graphql, ghFetch, sleep, token, readConfig } from "./lib.mjs";
+import { DATA_DIR, graphql, ghFetch, sleep, token, readConfig, allNamesOf } from "./lib.mjs";
 
 token(); // GitHub token: fail fast
 const blobToken = process.env.BLOB_READ_WRITE_TOKEN;
@@ -73,7 +73,14 @@ async function writeBlob(key, obj) {
 const histKey = (repo) => `vitals/hist--${repo.toLowerCase().replace("/", "--")}.json`;
 async function appendHistory(repo, point) {
   const key = histKey(repo);
-  const prev = (await readBlob(key)) || { repo, points: [] };
+  // rename survival: seed from the newest historical name that has points, so
+  // the accrued-only trend (no backfill exists) migrates instead of restarting
+  let prev = null;
+  for (const name of [...allNamesOf(repo)].reverse()) {
+    prev = await readBlob(histKey(name));
+    if (prev) break;
+  }
+  prev = prev || { repo, points: [] };
   const points = (Array.isArray(prev.points) ? prev.points : []).filter((p) => p.day !== point.day);
   points.push(point);
   points.sort((a, b) => (a.day < b.day ? -1 : 1));

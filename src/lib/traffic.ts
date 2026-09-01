@@ -5,6 +5,7 @@
 // shows its empty/locked state.
 import { get } from "@vercel/blob";
 import { unstable_cache } from "next/cache";
+import { allNamesOf, canonicalRepo } from "./aliases";
 
 interface RawVault {
   repo: string;
@@ -61,14 +62,41 @@ function blobKey(repo: string): string {
   return `traffic/${repo.toLowerCase().replace("/", "--")}.json`;
 }
 
+async function readOneVault(key: string, token: string): Promise<RawVault | null> {
+  try {
+    const res = await get(key, { access: "private", token });
+    if (!res || res.statusCode !== 200 || !res.stream) return null;
+    const raw = JSON.parse(await new Response(res.stream).text()) as RawVault;
+    return raw?.views ? raw : null;
+  } catch {
+    return null;
+  }
+}
+
 async function readVault(repo: string): Promise<TrafficVault | null> {
   const token = process.env.BLOB_READ_WRITE_TOKEN;
   if (!token) return null;
   try {
-    const res = await get(blobKey(repo), { access: "private", token });
-    if (!res || res.statusCode !== 200 || !res.stream) return null;
-    const raw = JSON.parse(await new Response(res.stream).text()) as RawVault;
-    if (!raw?.views) return null;
+    // A renamed/transferred repo's vault history stays under its OLD blob key
+    // while the collector writes new days under the new one. Read every name
+    // the repo ever had and merge day-by-day; canonical (last) wins overlaps.
+    // The vault is append-only per day, so the merge is lossless.
+    const vaults = (
+      await Promise.all(allNamesOf(repo).map((n) => readOneVault(blobKey(n), token)))
+    ).filter((v): v is RawVault => v !== null);
+    if (!vaults.length) return null;
+    const raw: RawVault = vaults[0];
+    for (const v of vaults.slice(1)) {
+      raw.views = { ...raw.views, ...v.views };
+      raw.clones = { ...raw.clones, ...v.clones };
+      // point-in-time fields: keep the freshest snapshot's
+      if ((v.updatedAt ?? "") >= (raw.updatedAt ?? "")) {
+        raw.referrers = v.referrers;
+        raw.referrersAt = v.referrersAt;
+        raw.updatedAt = v.updatedAt;
+        raw.uniq14 = v.uniq14;
+      }
+    }
     const dates = new Set([...Object.keys(raw.views ?? {}), ...Object.keys(raw.clones ?? {})]);
     const days: TrafficDay[] = [...dates]
       .sort()
@@ -99,8 +127,9 @@ export function loadTrafficVault(repo: string): Promise<TrafficVault | null> {
   // BUMP THIS KEY WHENEVER THE SHAPE CHANGES. unstable_cache is not scoped to a
   // deploy: without a new key the old shape keeps being served by the very
   // deploy that added the field, and the new one reads as "missing data".
-  // v2 = added newestDay.
-  return unstable_cache(() => readVault(repo), ["traffic-vault-v2", repo.toLowerCase()], {
+  // v2 = added newestDay. v3 = alias-merged reads (rename survival), cached
+  // under the canonical name so old/new query names share one entry.
+  return unstable_cache(() => readVault(repo), ["traffic-vault-v3", canonicalRepo(repo).toLowerCase()], {
     revalidate: 300,
   })();
 }

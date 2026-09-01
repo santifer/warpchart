@@ -6,7 +6,7 @@
 // can no longer export (the registry removal invalidates the key).
 import { NextRequest, NextResponse } from "next/server";
 import crypto from "node:crypto";
-import { loadTenants, loadTenantHistory, loadTenantTimestamps } from "@/lib/history";
+import { findTenant, loadTenantHistory, loadTenantTimestamps } from "@/lib/history";
 
 export const dynamic = "force-dynamic";
 
@@ -25,7 +25,7 @@ export async function GET(req: NextRequest) {
   if (!/^[\w.-]+\/[\w.-]+$/.test(repo) || !vault) {
     return NextResponse.json({ error: "repo and vault required" }, { status: 400, headers: NO_STORE });
   }
-  const tenant = loadTenants().find((t) => t.repo.toLowerCase() === repo.toLowerCase());
+  const tenant = findTenant(repo);
   if (!tenant?.vaultKey || !sameSecret(tenant.vaultKey, vault)) {
     return NextResponse.json({ error: "forbidden" }, { status: 403, headers: NO_STORE });
   }

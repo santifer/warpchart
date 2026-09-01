@@ -4,6 +4,7 @@
 //   ?theme=light|dark         -> force a scheme (for GitHub <picture> embeds);
 //                                default adapts via prefers-color-scheme.
 import { loadHistory, loadMeta, loadRoute } from "@/lib/history";
+import { canonicalRepo } from "@/lib/aliases";
 import { currentStars, worldwideRank, lowFuel } from "@/lib/github";
 import { canonicalVelocity } from "@/lib/velocity";
 import { fmt } from "@/lib/format";
@@ -103,16 +104,19 @@ export async function GET(req: Request) {
       if (!/^[\w.-]+\/[\w.-]+$/.test(repoParam)) {
         return new Response("bad repo", { status: 400, headers: { "Cache-Control": "no-store" } });
       }
+      // Third-party READMEs embed this URL with the name that was current when
+      // they pasted it: resolve renames so those badges survive a transfer.
+      const canonical = canonicalRepo(repoParam);
       const route = loadRoute();
       const idx = route
-        ? route.repos.findIndex((p) => p.r.toLowerCase() === repoParam.toLowerCase())
+        ? route.repos.findIndex((p) => p.r.toLowerCase() === canonical.toLowerCase())
         : -1;
       if (idx >= 0) {
         rank = idx + 1;
         stars = route!.repos[idx].s;
         cacheControl = embedCache(adaptiveTtl(stars, canonicalVelocity(route!.repos[idx])));
       } else {
-        const [owner, name] = repoParam.split("/");
+        const [owner, name] = canonical.split("/");
         stars = await currentStars(owner, name);
         rank = await worldwideRank(stars);
         cacheControl = embedCache(adaptiveTtl(stars, null));

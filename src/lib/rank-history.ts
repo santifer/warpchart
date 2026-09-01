@@ -12,6 +12,7 @@
 // hour. The shard hash MUST stay identical to shardOf() in route-history.mjs.
 import { get } from "@vercel/blob";
 import { unstable_cache } from "next/cache";
+import { allNamesOf } from "./aliases";
 
 const SHARDS = 32; // MUST match collector/route-history.mjs
 
@@ -109,17 +110,29 @@ export async function repoRankTrajectory(
   repo: string,
   opts?: { includeArchive?: boolean },
 ): Promise<RankHistoryPoint[]> {
-  const i = shardOf(repo);
-  const [hot, archive] = await Promise.all([
-    cachedShard(i).catch(() => null),
-    opts?.includeArchive ? readArchiveShard(i).catch(() => null) : Promise.resolve(null),
-  ]);
+  // A renamed/transferred repo's points live under EVERY name it ever carried,
+  // and different names hash to DIFFERENT shards (santifer/career-ops -> 27,
+  // career-ops-hq/career-ops -> 0 after the 2026-08-31 transfer). Read the
+  // shard of each known name and merge; canonical is last in allNamesOf so it
+  // wins any same-day overlap.
+  const names = allNamesOf(repo);
+  const shards = [...new Set(names.map((n) => shardOf(n)))];
+  const reads = await Promise.all(
+    shards.map(async (i) => ({
+      hot: await cachedShard(i).catch(() => null),
+      archive: opts?.includeArchive ? await readArchiveShard(i).catch(() => null) : null,
+    })),
+  );
   // archive (older, evicted days) first, hot (recent 90d) second so it wins on
   // any overlapping day; dedup by ISO day. Delivers the FULL recorded trajectory
   // (>90 days) once the archive exists, while it stays the hot window until then.
   const byDay = new Map<string, [string, number, number]>();
-  for (const p of pullSeries(archive?.series, repo)) byDay.set(p[0], p);
-  for (const p of pullSeries(hot?.series, repo)) byDay.set(p[0], p);
+  for (const name of names) {
+    for (const r of reads) for (const p of pullSeries(r.archive?.series, name)) byDay.set(p[0], p);
+  }
+  for (const name of names) {
+    for (const r of reads) for (const p of pullSeries(r.hot?.series, name)) byDay.set(p[0], p);
+  }
   if (!byDay.size) return [];
   return [...byDay.values()]
     // Each daily point is stamped at noon UTC, which puts TODAY's point in the

@@ -24,7 +24,7 @@
 // no channel mix. Everything with a shape lives behind a key.
 import { NextRequest, NextResponse } from "next/server";
 import { loadTrafficVault } from "@/lib/traffic";
-import { loadTenants } from "@/lib/history";
+import { findTenant } from "@/lib/history";
 
 export const dynamic = "force-dynamic";
 const NO_STORE = { "Cache-Control": "no-store, private" };
@@ -50,7 +50,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "bad request" }, { status: 400, headers: NO_STORE });
   }
   const master = process.env.VAULT_KEY ?? "";
-  const tenant = loadTenants().find((t) => t.repo.toLowerCase() === repo.toLowerCase());
+  const tenant = findTenant(repo);
   const authorized =
     (master && safeEqual(key, master)) ||
     (tenant?.vaultKey ? safeEqual(key, tenant.vaultKey) : false);

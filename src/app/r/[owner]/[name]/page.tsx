@@ -2,7 +2,8 @@
 // route to worldwide rank 1. ISR-cached per repo, so traffic never multiplies
 // GitHub API cost.
 import type { Metadata } from "next";
-import { notFound } from "next/navigation";
+import { notFound, permanentRedirect } from "next/navigation";
+import { canonicalRepo, isAliasOf } from "@/lib/aliases";
 import ConsoleLayout from "@/components/ConsoleLayout";
 import { RaceProvider, RaceToggle } from "@/components/RaceContext";
 import GalacticChart from "@/components/GalacticChart";
@@ -126,6 +127,13 @@ export default async function ExplorerPage({
 }) {
   const { owner, name } = await params;
   if (!VALID.test(owner) || !VALID.test(name)) notFound();
+
+  // Renamed/transferred repo: the old /r/ URL stays indexed (SEO pass put
+  // canonicals on these pages) and linked from third parties. 308 to the
+  // canonical route instead of serving a duplicate page under the dead name.
+  if (isAliasOf(`${owner}/${name}`)) {
+    permanentRedirect(`/r/${canonicalRepo(`${owner}/${name}`)}`);
+  }
 
   // charted frontier for the chart dots (solid = charted, hollow = uncharted),
   // shared by the unlocked dashboard branches and the public explorer below.

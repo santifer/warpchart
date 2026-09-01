@@ -20,7 +20,7 @@
 import { readFileSync, writeFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import { get } from "@vercel/blob";
-import { DATA_DIR } from "./lib.mjs";
+import { DATA_DIR, allNamesOf } from "./lib.mjs";
 
 const SHARDS = 32; // MUST match src/lib/rank-history.ts and route-history.mjs
 const PREFIX = "route-history";
@@ -167,21 +167,47 @@ async function main() {
   const todayMs = route.generated_at ? Date.parse(route.generated_at) : Date.now();
   const targetMs = todayMs - WINDOW_DAYS * DAY;
 
-  // group route repos by shard, read each shard once, build a lowercased lookup
+  // group route repos by shard, read each shard once, build a lowercased lookup.
+  // A renamed/transferred repo (mission.aliases.json) has points under EVERY
+  // name it carried, and different names live in different shards: register the
+  // repo in each of its names' shards and merge the per-name series by day, so
+  // the 7d baseline survives the transfer instead of resetting to "no baseline".
+  const namesCache = new Map();
+  const namesFor = (r) => {
+    let n = namesCache.get(r);
+    if (!n) { n = allNamesOf(r); namesCache.set(r, n); }
+    return n;
+  };
   const byShard = Array.from({ length: SHARDS }, () => []);
-  for (const p of repos) if (p?.r) byShard[shardOf(p.r)].push(p);
+  for (const p of repos) {
+    if (!p?.r) continue;
+    for (const i of new Set(namesFor(p.r).map((n) => shardOf(n)))) byShard[i].push(p);
+  }
 
+  const shardSeries = new Map(); // shard index -> lowercased name -> series
   let withV7 = 0;
   let purged = 0;
   for (let i = 0; i < SHARDS; i++) {
-    const list = byShard[i];
-    if (!list.length) continue;
+    if (!byShard[i].length) continue;
     const shard = await readJson(`${PREFIX}/shard-${i}.json`);
     const series = shard?.series ?? {};
     const lc = new Map();
     for (const k of Object.keys(series)) lc.set(k.toLowerCase(), series[k]);
+    shardSeries.set(i, lc);
+  }
+  {
+    const seen = new Set();
+    const list = [];
+    for (const arr of byShard) for (const p of arr) if (!seen.has(p) && seen.add(p)) list.push(p);
     for (const p of list) {
-      const s = lc.get(p.r.toLowerCase());
+      // merge points across every historical name, canonical last (wins the day)
+      const byDay = new Map();
+      for (const nm of namesFor(p.r)) {
+        for (const lcMap of shardSeries.values()) {
+          for (const pt of lcMap.get(nm.toLowerCase()) ?? []) byDay.set(pt[0], pt);
+        }
+      }
+      const s = [...byDay.values()].sort((a, b) => (a[0] < b[0] ? -1 : 1));
       if (!s || !s.length) continue;
       const base = baselineFor(s, targetMs, todayMs, p.s);
       if (!base) continue;
@@ -226,7 +252,7 @@ async function main() {
   route.v7_at = route.generated_at;
   writeFileSync(routePath, JSON.stringify(route) + "\n");
 
-  const sample = repos.find((p) => p.r?.toLowerCase() === "santifer/career-ops");
+  const sample = repos.find((p) => ["santifer/career-ops","career-ops-hq/career-ops"].includes(p.r?.toLowerCase()));
   console.log(
     `[velocity7] ${withV7}/${repos.length} repos got a 7d velocity` +
       ` · ${purged} measured from after a star purge` +

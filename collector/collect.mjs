@@ -13,7 +13,7 @@ import { join } from "node:path";
 import {
   DATA_DIR, readConfig, repoMeta, backwalk, countAbove,
   nextMilestones, thresholdForRank, findNeighbors, reposVelocity, apexRepo, topRepos,
-  buildForensics, token,
+  buildForensics, token, warnIfRenamed,
 } from "./lib.mjs";
 
 token(); // fail fast
@@ -38,6 +38,7 @@ const meta = await repoMeta(owner, name);
 const stars = meta.stargazerCount;
 const rank = (await countAbove(stars)) + 1;
 console.log(`[collect] ${meta.nameWithOwner}: ${stars} stars, rank #${rank}`);
+warnIfRenamed(config.repo, meta.nameWithOwner);
 
 // 2. Milestones (best effort)
 let milestones = null;

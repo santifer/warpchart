@@ -5,6 +5,7 @@
 // collector, so traffic is free. The line stays public-and-free; per-tenant
 // history is a separate, gated surface.
 import { loadRoute, loadCollisions } from "@/lib/history";
+import { canonicalRepo } from "@/lib/aliases";
 import { repoBadges } from "@/lib/badges";
 import { canonicalVelocity, canonicalVel0 } from "@/lib/velocity";
 
@@ -56,7 +57,10 @@ export interface RepoStats {
 export function repoStats(repoInput: string, band = 5): RepoStats | null {
   const r = loadRoute();
   if (!r) return null;
-  const lower = repoInput.toLowerCase();
+  // A renamed repo's old name resolves to its canonical name first, so cached
+  // third-party integrations (?repo=santifer/career-ops) keep working after a
+  // transfer instead of falling through to the name-part heuristic.
+  const lower = canonicalRepo(repoInput).toLowerCase();
   let idx = r.repos.findIndex((p) => p.r.toLowerCase() === lower);
   // Fallback for the REAL GitHub path when the registry stores a canonical/brand
   // owner (e.g. a query for "facebook/react" must resolve to "react/react"):
@@ -198,7 +202,7 @@ export interface RepoOvertakes {
 // This is the "who is chasing my repo?" answer the launch leads with.
 export function repoOvertakes(repoInput: string): RepoOvertakes {
   const c = loadCollisions();
-  const lower = repoInput.toLowerCase();
+  const lower = canonicalRepo(repoInput).toLowerCase();
   const all = c?.collisions ?? [];
   return {
     repo: repoInput,

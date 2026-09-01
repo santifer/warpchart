@@ -48,6 +48,57 @@ export function readConfig() {
   return cfg;
 }
 
+// Rename/transfer registry, mirror of src/lib/aliases.ts (old name -> canonical).
+// Keys everything that survives a repo transfer: rank-history shards, blob keys,
+// tenant dirs. NEVER delete entries; old data keeps the old name forever.
+function readAliases() {
+  try {
+    return JSON.parse(readFileSync(join(ROOT, "mission.aliases.json"), "utf8"));
+  } catch {
+    return {};
+  }
+}
+
+export function canonicalRepo(repo) {
+  const map = readAliases();
+  const byLower = new Map(Object.entries(map).map(([o, c]) => [o.toLowerCase(), c]));
+  let cur = repo;
+  for (let hops = 0; hops < 4; hops++) {
+    const next = byLower.get(cur.toLowerCase());
+    if (!next || next.toLowerCase() === cur.toLowerCase()) break;
+    cur = next;
+  }
+  return cur;
+}
+
+// Every name a repo has carried, canonical LAST (merge order: canonical wins).
+export function allNamesOf(repo) {
+  const map = readAliases();
+  const canonical = canonicalRepo(repo);
+  const lower = canonical.toLowerCase();
+  const olds = [];
+  for (const [o, c] of Object.entries(map)) {
+    if (canonicalRepo(c).toLowerCase() === lower && o.toLowerCase() !== lower) olds.push(o);
+  }
+  return [...olds, canonical];
+}
+
+// Rename detection: GraphQL follows GitHub's redirect and returns the repo's
+// CURRENT nameWithOwner. When it differs from what we asked for, the repo was
+// renamed/transferred and every full_name-keyed store is about to split. Warn
+// loudly; the fix is a curated entry in mission.aliases.json + config update.
+export function warnIfRenamed(requested, resolvedNameWithOwner) {
+  if (!resolvedNameWithOwner) return false;
+  if (requested.toLowerCase() === resolvedNameWithOwner.toLowerCase()) return false;
+  if (canonicalRepo(requested).toLowerCase() === resolvedNameWithOwner.toLowerCase()) return false;
+  console.warn(
+    `[rename-detected] ${requested} now resolves to ${resolvedNameWithOwner}. ` +
+      `Add "${requested.toLowerCase()}": "${resolvedNameWithOwner}" to mission.aliases.json ` +
+      `(and update mission.config.json if it is the house repo) or its history splits.`,
+  );
+  return true;
+}
+
 export const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 // Which token index is currently working. Sticky, so a permission failover

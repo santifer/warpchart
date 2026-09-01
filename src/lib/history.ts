@@ -1,6 +1,7 @@
 // Build-time / server-side loaders for the data/ directory.
 import { readFileSync, existsSync } from "node:fs";
 import path from "node:path";
+import { allNamesOf, canonicalRepo } from "./aliases";
 import type { Snapshot, RepoMetaFile, MilestonesFile, RouteFile, ForensicsFile, AttributionFile, CollisionsFile, CatalogFile, EnrichmentEntry, EnrichmentFile } from "./types";
 
 const DATA = path.join(process.cwd(), "data");
@@ -89,13 +90,29 @@ export function loadTenants(): TenantEntry[] {
   }
 }
 
+// Rename-tolerant: a tenant registered under its old name must keep matching
+// queries for the new one (and vice versa), or a paying repo's console dies
+// silently the day its owner renames/transfers it.
 export function isHostedRepo(repo: string): boolean {
-  const lower = repo.toLowerCase();
-  return loadTenants().some((t) => t.repo.toLowerCase() === lower);
+  return findTenant(repo) !== undefined;
+}
+
+// Alias-aware tenant lookup: matches whichever name (old or new) the caller
+// or the registry happens to hold. Single source for every vault-key gate.
+export function findTenant(repo: string): TenantEntry | undefined {
+  const lower = canonicalRepo(repo).toLowerCase();
+  return loadTenants().find((t) => canonicalRepo(t.repo).toLowerCase() === lower);
 }
 
 function tenantDir(repo: string): string {
-  return path.join(DATA, "tenants", repo.toLowerCase().replace("/", "--"));
+  // The collector keys the data dir by the name it resolves at collect time,
+  // so after a rename the OLD dir holds the history until the next full run.
+  // Prefer the canonical dir, fall back through every historical name.
+  for (const name of [...allNamesOf(repo)].reverse()) {
+    const p = path.join(DATA, "tenants", name.toLowerCase().replace("/", "--"));
+    if (existsSync(p)) return p;
+  }
+  return path.join(DATA, "tenants", canonicalRepo(repo).toLowerCase().replace("/", "--"));
 }
 
 export function loadTenantTimestamps(repo: string): string[] {

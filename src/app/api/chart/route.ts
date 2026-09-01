@@ -7,6 +7,7 @@
 //   /api/chart?w=600&h=200&theme=dark  -> size and scheme overrides
 import { cachedSampleCurve, tenantCurve, isTenantRepo, withLiveTotal, curveTailV, type Curve } from "@/lib/curve";
 import { loadRoute, loadHistory } from "@/lib/history";
+import { canonicalRepo } from "@/lib/aliases";
 import { reqLog } from "@/lib/log";
 import { fmt, fmtCompact } from "@/lib/format";
 import { fmtEmbed, adaptiveTtl, embedCache, TENANT_EMBED_CACHE } from "@/lib/embed";
@@ -50,7 +51,10 @@ export async function GET(req: Request) {
   const h = Math.min(Math.max(Number(url.searchParams.get("h")) || 420, 120), 800);
   const themeParam = url.searchParams.get("theme");
   const theme = themeParam === "light" || themeParam === "dark" ? themeParam : null;
-  const repoParam = url.searchParams.get("repo");
+  // Renames resolved at the door: embedded chart URLs keep the name that was
+  // current when pasted, and every lookup below keys by full_name.
+  const rawRepoParam = url.searchParams.get("repo");
+  const repoParam = rawRepoParam ? canonicalRepo(rawRepoParam) : rawRepoParam;
   const log = reqLog("chart", { repo: repoParam ?? "tenant", w, h });
 
   let curve: Curve | null = null;
