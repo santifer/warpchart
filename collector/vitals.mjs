@@ -636,15 +636,24 @@ async function onboarding(repo) {
 }
 
 // ---- creator: followers (a rare, verifiable signal for the profile link) ----
-async function creatorInfo(owner) {
-  try {
-    const d = await gqlRetry(`query($login:String!){ user(login:$login){ followers{ totalCount } } }`, {
-      login: owner,
-    });
-    return { login: owner, followers: d.user?.followers?.totalCount ?? null };
-  } catch {
-    return { login: owner, followers: null };
+// "operated by" must name a HUMAN. After a personal->org transfer (career-ops
+// 2026-08-31) the owner login is an organization: user(login:) resolves null
+// for orgs, and a days-old org didn't create anything. When the owner is not a
+// user, fall back to the top merge-gate keeper — the measured human who
+// actually operates the repo (cm.maintainers, bot-filtered, mergers-first).
+async function creatorInfo(owner, fallbackHumans = []) {
+  const candidates = [owner, ...fallbackHumans.filter((l) => l && l !== owner)];
+  for (const login of candidates) {
+    try {
+      const d = await gqlRetry(`query($login:String!){ user(login:$login){ followers{ totalCount } } }`, {
+        login,
+      });
+      if (d.user) return { login, followers: d.user.followers?.totalCount ?? null };
+    } catch {
+      /* org login or transient: try the next candidate */
+    }
   }
+  return { login: owner, followers: null };
 }
 
 // ---- clone-conversion from the Traffic Vault (last 7 complete days) ---------
@@ -905,7 +914,7 @@ async function main() {
       const docs = await docsHealth(repo).catch(() => null);
       await sleep(Math.max(PACE_MS, 1200)); // onboarding is search-bearing
       const onboard = await onboarding(repo).catch(() => null);
-      const creator = await creatorInfo(repo.split("/")[0]);
+      const creator = await creatorInfo(repo.split("/")[0], cm?.maintainers ?? []);
       const perWeek = Math.round((act.releases90 / 90) * 7 * 10) / 10;
       const deploy = {
         releases90: act.releases90,
