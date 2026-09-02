@@ -77,7 +77,7 @@ async function ghTraffic(repo, path, token) {
 const repos = new Set();
 try {
   const house = readConfig()?.repo;
-  if (house) repos.add(house);
+  if (house) repos.add(canonicalRepo(house));
 } catch {
   /* no config */
 }
@@ -85,7 +85,7 @@ try {
   const tenantsPath = join(DATA_DIR, "tenants.json");
   if (existsSync(tenantsPath)) {
     for (const t of JSON.parse(readFileSync(tenantsPath, "utf8"))) {
-      if (t?.repo) repos.add(t.repo);
+      if (t?.repo) repos.add(canonicalRepo(t.repo));
     }
   }
 } catch {

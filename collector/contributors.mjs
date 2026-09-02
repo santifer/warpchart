@@ -33,7 +33,7 @@ import { readFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import { createHash } from "node:crypto";
 import { put, get } from "@vercel/blob";
-import { DATA_DIR, ghFetch, readConfig, sleep, allNamesOf } from "./lib.mjs";
+import { DATA_DIR, ghFetch, readConfig, sleep, allNamesOf, canonicalRepo } from "./lib.mjs";
 
 const blobToken = process.env.BLOB_READ_WRITE_TOKEN;
 if (!blobToken) {
@@ -264,6 +264,9 @@ async function census(repo) {
   // timestamp reappear; their SHAs are carried in the cursor to be skipped.
   const seenShas = new Set(store.cursor?.shas ?? []);
   const since = store.cursor?.iso ?? null;
+  console.log(
+    `[contributors] ${repo}: ${fresh ? "no store, FULL BACKFILL" : `resuming from ${since ?? "start"} (${Object.keys(store.people).length} people)`}`,
+  );
 
   let pages = 0;
   let folded = 0;
@@ -329,11 +332,11 @@ async function census(repo) {
 async function main() {
   // Same unlocked set as vitals.mjs phase B: the house repo, every route repo
   // owned by us, and the paying tenants.
-  const unlocked = new Set([config.repo.toLowerCase()]);
+  const unlocked = new Set([canonicalRepo(config.repo).toLowerCase()]);
   try {
     const route = JSON.parse(readFileSync(join(DATA_DIR, "route.json"), "utf8"));
     for (const p of route?.repos ?? []) {
-      if (p?.r && OWNED.includes(p.r.split("/")[0].toLowerCase())) unlocked.add(p.r.toLowerCase());
+      if (p?.r && OWNED.includes(p.r.split("/")[0].toLowerCase())) unlocked.add(canonicalRepo(p.r).toLowerCase());
     }
   } catch {
     /* no route yet: the house repo alone */
@@ -342,7 +345,7 @@ async function main() {
   if (existsSync(tenantsPath)) {
     try {
       const t = JSON.parse(readFileSync(tenantsPath, "utf8"));
-      for (const x of Array.isArray(t) ? t : []) unlocked.add((x.repo || x).toLowerCase());
+      for (const x of Array.isArray(t) ? t : []) unlocked.add(canonicalRepo(x.repo || x).toLowerCase());
     } catch {
       /* unreadable tenants: skip them, never abort the owned repos */
     }

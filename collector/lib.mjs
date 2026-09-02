@@ -140,6 +140,13 @@ export async function ghFetch(path, { method = "GET", body, tokenOverride = null
       else if (reset) wait = Math.max(wait, parseInt(reset, 10) * 1000 - Date.now() + 1000);
       wait = Math.min(wait, 120_000);
     }
+    // Say so BEFORE sleeping: three capped waits (3x120s) outlive a 4-minute
+    // step, and a step killed mid-sleep leaves no line at all. The contributor
+    // census sat mute for 8 runs (2026-09-01/02) exactly this way.
+    console.warn(
+      `[gh] ${res.status} on ${url.replace(API, "")} · attempt ${attempt + 1}/${delays.length + 1}` +
+        ` · waiting ${Math.round(wait / 1000)}s · remaining=${res.headers.get("x-ratelimit-remaining") ?? "?"}`,
+    );
     await sleep(wait);
   }
 }
