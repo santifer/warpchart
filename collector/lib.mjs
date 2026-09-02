@@ -128,6 +128,26 @@ export async function ghFetch(path, { method = "GET", body, tokenOverride = null
       continue;
     }
     if (res.ok) return res.json();
+    // A 403 with budget left and no retry-after is a PERMISSION denial, not a
+    // rate limit: a fine-grained PAT scoped to one resource owner answers 403
+    // for a repo that moved to an org (career-ops -> career-ops-hq,
+    // 2026-08-31: "remaining=3718" on every retry). Waiting on it is useless;
+    // fail over to the next token in the pool, the same way graphql() does,
+    // and only throw when every token has been refused.
+    const remaining = parseInt(res.headers.get("x-ratelimit-remaining") ?? "", 10);
+    const permissionDenied =
+      res.status === 403 && !res.headers.get("retry-after") && Number.isFinite(remaining) && remaining > 0;
+    if (permissionDenied && !tokenOverride) {
+      const pool = tokens();
+      const next = (tokenIdx + 1) % pool.length;
+      if (next !== tokenIdx && attempt < pool.length) {
+        console.warn(`[gh] 403 (permission, not rate limit) on ${url.replace(API, "")} with token #${tokenIdx}, trying #${next}`);
+        tokenIdx = next; // stick to the one that works, as graphql() does
+        continue;
+      }
+      const text = (await res.text()).slice(0, 300);
+      throw new Error(`GitHub 403 on ${url} with every token in the pool: ${text}`);
+    }
     if (attempt >= delays.length) {
       const text = (await res.text()).slice(0, 300);
       throw new Error(`GitHub ${res.status} on ${url}: ${text}`);
