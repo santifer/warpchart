@@ -33,7 +33,7 @@ import { readFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import { createHash } from "node:crypto";
 import { put, get } from "@vercel/blob";
-import { DATA_DIR, ghFetch, readConfig, sleep } from "./lib.mjs";
+import { DATA_DIR, ghFetch, readConfig, sleep, allNamesOf } from "./lib.mjs";
 
 const blobToken = process.env.BLOB_READ_WRITE_TOKEN;
 if (!blobToken) {
@@ -242,7 +242,16 @@ function derive(store) {
 
 async function census(repo) {
   const key = storeKey(repo);
-  let store = await readBlob(key);
+  // Rename survival: the store (people + incremental cursor) lives under the
+  // OLD name's key after a transfer. Without this seed the walk restarts from
+  // the first commit, blows the 4-minute step budget and never writes, so the
+  // evolution chart silently disappears (career-ops, 2026-09-01). Newest name
+  // first; the store migrates to the canonical key on this write.
+  let store = null;
+  for (const name of [...allNamesOf(repo)].reverse()) {
+    store = await readBlob(storeKey(name));
+    if (store) break;
+  }
   const fresh = !store;
   if (fresh) {
     store = { repo, people: {}, coPeople: {}, aiCoCredits: 0, totalCommits: 0, botCommits: 0, cursor: null };

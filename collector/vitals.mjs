@@ -883,7 +883,11 @@ async function main() {
       // merged PRs (career-ops: on course for late September 2026) and start
       // re-labelling early people as "new". Same {month,new,returning} contract.
       if (cm) {
-        const census = await readBlob(`contributors/${repo.toLowerCase().replace("/", "--")}.json`);
+        let census = null;
+        for (const name of [...allNamesOf(repo)].reverse()) {
+          census = await readBlob(`contributors/${name.toLowerCase().replace("/", "--")}.json`);
+          if (census) break;
+        }
         if (census?.months?.length) {
           cm.cohorts = census.months.map((m) => ({ month: m.month, new: m.new, returning: m.returning }));
           cm.cohortsSource = "commit-census";
