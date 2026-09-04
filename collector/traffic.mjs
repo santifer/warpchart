@@ -151,26 +151,34 @@ for (const repo of repos) {
     vault.referrerHistory.push({ at: stamp, refs: vault.referrers });
     vault.referrerHistory = vault.referrerHistory.slice(-250);
 
-    // DAILY ANCHOR: the FIRST snapshot of each UTC day, kept forever (one row
-    // per day, ~1KB). The 2-hourly history above cannot give a clean daily
-    // series: the last snapshot of a day lands anywhere between 14:31Z and
-    // 23:47Z (measured over 32 days), so "yesterday to today" is a window of
-    // 15h to 33h, not 24h. That jitter is what makes a reconstructed daily
-    // flow go NEGATIVE on days with more runs than usual (2026-09-02: -753).
+    // REFRESH-ANCHORED SERIES: one entry per REAL change of GitHub's aggregate,
+    // kept forever (~1 row/day, a few KB a year). Deduped by content.
     //
-    // WHY THIS MATTERS. GitHub only serves referrers as a 14-day ROLLING
+    // WHY NOT one-per-day-by-clock, which is what this was for about an hour.
+    // Measured over 273 snapshots: 214 of 241 intra-day pairs are BYTE
+    // IDENTICAL. GitHub does not recompute this feed every 2h, it recomputes it
+    // ONCE A DAY (median gap between changes: 24.0h) at a wandering hour -
+    // usually 05:00-13:00Z, mode 08:00Z, but one landed at 20:23Z. So a clock
+    // anchor is fragile in both directions: anchor early and you always capture
+    // yesterday's figure until the one day the refresh comes at 01:00Z; anchor
+    // late and the 20:23Z refresh flips a day. Anchoring on the CHANGE itself
+    // has no such failure mode and needs no assumption about GitHub's schedule.
+    //
+    // WHY IT MATTERS. GitHub only serves referrers as a 14-day ROLLING
     // aggregate, so a fall can be an old day leaving the window rather than a
-    // source going quiet - exactly the trap that made github.com look like it
-    // dropped 19% after the org transfer when its real daily inflow had RISEN
-    // ~56%. With one snapshot per day at a stable hour, the aggregate inverts
-    // into a real daily flow: flow(t) = agg(t) - agg(t-1) + flow(t-14).
-    // First-of-day (not last) because the collector runs every ~2h, so the
-    // first run of a day always lands in a narrow 00:00-02:00Z band.
-    vault.referrerDaily = vault.referrerDaily ?? {};
-    const dayKey = stamp.slice(0, 10);
-    if (!vault.referrerDaily[dayKey]) {
-      vault.referrerDaily[dayKey] = { at: stamp, refs: vault.referrers };
-    }
+    // source going quiet - the trap that made github.com look like it dropped
+    // 19% after the org transfer when its real daily inflow had RISEN ~56%
+    // (reconstructed as flow(t) = agg(t) - agg(t-1) + flow(t-14), replicated
+    // independently by search-ops). That inversion needs one clean reading per
+    // refresh; capture jitter is what pushed reconstructed flow negative.
+    const lastRefs = vault.referrerChanges?.at(-1)?.refs;
+    const sameAsLast =
+      lastRefs !== undefined &&
+      JSON.stringify(lastRefs.map((r) => [r.r, r.c, r.u]).sort()) ===
+        JSON.stringify(vault.referrers.map((r) => [r.r, r.c, r.u]).sort());
+    vault.referrerChanges = vault.referrerChanges ?? [];
+    if (!sameAsLast) vault.referrerChanges.push({ at: stamp, refs: vault.referrers });
+
     vault.updatedAt = stamp;
 
     await put(blobKey(repo), JSON.stringify(vault), {
