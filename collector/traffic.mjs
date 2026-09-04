@@ -150,6 +150,27 @@ for (const repo of repos) {
     vault.referrerHistory = vault.referrerHistory ?? [];
     vault.referrerHistory.push({ at: stamp, refs: vault.referrers });
     vault.referrerHistory = vault.referrerHistory.slice(-250);
+
+    // DAILY ANCHOR: the FIRST snapshot of each UTC day, kept forever (one row
+    // per day, ~1KB). The 2-hourly history above cannot give a clean daily
+    // series: the last snapshot of a day lands anywhere between 14:31Z and
+    // 23:47Z (measured over 32 days), so "yesterday to today" is a window of
+    // 15h to 33h, not 24h. That jitter is what makes a reconstructed daily
+    // flow go NEGATIVE on days with more runs than usual (2026-09-02: -753).
+    //
+    // WHY THIS MATTERS. GitHub only serves referrers as a 14-day ROLLING
+    // aggregate, so a fall can be an old day leaving the window rather than a
+    // source going quiet - exactly the trap that made github.com look like it
+    // dropped 19% after the org transfer when its real daily inflow had RISEN
+    // ~56%. With one snapshot per day at a stable hour, the aggregate inverts
+    // into a real daily flow: flow(t) = agg(t) - agg(t-1) + flow(t-14).
+    // First-of-day (not last) because the collector runs every ~2h, so the
+    // first run of a day always lands in a narrow 00:00-02:00Z band.
+    vault.referrerDaily = vault.referrerDaily ?? {};
+    const dayKey = stamp.slice(0, 10);
+    if (!vault.referrerDaily[dayKey]) {
+      vault.referrerDaily[dayKey] = { at: stamp, refs: vault.referrers };
+    }
     vault.updatedAt = stamp;
 
     await put(blobKey(repo), JSON.stringify(vault), {
