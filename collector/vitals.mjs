@@ -214,7 +214,7 @@ async function prAnalysis(repo, want = 1000) {
   const [owner, name] = repo.split("/");
   const hrs = [];
   const authorCount = new Map();
-  const mergers = new Set();
+  const mergerCount = new Map(); // login -> merges, NOT a Set: the order matters
   const monthAuthors = new Map(); // "YYYY-MM" -> Set(login)
   let cursor = null;
   let mergedTotal = null;
@@ -254,7 +254,8 @@ async function prAnalysis(repo, want = 1000) {
         if (!monthAuthors.has(m)) monthAuthors.set(m, new Set());
         monthAuthors.get(m).add(au);
       }
-      if (n.mergedBy?.login) mergers.add(n.mergedBy.login);
+      if (n.mergedBy?.login)
+        mergerCount.set(n.mergedBy.login, (mergerCount.get(n.mergedBy.login) || 0) + 1);
     }
     if (!pr.pageInfo.hasNextPage) break;
     cursor = pr.pageInfo.endCursor;
@@ -302,7 +303,18 @@ async function prAnalysis(repo, want = 1000) {
       return { month: m, new: nw, returning: rt };
     })
     .filter((c) => !(truncated && c.month === months[0]));
-  const maintainers = [...mergers].filter((l) => !isBot(l)).slice(0, 6);
+  // BY VOLUME OF MERGES, never by insertion order. This list is what names the
+  // repo in the panel ("operated by X"), and a Set iterates in the order logins
+  // were first seen - which, scanning PRs newest-first, is whoever merged the
+  // MOST RECENT pull request. On 2026-09-15 the live panel read "operated by
+  // FReptar0" because a contributor merged his first PR twelve days earlier and
+  // landed ahead of the person who had merged everything else. Whoever holds the
+  // merge gate is the one who merges most, so that is the order.
+  const maintainers = [...mergerCount.entries()]
+    .filter(([l]) => !isBot(l))
+    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+    .slice(0, 6)
+    .map(([l]) => l);
   const community = scanned
     ? {
         // the real repo-wide figure; `contributorsSampled` is what the window saw
@@ -310,7 +322,7 @@ async function prAnalysis(repo, want = 1000) {
         contributorsSampled: humans.length,
         mergedTotal, // every merged PR ever, not just the sampled window
         prsSampled: hrs.length,
-        mergedByDistinct: mergers.size || 1,
+        mergedByDistinct: mergerCount.size || 1,
         maintainers, // the actual merge-gate keepers, for their avatars
         topContributors: humans.slice(0, 10).map(([login]) => ({ login })),
         cohorts,
@@ -640,7 +652,9 @@ async function onboarding(repo) {
 // 2026-08-31) the owner login is an organization: user(login:) resolves null
 // for orgs, and a days-old org didn't create anything. When the owner is not a
 // user, fall back to the top merge-gate keeper — the measured human who
-// actually operates the repo (cm.maintainers, bot-filtered, mergers-first).
+// actually operates the repo: cm.maintainers, bot-filtered and sorted by MERGE
+// VOLUME (see prAnalysis) so a one-off merge by a new contributor never renames
+// the project.
 async function creatorInfo(owner, fallbackHumans = []) {
   const candidates = [owner, ...fallbackHumans.filter((l) => l && l !== owner)];
   for (const login of candidates) {
