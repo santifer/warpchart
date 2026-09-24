@@ -17,6 +17,7 @@ import {
   type DossierRaw,
 } from "./github";
 import { loadTrafficVault } from "./traffic";
+import { allNamesOf } from "./aliases";
 import { reqLog } from "./log";
 import { nextMilestones } from "./milestones";
 import { canonicalVelocity } from "./velocity";
@@ -55,16 +56,26 @@ async function resolveNpmUsage(
   name: string,
   rootPkg: string | null,
 ): Promise<{ npmPkg: string | null; npmLast30: number | null; npmHistory: { day: string; d: number }[] | null }> {
+  // Scoped candidates come from EVERY name the repo has carried, canonical
+  // first. After the 2026-08-31 transfer the owner became career-ops-hq, so the
+  // only scoped guess was @career-ops-hq/career-ops, which does not exist: the
+  // installer is still published as @santifer/career-ops. npm answered a clean
+  // 404, resolveNpmUsage returned null, and the panel silently fell back to
+  // clones only for three weeks. A transfer renames the repo, never the package.
+  const names = allNamesOf(`${owner}/${name}`);
   const candidates = [
-    ...(rootPkg ? [rootPkg] : []),
-    `@${owner.toLowerCase()}/${name.toLowerCase()}`,
+    ...new Set([
+      ...(rootPkg ? [rootPkg] : []),
+      ...[...names].reverse().map((full) => `@${full.toLowerCase()}`),
+    ]),
   ];
   for (const cand of candidates) {
     // Fetch the point total and the daily history in PARALLEL, so a candidate
     // costs ~one 8s timeout instead of two back-to-back. No retry and no total
     // race-cap (an earlier cap was cutting a slow-but-valid npm mid-resolution
-    // and blanking the whole npm channel): worst case is 2 candidates x ~8s =
-    // ~16s, well under the /r/ maxDuration, and npm resolves as reliably as a
+    // and blanking the whole npm channel): worst case is 3 candidates x ~8s =
+    // ~24s (a missing package is a fast 404, not a timeout, so in practice only
+    // the one that exists costs anything), under the /r/ maxDuration; npm resolves as reliably as a
     // single lookup.
     const [dl, npmHistory] = await Promise.all([
       npmDownloads(cand),
@@ -187,7 +198,7 @@ const cachedDossier = (owner: string, name: string) =>
     // worse than either state. Third time this exact miss has cost a deploy:
     // CHANGE THE SHAPE, CHANGE THE KEY, IN THE SAME COMMIT.
     // v11: adds uniqueCloners14d. CHANGE THE SHAPE, CHANGE THE KEY, SAME COMMIT.
-    ["dossier-v11", `${owner}/${name}`.toLowerCase()],
+    ["dossier-v12", `${owner}/${name}`.toLowerCase()],
     { revalidate: 900 },
   )();
 
