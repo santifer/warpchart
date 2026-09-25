@@ -1545,3 +1545,15 @@ body.gx-warping .ghx-lore {
 @media (prefers-reduced-motion: reduce) {
   .live-number-bump { animation: none; }
 }
+
+/* MOTION GOVERNOR (src/components/MotionGovernor.tsx): after 15 s without
+   interaction, or while the tab is hidden, every CSS animation pauses where it
+   stands. A quiet page used to keep ~400 animations running and a renderer at
+   50-70% CPU for decoration nobody was watching (25-sep-2026). Paused, not
+   removed: the first interaction resumes each one from the same frame. */
+html[data-motion="idle"] *,
+html[data-motion="idle"] *::before,
+html[data-motion="idle"] *::after {
+  animation-play-state: paused !important;
+}
+

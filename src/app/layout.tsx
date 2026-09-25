@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Michroma, Chakra_Petch, JetBrains_Mono } from "next/font/google";
 import { Analytics } from "@vercel/analytics/next";
 import { ThemeProvider } from "@/lib/usePalette";
+import MotionGovernor from "@/components/MotionGovernor";
 import DemoBanner from "@/components/DemoBanner";
 import JsonLd, { siteGraph } from "@/components/JsonLd";
 import "./globals.css";
@@ -67,6 +68,7 @@ export default function RootLayout({
         <script dangerouslySetInnerHTML={{ __html: themeInit }} />
         <JsonLd data={siteGraph} />
         <ThemeProvider>
+          <MotionGovernor />
           <div className="space-backdrop" aria-hidden />
           <div className="space-grid" aria-hidden />
           <div className="starfield" aria-hidden />
