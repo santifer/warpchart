@@ -35,6 +35,8 @@ import SpaceBackdrop from "@/components/SpaceBackdrop";
 import TrafficPanel from "@/components/TrafficPanel";
 import VitalSignsPanel from "@/components/VitalSignsPanel";
 import { loadVitals } from "@/lib/vitals";
+import { loadPrFlow } from "@/lib/prflow";
+import PrFlowPanel from "@/components/PrFlowPanel";
 import { getCachedCodex, listCodexes } from "@/lib/codex";
 import { loadExplorerData, getCachedDossier } from "@/lib/explorer";
 import { fmt, fmtCompact, fmtEtaDays } from "@/lib/format";
@@ -154,6 +156,7 @@ export default async function ExplorerPage({
           bundle={tBundle}
           dossier={await getCachedDossier(owner, name)}
           vitals={await loadVitals(owner, name)}
+          prFlow={await loadPrFlow(owner, name)}
           charted={chartedRepos}
         />
       </>
@@ -192,6 +195,7 @@ export default async function ExplorerPage({
             polling={false}
             dossier={await getCachedDossier(owner, name)}
             vitals={await loadVitals(owner, name)}
+            prFlow={await loadPrFlow(owner, name)}
             charted={chartedRepos}
           />
         </>
@@ -360,6 +364,9 @@ export default async function ExplorerPage({
           renders the locked upsell. Free for owned repos, paid for the rest. */}
       <div className="mb-4">
         <VitalSignsPanel repo={repoLabel} name={repoName} vitals={await loadVitals(owner, name)} />
+      </div>
+      <div className="mb-4 empty:hidden">
+        <PrFlowPanel flow={await loadPrFlow(owner, name)} />
       </div>
 
       <RaceProvider repo={repoLabel}>

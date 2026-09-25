@@ -191,6 +191,20 @@ jobs:
           VITALS_UNIVERSE: "1000"
           VITALS_DEADLINE_MS: "150000"
 
+      # 4c-bis-2. PR FLOW for the unlocked repos: per UTC day, PRs opened /
+      #     merged / closed-without-merge and the open queue at each close,
+      #     from each PR's own timestamps (so a skipped run cannot fabricate a
+      #     zero day). Full recompute, one GraphQL page per 100 PRs (career-ops
+      #     ~28 calls, ~16 s) -> prflow/{owner}--{name}.json. Never fails the run.
+      - name: PR flow
+        run: node collector/prflow.mjs
+        continue-on-error: true
+        timeout-minutes: 3
+        env:
+          BLOB_READ_WRITE_TOKEN: ${{ secrets.BLOB_READ_WRITE_TOKEN }}
+          GH_TOKEN: ${{ secrets.STARGAZER_TOKEN || secrets.TRAFFIC_TOKEN || secrets.GITHUB_TOKEN }}
+          GH_TOKEN_FALLBACKS: ${{ secrets.TRAFFIC_TOKEN }} ${{ secrets.GITHUB_TOKEN }}
+
       # 4c-ter. Owner standing: follower count + worldwide rank into the PRIVATE
       #     Blob (private/followers.json). Follower history cannot be backfilled
       #     (GitHub publishes one integer and no series), so every skipped run is

@@ -22,6 +22,8 @@ import MissionLog from "./MissionLog";
 import TrafficPanel from "./TrafficPanel";
 import VitalSignsPanel from "./VitalSignsPanel";
 import type { Vitals } from "@/lib/vitals";
+import PrFlowPanel from "./PrFlowPanel";
+import type { PrFlow } from "@/lib/prflow";
 import DailyBriefing from "./DailyBriefing";
 import TargetHud from "./TargetHud";
 import SoundController from "./SoundController";
@@ -80,12 +82,14 @@ export default function Dashboard({
   polling = true,
   dossier = null,
   vitals = null,
+  prFlow = null,
   charted,
 }: {
   bundle: DashboardBundle;
   polling?: boolean;
   dossier?: Dossier | null;
   vitals?: Vitals | null;
+  prFlow?: PrFlow | null;
   charted?: string[];
 }) {
   const repo = bundle.meta?.repo;
@@ -125,6 +129,7 @@ export default function Dashboard({
         <StatusBar bundle={bundle} />
         <DailyBriefing bundle={bundle} />
         <VitalSignsPanel repo={repo ?? ""} name={repo?.split("/")[1] ?? ""} vitals={vitals} />
+        <PrFlowPanel flow={prFlow} />
         {target ? (
           <TargetHud bundle={bundle} target={target} onClear={() => pinTarget(null)} />
         ) : null}
