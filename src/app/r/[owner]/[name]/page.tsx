@@ -213,6 +213,8 @@ export default async function ExplorerPage({
   const { inputs } = data;
   const next = inputs.milestones[0] ?? null;
   const repoLabel = `${owner}/${name}`;
+  // loaded once: the panel renders from it and the console numbering starts after it
+  const prFlow = await loadPrFlow(owner, name);
   const repoName = name;
 
   // the dossier tagline shown inline (unique content up front, not hidden
@@ -365,12 +367,15 @@ export default async function ExplorerPage({
       <div className="mb-4">
         <VitalSignsPanel repo={repoLabel} name={repoName} vitals={await loadVitals(owner, name)} />
       </div>
-      <div className="mb-4 empty:hidden">
-        <PrFlowPanel flow={await loadPrFlow(owner, name)} />
-      </div>
+      {prFlow ? (
+        <div className="mb-4">
+          <PrFlowPanel flow={prFlow} />
+        </div>
+      ) : null}
 
       <RaceProvider repo={repoLabel}>
         <ConsoleLayout
+          firstIndex={prFlow ? 3 : 2}
           dossier={data.dossier}
           starChart={{
             meta: inputs.apex

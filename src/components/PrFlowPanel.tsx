@@ -9,7 +9,7 @@
 // out holds exactly in the data (checked on all 173 days of career-ops).
 // Data is precomputed by collector/prflow.mjs (UTC days, bots excluded, day in
 // progress omitted); this component only draws it.
-import { useMemo, useState, type ComponentProps } from "react";
+import { useEffect, useMemo, useState, type ComponentProps } from "react";
 import {
   ResponsiveContainer,
   ComposedChart,
@@ -42,9 +42,22 @@ interface Row {
 const fmtDay = (d: string) =>
   new Date(`${d}T00:00:00Z`).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
 
-export default function PrFlowPanel({ flow, index = "01B" }: { flow: PrFlow | null; index?: string }) {
+export const PR_FLOW_ANCHOR = "pr-flow";
+
+export default function PrFlowPanel({ flow, index = "02" }: { flow: PrFlow | null; index?: string }) {
   const C = usePalette();
   const [range, setRange] = useState<Range>(90);
+  // Deep link (/r/owner/name#pr-flow, shared in chats): the page streams in
+  // after its loading skeleton, so the browser's own jump to the fragment can
+  // fire before this panel exists. Scroll once it has mounted, and again after
+  // the charts above have settled their height.
+  useEffect(() => {
+    if (window.location.hash !== `#${PR_FLOW_ANCHOR}`) return;
+    const go = () => document.getElementById(PR_FLOW_ANCHOR)?.scrollIntoView({ block: "start" });
+    go();
+    const t = setTimeout(go, 700);
+    return () => clearTimeout(t);
+  }, []);
 
   const all = useMemo<Row[]>(() => {
     const days = flow?.days ?? [];
@@ -185,7 +198,7 @@ export default function PrFlowPanel({ flow, index = "01B" }: { flow: PrFlow | nu
   };
 
   return (
-    <Panel index={index} title="PR flow" meta={`in / out · through ${fmtDay(flow.through ?? last.day ?? "")}`}>
+    <Panel id={PR_FLOW_ANCHOR} index={index} title="PR flow" meta={`in / out · through ${fmtDay(flow.through ?? last.day ?? "")}`}>
       <div className="flex flex-col gap-4">
         <div className="grid grid-cols-2 gap-x-4 gap-y-3 sm:grid-cols-4">
           <Stat label="IN · 7D" value={fmt(in7)} sub="PRs opened" tone={C.warn} />

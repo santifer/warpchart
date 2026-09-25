@@ -8,6 +8,7 @@ export default function Panel({
   children,
   className = "",
   delay = 0,
+  id,
 }: {
   index: string;
   title: string;
@@ -18,12 +19,18 @@ export default function Panel({
   children: ReactNode;
   className?: string;
   delay?: number;
+  // anchor target (#id) for deep links, e.g. /r/owner/name#pr-flow
+  id?: string;
 }) {
   return (
     // no entrance animation: these boxes always arrive after the loading
     // skeleton already drew them, and re-rising read as a full repaint.
     // the boxes stay put; only their CONTENT animates in.
-    <section className={`hud flex flex-col ${className}`} style={{ animationDelay: `${delay}ms` }}>
+    <section
+      id={id}
+      className={`hud flex flex-col ${id ? "scroll-mt-4" : ""} ${className}`}
+      style={{ animationDelay: `${delay}ms` }}
+    >
       <header className="flex items-center justify-between gap-3 border-b border-grid px-4 py-2.5 sm:px-5">
         <div className="flex items-baseline gap-3 min-w-0">
           <span className="module-index shrink-0">{index} /</span>

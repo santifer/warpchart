@@ -29,6 +29,7 @@ export default function ConsoleLayout({
   rank,
   traffic,
   log,
+  firstIndex = 2,
 }: {
   dossier: Dossier | null;
   starChart: ConsoleSlot;
@@ -40,10 +41,16 @@ export default function ConsoleLayout({
   rank: ConsoleSlot;
   traffic: ConsoleSlot;
   log: ConsoleSlot;
+  // Panels are numbered in page order. Vital Signs (01) always sits above the
+  // console and PR flow (02) only on repos that have it, so the caller says
+  // where the console starts: 2 without PR flow, 3 with it. Hardcoded indices
+  // used to give Vital Signs and the star chart the same "01".
+  firstIndex?: number;
 }) {
+  const n = (k: number) => String(firstIndex + k).padStart(2, "0");
   return (
     <>
-      <Panel index="01" title="Star chart" meta={starChart.meta} delay={80}>
+      <Panel index={n(0)} title="Star chart" meta={starChart.meta} delay={80}>
         {starChart.node}
       </Panel>
 
@@ -51,13 +58,13 @@ export default function ConsoleLayout({
           the star chart (cumulative anchors the left column, the dossier
           stacks on the right); deeper panels follow once the visitor is in */}
       <div className="grid grid-cols-1 items-stretch gap-4 lg:grid-cols-2">
-        <Panel index="02" title="Cumulative stars" meta={cumulative.meta} action={cumulative.action} delay={160}>
+        <Panel index={n(1)} title="Cumulative stars" meta={cumulative.meta} action={cumulative.action} delay={160}>
           {cumulative.node}
         </Panel>
         <div className="flex flex-col gap-4">
-          <PulsePanel dossier={dossier} index="03" delay={200} />
+          <PulsePanel dossier={dossier} index={n(2)} delay={200} />
           {/* velocity moved here: it has room to spare in the narrow column */}
-          <Panel index="04" title="Velocity, stars per hour" meta={velocity.meta} delay={240}>
+          <Panel index={n(3)} title="Velocity, stars per hour" meta={velocity.meta} delay={240}>
             {velocity.node}
           </Panel>
         </div>
@@ -66,9 +73,9 @@ export default function ConsoleLayout({
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-12">
         {/* real usage moved to the wide cell: it now stacks npm + clones over
             time and wants the horizontal room */}
-        <UsagePanel dossier={dossier} index="05" className="lg:col-span-8" delay={280} />
+        <UsagePanel dossier={dossier} index={n(4)} className="lg:col-span-8" delay={280} />
         <Panel
-          index="06"
+          index={n(5)}
           title="Milestone projections"
           meta={projections.meta}
           className="lg:col-span-4"
@@ -79,23 +86,23 @@ export default function ConsoleLayout({
       </div>
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <Panel index="07" title="Daily ladder" meta={ladder.meta} delay={360}>
+        <Panel index={n(6)} title="Daily ladder" meta={ladder.meta} delay={360}>
           {ladder.node}
         </Panel>
-        <Panel index="08" title="Activity heatmap" meta={heatmap.meta} delay={400}>
+        <Panel index={n(7)} title="Activity heatmap" meta={heatmap.meta} delay={400}>
           {heatmap.node}
         </Panel>
       </div>
 
-      <Panel index="09" title="World rank over time" meta={rank.meta} delay={440}>
+      <Panel index={n(8)} title="World rank over time" meta={rank.meta} delay={440}>
         {rank.node}
       </Panel>
 
-      <Panel index="10" title="Traffic vault" meta={traffic.meta} delay={480}>
+      <Panel index={n(9)} title="Traffic vault" meta={traffic.meta} delay={480}>
         {traffic.node}
       </Panel>
 
-      <Panel index="11" title="Mission log" meta={log.meta} delay={520}>
+      <Panel index={n(10)} title="Mission log" meta={log.meta} delay={520}>
         {log.node}
       </Panel>
     </>

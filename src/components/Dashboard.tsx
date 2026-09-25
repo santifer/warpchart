@@ -146,6 +146,7 @@ export default function Dashboard({
 
         <RaceProvider repo={repo ?? ""}>
         <ConsoleLayout
+          firstIndex={prFlow ? 3 : 2}
           dossier={dossier}
           starChart={{
             meta: bundle.apex
