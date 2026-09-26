@@ -33,12 +33,16 @@
 //   --base=X   probe another origin (a preview deployment, say)
 // Exit code 1 when a critical finding is open, so CI turns red by itself.
 import { writeFileSync } from "node:fs";
+import { cronLag, openPartials, presenceEval, presenceMap, prflowFreshness } from "./health-rules.mjs";
 
 const args = process.argv.slice(2);
 const JSON_OUT = args.includes("--json");
 const NO_FAIL = args.includes("--no-fail");
 const BASE = (args.find((a) => a.startsWith("--base="))?.slice(7) ?? "https://warpchart.dev").replace(/\/$/, "");
 const REPORT_PATH = args.find((a) => a.startsWith("--report="))?.slice(9) ?? null;
+// critical findings that were NOT critical on the previous run, for a comment
+// on the health issue (GitHub notifies on comments, not on body edits)
+const NEW_CRITICAL_PATH = args.find((a) => a.startsWith("--new-critical="))?.slice(15) ?? null;
 
 const BLOB_TOKEN = process.env.BLOB_READ_WRITE_TOKEN;
 const GH_TOKEN = process.env.GH_TOKEN ?? process.env.GITHUB_TOKEN;
@@ -127,7 +131,9 @@ async function ghGraphql(query) {
 async function blobJson(key) {
   if (!BLOB_TOKEN) return null;
   const { get } = await import("@vercel/blob");
-  const res = await get(key, { access: "private", token: BLOB_TOKEN }).catch(() => null);
+  // useCache:false: the Blob CDN keeps a rewritten file for weeks, and a
+  // watchdog reading a cached copy measures the past.
+  const res = await get(key, { access: "private", token: BLOB_TOKEN, useCache: false }).catch(() => null);
   if (!res?.stream) return null;
   return JSON.parse(await new Response(res.stream).text());
 }
@@ -217,11 +223,13 @@ async function checkFreshness(route) {
     // history.jsonl is line-delimited, so blobJson cannot parse it; read raw.
     if (hist === null && BLOB_TOKEN) {
       const { get } = await import("@vercel/blob");
-      const res = await get("data/history.jsonl", { access: "private", token: BLOB_TOKEN }).catch(() => null);
+      const res = await get("data/history.jsonl", { access: "private", token: BLOB_TOKEN, useCache: false }).catch(() => null);
       if (!res?.stream) return pass("fresh.partial-snapshots", "FRESH", "history unavailable");
       const lines = (await new Response(res.stream).text()).trimEnd().split("\n").filter(Boolean);
       const recent = lines.slice(-12).map((l) => { try { return JSON.parse(l); } catch { return null; } }).filter(Boolean);
-      const partial = recent.filter((s) => s.partial).length;
+      // collect.mjs writes the flag at snapshot.meta.partial; reading s.partial
+      // alone meant this check could never fire (found 2026-09-26).
+      const partial = recent.filter((s) => s.partial ?? s.meta?.partial).length;
       if (recent.length && partial / recent.length >= 0.5) {
         fail("fresh.partial-snapshots", "FRESH", "critical",
           `${partial} of the last ${recent.length} snapshots are marked partial`,
@@ -278,6 +286,23 @@ async function checkFreshness(route) {
         "Clones and referrers are DELETED by GitHub after 14 days, so days lost here are lost forever. Read the step: gh run view <id> --log | grep traffic. A 403 means the token lost push access to the repo.",
         { newestDay: newest, days: days.length });
     } else pass("fresh.traffic-days", "FRESH", `newest day ${newest} (${ageDays.toFixed(1)}d)`);
+  });
+
+  // PR FLOW omits the UTC day in progress, so a day appears at the first run
+  // after 00:00Z. On 2026-09-26 that run was cancelled and 25-sep stayed off the
+  // panel all morning; Santiago saw it, the watchdog did not. The artifact's
+  // own "through" is the assertion, whatever the cause.
+  await check("fresh.prflow", "FRESH", async () => {
+    const f = (await blobJson("prflow/career-ops-hq--career-ops.json").catch(() => null))
+      ?? (await blobJson("prflow/santifer--career-ops.json").catch(() => null)); // pre-transfer key
+    if (!f) return pass("fresh.prflow", "FRESH", "no PR flow artifact (panel not in use)");
+    const r = prflowFreshness(f.through);
+    if (!r.ok) {
+      fail("fresh.prflow", "FRESH", r.severity,
+        `the PR flow panel ends on ${f.through ?? "nothing"}; ${r.expected} should be closed by now`,
+        "The day closes at the first collector run after 00:00Z. Check that run: gh run list -w collect.yml, then gh run view <id> - a 'cancelled' conclusion means the job cap cut it. PR flow runs as step 2b so a job timeout cannot skip it; if it failed, its log line starts with [prflow]. Unblock now: gh workflow run collect.yml (the site reads the Blob, no deploy needed; up to 15 min of cache).",
+        { through: f.through, expected: r.expected, generatedAt: f.generatedAt });
+    } else pass("fresh.prflow", "FRESH", `through ${f.through}`);
   });
 
   // v7 is computed once per registry refresh. If the stamp lags the registry,
@@ -780,6 +805,7 @@ const ARTIFACTS = [
   { prefix: "vitals/", kind: "periodic", maxAgeH: 72, what: "the Vital Signs panel" },
   { prefix: "contributors/", kind: "periodic", maxAgeH: 12, what: "the contributor census (cohorts source)" },
   { prefix: "traffic/", kind: "periodic", maxAgeH: 12, what: "the Traffic Vault" },
+  { prefix: "prflow/", kind: "periodic", maxAgeH: 12, what: "the PR flow panel" },
   { prefix: "health/", kind: "periodic", maxAgeH: 6, what: "this watchdog's own output" },
   { prefix: "live/", kind: "periodic", maxAgeH: 12, what: "live star polling" },
   { prefix: "badges-earned.json", kind: "periodic", maxAgeH: 36, what: "earned badges" },
@@ -803,6 +829,13 @@ const ARTIFACTS = [
   { prefix: "data/tenants.json", kind: "config", what: "the paying-tenant list" },
 ];
 
+// KNOWN BLIND SPOT (declared 2026-09-26): scripts/sync-to-blob.mjs re-uploads
+// every hydrated data/* file on every run, so for the data/ family uploadedAt
+// proves the MIRROR ran, not that the producer did. Skipping unchanged files
+// would fix that but turn legitimately quiet artifacts (meta in a quiet hour,
+// attribution with no spikes) into false alarms. Content-level checks carry the
+// data/ family instead (fresh.snapshot, fresh.v7, fresh.traffic-days,
+// fresh.prflow, presence.transitions); enrichment/forensics/attribution have none yet.
 async function checkInventory() {
   await check("inventory.coverage", "INVENTORY", async () => {
     if (!BLOB_TOKEN) return pass("inventory.coverage", "INVENTORY", "no Blob token, skipped");
@@ -918,6 +951,69 @@ async function checkPipeline() {
         "A cancelled run usually means the job hit its timeout, which kills the remaining steps silently - including 'Trigger deploy'. That is exactly how the site froze on 2026-07-19. Find the step that overran and give it its own timeout-minutes rather than raising the job's; if none overran and the steps' normal durations simply add up past the job cap (the first run of each UTC day carries the daily sweeps), raise the job cap above that sum.",
         { cancelled, of: list.length });
     }
+
+    // The declared cron is every 2 h; the real cadence is what GitHub grants a
+    // public repo (median ~5.8 h, max 7.7 h on 16-sep). Everything the collector
+    // writes is that far behind, so the cadence itself is worth watching.
+    const lag = cronLag(list.filter((r) => r.event === "schedule").map((r) => r.run_started_at ?? r.created_at));
+    if (lag?.severity) {
+      fail("pipeline.cron-lag", "PIPELINE", lag.severity,
+        `the scheduled collector runs every ${lag.medianH} h (median); recent worst gap ${lag.recentMaxH} h, ${lag.sinceLastH} h since the last scheduled run`,
+        "GitHub throttles cron on public repos without marking anything as failed. Everything the collector writes is this far behind. If it persists, move the heavy daily work off the critical path or add a second trigger (workflow_dispatch from a scheduler you control).",
+        lag);
+    } else if (lag) pass("pipeline.cron-lag", "PIPELINE", `median ${lag.medianH} h, recent worst ${lag.recentMaxH} h over ${lag.runs} runs`);
+  });
+}
+
+// =========================================================== PRESENCE =======
+// A field that was on the house repo's public dossier yesterday and is gone
+// today is a bug, even though nothing threw: the npm channel vanished for three
+// weeks after the org transfer, the contributor chart after a census timeout,
+// and both were found by eye. First sighting = baseline, never a change.
+async function checkPresence() {
+  await check("presence.transitions", "PRESENCE", async () => {
+    const res = await fetch(`${BASE}/api/v1/dossier?repo=${encodeURIComponent(TENANT)}`, {
+      signal: AbortSignal.timeout(30_000),
+    }).catch(() => null);
+    if (!res?.ok) {
+      return fail("presence.transitions", "PRESENCE", "warn",
+        `the public dossier API answered ${res ? `HTTP ${res.status}` : "nothing (timeout or network)"} for ${TENANT}`,
+        "Presence could not be measured this run. /api/v1/dossier is a public endpoint: if this repeats, read the function logs (npx vercel logs --json | jq 'select(.scope==\"dossier\")').");
+    }
+    const now = presenceMap(await res.json());
+    // The baseline belongs to PRODUCTION only: a run against a preview or a
+    // local server must not rewrite what "was there" on the real site.
+    const persist = BASE === "https://warpchart.dev";
+    const key = "health/presence-house.json";
+    const prev = persist ? ((await blobJson(key).catch(() => null))?.state ?? null) : null;
+    const { state, findings: missing } = presenceEval(prev, now);
+    if (missing.length) {
+      const worst = missing.some((m) => m.severity === "critical") ? "critical" : "warn";
+      fail("presence.transitions", "PRESENCE", worst,
+        `${missing.length} field(s) of ${TENANT}'s public dossier are missing: ` +
+          missing.map((m) => `${m.field} (since ${m.missingSince.slice(0, 16)}Z)`).join(", "),
+        "Something that was published is now empty, without an error. One run missing is a warning (a live npm or GitHub call can blip); two in a row is critical. Find the producer: usage.npm -> resolveNpmUsage/npm-candidates in src/lib; contributors.* -> collector/contributors.mjs; vitals.* -> collector/vitals.mjs; usage.clones -> collector/traffic.mjs. Check the cache key if the shape changed.",
+        { lost: missing.map((m) => m.field).sort(), missing });
+    } else pass("presence.transitions", "PRESENCE", `${Object.values(now).filter(Boolean).length}/${Object.keys(now).length} fields present`);
+    if (persist) await blobPut(key, { at: new Date().toISOString(), state }).catch(() => {});
+  });
+
+  // Guards in the collector (collector/guards.mjs) refuse to publish a
+  // truncated artifact and leave a marker here instead. Unresolved for more
+  // than a day = a whole day went by without the artifact recovering.
+  await check("data.partial-markers", "PRESENCE", async () => {
+    if (!BLOB_TOKEN) return pass("data.partial-markers", "PRESENCE", "no Blob token, skipped");
+    const { list } = await import("@vercel/blob");
+    const { blobs } = await list({ token: BLOB_TOKEN, prefix: "health/partial/", limit: 100 });
+    const markers = [];
+    for (const b of blobs ?? []) markers.push(await blobJson(b.pathname).catch(() => null));
+    const r = openPartials(markers.filter(Boolean));
+    if (r.severity) {
+      fail("data.partial-markers", "PRESENCE", r.severity,
+        `${r.open.length} artifact(s) refused a truncated publish and have not recovered: ${r.open.map((m) => `${m.family} (${m.reason ?? "incomplete"}, ${m.ageH} h)`).join(" · ")}`,
+        "The previous artifact is still being served, which is correct, but it is aging. Read the refusing step's log (search for 'NOT recording' / 'NOT publishing') and the upstream it depends on (search API windows for route-history/catalog, GraphQL pagination for prflow).",
+        r.open);
+    } else pass("data.partial-markers", "PRESENCE", `${markers.length} marker(s), none open`);
   });
 }
 
@@ -997,6 +1093,7 @@ async function main() {
   await checkContracts();
   await checkPublic();
   await checkCoherence(route);
+  await checkPresence();
   await checkCurves();
   await checkInventory();
   await checkPipeline();
@@ -1023,6 +1120,23 @@ async function main() {
   else console.log(renderConsole(summary));
 
   if (REPORT_PATH) writeFileSync(REPORT_PATH, renderMarkdown(summary));
+
+  if (NEW_CRITICAL_PATH) {
+    // "new" = a critical finding id, plus WHAT it is about (the fields lost,
+    // the families affected), that was not critical last run. Not the detail
+    // text: it carries ages that change every run and would comment each time.
+    const sig = (f) => {
+      const e = f.evidence;
+      const what = Array.isArray(e?.lost) ? e.lost
+        : Array.isArray(e) ? e.map((x) => x?.family ?? x?.step ?? x?.path ?? "").filter(Boolean)
+        : [];
+      return `${f.id}:${[...what].sort().join(",")}`;
+    };
+    const prevSigs = new Set(((await blobJson("health/latest.json").catch(() => null))?.findings ?? [])
+      .filter((f) => f.severity === "critical").map(sig));
+    const fresh = findings.filter((f) => f.severity === "critical" && !prevSigs.has(sig(f)));
+    writeFileSync(NEW_CRITICAL_PATH, fresh.map((f) => `- **${f.id}**: ${f.detail}`).join("\n"));
+  }
 
   // Persist for trend analysis and for the next run's purge/contract diffing.
   await blobPut("health/latest.json", summary).catch(() => {});

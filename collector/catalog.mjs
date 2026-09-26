@@ -12,6 +12,8 @@ import { readFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import { put, get } from "@vercel/blob";
 import { DATA_DIR, topReposDeep } from "./lib.mjs";
+import { acceptUniverse } from "./guards.mjs";
+import { markPartial, markComplete } from "./blob.mjs";
 
 const CATALOG_KEY = "data/catalog.json";
 const LIMIT = 3000;
@@ -65,6 +67,15 @@ if (!deep.length) {
   console.log("[catalog] no distribution available, skipping");
   process.exit(0);
 }
+// Same rule as route-history: a sweep that stopped short keeps yesterday's
+// catalog (the day gate above retries on the next run) instead of publishing a
+// truncated population that every percentile and badge would then read.
+const verdict = acceptUniverse(deep.length, { want: LIMIT, prev: prev?.repos?.length ?? null });
+if (!verdict.ok) {
+  await markPartial("catalog", { day: today, got: deep.length, want: LIMIT, reason: verdict.reason });
+  console.log(`[catalog] NOT publishing ${today}: ${verdict.reason}. Keeping the previous catalog.`);
+  process.exit(0);
+}
 const ranked = deep.map((r, i) => ({ ...r, rank: i + 1 }));
 
 // velocity: fresh top-1000 velocities from the committed registry, then fall
@@ -103,6 +114,7 @@ const repos = ranked.map((r) => {
 });
 
 await writeJson(CATALOG_KEY, { generated_at: new Date().toISOString(), repos });
+await markComplete("catalog", { day: today, got: repos.length });
 const withV = repos.filter((p) => p.v != null && p.v > 0).length;
 const withTopics = repos.filter((p) => p.t.length).length;
 console.log(`[catalog] built ${today}: ${repos.length} repos · ${withV} with velocity · ${withTopics} with topics`);

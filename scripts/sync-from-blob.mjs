@@ -31,7 +31,9 @@ async function pull() {
     if (!rel) continue;
     const dest = join(DATA, rel);
     mkdirSync(dirname(dest), { recursive: true });
-    const res = await get(b.pathname, { access: "private", token });
+    // useCache:false: the collector read-modify-writes this copy, and a CDN
+    // copy of a file rewritten minutes ago would be written back over it.
+    const res = await get(b.pathname, { access: "private", token, useCache: false });
     if (res?.statusCode === 200 && res.stream) {
       const buf = Buffer.from(await new Response(res.stream).arrayBuffer());
       writeFileSync(dest, buf);

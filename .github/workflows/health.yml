@@ -53,6 +53,7 @@ jobs:
           node collector/health.mjs \
             --base="${{ inputs.base || 'https://warpchart.dev' }}" \
             --report=health-report.md \
+            --new-critical=health-new-critical.md \
             | tee health-console.txt
         env:
           BLOB_READ_WRITE_TOKEN: ${{ secrets.BLOB_READ_WRITE_TOKEN }}
@@ -103,6 +104,13 @@ jobs:
           if [ -n "$EXISTING" ]; then
             gh issue edit "$EXISTING" --repo "$REPO" --body-file health-report.md
             echo "updated #$EXISTING"
+            # Editing the body notifies nobody, so a NEW critical finding on an
+            # issue that was already open went unseen. A comment does notify.
+            if [ -s health-new-critical.md ]; then
+              { echo "New critical finding(s) since the last run:"; echo; cat health-new-critical.md; echo; echo "[Run log]($RUN_URL)"; } > health-comment.md
+              gh issue comment "$EXISTING" --repo "$REPO" --body-file health-comment.md
+              echo "commented new criticals on #$EXISTING"
+            fi
           else
             gh issue create --repo "$REPO" --label health \
               --title "Health: production checks failing" \

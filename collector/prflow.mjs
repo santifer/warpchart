@@ -24,6 +24,8 @@ import { readFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import { put } from "@vercel/blob";
 import { DATA_DIR, graphql, sleep, token, readConfig, canonicalRepo } from "./lib.mjs";
+import { acceptPrCount } from "./guards.mjs";
+import { markPartial, markComplete, readFresh, partialKey } from "./blob.mjs";
 
 const DAY = 864e5;
 const BOT_LOGINS = new Set(["dependabot", "renovate", "github-actions", "pre-commit-ci", "allcontributors", "coderabbitai", "copilot-swe-agent"]);
@@ -63,7 +65,13 @@ async function allPulls(repo) {
       { owner, name, after },
     );
     const c = d.repository?.pullRequests;
-    if (!c) break;
+    if (!c) {
+      // Not found on the first page: nothing to chart. Vanishing MID-way is a
+      // truncated list, and publishing it would redraw the queue from a
+      // fraction of the PRs: fail loudly instead of returning what we have.
+      if (out.length) throw new Error(`${repo} stopped answering after ${out.length} PRs (pagination cut short)`);
+      break;
+    }
     out.push(...c.nodes);
     if (!c.pageInfo.hasNextPage) break;
     after = c.pageInfo.endCursor;
@@ -168,10 +176,26 @@ async function main() {
       out = await collectPrFlow(repo);
     } catch (err) {
       console.error(`[prflow] ${repo} failed (non-fatal): ${err?.message ?? err}`);
+      // the previous flow stays; leave the marker so the watchdog sees it
+      await markPartial(`prflow--${canonicalRepo(repo).toLowerCase().replace("/", "--")}`, {
+        repo, reason: String(err?.message ?? err).slice(0, 200),
+      });
       continue;
     }
     if (!out) {
       console.log(`[prflow] ${repo}: no human PRs, nothing written`);
+      continue;
+    }
+    const family = `prflow--${out.repo.toLowerCase().replace("/", "--")}`;
+    const prev = await readFresh(prflowKey(out.repo));
+    // a refused count that repeats EXACTLY on the next run is a real drop, not a cut-short pagination
+    const pending = await readFresh(partialKey(family));
+    const verdict = acceptPrCount(out.humanPrs, prev?.humanPrs ?? null, {
+      pendingGot: pending && pending.resolved === false ? pending.got : null,
+    });
+    if (!verdict.ok) {
+      await markPartial(family, { repo: out.repo, got: out.humanPrs, prev: prev?.humanPrs, reason: verdict.reason });
+      console.log(`[prflow] ${out.repo}: NOT publishing, ${verdict.reason}. Keeping the previous flow.`);
       continue;
     }
     await put(prflowKey(out.repo), JSON.stringify(out), {
@@ -181,6 +205,7 @@ async function main() {
       allowOverwrite: true,
       contentType: "application/json",
     });
+    await markComplete(family, { humanPrs: out.humanPrs });
     const last = out.days.at(-1);
     console.log(
       `[prflow] ${out.repo}: ${out.humanPrs} human PRs (${out.botsExcluded} bot) · ${out.days.length} days through ${out.through} · open ${last[4]} · median age ${last[5]}d · ${((Date.now() - t0) / 1000).toFixed(1)}s`,

@@ -23,6 +23,8 @@ import { readFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import { put, get } from "@vercel/blob";
 import { DATA_DIR, topReposDeep } from "./lib.mjs";
+import { acceptUniverse } from "./guards.mjs";
+import { markPartial, markComplete, readFresh, partialKey } from "./blob.mjs";
 
 const SHARDS = 32; // MUST match src/lib/rank-history.ts
 const CAP_DAYS = 90; // a touch over the 2-month chart window; bounds shard size
@@ -81,8 +83,18 @@ if (meta.days.includes(today)) {
   process.exit(0);
 }
 
-// gather today's distribution: the deep top-10k, falling back to the committed
-// top-1000 route.json if the search sweep is unavailable (no token / failure)
+// A refused sweep leaves the day open, and every run retries the ~4-minute deep
+// sweep. Three refusals in the same day = the upstream is not coming back
+// today: stop spending the job's budget on it and leave the day as a gap.
+const openMarker = await readFresh(partialKey("route-history"));
+if (openMarker && openMarker.resolved === false && openMarker.day === today && (openMarker.attempts ?? 1) >= 3) {
+  console.log(`[route-history] ${today}: ${openMarker.attempts} refused sweeps today, not retrying until tomorrow (the day stays a gap)`);
+  process.exit(0);
+}
+
+// gather today's distribution: the deep top-10k. (There used to be a fallback
+// to the committed top-1000 route.json; a 1,000-repo "top-10k day" is exactly
+// the truncated day the guard below refuses, so it is gone.)
 let ranked = [];
 try {
   const deep = await topReposDeep(LIMIT);
@@ -92,19 +104,22 @@ try {
   console.error(`[route-history] deep sweep failed: ${err.message}`);
 }
 if (!ranked.length) {
-  const routePath = join(DATA_DIR, "route.json");
-  if (existsSync(routePath)) {
-    try {
-      const route = JSON.parse(readFileSync(routePath, "utf8"));
-      ranked = (route.repos ?? []).map((r, i) => ({ ...r, rank: i + 1 }));
-      console.log(`[route-history] fell back to route.json: ${ranked.length} repos`);
-    } catch {
-      /* no usable route.json */
-    }
-  }
-}
-if (!ranked.length) {
   console.log("[route-history] no distribution available, skipping");
+  process.exit(0);
+}
+
+// VALIDATE BEFORE PUBLISHING. topReposDeep returns whatever it gathered when a
+// search window fails, and this script used to record that as the day AND mark
+// the day done, so the short day could never be retried: 2026-09-03 kept 4,039
+// repos and 2026-09-11 6,012 of ~10,000, and every percentile computed on them
+// looked better than it was. A refused sweep writes nothing, leaves the day
+// open for the next run, and leaves a marker for the watchdog. A missing day is
+// an honest gap; a truncated one is a lie that never throws.
+const lastDay = [...meta.days].sort().at(-1);
+const verdict = acceptUniverse(ranked.length, { want: LIMIT, prev: meta.counts?.[lastDay] ?? null });
+if (!verdict.ok) {
+  await markPartial("route-history", { day: today, got: ranked.length, want: LIMIT, reason: verdict.reason });
+  console.log(`[route-history] NOT recording ${today}: ${verdict.reason}. The day stays open for the next run.`);
   process.exit(0);
 }
 
@@ -193,9 +208,14 @@ for (let i = 0; i < SHARDS; i++) {
 if (seedDay) meta.days.push(seedDay);
 meta.days.push(today);
 meta.days = [...new Set(meta.days)].sort().slice(-CAP_DAYS);
+// the size of each recorded day, so the next sweep can be checked against it
+meta.counts = Object.fromEntries(
+  Object.entries({ ...(meta.counts ?? {}), [today]: ranked.length }).filter(([d]) => meta.days.includes(d)),
+);
 meta.shards = SHARDS;
 meta.updatedAt = new Date().toISOString();
 await writeJson(META_KEY, meta);
+await markComplete("route-history", { day: today, got: ranked.length });
 
 console.log(
   `[route-history] recorded ${today}${seedDay ? ` (+seed ${seedDay})` : ""}: ${ranked.length} repos · ` +

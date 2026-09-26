@@ -19,7 +19,7 @@ a different question. It never throws, never logs, and the panel stays green.
 | Count openings, not signs. | "12 good first issues" when 2 were free: count `no:assignee -linked:pr`. | `collector/vitals-core.test.mjs` |
 | A one-off correction is not a rate. | A 21.8k-star purge inside the 7-day window read as −2903★/day, and its restore as +4587★/day. | `collector/velocity7-core.test.mjs` |
 | No point in the future. | Stamping today at 12:00 UTC put the morning point ahead of `now`. | `src/lib/trajectory.test.ts` |
-| Check the size of the universe before a percentile. | A truncated day (6,010 of ~10,000 repos) made every rank look better. | pending (phase 3) |
+| Check the size of the universe before a percentile. | A truncated day (6,010 of ~10,000 repos) made every rank look better. | `collector/guards.test.mjs`; route-history and the catalog refuse a short sweep and leave a marker (`data.partial-markers`) |
 | UI order never comes from a `Set`. | Insertion order made the newest merger "operate" a 70K-star repo. | `collector/vitals-core.test.mjs` |
 | A stamp of the ATTEMPT is not freshness of the DATA. | A vault stamped `updatedAt` every run while upstream had stopped publishing. | `fresh.traffic-days` |
 
@@ -49,8 +49,10 @@ a different question. It never throws, never logs, and the panel stays green.
 - **A job-level timeout cancels every remaining step, `continue-on-error` included**, and 'Trigger deploy' with them. Every non-critical network step gets its own `timeout-minutes`, and the job cap stays above the sum of the steps' normal durations.
 - `continue-on-error` rewrites a failed step as `success` in the API. The truth is in the run's annotations (the watchdog reads those).
 - The cron runs every ~6 h in practice (declared every 2 h). Anything the collector writes can be ~8 h behind.
-- **The UTC day in progress is never published.** A day appears at the first run after 00:00Z, which is also the heaviest run of the day, so what must close the day runs FIRST (PR flow is step 2b).
+- **The UTC day in progress is never published.** A day appears at the first run after 00:00Z, which is also the heaviest run of the day, so what must close the day runs FIRST (PR flow is step 2b). Watched by `fresh.prflow`; the real cron cadence by `pipeline.cron-lag`.
 - The watchdog must never hold stronger credentials than what it watches: it uses the same token cascade as the collector.
+- **Validate before publishing.** A guard that refuses (`collector/guards.mjs`) keeps the previous artifact, writes nothing that would mark the work done, and leaves `health/partial/{family}.json`. An honest gap beats a truncated artifact.
+- A field that was on the house repo's public dossier and disappears is a critical finding (`presence.transitions`), even when nothing threw.
 - A watchdog alarm that has to be doubted gets silenced. Baselines are per identity, and 401/403 means "unmeasurable", never "changed".
 
 ## 5. UI

@@ -25,7 +25,9 @@ if (!token) {
 }
 
 try {
-  const res = await get("health/latest.json", { access: "private", token });
+  // useCache:false: a CDN copy of the report would say the watchdog is alive
+  // for weeks after it stopped (found 2026-09-26).
+  const res = await get("health/latest.json", { access: "private", token, useCache: false });
   if (!res?.stream) {
     console.log("[watchdog-alive] no health report yet (first run?)");
     process.exit(0);
