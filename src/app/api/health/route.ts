@@ -1,13 +1,15 @@
 // Heartbeat for external monitors (UptimeRobot etc.): 200 while the
-// collector keeps the tenant snapshot fresh, 503 when it has gone quiet
-// for over 3 hours (the hourly Action failing) so a free uptime monitor
+// collector keeps the tenant snapshot fresh, 503 when it has gone quiet for
+// longer than any normal gap (COLLECTOR_STALE_H, src/lib/staleness.ts: the
+// real cron cadence is ~5 h, not the declared 2 h) so a free uptime monitor
 // can page the operator. Also reports the token pool's fuel state.
 import { lastSnapshot } from "@/lib/history";
 import { lowFuel } from "@/lib/github";
+import { COLLECTOR_STALE_H } from "@/lib/staleness";
 
 export const dynamic = "force-dynamic";
 
-const STALE_MS = 3 * 3600 * 1000;
+const STALE_MS = COLLECTOR_STALE_H * 3600 * 1000;
 
 export async function GET() {
   const snap = lastSnapshot();

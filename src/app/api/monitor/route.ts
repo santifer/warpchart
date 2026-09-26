@@ -1,17 +1,17 @@
 // Server-side watchdog, run by Vercel Cron every 30 minutes: pages the
 // operator's phone (Moshi webhook) when the collector goes quiet or the
 // GitHub token pool runs low. Stateless alert dedupe: a dead collector
-// only pages at the 3h, 6h, 12h and 24h marks (each a single 30-min
-// window), not every run of a long incident.
+// only pages at the marks in src/lib/staleness.ts (10 h, 16 h, 24 h, each a
+// single 30-min window), not every run of a long incident. The old 3 h mark
+// paged on almost every normal cycle (the real cron cadence is ~5 h).
 import { lastSnapshot } from "@/lib/history";
 import { lowFuel } from "@/lib/github";
 import { reqLog } from "@/lib/log";
+import { pageMark } from "@/lib/staleness";
 
 export const dynamic = "force-dynamic";
 
 const log = reqLog("monitor");
-const ALERT_WINDOWS_MIN = [180, 360, 720, 1440];
-const WINDOW_MIN = 31; // slightly over the cron cadence so marks never slip
 
 async function page(title: string, message: string) {
   const token = process.env.MOSHI_WEBHOOK_TOKEN;
@@ -48,12 +48,12 @@ export async function GET(req: Request) {
     alerts.push("no snapshot data at all");
     await page("⚠️ warpchart collector", "no snapshot data found in the deployment");
   } else {
-    const mark = ALERT_WINDOWS_MIN.find((m) => ageMin >= m && ageMin < m + WINDOW_MIN);
+    const mark = pageMark(ageMin);
     if (mark) {
       alerts.push(`collector quiet ${ageMin}min`);
       await page(
         "⚠️ warpchart collector quiet",
-        `last snapshot ${Math.round(ageMin / 60)}h ago (${snap!.ts}). Check the hourly Action: github.com/santifer/warpchart/actions`
+        `last snapshot ${Math.round(ageMin / 60)}h ago (${snap!.ts}); a normal gap is up to ~8h. Check the collect workflow: github.com/santifer/warpchart/actions`
       );
     }
   }

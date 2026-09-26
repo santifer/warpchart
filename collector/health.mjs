@@ -163,10 +163,13 @@ async function checkFreshness(route) {
         "Check the collect workflow ran at all: gh run list -R santifer/warpchart -w collect.yml", body);
     }
     const h = ageH(iso);
-    if (h > 6) {
-      fail("fresh.snapshot", "FRESH", "critical", `last snapshot is ${h.toFixed(1)}h old (cron is every 2h)`,
+    // Thresholds follow the REAL cadence (median ~5 h, normal worst ~8 h; see
+    // src/lib/staleness.ts), not the declared 2 h: at 4/6 h this fired on
+    // most normal cycles.
+    if (h > 10) {
+      fail("fresh.snapshot", "FRESH", "critical", `last snapshot is ${h.toFixed(1)}h old (a normal gap is up to ~8h)`,
         "The collector is failing or being cancelled. Check the run log, especially step timeouts: a job-level timeout kills 'Trigger deploy' silently (that is what froze the site on 2026-07-19).", { lastSnapshot: iso });
-    } else if (h > 4) {
+    } else if (h > 8) {
       fail("fresh.snapshot", "FRESH", "warn", `last snapshot is ${h.toFixed(1)}h old`,
         "One missed cron is tolerable; two in a row is not. Watch the next run.", { lastSnapshot: iso });
     } else pass("fresh.snapshot", "FRESH", `${h.toFixed(1)}h old`);
