@@ -17,7 +17,7 @@ import {
   type DossierRaw,
 } from "./github";
 import { loadTrafficVault } from "./traffic";
-import { allNamesOf } from "./aliases";
+import { npmCandidates } from "./npm-candidates";
 import { reqLog } from "./log";
 import { nextMilestones } from "./milestones";
 import { canonicalVelocity } from "./velocity";
@@ -56,19 +56,9 @@ async function resolveNpmUsage(
   name: string,
   rootPkg: string | null,
 ): Promise<{ npmPkg: string | null; npmLast30: number | null; npmHistory: { day: string; d: number }[] | null }> {
-  // Scoped candidates come from EVERY name the repo has carried, canonical
-  // first. After the 2026-08-31 transfer the owner became career-ops-hq, so the
-  // only scoped guess was @career-ops-hq/career-ops, which does not exist: the
-  // installer is still published as @santifer/career-ops. npm answered a clean
-  // 404, resolveNpmUsage returned null, and the panel silently fell back to
-  // clones only for three weeks. A transfer renames the repo, never the package.
-  const names = allNamesOf(`${owner}/${name}`);
-  const candidates = [
-    ...new Set([
-      ...(rootPkg ? [rootPkg] : []),
-      ...[...names].reverse().map((full) => `@${full.toLowerCase()}`),
-    ]),
-  ];
+  // Every name the repo has carried, canonical first (see npm-candidates.ts:
+  // a transfer renames the repo, never the package).
+  const candidates = npmCandidates(owner, name, rootPkg);
   for (const cand of candidates) {
     // Fetch the point total and the daily history in PARALLEL, so a candidate
     // costs ~one 8s timeout instead of two back-to-back. No retry and no total

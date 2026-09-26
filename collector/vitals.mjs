@@ -26,6 +26,7 @@ import { readFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import { get, put } from "@vercel/blob";
 import { DATA_DIR, graphql, ghFetch, sleep, token, readConfig, allNamesOf } from "./lib.mjs";
+import { isBot, derivePrAnalysis, gfiQueries, gfiFromCounts } from "./vitals-core.mjs";
 
 token(); // GitHub token: fail fast
 const blobToken = process.env.BLOB_READ_WRITE_TOKEN;
@@ -171,12 +172,7 @@ async function lightActivity(repo) {
 // Paginate merged PRs once, gathering createdAt/mergedAt (lead time), author
 // (contributors + cohorts) and mergedBy (the maintainer gate). Two derived
 // panels for the price of one pagination.
-const BOTS = new Set([
-  "github-actions", "renovate", "dependabot", "renovate-bot", "codecov",
-  // the manifesto ledger's service account: commits under a human-shaped login
-  "careerops-ledger",
-]);
-const isBot = (l) => !l || BOTS.has(l.toLowerCase()) || l.toLowerCase().endsWith("[bot]");
+// BOTS / isBot live in vitals-core.mjs (shared with the tests).
 
 // TRUE number of contributors, the same one github.com/{repo}/graphs/contributors
 // shows. The PR sample below can only ever see the authors inside its window
@@ -212,18 +208,9 @@ async function contributorsCount(repo) {
 // a census store, still guarded by the truncation drop below.
 async function prAnalysis(repo, want = 1000) {
   const [owner, name] = repo.split("/");
-  const hrs = [];
-  const authorCount = new Map();
-  const mergerCount = new Map(); // login -> merges, NOT a Set: the order matters
-  const monthAuthors = new Map(); // "YYYY-MM" -> Set(login)
+  const nodes = [];
   let cursor = null;
   let mergedTotal = null;
-  // Two different windows on purpose. COHORTS need the whole history to say who
-  // came back; LEAD TIME is a statement about how the project works NOW, so it
-  // only counts PRs merged in the last 90 days. Measuring it over all 707 mixed
-  // in the slower early months and dropped the repo from Elite to High while
-  // nothing about today had changed.
-  const LEAD_WINDOW = Date.now() - 90 * DAY;
   let scanned = 0;
   while (scanned < want) {
     const d = await gqlRetry(
@@ -242,93 +229,16 @@ async function prAnalysis(repo, want = 1000) {
     if (!pr) break;
     if (mergedTotal === null) mergedTotal = pr.totalCount ?? null;
     for (const n of pr.nodes) {
-      if (!n.createdAt || !n.mergedAt) continue;
-      scanned++;
-      const merged = Date.parse(n.mergedAt);
-      const h = (merged - Date.parse(n.createdAt)) / 36e5;
-      if (h >= 0 && merged >= LEAD_WINDOW) hrs.push(h);
-      const au = n.author?.login;
-      if (au) {
-        authorCount.set(au, (authorCount.get(au) || 0) + 1);
-        const m = n.createdAt.slice(0, 7);
-        if (!monthAuthors.has(m)) monthAuthors.set(m, new Set());
-        monthAuthors.get(m).add(au);
-      }
-      if (n.mergedBy?.login)
-        mergerCount.set(n.mergedBy.login, (mergerCount.get(n.mergedBy.login) || 0) + 1);
+      nodes.push(n);
+      if (n.createdAt && n.mergedAt) scanned++;
     }
     if (!pr.pageInfo.hasNextPage) break;
     cursor = pr.pageInfo.endCursor;
     if (PACE_MS) await sleep(PACE_MS);
   }
-
-  let leadTime = null;
-  if (hrs.length) {
-    hrs.sort((a, b) => a - b);
-    const q = (p) => {
-      const k = (hrs.length - 1) * p;
-      const f = Math.floor(k);
-      return hrs[f] + (hrs[Math.min(f + 1, hrs.length - 1)] - hrs[f]) * (k - f);
-    };
-    const median = q(0.5);
-    leadTime = {
-      medianH: Math.round(median * 10) / 10,
-      p90H: Math.round(q(0.9) * 10) / 10,
-      tier: median < 24 ? "Elite" : median < 168 ? "High" : median < 720 ? "Medium" : "Low",
-      windowDays: 90, // the window this median describes, so the panel can say so
-      sample: hrs.length,
-      pctUnder24h: Math.round((hrs.filter((h) => h <= 24).length / hrs.length) * 100),
-      pctUnder7d: Math.round((hrs.filter((h) => h <= 168).length / hrs.length) * 100),
-    };
-  }
-
-  // human contributors (bots excluded), top by merged-PR count
-  const humans = [...authorCount.entries()].filter(([l]) => !isBot(l)).sort((a, b) => b[1] - a[1]);
-  // Did we stop before reaching the repo's first PR? Then the OLDEST month in
-  // the sample is a lie by construction: nobody can be "returning" in it,
-  // because the algorithm has not seen anyone yet. On 2026-07-28 that published
-  // "returning devs 0 → 18" for a repo whose June returners simply fell outside
-  // the window - and the series jumped from "1 → 7 → 17" to "0 → 18" overnight
-  // as the growing PR volume shrank the window. Drop the truncated month.
-  const truncated = scanned >= want;
-  const months = [...monthAuthors.keys()].sort();
-  // new-vs-returning cohorts (chronological)
-  const seen = new Set();
-  const cohorts = months
-    .map((m) => {
-      const au = [...monthAuthors.get(m)].filter((l) => !isBot(l));
-      const nw = au.filter((l) => !seen.has(l)).length;
-      const rt = au.filter((l) => seen.has(l)).length;
-      au.forEach((l) => seen.add(l));
-      return { month: m, new: nw, returning: rt };
-    })
-    .filter((c) => !(truncated && c.month === months[0]));
-  // BY VOLUME OF MERGES, never by insertion order. This list is what names the
-  // repo in the panel ("operated by X"), and a Set iterates in the order logins
-  // were first seen - which, scanning PRs newest-first, is whoever merged the
-  // MOST RECENT pull request. On 2026-09-15 the live panel read "operated by
-  // FReptar0" because a contributor merged his first PR twelve days earlier and
-  // landed ahead of the person who had merged everything else. Whoever holds the
-  // merge gate is the one who merges most, so that is the order.
-  const maintainers = [...mergerCount.entries()]
-    .filter(([l]) => !isBot(l))
-    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
-    .slice(0, 6)
-    .map(([l]) => l);
-  const community = scanned
-    ? {
-        // the real repo-wide figure; `contributorsSampled` is what the window saw
-        contributors: (await contributorsCount(repo)) ?? humans.length,
-        contributorsSampled: humans.length,
-        mergedTotal, // every merged PR ever, not just the sampled window
-        prsSampled: hrs.length,
-        mergedByDistinct: mergerCount.size || 1,
-        maintainers, // the actual merge-gate keepers, for their avatars
-        topContributors: humans.slice(0, 10).map(([login]) => ({ login })),
-        cohorts,
-      }
-    : null;
-
+  // the real repo-wide figure (the sample only sees the authors in its window)
+  const contributorsTotal = scanned ? await contributorsCount(repo) : null;
+  const { leadTime, community } = derivePrAnalysis({ nodes, want, mergedTotal, contributorsTotal });
   return { leadTime, community };
 }
 
@@ -618,7 +528,6 @@ async function docsHealth(repo) {
 // A failed lookup returns free:null, never free:open. An outage that silently
 // refills the pool is the same lie in a different costume.
 async function onboarding(repo) {
-  const base = (label) => `repo:${repo} is:issue is:open label:"${label}"`;
   try {
     const d = await gqlRetry(
       `query($q:String!,$q2:String!,$f:String!,$f2:String!){
@@ -627,21 +536,9 @@ async function onboarding(repo) {
         c: search(query:$f,  type:ISSUE){ issueCount }
         d: search(query:$f2, type:ISSUE){ issueCount }
       }`,
-      {
-        q: base("good first issue"),
-        q2: base("good-first-issue"),
-        // no:assignee drops the claimed ones; -linked:pr drops the ones that
-        // already have a PR on the way. Both are server-side, so this costs
-        // nothing beyond the two extra search fields.
-        f: `${base("good first issue")} no:assignee -linked:pr`,
-        f2: `${base("good-first-issue")} no:assignee -linked:pr`,
-      },
+      gfiQueries(repo),
     );
-    const open = Math.max(d?.a?.issueCount ?? 0, d?.b?.issueCount ?? 0);
-    const freeRaw = Math.max(d?.c?.issueCount ?? 0, d?.d?.issueCount ?? 0);
-    // the free set is a subset of the open set by construction; if the two
-    // spellings ever disagree enough to break that, trust the smaller number
-    return { goodFirstIssues: open, goodFirstIssuesFree: Math.min(freeRaw, open) };
+    return gfiFromCounts(d);
   } catch {
     return null;
   }

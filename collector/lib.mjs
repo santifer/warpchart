@@ -105,6 +105,16 @@ export const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 // costs one retry per process rather than one per call.
 let tokenIdx = 0;
 
+// Say which token of the pool is doing the work, once per change. A silent
+// fallback to a more powerful token hides exactly the permission problem the
+// 27-jul freeze was made of; the log line makes it visible in every run.
+const served = { rest: -1, graphql: -1 };
+function noteToken(kind, idx) {
+  if (served[kind] === idx) return;
+  served[kind] = idx;
+  console.log(`[gh] ${kind} served by token #${idx} of ${tokens().length}`);
+}
+
 // Fetch with retries and rate-limit awareness.
 export async function ghFetch(path, { method = "GET", body, tokenOverride = null } = {}) {
   const url = path.startsWith("http") ? path : API + path;
@@ -127,7 +137,10 @@ export async function ghFetch(path, { method = "GET", body, tokenOverride = null
       await sleep(delays[attempt]);
       continue;
     }
-    if (res.ok) return res.json();
+    if (res.ok) {
+      if (!tokenOverride) noteToken("rest", tokenIdx);
+      return res.json();
+    }
     // A 403 with budget left and no retry-after is a PERMISSION denial, not a
     // rate limit: a fine-grained PAT scoped to one resource owner answers 403
     // for a repo that moved to an org (career-ops -> career-ops-hq,
@@ -176,7 +189,7 @@ const isForbidden = (errors) =>
 
 export async function graphql(query, variables) {
   const pool = tokens();
-  let lastErrors = null;
+  let last = null;
   // GraphQL answers 200 with a FORBIDDEN error object rather than an HTTP 403,
   // so the permission failover has to live here, not in ghFetch's status check.
   for (let i = 0; i < pool.length; i++) {
@@ -189,13 +202,34 @@ export async function graphql(query, variables) {
         console.log(`[lib] token #${tokenIdx} is FORBIDDEN for this call, using #${idx} from now on`);
         tokenIdx = idx; // stick to the one that works
       }
+      noteToken("graphql", idx);
       return data.data;
     }
-    lastErrors = data.errors;
+    last = data;
     if (!isForbidden(data.errors)) break; // a real query error: another token will not help
   }
-  throw new Error("GraphQL: " + JSON.stringify(lastErrors).slice(0, 400));
+  // A PARTIAL answer is kept only in its one honest form: whole top-level
+  // aliases that came back null (NOT_FOUND for a renamed repo in an aliased
+  // batch, or one alias no token may read) next to good data for the others.
+  // Throwing there threw the whole batch away, so one rename zeroed a tenant's
+  // neighbours. Anything else (an error NESTED inside a field) still throws:
+  // accepting it turned a timeout inside `releases` into commits30=0 with the
+  // look of a measurement, and skipped the caller's retry (caught by review
+  // before shipping, 2026-09-26).
+  if (last && onlyWholeAliasesMissing(last.data, last.errors)) {
+    console.warn(`[gh] GraphQL partial answer, keeping the other aliases: ${JSON.stringify(last.errors).slice(0, 200)}`);
+    return last.data;
+  }
+  throw new Error("GraphQL: " + JSON.stringify(last?.errors).slice(0, 400));
 }
+
+const onlyWholeAliasesMissing = (data, errors) =>
+  !!data &&
+  typeof data === "object" &&
+  Array.isArray(errors) &&
+  errors.length > 0 &&
+  errors.every((e) => Array.isArray(e?.path) && e.path.length === 1 && data[e.path[0]] === null) &&
+  Object.values(data).some((v) => v != null);
 
 // Search API is limited to 30 req/min: enforce a global gap between calls.
 let lastSearchAt = 0;
