@@ -31,7 +31,13 @@ jobs:
     # timeout cancels the remaining steps silently (that is what killed
     # 'Trigger deploy' and froze the site on 2026-07-19), whereas a step-level
     # one is contained and visible.
-    timeout-minutes: 15
+    # 15 stopped being room on 2026-09-21: the first run of each UTC day also
+    # does the daily sweeps (rank history ~255 s, Vital Signs ~195 s, catalog
+    # ~68 s, overtakes ~65 s), and when GitHub delays that run to ~04:40Z
+    # 'Collect snapshot' alone takes 147-470 s instead of ~21 s. The job hit 15
+    # minutes on 21, 24 and 26-sep and cancelled everything from Vital Signs on,
+    # 'Trigger deploy' included. No single step overran; the sum did.
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-node@v5
@@ -54,6 +60,26 @@ jobs:
       - name: Verify real data hydrated
         run: |
           node -e "const fs=require('fs');const m=JSON.parse(fs.readFileSync('./data/meta.json','utf8'));if(m.repo==='warpchart/sample'){console.error('hydrate fell back to sample — aborting to protect the Blob moat');process.exit(1)}console.log('hydrated: '+m.repo)"
+
+      # 2b. PR FLOW for the unlocked repos: per UTC day, PRs opened / merged /
+      #     closed-without-merge and the open queue at each close, from each
+      #     PR's own timestamps (so a skipped run cannot fabricate a zero day).
+      #     Full recompute, one GraphQL page per 100 PRs (career-ops ~28 calls,
+      #     ~16 s) -> prflow/{owner}--{name}.json. Never fails the run.
+      #     FIRST on purpose: the day in progress is left out, so a day only
+      #     appears at the first run after 00:00Z. That run is the heaviest of
+      #     the day, and while this step sat after Vital Signs a job timeout
+      #     skipped it (25-sep stayed missing all morning of the 26th). It only
+      #     needs the hydrated config/route/tenants, and the site reads its
+      #     Blob key at runtime, so no deploy is needed for the new day.
+      - name: PR flow
+        run: node collector/prflow.mjs
+        continue-on-error: true
+        timeout-minutes: 3
+        env:
+          BLOB_READ_WRITE_TOKEN: ${{ secrets.BLOB_READ_WRITE_TOKEN }}
+          GH_TOKEN: ${{ secrets.STARGAZER_TOKEN || secrets.TRAFFIC_TOKEN || secrets.GITHUB_TOKEN }}
+          GH_TOKEN_FALLBACKS: ${{ secrets.TRAFFIC_TOKEN }} ${{ secrets.GITHUB_TOKEN }}
 
       # 3. Collect one snapshot (appends to the hydrated data/).
       - name: Collect snapshot
@@ -124,6 +150,7 @@ jobs:
       - name: Record rank-distribution history
         run: node collector/route-history.mjs
         continue-on-error: true
+        timeout-minutes: 7
         env:
           BLOB_READ_WRITE_TOKEN: ${{ secrets.BLOB_READ_WRITE_TOKEN }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -135,6 +162,7 @@ jobs:
       - name: Build rising catalog
         run: node collector/catalog.mjs
         continue-on-error: true
+        timeout-minutes: 3
         env:
           BLOB_READ_WRITE_TOKEN: ${{ secrets.BLOB_READ_WRITE_TOKEN }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -190,20 +218,6 @@ jobs:
           GH_TOKEN_FALLBACKS: ${{ secrets.TRAFFIC_TOKEN }} ${{ secrets.GITHUB_TOKEN }}
           VITALS_UNIVERSE: "1000"
           VITALS_DEADLINE_MS: "150000"
-
-      # 4c-bis-2. PR FLOW for the unlocked repos: per UTC day, PRs opened /
-      #     merged / closed-without-merge and the open queue at each close,
-      #     from each PR's own timestamps (so a skipped run cannot fabricate a
-      #     zero day). Full recompute, one GraphQL page per 100 PRs (career-ops
-      #     ~28 calls, ~16 s) -> prflow/{owner}--{name}.json. Never fails the run.
-      - name: PR flow
-        run: node collector/prflow.mjs
-        continue-on-error: true
-        timeout-minutes: 3
-        env:
-          BLOB_READ_WRITE_TOKEN: ${{ secrets.BLOB_READ_WRITE_TOKEN }}
-          GH_TOKEN: ${{ secrets.STARGAZER_TOKEN || secrets.TRAFFIC_TOKEN || secrets.GITHUB_TOKEN }}
-          GH_TOKEN_FALLBACKS: ${{ secrets.TRAFFIC_TOKEN }} ${{ secrets.GITHUB_TOKEN }}
 
       # 4c-ter. Owner standing: follower count + worldwide rank into the PRIVATE
       #     Blob (private/followers.json). Follower history cannot be backfilled

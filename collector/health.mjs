@@ -869,7 +869,11 @@ async function checkInventory() {
 async function checkPipeline() {
   const repo = process.env.GITHUB_REPOSITORY ?? "santifer/warpchart";
   await check("pipeline.chronic-step", "PIPELINE", async () => {
-    const runs = await gh(`/repos/${repo}/actions/workflows/collect.yml/runs?per_page=8&status=completed`);
+    // 24 runs is about a week at the cron's real cadence (median gap ~5.8 h).
+    // With 8 (two days) this was blind to the failure it exists for: the daily
+    // heavy run was cancelled on 21, 24 and 26-sep, never twice inside the
+    // window, so pipeline.cancelled never fired.
+    const runs = await gh(`/repos/${repo}/actions/workflows/collect.yml/runs?per_page=24&status=completed`);
     const list = runs.body?.workflow_runs ?? [];
     if (!list.length) return pass("pipeline.chronic-step", "PIPELINE", "no runs to inspect");
 
@@ -911,7 +915,7 @@ async function checkPipeline() {
     if (cancelled >= 2) {
       fail("pipeline.cancelled", "PIPELINE", "critical",
         `${cancelled} of the last ${list.length} collector runs were CANCELLED`,
-        "A cancelled run usually means the job hit its timeout, which kills the remaining steps silently - including 'Trigger deploy'. That is exactly how the site froze on 2026-07-19. Find the step that overran and give it its own timeout-minutes rather than raising the job's.",
+        "A cancelled run usually means the job hit its timeout, which kills the remaining steps silently - including 'Trigger deploy'. That is exactly how the site froze on 2026-07-19. Find the step that overran and give it its own timeout-minutes rather than raising the job's; if none overran and the steps' normal durations simply add up past the job cap (the first run of each UTC day carries the daily sweeps), raise the job cap above that sum.",
         { cancelled, of: list.length });
     }
   });
