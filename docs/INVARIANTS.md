@@ -60,7 +60,7 @@ a different question. It never throws, never logs, and the panel stays green.
 - **Velocity has one definition:** `src/lib/velocity.ts` (`v7 ?? v`). The crossing math has one definition: `projectCrossing` in `src/lib/compare.ts`.
 - **Tailwind drops an unknown utility silently**: `ring-panel` (no such token) fell back to `currentColor`. Lint rule: `better-tailwindcss/no-unknown-classes`. Our own plain-CSS classes are read from `globals.css`.
 - Color has two sources that must move together: `src/app/globals.css` (CSS vars) and `src/lib/theme.ts` (chart palettes).
-- Avatars go through `src/lib/avatar.ts` (`github.com/{login}.png` is a redirect that fails on iOS).
+- Avatars go through `src/lib/avatar.ts` (`github.com/{login}.png` is a redirect that fails on iOS). Broken images, horizontal scroll and AA contrast in both themes are checked in WebKit after every production deploy (`smoke.yml`).
 - Panel order and grid live only in `src/components/ConsoleLayout.tsx`; the loading skeleton mirrors it by hand.
 - No `Date.now()` in SSR initial state (hydration mismatch). Use the bundle's `generatedAt`, then go live after mount.
 

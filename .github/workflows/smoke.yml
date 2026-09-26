@@ -1,0 +1,53 @@
+name: smoke
+# After every production deploy, open the real pages in the real client
+# (WebKit = every iPhone) in both themes: no broken images, no horizontal
+# scroll, AA contrast on our muted/accent tokens, and the literal text that
+# proves the page rendered. Until 2026-09-26 these failures were found by
+# Santiago on his phone (broken avatars on iOS, an inverted ring, a panel
+# that went blank). e2e/selftest.spec.ts proves the sensors still bite.
+on:
+  deployment_status:
+  workflow_dispatch:
+    inputs:
+      base:
+        description: "Base URL to test"
+        required: false
+        default: "https://warpchart.dev"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: smoke
+  cancel-in-progress: true
+
+jobs:
+  smoke:
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.deployment_status.state == 'success' && github.event.deployment.environment == 'Production')
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      - run: npx playwright install --with-deps webkit
+      # the alias moves to the new deployment when it succeeds; give the edge
+      # a moment so the smoke reads the version that was just deployed
+      - name: Settle
+        if: github.event_name == 'deployment_status'
+        run: sleep 45
+      - name: Smoke (WebKit, both themes)
+        run: npx playwright test
+        env:
+          SMOKE_BASE: ${{ inputs.base || 'https://warpchart.dev' }}
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: smoke-failures
+          path: test-results/
+          retention-days: 7
