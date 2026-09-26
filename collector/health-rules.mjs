@@ -114,3 +114,14 @@ export function openPartials(markers, now = Date.now()) {
   const severity = open.some((m) => m.ageH > 24) ? "critical" : open.length ? "warn" : null;
   return { open, severity };
 }
+
+// Cancelled collector runs (the job cap cut them). Two or more in the window is
+// the signal; "critical" only while one of them is RECENT (the newest `recent`
+// runs, ~2 days), so the alarm clears on its own once a fix has held, instead
+// of staying red for the ~5 days it takes old runs to leave a 24-run window.
+// runs: newest first, as the Actions API lists them.
+export function cancelledVerdict(runs, recent = 8) {
+  const idx = runs.map((r, i) => (r?.conclusion === "cancelled" ? i : -1)).filter((i) => i >= 0);
+  if (idx.length < 2) return { severity: null, cancelled: idx.length, of: runs.length };
+  return { severity: idx[0] < recent ? "critical" : "warn", cancelled: idx.length, of: runs.length, newestIndex: idx[0] };
+}

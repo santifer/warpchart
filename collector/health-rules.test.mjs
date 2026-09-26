@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { cronLag, openPartials, presenceEval, presenceLost, presenceMap, prflowFreshness } from "./health-rules.mjs";
+import { cancelledVerdict, cronLag, openPartials, presenceEval, presenceLost, presenceMap, prflowFreshness } from "./health-rules.mjs";
 
 describe("prflowFreshness", () => {
   // 26-sep: the first run after 00:00Z was cancelled and 25-sep never closed.
@@ -116,5 +116,18 @@ describe("openPartials", () => {
 
   it("ignores resolved markers", () => {
     expect(openPartials([{ family: "x", resolved: true, at: "2026-09-20T00:00:00Z" }], now).severity).toBeNull();
+  });
+});
+
+describe("cancelledVerdict", () => {
+  const runs = (cancelledAt) => Array.from({ length: 24 }, (_, i) => ({ conclusion: cancelledAt.includes(i) ? "cancelled" : "success" }));
+  it("is critical while a cancellation is recent", () => {
+    expect(cancelledVerdict(runs([2, 12])).severity).toBe("critical");
+  });
+  it("drops to warn once the recent runs are clean (the fix held)", () => {
+    expect(cancelledVerdict(runs([10, 15])).severity).toBe("warn");
+  });
+  it("says nothing about a single cancellation", () => {
+    expect(cancelledVerdict(runs([1])).severity).toBeNull();
   });
 });

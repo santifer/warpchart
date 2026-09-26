@@ -33,7 +33,7 @@
 //   --base=X   probe another origin (a preview deployment, say)
 // Exit code 1 when a critical finding is open, so CI turns red by itself.
 import { writeFileSync } from "node:fs";
-import { cronLag, openPartials, presenceEval, presenceMap, prflowFreshness } from "./health-rules.mjs";
+import { cancelledVerdict, cronLag, openPartials, presenceEval, presenceMap, prflowFreshness } from "./health-rules.mjs";
 
 const args = process.argv.slice(2);
 const JSON_OUT = args.includes("--json");
@@ -945,9 +945,11 @@ async function checkPipeline() {
         chronic.map(([name, n]) => ({ step: name, failedRuns: n, inspected })));
     } else pass("pipeline.chronic-step", "PIPELINE", `${inspected} runs inspected, no chronic step failures`);
 
-    if (cancelled >= 2) {
-      fail("pipeline.cancelled", "PIPELINE", "critical",
-        `${cancelled} of the last ${list.length} collector runs were CANCELLED`,
+    const cv = cancelledVerdict(list);
+    if (cv.severity) {
+      fail("pipeline.cancelled", "PIPELINE", cv.severity,
+        `${cancelled} of the last ${list.length} collector runs were CANCELLED` +
+          (cv.severity === "warn" ? " (none in the last 8 runs: the fix seems to hold)" : ""),
         "A cancelled run usually means the job hit its timeout, which kills the remaining steps silently - including 'Trigger deploy'. That is exactly how the site froze on 2026-07-19. Find the step that overran and give it its own timeout-minutes rather than raising the job's; if none overran and the steps' normal durations simply add up past the job cap (the first run of each UTC day carries the daily sweeps), raise the job cap above that sum.",
         { cancelled, of: list.length });
     }
