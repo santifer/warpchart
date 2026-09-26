@@ -1,0 +1,52 @@
+name: ci
+# The gate every human (or agent) change passes BEFORE it can reach production.
+# Until 2026-09-26 there was none: the only check was Vercel's build, which runs
+# after the push and never looks at the collector, the lint or any test.
+on:
+  push:
+    branches: [main]
+    # the collector's own commits only touch the deploy stamp
+    paths-ignore: [".deploy-stamp", "data/**"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+
+      - name: Typecheck
+        run: npx tsc --noEmit --incremental false
+
+      # Existing violations are frozen in eslint-suppressions.json; only NEW ones
+      # fail. Includes better-tailwindcss/no-unknown-classes: Tailwind drops an
+      # unknown utility silently (ring-panel drew an inverted ring in both themes).
+      - name: Lint
+        run: npx eslint .
+
+      - name: Collector and scripts parse
+        run: for f in collector/*.mjs scripts/*.mjs; do node --check "$f" || exit 1; done
+
+      - name: Tests
+        run: npm test
+
+      # No Blob token here, so the prebuild seeds data-sample/ exactly like a
+      # fork would: this also proves a fresh fork still builds.
+      - name: Build (sample data)
+        run: npm run build
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

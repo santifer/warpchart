@@ -1,0 +1,119 @@
+{
+  "src/app/r/[owner]/[name]/error.tsx": {
+    "@next/next/no-html-link-for-pages": {
+      "count": 1
+    }
+  },
+  "src/components/CodexModal.tsx": {
+    "react-hooks/set-state-in-effect": {
+      "count": 2
+    }
+  },
+  "src/components/CompareLab.tsx": {
+    "react-hooks/refs": {
+      "count": 6
+    },
+    "react-hooks/set-state-in-effect": {
+      "count": 1
+    }
+  },
+  "src/components/CumulativeChart.tsx": {
+    "react-hooks/immutability": {
+      "count": 1
+    }
+  },
+  "src/components/DailyBriefing.tsx": {
+    "react-hooks/purity": {
+      "count": 1
+    },
+    "react-hooks/set-state-in-effect": {
+      "count": 1
+    }
+  },
+  "src/components/DailyLadder.tsx": {
+    "react-hooks/refs": {
+      "count": 1
+    }
+  },
+  "src/components/DossierPanels.tsx": {
+    "react-hooks/purity": {
+      "count": 1
+    }
+  },
+  "src/components/EmbedGenerator.tsx": {
+    "react-hooks/set-state-in-effect": {
+      "count": 1
+    }
+  },
+  "src/components/GalacticChart.tsx": {
+    "react-hooks/refs": {
+      "count": 1
+    },
+    "react-hooks/set-state-in-effect": {
+      "count": 2
+    }
+  },
+  "src/components/GalaxyHero.tsx": {
+    "@next/next/no-html-link-for-pages": {
+      "count": 1
+    }
+  },
+  "src/components/GodRank.tsx": {
+    "react-hooks/set-state-in-effect": {
+      "count": 1
+    }
+  },
+  "src/components/LiveProvider.tsx": {
+    "react-hooks/set-state-in-effect": {
+      "count": 1
+    }
+  },
+  "src/components/PrFlowPanel.tsx": {
+    "react-hooks/static-components": {
+      "count": 4
+    }
+  },
+  "src/components/Projections.tsx": {
+    "react/no-unescaped-entities": {
+      "count": 1
+    }
+  },
+  "src/components/RankChart.tsx": {
+    "react-hooks/refs": {
+      "count": 1
+    }
+  },
+  "src/components/RepoSearch.tsx": {
+    "react-hooks/set-state-in-effect": {
+      "count": 1
+    }
+  },
+  "src/components/StatusBar.tsx": {
+    "@next/next/no-html-link-for-pages": {
+      "count": 1
+    }
+  },
+  "src/components/TrafficPanel.tsx": {
+    "react-hooks/purity": {
+      "count": 1
+    },
+    "react-hooks/set-state-in-effect": {
+      "count": 1
+    }
+  },
+  "src/components/UsageChart.tsx": {
+    "react-hooks/immutability": {
+      "count": 1
+    }
+  },
+  "src/lib/useChartPan.ts": {
+    "react-hooks/refs": {
+      "count": 1
+    }
+  },
+  "src/lib/usePalette.tsx": {
+    "react-hooks/set-state-in-effect": {
+      "count": 1
+    }
+  }
+}

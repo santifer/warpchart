@@ -10,7 +10,7 @@ export default function DemoBanner() {
   return (
     <div className="demo-banner numeral" role="note">
       <span className="demo-banner__tag">DEMO</span>
-      <span className="demo-banner__txt">synthetic telemetry · this fork ships sample data</span>
+      <span>synthetic telemetry · this fork ships sample data</span>
       <a
         className="demo-banner__cta"
         href="https://warpchart.dev"

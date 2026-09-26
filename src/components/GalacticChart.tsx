@@ -1198,7 +1198,7 @@ export default function GalacticChart({
             })}
 
             {panHint && inWindow(stars) ? (
-              <g className="pan-hint">
+              <g>
                 <text x={W - 76} y={CLIP_BOTTOM - 16} textAnchor="end" fontSize={11.5 * fs}
                   fill={C.accent} letterSpacing={2} className="numeral" opacity={0.9}>
                   PAN

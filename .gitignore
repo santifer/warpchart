@@ -50,3 +50,6 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Local Claude Code session memory (hooks write it); never publish it from this public repo
+**/.claude/memory/

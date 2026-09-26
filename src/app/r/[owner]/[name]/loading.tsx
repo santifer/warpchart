@@ -138,7 +138,7 @@ function StarfieldSkeleton({ mobile = false }: { mobile?: boolean }) {
       {stars.map((s, i) => (
         <span
           key={i}
-          className="absolute rounded-full bg-speck"
+          className="absolute rounded-full bg-star"
           style={{
             left: `${s.left}%`,
             top: `${s.top}%`,

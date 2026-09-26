@@ -257,7 +257,7 @@ export default function VitalSignsPanel({
             <span className="numeral leading-none text-accent" style={{ fontSize: "2.7rem" }}>
               {rankTier(a.compositeRank, vitals.universe).toUpperCase()}
             </span>
-            <span className="numeral text-body text-ink">
+            <span className="numeral text-ink">
               #{fmtCompact(a.compositeRank)}{" "}
               <span className="text-dim">of the {fmtCompact(vitals.universe)} most-starred on GitHub</span>
             </span>
