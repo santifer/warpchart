@@ -4,6 +4,7 @@
 // every response feeds the pool's rate-limit accounting.
 import { reqLog, serializeError } from "@/lib/log";
 import { pickAuth, noteRateLimit, lowFuel } from "@/lib/ghauth";
+import { softwareDownloads } from "@/lib/release-assets";
 
 export { lowFuel };
 
@@ -410,7 +411,7 @@ export async function repoDossier(owner: string, name: string): Promise<DossierR
           tagName: string;
           publishedAt: string | null;
           isPrerelease: boolean;
-          releaseAssets: { nodes: { downloadCount: number }[] };
+          releaseAssets: { nodes: { name: string | null; downloadCount: number }[] };
         }[];
       };
       object: { text: string } | null;
@@ -428,7 +429,7 @@ export async function repoDossier(owner: string, name: string): Promise<DossierR
             tagName
             publishedAt
             isPrerelease
-            releaseAssets(first: 50) { nodes { downloadCount } }
+            releaseAssets(first: 50) { nodes { name downloadCount } }
           }
         }
         object(expression: "HEAD:package.json") { ... on Blob { text } }
@@ -461,7 +462,8 @@ export async function repoDossier(owner: string, name: string): Promise<DossierR
       .map((r) => ({
         tag: r.tagName,
         at: r.publishedAt as string,
-        downloads: r.releaseAssets.nodes.reduce((a, b) => a + b.downloadCount, 0),
+        // software only: an SBOM or a checksum file is not an install (release-assets.ts)
+        downloads: softwareDownloads(r.releaseAssets.nodes),
       })),
     npmPkg,
   };

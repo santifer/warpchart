@@ -7,6 +7,7 @@ import Panel from "./Panel";
 import UsageChart from "./UsageChart";
 import { fmtCompact } from "@/lib/format";
 import type { Dossier } from "@/lib/explorer";
+import { shortTag } from "@/lib/release-assets";
 
 function ago(iso: string): string {
   const days = Math.max(0, (Date.now() - new Date(iso).getTime()) / 864e5);
@@ -203,7 +204,9 @@ export function UsagePanel({
                 </span>
                 {withDownloads.map((r) => (
                   <div key={r.tag} className="flex items-center gap-2">
-                    <span className="numeral w-24 truncate text-micro text-dim">{r.tag}</span>
+                    <span className="numeral w-24 truncate text-micro text-dim" title={r.tag}>
+                      {shortTag(r.tag)}
+                    </span>
                     <div className="h-1.5 flex-1 overflow-hidden bg-grid/60">
                       <div
                         className="h-full bg-accent/70"

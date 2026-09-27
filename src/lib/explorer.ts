@@ -188,7 +188,7 @@ const cachedDossier = (owner: string, name: string) =>
     // worse than either state. Third time this exact miss has cost a deploy:
     // CHANGE THE SHAPE, CHANGE THE KEY, IN THE SAME COMMIT.
     // v11: adds uniqueCloners14d. CHANGE THE SHAPE, CHANGE THE KEY, SAME COMMIT.
-    ["dossier-v12", `${owner}/${name}`.toLowerCase()],
+    ["dossier-v13", `${owner}/${name}`.toLowerCase()],
     { revalidate: 900 },
   )();
 
