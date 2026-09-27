@@ -42,6 +42,7 @@ export const PRESENCE_FIELDS = [
   "contributors.series",
   "usage.npm",
   "usage.npm.series.points",
+  "usage.npm.versions",
   "usage.clones.series",
   "activity30d",
 ];

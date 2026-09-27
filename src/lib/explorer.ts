@@ -18,6 +18,7 @@ import {
 } from "./github";
 import { loadTrafficVault } from "./traffic";
 import { npmCandidates } from "./npm-candidates";
+import { npmVersionWeek, type VersionDownloads } from "./npm-versions";
 import { reqLog } from "./log";
 import { nextMilestones } from "./milestones";
 import { canonicalVelocity } from "./velocity";
@@ -29,6 +30,12 @@ export interface Dossier extends DossierRaw {
   // daily download history (since launch) of the resolved npm package, so the
   // panel can draw the usage curve climbing over time, not just one number
   npmHistory: { day: string; d: number }[] | null;
+  // downloads per version over npm's rolling last week (release adoption);
+  // null = no npm package or npm had no data. Downloads, not people.
+  npmVersions: VersionDownloads[] | null;
+  // npm's own week for that reading (through = last day included), never the fetch time
+  npmVersionsStart: string | null;
+  npmVersionsThrough: string | null;
   // daily git clones (the other acquisition channel for clone-and-run repos),
   // from the Traffic Vault. Only populated for the public house repo — every
   // other repo's traffic stays private.
@@ -55,7 +62,14 @@ async function resolveNpmUsage(
   owner: string,
   name: string,
   rootPkg: string | null,
-): Promise<{ npmPkg: string | null; npmLast30: number | null; npmHistory: { day: string; d: number }[] | null }> {
+): Promise<{
+  npmPkg: string | null;
+  npmLast30: number | null;
+  npmHistory: { day: string; d: number }[] | null;
+  npmVersions: VersionDownloads[] | null;
+  npmVersionsStart: string | null;
+  npmVersionsThrough: string | null;
+}> {
   // Every name the repo has carried, canonical first (see npm-candidates.ts:
   // a transfer renames the repo, never the package).
   const candidates = npmCandidates(owner, name, rootPkg);
@@ -67,15 +81,23 @@ async function resolveNpmUsage(
     // ~24s (a missing package is a fast 404, not a timeout, so in practice only
     // the one that exists costs anything), under the /r/ maxDuration; npm resolves as reliably as a
     // single lookup.
-    const [dl, npmHistory] = await Promise.all([
+    const [dl, npmHistory, npmVersions] = await Promise.all([
       npmDownloads(cand),
       npmDownloadsRange(cand),
+      npmVersionWeek(cand),
     ]);
     if (dl !== null) {
-      return { npmPkg: cand, npmLast30: dl, npmHistory };
+      return {
+        npmPkg: cand,
+        npmLast30: dl,
+        npmHistory,
+        npmVersions: npmVersions?.list ?? null,
+        npmVersionsStart: npmVersions?.start ?? null,
+        npmVersionsThrough: npmVersions?.end ?? null,
+      };
     }
   }
-  return { npmPkg: null, npmLast30: null, npmHistory: null };
+  return { npmPkg: null, npmLast30: null, npmHistory: null, npmVersions: null, npmVersionsStart: null, npmVersionsThrough: null };
 }
 
 // standalone cached dossier for routes that don't run the full explorer
@@ -83,7 +105,7 @@ async function resolveNpmUsage(
 export async function fetchDossier(owner: string, name: string): Promise<Dossier | null> {
   try {
     const raw = await repoDossier(owner, name);
-    const { npmPkg, npmLast30, npmHistory } = await resolveNpmUsage(owner, name, raw.npmPkg);
+    const { npmPkg, npmLast30, npmHistory, npmVersions, npmVersionsStart, npmVersionsThrough } = await resolveNpmUsage(owner, name, raw.npmPkg);
     // git clones are the owner's PRIVATE traffic — surface them as a second
     // acquisition channel ONLY for the public house repo (its vault is the
     // opt-in demo). Unique cloners/day = the real-people proxy (raw count
@@ -140,6 +162,9 @@ export async function fetchDossier(owner: string, name: string): Promise<Dossier
       npmPkg,
       npmLast30,
       npmHistory: past(npmHistory),
+      npmVersions,
+      npmVersionsStart,
+      npmVersionsThrough,
       clonesHistory: past(clonesHistory),
       uniqueCloners14d,
       uniqueCloners14dAt,
@@ -188,7 +213,7 @@ const cachedDossier = (owner: string, name: string) =>
     // worse than either state. Third time this exact miss has cost a deploy:
     // CHANGE THE SHAPE, CHANGE THE KEY, IN THE SAME COMMIT.
     // v11: adds uniqueCloners14d. CHANGE THE SHAPE, CHANGE THE KEY, SAME COMMIT.
-    ["dossier-v13", `${owner}/${name}`.toLowerCase()],
+    ["dossier-v14", `${owner}/${name}`.toLowerCase()],
     { revalidate: 900 },
   )();
 
@@ -365,10 +390,10 @@ export async function getExplorerData(owner: string, name: string): Promise<Expl
   try {
     const [o, n] = repoName.split("/");
     const raw = await repoDossier(o, n);
-    const { npmPkg, npmLast30, npmHistory } = await resolveNpmUsage(o, n, raw.npmPkg);
+    const { npmPkg, npmLast30, npmHistory, npmVersions, npmVersionsStart, npmVersionsThrough } = await resolveNpmUsage(o, n, raw.npmPkg);
     // clones (private traffic) are surfaced only via the cached dossier path
     // (getCachedDossier -> fetchDossier), which the panels actually render
-    dossier = { ...raw, npmPkg, npmLast30, npmHistory, clonesHistory: null,
+    dossier = { ...raw, npmPkg, npmLast30, npmHistory, npmVersions, npmVersionsStart, npmVersionsThrough, clonesHistory: null,
                 uniqueCloners14d: null, uniqueCloners14dAt: null };
   } catch (err) {
     log.warn("dossier.failed", { err: err instanceof Error ? err.message.slice(0, 120) : String(err) });

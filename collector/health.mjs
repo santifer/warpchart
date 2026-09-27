@@ -809,6 +809,7 @@ const ARTIFACTS = [
   { prefix: "contributors/", kind: "periodic", maxAgeH: 12, what: "the contributor census (cohorts source)" },
   { prefix: "traffic/", kind: "periodic", maxAgeH: 12, what: "the Traffic Vault" },
   { prefix: "prflow/", kind: "periodic", maxAgeH: 12, what: "the PR flow panel" },
+  { prefix: "npm-versions/", kind: "periodic", maxAgeH: 36, what: "npm downloads by version (daily snapshot)" },
   { prefix: "health/", kind: "periodic", maxAgeH: 6, what: "this watchdog's own output" },
   { prefix: "live/", kind: "periodic", maxAgeH: 12, what: "live star polling" },
   { prefix: "badges-earned.json", kind: "periodic", maxAgeH: 36, what: "earned badges" },

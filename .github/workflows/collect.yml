@@ -81,6 +81,17 @@ jobs:
           GH_TOKEN: ${{ secrets.STARGAZER_TOKEN || secrets.TRAFFIC_TOKEN || secrets.GITHUB_TOKEN }}
           GH_TOKEN_FALLBACKS: ${{ secrets.TRAFFIC_TOKEN }} ${{ secrets.GITHUB_TOKEN }}
 
+      # 2c. NPM BY VERSION: npm only tells, for its CURRENT 7-day window, how the
+      #     downloads split across versions; the adoption curve of each release
+      #     exists only if every window is kept -> npm-versions/{owner}--{name}/{end}.json,
+      #     append-only, dated by npm. Two npm calls per repo, never fails the run.
+      - name: npm by version
+        run: node collector/npm-versions.mjs
+        continue-on-error: true
+        timeout-minutes: 2
+        env:
+          BLOB_READ_WRITE_TOKEN: ${{ secrets.BLOB_READ_WRITE_TOKEN }}
+
       # 3. Collect one snapshot (appends to the hydrated data/).
       - name: Collect snapshot
         run: node collector/collect.mjs

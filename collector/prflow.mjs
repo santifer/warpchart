@@ -140,7 +140,7 @@ export async function collectPrFlow(repo) {
 
 // Same unlocked set as vitals.mjs phase B and contributors.mjs: the house repo,
 // every route repo owned by us, and the paying tenants.
-function unlockedSet() {
+export function unlockedSet() {
   const config = readConfig();
   const owned = ((config.owned_by ?? [config.repo.split("/")[0]]) || []).map((o) => o.toLowerCase());
   const unlocked = new Set([canonicalRepo(config.repo).toLowerCase()]);

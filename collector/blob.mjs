@@ -26,6 +26,20 @@ export async function readFresh(key) {
   return null;
 }
 
+// true / false / null. null = could not tell (a transient error), which the
+// caller must treat as "do not write": only a definite "not found" is false.
+export async function blobExists(key) {
+  if (!token()) return null;
+  const m = await blob();
+  try {
+    await m.head(key, { token: token() });
+    return true;
+  } catch (e) {
+    if (e instanceof m.BlobNotFoundError || e?.name === "BlobNotFoundError") return false;
+    return null;
+  }
+}
+
 export async function writeJson(key, value) {
   const { put } = await blob();
   await put(key, JSON.stringify(value), {

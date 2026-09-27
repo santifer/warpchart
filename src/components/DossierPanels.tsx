@@ -8,6 +8,7 @@ import UsageChart from "./UsageChart";
 import { fmtCompact } from "@/lib/format";
 import type { Dossier } from "@/lib/explorer";
 import { shortTag } from "@/lib/release-assets";
+import { newestVersion, summarizeVersions } from "@/lib/npm-versions";
 
 function ago(iso: string): string {
   const days = Math.max(0, (Date.now() - new Date(iso).getTime()) / 864e5);
@@ -197,6 +198,50 @@ export function UsagePanel({
             (d!.clonesHistory && d!.clonesHistory.length >= 2) ? (
               <UsageChart npm={d!.npmHistory ?? []} clones={d!.clonesHistory} />
             ) : null}
+            {d!.npmVersions?.length
+              ? (() => {
+                  // adoption per release, from npm's rolling week (downloads, not people)
+                  const v = summarizeVersions(d!.npmVersions!, 4);
+                  const max = Math.max(1, ...v.rows.map((r) => r.d));
+                  const newest = newestVersion(d!.npmVersions!);
+                  const weekEnd = d!.npmVersionsThrough
+                    ? new Date(`${d!.npmVersionsThrough}T00:00:00Z`).toLocaleDateString("en-US", {
+                        month: "short",
+                        day: "numeric",
+                        timeZone: "UTC",
+                      })
+                    : null;
+                  return (
+                    <div className="flex flex-col gap-1.5">
+                      <span className="numeral text-micro tracking-[0.2em] text-faint">
+                        NPM BY VERSION · 7D
+                        {weekEnd ? ` · through ${weekEnd}` : ""}
+                      </span>
+                      {v.rows.map((r) => (
+                        <div key={r.version} className="flex items-center gap-2">
+                          <span
+                            className={`numeral w-24 truncate text-micro ${r.version === newest ? "text-accent" : "text-dim"}`}
+                            title={`${d!.npmPkg}@${r.version}`}
+                          >
+                            v{r.version}
+                          </span>
+                          <div className="h-1.5 flex-1 overflow-hidden bg-grid/60">
+                            <div
+                              className="h-full bg-accent/70"
+                              style={{ width: `${((r.d / max) * 100).toFixed(1)}%` }}
+                            />
+                          </div>
+                          <span className="numeral w-14 text-right text-micro text-ink">{fmtCompact(r.d)}</span>
+                        </div>
+                      ))}
+                      <span className="numeral text-micro text-faint">
+                        {v.rest ? `+${v.rest.versions} older · ${fmtCompact(v.rest.d)} · ` : ""}
+                        newest v{newest} · downloads, not people
+                      </span>
+                    </div>
+                  );
+                })()
+              : null}
             {withDownloads.length ? (
               <div className="flex flex-col gap-1.5">
                 <span className="numeral text-micro tracking-[0.2em] text-faint">

@@ -207,6 +207,10 @@ export async function GET(req: NextRequest) {
               last30: dossier.npmLast30,
               windowTotal: npm ? sum(npm.points, "d") : null,
               series: npm,
+              // downloads per version over npm's rolling last week (not people)
+              versions: dossier.npmVersions
+                ? { start: dossier.npmVersionsStart, through: dossier.npmVersionsThrough, list: dossier.npmVersions }
+                : null,
             }
           : null,
         clones: clones
