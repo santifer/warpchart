@@ -33,7 +33,7 @@
 //   --base=X   probe another origin (a preview deployment, say)
 // Exit code 1 when a critical finding is open, so CI turns red by itself.
 import { writeFileSync } from "node:fs";
-import { ARTIFACTS, COLLECTOR_STALE_H, cancelledVerdict, cronLag, etaIncoherences, openPartials, presenceEval, presenceMap, prflowFreshness, staleArtifacts } from "./health-rules.mjs";
+import { ARTIFACTS, COLLECTOR_STALE_H, cancelledVerdict, cronLag, etaIncoherences, openPartials, pipelineRunsGate, presenceEval, presenceMap, prflowFreshness, staleArtifacts } from "./health-rules.mjs";
 
 const args = process.argv.slice(2);
 const JSON_OUT = args.includes("--json");
@@ -110,6 +110,21 @@ async function gh(path, opts = {}) {
   return last;
 }
 
+// Every token of the pool answers the same GET, for calls where the tokens can
+// DISAGREE on content (not only on permission): the runs list came back stale
+// for one of them on 30-sep.
+async function ghEach(path, opts = {}) {
+  const out = [];
+  for (const tok of GH_POOL) {
+    // a token that times out is a failed token, not a failed check
+    out.push(await fetchJson(`https://api.github.com${path}`, {
+      headers: { Authorization: `Bearer ${tok}`, Accept: opts.accept ?? "application/vnd.github+json", "User-Agent": "warpchart-health" },
+      timeoutMs: 15_000,
+    }).catch((e) => ({ status: 0, ok: false, body: null, text: String(e?.message ?? e) })));
+  }
+  return out;
+}
+
 async function ghGraphql(query) {
   if (!GH_POOL.length) return { status: 0, ok: false, body: null };
   let last = { status: 0, ok: false, body: null };
@@ -163,6 +178,10 @@ async function checkFreshness(route) {
         "Check the collect workflow ran at all: gh run list -R santifer/warpchart -w collect.yml", body);
     }
     const h = ageH(iso);
+    if (!Number.isFinite(h)) {
+      return fail("fresh.snapshot", "FRESH", "critical", `/api/health reported a last snapshot that is not a date (${JSON.stringify(iso)})`,
+        "Read /api/health: collector.lastSnapshot must be an ISO timestamp.", body);
+    }
     // Thresholds follow the REAL cadence (median ~5 h, normal worst ~8 h; see
     // src/lib/staleness.ts), not the declared 2 h: at 4/6 h this fired on
     // most normal cycles.
@@ -866,9 +885,35 @@ async function checkPipeline() {
     // With 8 (two days) this was blind to the failure it exists for: the daily
     // heavy run was cancelled on 21, 24 and 26-sep, never twice inside the
     // window, so pipeline.cancelled never fired.
-    const runs = await gh(`/repos/${repo}/actions/workflows/collect.yml/runs?per_page=24&status=completed`);
-    const list = runs.body?.workflow_runs ?? [];
-    if (!list.length) return pass("pipeline.chronic-step", "PIPELINE", "no runs to inspect");
+    const runsPath = `/repos/${repo}/actions/workflows/collect.yml/runs?per_page=24&status=completed`;
+    // judge only a list that contains the run that made the latest snapshot
+    const { body: hb } = await fetchJson(`${BASE}/api/health`).catch(() => ({ body: null }));
+    const lastSnap = hb?.collector?.lastSnapshot ?? null;
+    const picked = pipelineRunsGate(await ghEach(runsPath), Date.parse(lastSnap));
+    const list = picked.list;
+    if (picked.gate === "unreadable") {
+      return fail("pipeline.runs-list", "PIPELINE", "warn", "no token of the pool could read the collector's runs list, so the pipeline was not checked",
+        "Check the tokens' access to Actions on this repo (GH_TOKEN / GH_TOKEN_FALLBACKS in health.yml). perToken says what each token got.", { perToken: picked.perToken });
+    }
+    if (picked.gate === "empty") {
+      return fail("pipeline.runs-list", "PIPELINE", "warn", `the runs list came back empty while the collector's last snapshot is ${lastSnap}, so the pipeline was not checked`,
+        "An empty completed-runs list next to a recent snapshot is a contradiction: read the API answer by hand (gh api " + runsPath + ").", { perToken: picked.perToken, lastSnapshot: lastSnap });
+    }
+    if (picked.gate === "none") return pass("pipeline.chronic-step", "PIPELINE", "no runs to inspect");
+    if (picked.gate === "stale") {
+      return fail("pipeline.runs-list", "PIPELINE", "warn",
+        `the Actions API returned a stale runs list (newest run ${picked.newestIso ?? "undated"}, but the collector's last snapshot is ${lastSnap}); chronic-step, cancelled and cron-lag were NOT judged on it`,
+        "Every token of the pool was asked and the freshest list is still behind the collector's own snapshot. perToken says what each token saw.",
+        { perToken: picked.perToken, lastSnapshot: lastSnap });
+    }
+    // the freshest list is fine, but a token that saw an old one is a symptom,
+    // not a detail: the collector uses the same pool for its other calls
+    if (picked.lagging.length) {
+      fail("pipeline.token-stale", "PIPELINE", "warn",
+        `token(s) #${picked.lagging.map((t) => t.token).join(", #")} of the pool received a stale runs list (newest ${picked.lagging.map((t) => t.newest ?? "none: empty list").join(", ")}); the freshest list was used`,
+        "#N is 0-based, in health.yml's pool order with empty and duplicate secrets removed; with all three set: #0 = STARGAZER_TOKEN, #1 = TRAFFIC_TOKEN, #2 = GITHUB_TOKEN. A token listed with no date returned an empty list while another had runs. The same token may be serving stale data to the collector's other calls: check its type and owner, and reissue it. Expected to repeat on every pass until that token changes.",
+        { perToken: picked.perToken, lastSnapshot: lastSnap });
+    }
 
     const failCount = new Map();
     const cancelled = list.filter((r) => r.conclusion === "cancelled").length;
@@ -911,7 +956,7 @@ async function checkPipeline() {
         `${cancelled} of the last ${list.length} collector runs were CANCELLED` +
           (cv.severity === "warn" ? " (none in the last 8 runs: the fix seems to hold)" : ""),
         "A cancelled run usually means the job hit its timeout, which kills the remaining steps silently - including 'Trigger deploy'. That is exactly how the site froze on 2026-07-19. Find the step that overran and give it its own timeout-minutes rather than raising the job's; if none overran and the steps' normal durations simply add up past the job cap (the first run of each UTC day carries the daily sweeps), raise the job cap above that sum.",
-        { cancelled, of: list.length });
+        { cancelled, of: list.length, listToken: picked.token, newest: picked.newestIso });
     }
 
     // The declared cron is every 2 h; the real cadence is what GitHub grants a
@@ -922,7 +967,7 @@ async function checkPipeline() {
       fail("pipeline.cron-lag", "PIPELINE", lag.severity,
         `the scheduled collector runs every ${lag.medianH} h (median); recent worst gap ${lag.recentMaxH} h, ${lag.sinceLastH} h since the last scheduled run`,
         "GitHub throttles cron on public repos without marking anything as failed. Everything the collector writes is this far behind. If it persists, move the heavy daily work off the critical path or add a second trigger (workflow_dispatch from a scheduler you control).",
-        lag);
+        { ...lag, listToken: picked.token, perToken: picked.perToken });
     } else if (lag) pass("pipeline.cron-lag", "PIPELINE", `median ${lag.medianH} h, recent worst ${lag.recentMaxH} h over ${lag.runs} runs`);
   });
 }

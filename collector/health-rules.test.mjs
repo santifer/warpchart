@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { COLLECTOR_STALE_H as APP_STALE_H } from "../src/lib/staleness.ts";
-import { ARTIFACTS, COLLECTOR_STALE_H, cancelledVerdict, cronLag, etaIncoherences, maxAgeFromEnv, openPartials, presenceEval, presenceLost, presenceMap, prflowFreshness, staleArtifacts, watchdogStale } from "./health-rules.mjs";
+import { ARTIFACTS, COLLECTOR_STALE_H, cancelledVerdict, cronLag, etaIncoherences, maxAgeFromEnv, newestRunMs, pickFreshestRuns, pipelineRunsGate, RUNS_LIST_TOL_H, runsListStale, openPartials, presenceEval, presenceLost, presenceMap, prflowFreshness, staleArtifacts, watchdogStale } from "./health-rules.mjs";
 
 describe("prflowFreshness", () => {
   // 26-sep: the first run after 00:00Z was cancelled and 25-sep never closed.
@@ -300,5 +300,173 @@ describe("inventory cadence (ARTIFACTS)", () => {
     const bad = new Map(newest);
     bad.set("data/meta.json", NaN);
     expect(staleArtifacts(bad, now).stale.map((s) => s.prefix)).toEqual(["data/meta.json"]);
+  });
+});
+
+// Real Actions API pages of collect.yml. STALE_PAGE ends on 6-sep 23:50Z (the
+// page one token of the pool kept receiving on 30-sep); FRESH_PAGE is what the
+// same call returned at 19:11Z on 30-sep.
+const STALE_PAGE = [
+    { created_at: "2026-09-06T23:50:47Z", run_started_at: "2026-09-06T23:50:47Z", event: "schedule", conclusion: "success" },
+    { created_at: "2026-09-06T22:05:21Z", run_started_at: "2026-09-06T22:05:21Z", event: "schedule", conclusion: "success" },
+    { created_at: "2026-09-06T18:13:50Z", run_started_at: "2026-09-06T18:13:50Z", event: "schedule", conclusion: "success" },
+    { created_at: "2026-09-06T15:23:29Z", run_started_at: "2026-09-06T15:23:29Z", event: "schedule", conclusion: "success" },
+    { created_at: "2026-09-06T10:49:23Z", run_started_at: "2026-09-06T10:49:23Z", event: "schedule", conclusion: "success" },
+    { created_at: "2026-09-06T04:28:55Z", run_started_at: "2026-09-06T04:28:55Z", event: "schedule", conclusion: "cancelled" },
+    { created_at: "2026-09-05T23:49:36Z", run_started_at: "2026-09-05T23:49:36Z", event: "schedule", conclusion: "success" },
+    { created_at: "2026-09-05T22:01:54Z", run_started_at: "2026-09-05T22:01:54Z", event: "schedule", conclusion: "success" },
+    { created_at: "2026-09-05T18:12:14Z", run_started_at: "2026-09-05T18:12:14Z", event: "schedule", conclusion: "success" },
+    { created_at: "2026-09-05T15:06:30Z", run_started_at: "2026-09-05T15:06:30Z", event: "schedule", conclusion: "success" },
+    { created_at: "2026-09-05T10:29:05Z", run_started_at: "2026-09-05T10:29:05Z", event: "schedule", conclusion: "success" },
+    { created_at: "2026-09-05T04:18:01Z", run_started_at: "2026-09-05T04:18:01Z", event: "schedule", conclusion: "cancelled" },
+    { created_at: "2026-09-04T23:58:45Z", run_started_at: "2026-09-04T23:58:45Z", event: "schedule", conclusion: "success" },
+    { created_at: "2026-09-04T20:42:22Z", run_started_at: "2026-09-04T20:42:22Z", event: "schedule", conclusion: "cancelled" },
+    { created_at: "2026-09-04T16:16:31Z", run_started_at: "2026-09-04T16:16:31Z", event: "schedule", conclusion: "success" },
+    { created_at: "2026-09-04T11:10:24Z", run_started_at: "2026-09-04T11:10:24Z", event: "schedule", conclusion: "failure" },
+    { created_at: "2026-09-04T04:22:37Z", run_started_at: "2026-09-04T04:22:37Z", event: "schedule", conclusion: "success" },
+    { created_at: "2026-09-04T00:00:08Z", run_started_at: "2026-09-04T00:00:08Z", event: "schedule", conclusion: "success" },
+    { created_at: "2026-09-03T20:56:45Z", run_started_at: "2026-09-03T20:56:45Z", event: "schedule", conclusion: "success" },
+    { created_at: "2026-09-03T17:48:35Z", run_started_at: "2026-09-03T17:48:35Z", event: "schedule", conclusion: "success" },
+    { created_at: "2026-09-03T12:46:53Z", run_started_at: "2026-09-03T12:46:53Z", event: "schedule", conclusion: "success" },
+    { created_at: "2026-09-03T07:07:25Z", run_started_at: "2026-09-03T07:07:25Z", event: "schedule", conclusion: "success" },
+    { created_at: "2026-09-03T05:10:38Z", run_started_at: "2026-09-03T05:10:38Z", event: "workflow_dispatch", conclusion: "success" },
+    { created_at: "2026-09-03T00:08:12Z", run_started_at: "2026-09-03T00:08:12Z", event: "schedule", conclusion: "success" },
+  ];
+const FRESH_PAGE = [
+    { created_at: "2026-09-30T19:11:11Z", run_started_at: "2026-09-30T19:11:11Z", event: "schedule", conclusion: "success" },
+    { created_at: "2026-09-30T12:26:46Z", run_started_at: "2026-09-30T12:26:46Z", event: "schedule", conclusion: "success" },
+    { created_at: "2026-09-30T05:24:58Z", run_started_at: "2026-09-30T05:24:58Z", event: "schedule", conclusion: "success" },
+    { created_at: "2026-09-29T22:10:16Z", run_started_at: "2026-09-29T22:10:16Z", event: "schedule", conclusion: "success" },
+    { created_at: "2026-09-29T16:28:17Z", run_started_at: "2026-09-29T16:28:17Z", event: "schedule", conclusion: "failure" },
+    { created_at: "2026-09-29T08:22:05Z", run_started_at: "2026-09-29T08:22:05Z", event: "schedule", conclusion: "failure" },
+    { created_at: "2026-09-29T01:51:07Z", run_started_at: "2026-09-29T01:51:07Z", event: "schedule", conclusion: "success" },
+    { created_at: "2026-09-28T20:30:50Z", run_started_at: "2026-09-28T20:30:50Z", event: "schedule", conclusion: "failure" },
+    { created_at: "2026-09-28T13:44:40Z", run_started_at: "2026-09-28T13:44:40Z", event: "schedule", conclusion: "failure" },
+    { created_at: "2026-09-28T05:14:56Z", run_started_at: "2026-09-28T05:14:56Z", event: "schedule", conclusion: "failure" },
+    { created_at: "2026-09-27T22:58:34Z", run_started_at: "2026-09-27T22:58:34Z", event: "schedule", conclusion: "success" },
+    { created_at: "2026-09-27T18:18:05Z", run_started_at: "2026-09-27T18:18:05Z", event: "schedule", conclusion: "success" },
+    { created_at: "2026-09-27T13:52:52Z", run_started_at: "2026-09-27T13:52:52Z", event: "schedule", conclusion: "success" },
+    { created_at: "2026-09-27T09:31:03Z", run_started_at: "2026-09-27T09:31:03Z", event: "workflow_dispatch", conclusion: "success" },
+    { created_at: "2026-09-27T08:02:33Z", run_started_at: "2026-09-27T08:02:33Z", event: "schedule", conclusion: "failure" },
+    { created_at: "2026-09-27T00:30:04Z", run_started_at: "2026-09-27T00:30:04Z", event: "schedule", conclusion: "success" },
+    { created_at: "2026-09-26T21:03:29Z", run_started_at: "2026-09-26T21:03:29Z", event: "schedule", conclusion: "success" },
+    { created_at: "2026-09-26T16:17:32Z", run_started_at: "2026-09-26T16:17:32Z", event: "schedule", conclusion: "success" },
+    { created_at: "2026-09-26T11:16:44Z", run_started_at: "2026-09-26T11:16:44Z", event: "schedule", conclusion: "success" },
+    { created_at: "2026-09-26T10:22:20Z", run_started_at: "2026-09-26T10:22:20Z", event: "workflow_dispatch", conclusion: "success" },
+    { created_at: "2026-09-26T09:58:53Z", run_started_at: "2026-09-26T09:58:53Z", event: "workflow_dispatch", conclusion: "success" },
+    { created_at: "2026-09-26T06:59:13Z", run_started_at: "2026-09-26T06:59:13Z", event: "workflow_dispatch", conclusion: "success" },
+    { created_at: "2026-09-26T06:52:16Z", run_started_at: "2026-09-26T06:52:16Z", event: "workflow_dispatch", conclusion: "failure" },
+    { created_at: "2026-09-26T04:49:28Z", run_started_at: "2026-09-26T04:49:28Z", event: "schedule", conclusion: "cancelled" },
+  ];
+
+
+describe("stale runs list (pipeline.*)", () => {
+  it("the stale page alone reads as a dead cron: the 30-sep false critical", () => {
+    const lag = cronLag(STALE_PAGE.filter((r) => r.event === "schedule").map((r) => r.run_started_at), Date.parse("2026-09-30T16:30:34Z"));
+    expect(lag.sinceLastH).toBeCloseTo(568.7, 1);
+    expect(lag.severity).toBe("critical");
+    expect(STALE_PAGE.filter((r) => r.conclusion === "cancelled")).toHaveLength(3);
+  });
+
+  it("keeps the freshest list whatever order the pool answers in", () => {
+    const stale = { ok: true, body: { workflow_runs: STALE_PAGE } };
+    const fresh = { ok: true, body: { workflow_runs: FRESH_PAGE } };
+    expect(pickFreshestRuns([stale, fresh])).toMatchObject({ token: 1, list: FRESH_PAGE });
+    expect(pickFreshestRuns([fresh, stale])).toMatchObject({ token: 0, list: FRESH_PAGE });
+    // what the old first-200 rule used
+    expect([stale, fresh].find((r) => r.ok).body.workflow_runs).toBe(STALE_PAGE);
+  });
+
+  it("ignores a token that failed and says so", () => {
+    const r = pickFreshestRuns([{ ok: false, body: null }, { ok: true, body: { workflow_runs: FRESH_PAGE } }]);
+    expect(r.token).toBe(1);
+    expect(r.perToken[0]).toMatchObject({ token: 0, ok: false, runs: null, newest: null });
+  });
+
+  it("refuses to judge a list that is behind the collector's own snapshot", () => {
+    const lastSnapshot = Date.parse("2026-09-30T19:11:57Z");
+    expect(runsListStale(newestRunMs(STALE_PAGE), lastSnapshot)).toBe(true);
+    expect(runsListStale(newestRunMs(FRESH_PAGE), lastSnapshot)).toBe(false);
+  });
+
+  it("does not guess without an independent timestamp", () => {
+    expect(runsListStale(newestRunMs(STALE_PAGE), NaN)).toBe(false);
+  });
+
+  it("an empty or unreadable list is stale against a known snapshot", () => {
+    expect(runsListStale(newestRunMs([]), Date.parse("2026-09-30T19:11:57Z"))).toBe(true);
+  });
+
+  it("tolerates a normal gap plus a run in progress, not more (boundaries)", () => {
+    const snap = Date.parse("2026-09-30T19:00:00Z");
+    const behind = (h) => snap - h * 3_600_000;
+    expect(runsListStale(behind(8.5), snap)).toBe(false);
+    expect(runsListStale(behind(10.5), snap)).toBe(false);
+    expect(runsListStale(behind(11.5), snap)).toBe(true);
+    expect(runsListStale(behind(RUNS_LIST_TOL_H), snap)).toBe(false);
+    expect(runsListStale(behind(RUNS_LIST_TOL_H + 0.01), snap)).toBe(true);
+  });
+});
+
+describe("pipelineRunsGate", () => {
+  const ok = (runs) => ({ ok: true, body: { workflow_runs: runs } });
+  const failed = { ok: false, body: null };
+  const snap = Date.parse("2026-09-30T19:11:57Z");
+
+  it("real 30-sep case: judges the fresh list and names the token that saw the stale one", () => {
+    const g = pipelineRunsGate([ok(STALE_PAGE), ok(FRESH_PAGE), ok(FRESH_PAGE)], snap);
+    expect(g.gate).toBe("ok");
+    expect(g.list).toBe(FRESH_PAGE);
+    expect(g.lagging.map((t) => t.token)).toEqual([0]);
+  });
+
+  it("refuses to judge when every token only has the stale list", () => {
+    expect(pipelineRunsGate([ok(STALE_PAGE)], snap).gate).toBe("stale");
+  });
+
+  // The rule that must never break: a collector that really stopped has a
+  // snapshot as old as its newest run, so its list is not "stale" and cron-lag
+  // still fires as critical.
+  it("a cron that really died is still judged, and still critical", () => {
+    const deadSnap = Date.parse("2026-09-06T23:51:40Z");
+    const g = pipelineRunsGate([ok(STALE_PAGE)], deadSnap);
+    expect(g.gate).toBe("ok");
+    const lag = cronLag(g.list.filter((r) => r.event === "schedule").map((r) => r.run_started_at), Date.parse("2026-09-30T16:30:34Z"));
+    expect(lag.severity).toBe("critical");
+  });
+
+  it("a failed or timed-out token does not decide anything", () => {
+    const g = pipelineRunsGate([failed, ok(FRESH_PAGE)], snap);
+    expect(g).toMatchObject({ gate: "ok", token: 1 });
+    expect(g.lagging).toEqual([]);
+  });
+
+  it("no readable token is 'unreadable', never a pass", () => {
+    expect(pipelineRunsGate([failed, failed], snap).gate).toBe("unreadable");
+    expect(pipelineRunsGate([{ ok: true, body: { message: "Not Found" } }], snap).gate).toBe("unreadable");
+    expect(pipelineRunsGate([], snap).gate).toBe("unreadable");
+  });
+
+  it("names a token that read an empty list while another had runs", () => {
+    expect(pipelineRunsGate([ok([]), ok(FRESH_PAGE)], snap).lagging.map((t) => t.token)).toEqual([0]);
+  });
+
+  it("without the snapshot, still names a token that trails the freshest list", () => {
+    expect(pipelineRunsGate([ok(STALE_PAGE), ok(FRESH_PAGE)], NaN).lagging.map((t) => t.token)).toEqual([0]);
+  });
+
+  it("an empty list next to a known snapshot is a contradiction, not 'no runs'", () => {
+    expect(pipelineRunsGate([ok([])], snap).gate).toBe("empty");
+    expect(pipelineRunsGate([ok([])], NaN).gate).toBe("none");
+  });
+
+  it("without the snapshot it judges the freshest list rather than guessing", () => {
+    expect(pipelineRunsGate([ok(STALE_PAGE), ok(FRESH_PAGE)], NaN)).toMatchObject({ gate: "ok", token: 1 });
+  });
+
+  it("undated runs do not crash it", () => {
+    const g = pipelineRunsGate([ok([{ event: "schedule", conclusion: "success" }])], snap);
+    expect(g.gate).toBe("stale");
+    expect(g.newestIso).toBeNull();
   });
 });

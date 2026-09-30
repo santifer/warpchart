@@ -256,3 +256,71 @@ export function staleArtifacts(newest, now = Date.now(), artifacts = ARTIFACTS) 
   }
   return { stale, missing };
 }
+
+// pipeline.*: the Actions API can hand one token of the pool a STALE runs list.
+// 30-sep: a page ending on 6-sep 23:50Z was judged as today's, "568.7 h since the
+// last scheduled run" and "3 of 24 cancelled", hours after the collector had run
+// (that real page reproduces both numbers exactly; the API answers with
+// `Vary: Authorization`, so a cache per token fits). gh() used the first 200 of
+// the pool, so the verdict flipped with whichever token answered first.
+export function newestRunMs(runs) {
+  const t = (runs ?? []).map((r) => Date.parse(r?.run_started_at ?? r?.created_at)).filter(Number.isFinite);
+  return t.length ? Math.max(...t) : NaN;
+}
+
+const isoOrNull = (ms) => (Number.isFinite(ms) ? new Date(ms).toISOString() : null);
+
+// responses: one { ok, body } per token, in pool order. Keeps the freshest list;
+// perToken records what each token saw, so a stale token can be named. A 200
+// without a workflow_runs array is an unreadable answer, not an empty list.
+export function pickFreshestRuns(responses) {
+  let best = null;
+  const perToken = (responses ?? []).map((r, token) => {
+    const list = r?.ok && Array.isArray(r.body?.workflow_runs) ? r.body.workflow_runs : null;
+    const newest = list ? newestRunMs(list) : NaN;
+    if (list && (best === null || (Number.isFinite(newest) && !(newest <= best.newest)))) best = { list, token, newest };
+    return { token, ok: !!list, runs: list ? list.length : null, newest: isoOrNull(newest) };
+  });
+  return { list: best?.list ?? [], token: best?.token ?? null, newest: best?.newest ?? NaN, perToken };
+}
+
+// How far the newest listed run may trail the collector's last snapshot before
+// the list counts as missing runs: a normal cron gap (COLLECTOR_STALE_H) plus
+// the run that wrote the snapshot possibly still being in progress (job cap
+// 25 min, rounded to 1 h). Accepted rare case: right after a real hole longer
+// than this, while the recovering run is still in progress, one pass may read
+// "stale list" instead of cron-lag; the next pass sees the >12 h hole and
+// cron-lag fires critical. The delay is one pass at most.
+export const RUNS_LIST_TOL_H = COLLECTOR_STALE_H + 1;
+
+// A runs list whose newest run is older than the collector's own last snapshot
+// (beyond RUNS_LIST_TOL_H) is missing runs: judging it would read an old sample
+// as current. Without an independent timestamp we cannot tell: not stale. A
+// cron that really died is NOT a stale list: its snapshot is as old as its runs.
+export function runsListStale(newestMs, lastSnapshotMs, tolH = RUNS_LIST_TOL_H) {
+  if (!Number.isFinite(lastSnapshotMs)) return false;
+  return !Number.isFinite(newestMs) || lastSnapshotMs - newestMs > tolH * HOUR;
+}
+
+// Tokens whose own list trails the reference: a symptom worth naming even when
+// the freshest list is fine (the collector uses the same pool for other calls).
+// Reference = the collector's snapshot, or the freshest list when the snapshot
+// is unknown. A token that read an EMPTY list while another had runs lags too.
+export function laggingTokens(perToken, refMs, freshestHasRuns = true) {
+  return (perToken ?? []).filter((t) =>
+    t.ok && (t.newest ? runsListStale(Date.parse(t.newest), refMs) : freshestHasRuns && t.runs === 0));
+}
+
+// The whole decision before any pipeline verdict: which list to judge, or why none.
+// gate: "ok" | "unreadable" (no token, or none could read it) | "empty" (readable, no runs,
+// snapshot known) | "none" (readable, no runs, nothing to compare) | "stale".
+export function pipelineRunsGate(responses, lastSnapshotMs) {
+  const picked = pickFreshestRuns(responses);
+  const base = { ...picked, newestIso: isoOrNull(picked.newest), lagging: [] };
+  // no token at all, or none that could read: never a pass
+  if (!picked.perToken.some((t) => t.ok)) return { ...base, gate: "unreadable" };
+  if (!picked.list.length) return { ...base, gate: Number.isFinite(lastSnapshotMs) ? "empty" : "none" };
+  if (runsListStale(picked.newest, lastSnapshotMs)) return { ...base, gate: "stale" };
+  const ref = Number.isFinite(lastSnapshotMs) ? lastSnapshotMs : picked.newest;
+  return { ...base, gate: "ok", lagging: laggingTokens(picked.perToken, ref, picked.list.length > 0) };
+}
