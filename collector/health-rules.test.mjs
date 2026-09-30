@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { cancelledVerdict, cronLag, openPartials, presenceEval, presenceLost, presenceMap, prflowFreshness } from "./health-rules.mjs";
+import { cancelledVerdict, cronLag, etaIncoherences, maxAgeFromEnv, openPartials, presenceEval, presenceLost, presenceMap, prflowFreshness, watchdogStale } from "./health-rules.mjs";
 
 describe("prflowFreshness", () => {
   // 26-sep: the first run after 00:00Z was cancelled and 25-sep never closed.
@@ -129,5 +129,139 @@ describe("cancelledVerdict", () => {
   });
   it("says nothing about a single cancellation", () => {
     expect(cancelledVerdict(runs([1])).severity).toBeNull();
+  });
+});
+
+describe("etaIncoherences", () => {
+  // Real payload, /api/v1/overtakes 29-sep: a 12-star gap closing at 1,736/day
+  // is 0.0069 d away; collisions.mjs publishes etaDays rounded to 0.01, so the
+  // API says 0.01. The old 15% relative test read the rounding as a broken
+  // projection and kept issue #46 critical ("says 0.01d, the numbers give 0.01d").
+  const imminent = {
+    hunter: { repo: "paperclipai/paperclip", velocityPerDay: 1769 },
+    victim: { repo: "3b1b/manim", velocityPerDay: 33 },
+    gap: 12,
+    etaDays: 0.01,
+  };
+
+  it("does not read the 0.01 d publishing resolution as incoherence", () => {
+    expect(etaIncoherences([imminent])).toEqual([]);
+  });
+
+  it("still fires when the ETA comes from another velocity", () => {
+    const wrong = { hunter: { repo: "a/a", velocityPerDay: 60 }, victim: { repo: "b/b", velocityPerDay: 20 }, gap: 100, etaDays: 5 };
+    expect(etaIncoherences([wrong])).toHaveLength(1);
+  });
+
+  it("still fires on an imminent ETA that is really off", () => {
+    expect(etaIncoherences([{ ...imminent, etaDays: 0.5 }])).toHaveLength(1);
+  });
+
+  it("fires on a crossing published for a hunter shown slower than its victim", () => {
+    const r = etaIncoherences([{ ...imminent, victim: { repo: "x/x", velocityPerDay: 1800 } }]);
+    expect(r).toHaveLength(1);
+    expect(r[0].reason).toBe("hunter shown slower than victim");
+  });
+
+  // The high side of the interval, gap/(c-1): true 31.51 and 23.49 are shown as
+  // 32 and 23, so the true closing (8.02) is ABOVE the shown c=9 minus one. Drop
+  // the (c-1) bound for gap/c and these legitimate ETAs turn into false alarms.
+  it("accepts ETAs on the high side of the rounding interval", () => {
+    const high1 = { hunter: { repo: "h/h", velocityPerDay: 32 }, victim: { repo: "v/v", velocityPerDay: 23 }, gap: 8, etaDays: 1 };
+    const high2 = { hunter: { repo: "h/h", velocityPerDay: 33 }, victim: { repo: "v/v", velocityPerDay: 24 }, gap: 50, etaDays: 6.24 };
+    expect(etaIncoherences([high1, high2])).toEqual([]);
+  });
+
+  // Property: anything collisions.mjs can publish passes. Same filters and the
+  // same rounding as runCollisionScan (hunter >= 25/day, closing >= max(8, 15%),
+  // gap >= 3, ETA <= 7 d; v shown whole, etaDays to 0.01). Seeded, deterministic.
+  it("never flags what collisions.mjs can legitimately publish (20,000 generated pairs)", () => {
+    let seed = 20260930;
+    const rnd = () => ((seed = (seed * 1664525 + 1013904223) >>> 0) / 2 ** 32);
+    const legit = [];
+    while (legit.length < 20000) {
+      const hv = Math.round(25 * Math.pow(3000 / 25, rnd()) * 10) / 10; // v7 comes at 0.1
+      const closing = Math.max(8, hv * 0.15) + rnd() * hv;
+      const vv = Math.round((hv - closing) * 10) / 10;
+      const realClosing = hv - vv;
+      if (realClosing < Math.max(8, hv * 0.15)) continue;
+      const gap = 3 + Math.floor(rnd() * hv * 7);
+      const eta = gap / realClosing;
+      if (eta > 7) continue;
+      legit.push({ hunter: { repo: "h/h", velocityPerDay: Math.round(hv) }, victim: { repo: "v/v", velocityPerDay: Math.round(vv) }, gap, etaDays: Math.round(eta * 100) / 100 });
+    }
+    expect(etaIncoherences(legit)).toEqual([]);
+  });
+
+  // The worst legitimate case collisions.mjs can publish: closing just above its
+  // floor of 8/day, both velocities rounded the unlucky way (true 32.49 and 23.52
+  // shown as 32 and 24). Rounding alone moves the ETA 12.4%; it is still right.
+  it("accepts the worst legitimate rounding (closing 8, 12.4% off in relative terms)", () => {
+    const edge = { hunter: { repo: "h/h", velocityPerDay: 32 }, victim: { repo: "v/v", velocityPerDay: 24 }, gap: 8, etaDays: 0.89 };
+    expect(etaIncoherences([edge])).toEqual([]);
+  });
+
+  // Review of 30-sep: a relative 15% hides a projection from a velocity 10% off
+  // on a fast repo, because rounding there is only ±0.06%.
+  it("fires on a fast repo projected from a velocity 10% off", () => {
+    const fast = { ...imminent, gap: 5000, etaDays: 3.2 }; // true ETA 5000/1736 = 2.88
+    expect(etaIncoherences([fast])).toHaveLength(1);
+  });
+
+  it("fires on a published 0 for a crossing weeks away", () => {
+    const zero = { hunter: { repo: "h/h", velocityPerDay: 30 }, victim: { repo: "v/v", velocityPerDay: 20 }, gap: 500, etaDays: 0 };
+    expect(etaIncoherences([zero])).toHaveLength(1);
+  });
+
+  it("accepts a published 0 for a crossing minutes away", () => {
+    const now = { ...imminent, gap: 3, hunter: { repo: "h/h", velocityPerDay: 1714 }, etaDays: 0 }; // 3/1700 = 0.0018 d
+    expect(etaIncoherences([now])).toEqual([]);
+  });
+
+  it("reads a missing number as a failure, not as coherence", () => {
+    const { gap, ...noGap } = imminent;
+    const r = etaIncoherences([noGap]);
+    expect(gap).toBe(12);
+    expect(r).toHaveLength(1);
+    expect(r[0].reason).toBe("non-numeric input");
+  });
+});
+
+describe("watchdogStale", () => {
+  // The health cron is declared every 2 h but GitHub runs it every 4.7 h median,
+  // 7.9 h p99, 8.6 h max (149 gaps, 30 days to 30-sep). A 6 h limit went red on
+  // 38 of them, including 28-sep 20:33Z at 6.1 h, with nothing broken.
+  it("reads a late cron as late, not stopped (6.1 h, 28-sep 20:33Z)", () => {
+    expect(watchdogStale(6.1)).toBe(false);
+  });
+
+  it("tolerates the longest real gap in 30 days (8.6 h)", () => {
+    expect(watchdogStale(8.6)).toBe(false);
+  });
+
+  it("fires on a stopped schedule", () => {
+    expect(watchdogStale(12.5)).toBe(true);
+  });
+
+  it("does not fire at exactly the limit", () => {
+    expect(watchdogStale(12)).toBe(false);
+  });
+
+  it("reads a report without a timestamp as stale", () => {
+    expect(watchdogStale(NaN)).toBe(true);
+  });
+
+  it("reads a non-numeric limit as stale rather than alive", () => {
+    expect(watchdogStale(5, NaN)).toBe(true);
+  });
+});
+
+describe("maxAgeFromEnv", () => {
+  it("keeps the default when the override is absent, empty, not a number, zero or negative", () => {
+    for (const raw of [undefined, "", "  ", "abc", "0", "-1"]) expect(maxAgeFromEnv(raw)).toBe(12);
+  });
+
+  it("honours a positive numeric override", () => {
+    expect(maxAgeFromEnv("8")).toBe(8);
   });
 });

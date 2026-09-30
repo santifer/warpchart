@@ -33,7 +33,7 @@
 //   --base=X   probe another origin (a preview deployment, say)
 // Exit code 1 when a critical finding is open, so CI turns red by itself.
 import { writeFileSync } from "node:fs";
-import { cancelledVerdict, cronLag, openPartials, presenceEval, presenceMap, prflowFreshness } from "./health-rules.mjs";
+import { cancelledVerdict, cronLag, etaIncoherences, openPartials, presenceEval, presenceMap, prflowFreshness } from "./health-rules.mjs";
 
 const args = process.argv.slice(2);
 const JSON_OUT = args.includes("--json");
@@ -702,19 +702,23 @@ async function checkCoherence(route) {
   // not reproduce the published eta, the projection is reading other inputs.
   await check("coherence.eta", "COHERENCE", async () => {
     const { body } = await fetchJson(`${BASE}/api/v1/overtakes?limit=20`);
-    const bad = [];
-    for (const o of body?.overtakes ?? []) {
-      const closing = (o.hunter?.velocityPerDay ?? 0) - (o.victim?.velocityPerDay ?? 0);
-      if (closing <= 0 || o.etaDays == null) continue;
-      const expected = o.gap / closing;
-      if (pct(expected, o.etaDays) > 0.15) bad.push({ pair: `${o.hunter.repo} -> ${o.victim.repo}`, gap: o.gap, closing, published: o.etaDays, expected: Math.round(expected * 100) / 100 });
+    // an absent or empty list is not a checked one
+    if (!Array.isArray(body?.overtakes)) {
+      return fail("coherence.eta", "COHERENCE", "warn", "the overtakes endpoint answered without an `overtakes` array, so no ETA could be checked",
+        "The route errored or changed shape (non-JSON body, renamed field). Open /api/v1/overtakes?limit=20 and read src/app/api/v1/overtakes/route.ts.");
     }
+    if (!body.overtakes.length) {
+      return fail("coherence.eta", "COHERENCE", "warn", "0 overtakes served, so no ETA was checked",
+        "overtakes() returns [] when the collisions store did not load (loadCollisions in src/lib/history.ts): check that data/collisions.json made it into the deploy.");
+    }
+    // rule and its tests live in health-rules.mjs (exact interval allowed by the published rounding)
+    const bad = etaIncoherences(body.overtakes);
     if (bad.length) {
       fail("coherence.eta", "COHERENCE", "critical",
         `${bad.length} published ETA(s) do not follow from the gap and velocities shown beside them: ` +
-        bad.slice(0, 3).map((b) => `${b.pair} says ${b.published}d, the numbers give ${b.expected}d`).join(" · "),
-        "projectCrossing in src/lib/compare.ts is the single source for crossings. If the endpoint's own numbers do not reproduce its ETA, it is projecting from a different velocity than the one it displays.", bad.slice(0, 8));
-    } else pass("coherence.eta", "COHERENCE", "ETAs follow from their inputs");
+        bad.slice(0, 3).map((b) => b.reason ? `${b.pair}: ${b.reason}` : `${b.pair} says ${b.published}d, the numbers give ${b.expected}d`).join(" · "),
+        "These ETAs come from runCollisionScan in collector/collisions.mjs, which shows velocities rounded to whole stars/day and etaDays to 0.01. An ETA outside the interval those numbers allow was computed from other inputs (a different velocity or gap than the ones shown). 'non-numeric input' = a field the endpoint serves is missing or not a number; 'hunter shown slower' = a crossing published for a pair that cannot converge. If the rounding in collisions.mjs was changed on purpose, update etaIncoherences in collector/health-rules.mjs with it.", bad.slice(0, 8));
+    } else pass("coherence.eta", "COHERENCE", `${body.overtakes.length} ETAs checked (the ones /api/v1/overtakes?limit=20 serves), all inside the interval their inputs allow`);
   });
 
   // Our stars vs GitHub's stars right now: the ultimate reality check.

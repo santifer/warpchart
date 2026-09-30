@@ -13,11 +13,13 @@
 // Usage: BLOB_READ_WRITE_TOKEN=... node collector/watchdog-alive.mjs
 // Exit 1 (visible in the run) when the watchdog has gone quiet.
 import { get } from "@vercel/blob";
+import { maxAgeFromEnv, watchdogStale } from "./health-rules.mjs";
 
 const token = process.env.BLOB_READ_WRITE_TOKEN;
-// The watchdog runs every 2h. Six hours means it missed three turns, which is
-// a stopped schedule rather than a slow one.
-const MAX_AGE_H = Number(process.env.WATCHDOG_MAX_AGE_H || 6);
+// The limit and why it is 12 h (GitHub delays the 2 h cron to 4.7 h median,
+// 8.6 h max) live with their tests in health-rules.mjs.
+// A non-numeric override must not switch the alarm off (or on forever).
+const MAX_AGE_H = maxAgeFromEnv(process.env.WATCHDOG_MAX_AGE_H);
 
 if (!token) {
   console.log("[watchdog-alive] no BLOB_READ_WRITE_TOKEN, skipping");
@@ -34,7 +36,11 @@ try {
   }
   const report = JSON.parse(await new Response(res.stream).text());
   const ageH = (Date.now() - Date.parse(report.at)) / 3_600_000;
-  if (ageH > MAX_AGE_H) {
+  if (watchdogStale(ageH, MAX_AGE_H)) {
+    if (!Number.isFinite(ageH)) {
+      console.error(`[watchdog-alive] the health report has no valid timestamp (at: ${JSON.stringify(report.at)}); cannot tell whether the watchdog is alive.`);
+      process.exit(1);
+    }
     console.error(
       `[watchdog-alive] the health workflow has not reported in ${ageH.toFixed(1)}h ` +
         `(last: ${report.at}). Nothing is checking production right now. ` +

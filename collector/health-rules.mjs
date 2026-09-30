@@ -126,3 +126,59 @@ export function cancelledVerdict(runs, recent = 8) {
   if (idx.length < 2) return { severity: null, cancelled: idx.length, of: runs.length };
   return { severity: idx[0] < recent ? "critical" : "warn", cancelled: idx.length, of: runs.length, newestIndex: idx[0] };
 }
+
+// coherence.eta: every published ETA must follow from the gap and the two
+// velocities shown beside it; if it does not, the projection is reading other
+// inputs. collisions.mjs rounds what it shows: velocities to whole stars/day and
+// etaDays to 0.01 d. So the true closing lies in (c-1, c+1) around the shown
+// c = hunter - victim, the true ETA in (gap/(c+1), gap/(c-1)), and the published
+// value within half a unit (0.005 d) of it. Anything outside that interval
+// cannot come from these numbers. A relative tolerance cannot do this: 15% is
+// needed for a closing of 8/day (rounding alone moves the ETA 12.4%) but it
+// hides a wrong velocity on a fast repo (±0.06% at 1,700/day), and it flagged
+// an exact 0.0069 d shown as 0.01 (issue #46, 29-sep).
+export function etaIncoherences(overtakes, halfUnit = 0.005) {
+  const bad = [];
+  const EPS = 1e-9;
+  for (const o of overtakes ?? []) {
+    const pair = `${o?.hunter?.repo} -> ${o?.victim?.repo}`;
+    const hv = o?.hunter?.velocityPerDay, vv = o?.victim?.velocityPerDay, gap = o?.gap, pub = o?.etaDays;
+    // an ETA that cannot be checked is not a checked ETA
+    if (![hv, vv, gap, pub].every(Number.isFinite)) {
+      bad.push({ pair, gap: gap ?? null, closing: null, published: pub ?? null, expected: null, reason: "non-numeric input" });
+      continue;
+    }
+    const c = hv - vv;
+    // a published crossing where the hunter is shown slower cannot come from
+    // these numbers (collisions.mjs never publishes a closing under 8/day)
+    if (c <= -1) {
+      bad.push({ pair, gap, closing: c, published: pub, expected: null, reason: "hunter shown slower than victim" });
+      continue;
+    }
+    const lo = gap / (c + 1) - halfUnit - EPS;
+    const hi = c > 1 ? gap / (c - 1) + halfUnit + EPS : Infinity;
+    if (pub < lo || pub > hi) {
+      bad.push({ pair, gap, closing: c, published: pub, expected: c > 0 ? Math.round((gap / c) * 100) / 100 : null });
+    }
+  }
+  return bad;
+}
+
+// Who watches the watchdog (collector/watchdog-alive.mjs). The health cron is
+// declared every 2 h, but GitHub delays scheduled runs: over the 30 days to
+// 30-sep the real gap was 4.7 h median, 7.9 h p99, 8.6 h max, and the old 6 h
+// limit went red on 38 of 149 gaps with nothing broken. 12 h is silent on those
+// 30 days; over the 400 runs since 6-aug it would have fired once, on a real
+// 13.5 h hole that ended 28-aug 14:34Z, which is the kind worth hearing about.
+// The alarm fires on the first collector run after 12 h, and the collector is
+// late too (up to ~8 h), so the worst case is ~20 h. Blind spot, unchanged: if
+// Actions stops BOTH workflows, nothing here fires.
+export const WATCHDOG_MAX_AGE_H = 12;
+// WATCHDOG_MAX_AGE_H from the environment: anything that is not a positive
+// number falls back to the default instead of switching the alarm off.
+export function maxAgeFromEnv(raw, fallback = WATCHDOG_MAX_AGE_H) {
+  const n = raw === undefined || raw === null || String(raw).trim() === "" ? NaN : Number(raw);
+  return Number.isFinite(n) && n > 0 ? n : fallback;
+}
+// NaN (no timestamp, or a non-numeric limit) must read as stale, not alive.
+export const watchdogStale = (ageH, maxAgeH = WATCHDOG_MAX_AGE_H) => !(ageH <= maxAgeH);

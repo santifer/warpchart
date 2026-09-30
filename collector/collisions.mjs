@@ -140,6 +140,9 @@ export async function runCollisionScan({ enrich = true, force = false } = {}) {
         imminenceOf(etaDays) *
         (Math.log10(Math.max(hunter.v, 10)) / 1.5) *
         (sameLang ? 1.3 : 1);
+      // collector/health-rules.mjs etaIncoherences (coherence.eta) assumes exactly
+      // this rounding: velocities to whole stars/day, etaDays to 0.01. Change one,
+      // change the other, or the watchdog raises false criticals.
       collisions.push({
         hunter: { r: hunter.r, s: hunter.s, v: Math.round(hunter.v), l: hunter.l, rank: hunter.rank },
         victim: { r: victim.r, s: victim.s, v: Math.round(victim.v), l: victim.l, rank: victim.rank },
