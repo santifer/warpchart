@@ -182,3 +182,77 @@ export function maxAgeFromEnv(raw, fallback = WATCHDOG_MAX_AGE_H) {
 }
 // NaN (no timestamp, or a non-numeric limit) must read as stale, not alive.
 export const watchdogStale = (ageH, maxAgeH = WATCHDOG_MAX_AGE_H) => !(ageH <= maxAgeH);
+
+// How old anything the collector writes on EVERY run may get. Mirror of
+// COLLECTOR_STALE_H in src/lib/staleness.ts (the app is TypeScript, the watchdog
+// plain node; a test keeps the two equal). The cron is declared every 2 h but
+// ran every 5.0 h median, 7.9 h p99, 8.5 h max over the 30 days to 30-sep. The
+// tenant families were declared at 6 h, a limit 39 of those 140 gaps passed; how
+// many became criticals depends on when health looks (30-sep 19:01Z did: three
+// families "stopped updating" at 7 h, nothing broken). fresh.snapshot uses it too.
+export const COLLECTOR_STALE_H = 10;
+
+// Every family the system stores and the cadence it must keep (inventory.coverage
+// in health.mjs). Invariant, tested: no periodic family may expect fresher than
+// the collector can deliver, i.e. maxAgeH >= COLLECTOR_STALE_H.
+export const ARTIFACTS = [
+  // periodic: produced on a schedule; silence past maxAgeH means it stopped
+  { prefix: "data/route.json", kind: "periodic", maxAgeH: 36, what: "the top-1000 registry" },
+  { prefix: "data/history.jsonl", kind: "periodic", maxAgeH: COLLECTOR_STALE_H, what: "tenant snapshots" },
+  { prefix: "data/stargazer_timestamps.txt", kind: "periodic", maxAgeH: COLLECTOR_STALE_H, what: "the tenant's per-star series" },
+  { prefix: "data/meta.json", kind: "periodic", maxAgeH: COLLECTOR_STALE_H, what: "tenant repo metadata" },
+  { prefix: "data/milestones.json", kind: "periodic", maxAgeH: 36, what: "rank milestones" },
+  { prefix: "data/collisions.json", kind: "periodic", maxAgeH: 36, what: "the overtake scan" },
+  { prefix: "data/catalog.json", kind: "periodic", maxAgeH: 36, what: "the rising catalog" },
+  { prefix: "data/route-prev.json", kind: "periodic", maxAgeH: 72, what: "the previous registry (velocity baseline)" },
+  { prefix: "data/enrichment.json", kind: "periodic", maxAgeH: 72, what: "repo enrichment" },
+  { prefix: "data/forensics.json", kind: "periodic", maxAgeH: 72, what: "spike forensics" },
+  { prefix: "data/attribution.json", kind: "periodic", maxAgeH: 72, what: "spike attribution" },
+  { prefix: "data/indexnow-stamp.txt", kind: "periodic", maxAgeH: 48, what: "the IndexNow ping stamp" },
+  { prefix: "route-history/", kind: "periodic", maxAgeH: 36, what: "the daily rank moat" },
+  { prefix: "vitals/", kind: "periodic", maxAgeH: 72, what: "the Vital Signs panel" },
+  { prefix: "contributors/", kind: "periodic", maxAgeH: 12, what: "the contributor census (cohorts source)" },
+  { prefix: "traffic/", kind: "periodic", maxAgeH: 12, what: "the Traffic Vault" },
+  { prefix: "prflow/", kind: "periodic", maxAgeH: 12, what: "the PR flow panel" },
+  { prefix: "npm-versions/", kind: "periodic", maxAgeH: 36, what: "npm downloads by version (daily snapshot)" },
+  // health/ is rewritten earlier in the same run (contracts, presence), so it
+  // is always fresh here; the real "is the watchdog alive" sensor is
+  // collector/watchdog-alive.mjs. The limit only keeps the declaration honest.
+  { prefix: "health/", kind: "periodic", maxAgeH: WATCHDOG_MAX_AGE_H, what: "this watchdog's own output" },
+  { prefix: "live/", kind: "periodic", maxAgeH: 12, what: "live star polling" },
+  { prefix: "badges-earned.json", kind: "periodic", maxAgeH: 36, what: "earned badges" },
+  // Declared so they are WATCHED, not so they are shown: nothing reads these
+  // keys but the owner. Declaring them also keeps `inventory.undeclared` from
+  // naming the `private/` family in the watchdog's PUBLIC issue. If one goes
+  // stale the issue names the file and its age, never a number from inside it.
+  // Listed individually rather than as a `private/` prefix because they have
+  // genuinely different cadences, and one declaration would hide the other:
+  // followers writes every run, installs only when an event fires.
+  { prefix: "private/followers.json", kind: "periodic", maxAgeH: 12, what: "the owner's private standing series" },
+  // event: written only when something happens outside; silence is information,
+  // never a failure
+  { prefix: "embeds/", kind: "event", what: "first sighting of an embed on GitHub" },
+  { prefix: "codex/", kind: "event", what: "LLM dossiers, written on first visit to a repo" },
+  { prefix: "alerts/", kind: "event", what: "alert dedup state" },
+  // Silence here is the normal state and means "no install wave since the last
+  // one": in 63 days of history exactly one day qualified. Never a failure.
+  { prefix: "private/installs.json", kind: "event", what: "detected install waves (private)" },
+  // config: edited by a human, age means nothing
+  { prefix: "data/tenants.json", kind: "config", what: "the paying-tenant list" },
+];
+
+// Which declared periodic families are older than they may be. `newest` maps a
+// family prefix to its newest upload (ms). A timestamp that is not a number reads
+// as stale, never as fresh.
+export function staleArtifacts(newest, now = Date.now(), artifacts = ARTIFACTS) {
+  const stale = [];
+  const missing = [];
+  for (const a of artifacts) {
+    if (a.kind !== "periodic") continue;
+    const t = newest.get(a.prefix);
+    if (t === undefined) { missing.push(a); continue; }
+    const ageH = (now - t) / HOUR;
+    if (!(ageH <= a.maxAgeH)) stale.push({ ...a, ageH });
+  }
+  return { stale, missing };
+}

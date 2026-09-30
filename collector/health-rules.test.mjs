@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { cancelledVerdict, cronLag, etaIncoherences, maxAgeFromEnv, openPartials, presenceEval, presenceLost, presenceMap, prflowFreshness, watchdogStale } from "./health-rules.mjs";
+import { COLLECTOR_STALE_H as APP_STALE_H } from "../src/lib/staleness.ts";
+import { ARTIFACTS, COLLECTOR_STALE_H, cancelledVerdict, cronLag, etaIncoherences, maxAgeFromEnv, openPartials, presenceEval, presenceLost, presenceMap, prflowFreshness, staleArtifacts, watchdogStale } from "./health-rules.mjs";
 
 describe("prflowFreshness", () => {
   // 26-sep: the first run after 00:00Z was cancelled and 25-sep never closed.
@@ -263,5 +264,41 @@ describe("maxAgeFromEnv", () => {
 
   it("honours a positive numeric override", () => {
     expect(maxAgeFromEnv("8")).toBe(8);
+  });
+});
+
+describe("inventory cadence (ARTIFACTS)", () => {
+  it("mirrors the app's single collector threshold (src/lib/staleness.ts)", () => {
+    expect(COLLECTOR_STALE_H).toBe(APP_STALE_H);
+  });
+
+  // The 6 h declarations for the tenant families contradicted the 10 h the app
+  // already used for the same collector: a family cannot be expected fresher
+  // than the collector that writes it can deliver.
+  it("no periodic family expects fresher than the collector can deliver", () => {
+    const tooTight = ARTIFACTS.filter((a) => a.kind === "periodic" && !(Number.isFinite(a.maxAgeH) && a.maxAgeH >= COLLECTOR_STALE_H)).map((a) => `${a.prefix}=${a.maxAgeH}`);
+    expect(tooTight).toEqual([]);
+  });
+
+  // Reconstructed from the real 19:01Z report of 30-sep: the tenant families were
+  // last uploaded at 12:27:41Z (Blob uploadedAt; collector run created 12:26:46Z)
+  // and GitHub had not granted the next run yet, so they were ~6.6 h old.
+  const now = Date.parse("2026-09-30T19:01:33Z");
+  const newest = new Map(ARTIFACTS.filter((a) => a.kind === "periodic").map((a) => [a.prefix, now - 3_600_000]));
+  for (const p of ["data/history.jsonl", "data/stargazer_timestamps.txt", "data/meta.json"]) newest.set(p, Date.parse("2026-09-30T12:27:41Z"));
+
+  it("reads a late cron as late, not as a family that stopped (30-sep 19:01Z)", () => {
+    expect(staleArtifacts(newest, now).stale).toEqual([]);
+  });
+
+  it("still names families that really stopped", () => {
+    const later = Date.parse("2026-09-30T23:30:00Z"); // 11 h after the last run
+    expect(staleArtifacts(newest, later).stale.map((s) => s.prefix).sort()).toEqual(["data/history.jsonl", "data/meta.json", "data/stargazer_timestamps.txt"]);
+  });
+
+  it("reads an unparseable upload time as stale, not fresh", () => {
+    const bad = new Map(newest);
+    bad.set("data/meta.json", NaN);
+    expect(staleArtifacts(bad, now).stale.map((s) => s.prefix)).toEqual(["data/meta.json"]);
   });
 });

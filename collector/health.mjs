@@ -33,7 +33,7 @@
 //   --base=X   probe another origin (a preview deployment, say)
 // Exit code 1 when a critical finding is open, so CI turns red by itself.
 import { writeFileSync } from "node:fs";
-import { cancelledVerdict, cronLag, etaIncoherences, openPartials, presenceEval, presenceMap, prflowFreshness } from "./health-rules.mjs";
+import { ARTIFACTS, COLLECTOR_STALE_H, cancelledVerdict, cronLag, etaIncoherences, openPartials, presenceEval, presenceMap, prflowFreshness, staleArtifacts } from "./health-rules.mjs";
 
 const args = process.argv.slice(2);
 const JSON_OUT = args.includes("--json");
@@ -166,7 +166,7 @@ async function checkFreshness(route) {
     // Thresholds follow the REAL cadence (median ~5 h, normal worst ~8 h; see
     // src/lib/staleness.ts), not the declared 2 h: at 4/6 h this fired on
     // most normal cycles.
-    if (h > 10) {
+    if (h > COLLECTOR_STALE_H) {
       fail("fresh.snapshot", "FRESH", "critical", `last snapshot is ${h.toFixed(1)}h old (a normal gap is up to ~8h)`,
         "The collector is failing or being cancelled. Check the run log, especially step timeouts: a job-level timeout kills 'Trigger deploy' silently (that is what froze the site on 2026-07-19).", { lastSnapshot: iso });
     } else if (h > 8) {
@@ -794,48 +794,8 @@ async function checkCurves() {
 // declared with the cadence it is supposed to keep. A family nobody declared is
 // itself a finding - it means an artifact exists that no one is watching. That
 // is the property the curated checks cannot have.
-const ARTIFACTS = [
-  // periodic: produced on a schedule; silence past maxAgeH means it stopped
-  { prefix: "data/route.json", kind: "periodic", maxAgeH: 36, what: "the top-1000 registry" },
-  { prefix: "data/history.jsonl", kind: "periodic", maxAgeH: 6, what: "tenant snapshots" },
-  { prefix: "data/stargazer_timestamps.txt", kind: "periodic", maxAgeH: 6, what: "the tenant's per-star series" },
-  { prefix: "data/meta.json", kind: "periodic", maxAgeH: 6, what: "tenant repo metadata" },
-  { prefix: "data/milestones.json", kind: "periodic", maxAgeH: 36, what: "rank milestones" },
-  { prefix: "data/collisions.json", kind: "periodic", maxAgeH: 36, what: "the overtake scan" },
-  { prefix: "data/catalog.json", kind: "periodic", maxAgeH: 36, what: "the rising catalog" },
-  { prefix: "data/route-prev.json", kind: "periodic", maxAgeH: 72, what: "the previous registry (velocity baseline)" },
-  { prefix: "data/enrichment.json", kind: "periodic", maxAgeH: 72, what: "repo enrichment" },
-  { prefix: "data/forensics.json", kind: "periodic", maxAgeH: 72, what: "spike forensics" },
-  { prefix: "data/attribution.json", kind: "periodic", maxAgeH: 72, what: "spike attribution" },
-  { prefix: "data/indexnow-stamp.txt", kind: "periodic", maxAgeH: 48, what: "the IndexNow ping stamp" },
-  { prefix: "route-history/", kind: "periodic", maxAgeH: 36, what: "the daily rank moat" },
-  { prefix: "vitals/", kind: "periodic", maxAgeH: 72, what: "the Vital Signs panel" },
-  { prefix: "contributors/", kind: "periodic", maxAgeH: 12, what: "the contributor census (cohorts source)" },
-  { prefix: "traffic/", kind: "periodic", maxAgeH: 12, what: "the Traffic Vault" },
-  { prefix: "prflow/", kind: "periodic", maxAgeH: 12, what: "the PR flow panel" },
-  { prefix: "npm-versions/", kind: "periodic", maxAgeH: 36, what: "npm downloads by version (daily snapshot)" },
-  { prefix: "health/", kind: "periodic", maxAgeH: 6, what: "this watchdog's own output" },
-  { prefix: "live/", kind: "periodic", maxAgeH: 12, what: "live star polling" },
-  { prefix: "badges-earned.json", kind: "periodic", maxAgeH: 36, what: "earned badges" },
-  // Declared so they are WATCHED, not so they are shown: nothing reads these
-  // keys but the owner. Declaring them also keeps `inventory.undeclared` from
-  // naming the `private/` family in the watchdog's PUBLIC issue. If one goes
-  // stale the issue names the file and its age, never a number from inside it.
-  // Listed individually rather than as a `private/` prefix because they have
-  // genuinely different cadences, and one declaration would hide the other:
-  // followers writes every run, installs only when an event fires.
-  { prefix: "private/followers.json", kind: "periodic", maxAgeH: 12, what: "the owner's private standing series" },
-  // event: written only when something happens outside; silence is information,
-  // never a failure
-  { prefix: "embeds/", kind: "event", what: "first sighting of an embed on GitHub" },
-  { prefix: "codex/", kind: "event", what: "LLM dossiers, written on first visit to a repo" },
-  { prefix: "alerts/", kind: "event", what: "alert dedup state" },
-  // Silence here is the normal state and means "no install wave since the last
-  // one": in 63 days of history exactly one day qualified. Never a failure.
-  { prefix: "private/installs.json", kind: "event", what: "detected install waves (private)" },
-  // config: edited by a human, age means nothing
-  { prefix: "data/tenants.json", kind: "config", what: "the paying-tenant list" },
-];
+// ARTIFACTS (every stored family and the cadence it must keep) lives in
+// health-rules.mjs, next to the constants its limits come from and their tests.
 
 // KNOWN BLIND SPOT (declared 2026-09-26): scripts/sync-to-blob.mjs re-uploads
 // every hydrated data/* file on every run, so for the data/ family uploadedAt
@@ -866,15 +826,7 @@ async function checkInventory() {
       if (!bag.has(key) || bag.get(key) < t) bag.set(key, t);
     }
 
-    const stale = [];
-    const missing = [];
-    for (const a of ARTIFACTS) {
-      if (a.kind !== "periodic") continue;
-      const t = newest.get(a.prefix);
-      if (t === undefined) { missing.push(a); continue; }
-      const h = (Date.now() - t) / HOUR;
-      if (h > a.maxAgeH) stale.push({ ...a, ageH: h });
-    }
+    const { stale, missing } = staleArtifacts(newest);
 
     if (stale.length) {
       stale.sort((x, y) => y.ageH / y.maxAgeH - x.ageH / x.maxAgeH);
@@ -896,7 +848,7 @@ async function checkInventory() {
       const rows = [...undeclared.entries()].map(([k, t]) => ({ family: k, ageHours: Math.round((Date.now() - t) / HOUR) }));
       fail("inventory.undeclared", "INVENTORY", "warn",
         `${undeclared.size} artifact family(ies) nobody is watching: ${rows.map((r) => `${r.family} (newest ${r.ageHours}h old)`).join(" · ")}`,
-        "Add each to ARTIFACTS in collector/health.mjs with its expected cadence (periodic/event/config), or delete it if it is an orphan from an older design. An undeclared artifact is one nobody would notice going stale - which is exactly how the Vital Signs panel sat frozen for eight days.",
+        "Add each to ARTIFACTS in collector/health-rules.mjs with its expected cadence (periodic/event/config), or delete it if it is an orphan from an older design. An undeclared artifact is one nobody would notice going stale - which is exactly how the Vital Signs panel sat frozen for eight days.",
         rows);
     }
   });
