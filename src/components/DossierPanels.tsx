@@ -5,7 +5,7 @@
 // the same boxes, and boxes never move once drawn (zero-CLS contract).
 import Panel from "./Panel";
 import UsageChart from "./UsageChart";
-import { fmtCompact } from "@/lib/format";
+import { fmt, fmtCompact } from "@/lib/format";
 import type { Dossier } from "@/lib/explorer";
 import { shortTag } from "@/lib/release-assets";
 import { newestVersion, summarizeVersions } from "@/lib/npm-versions";
@@ -159,12 +159,29 @@ export function UsagePanel({
                   {d!.npmLast30 !== null ? (
                     <Metric
                       label="NPM INSTALLS · 30D"
-                      value={fmtCompact(d!.npmLast30)}
-                      hint={
-                        lastNpm
-                          ? `${d!.npmPkg ?? ""} · through ${lastNpm}`.trim()
-                          : (d!.npmPkg ?? undefined)
+                      // npm's own total skips the days it never recorded. With
+                      // holes in its window the headline is the measured total
+                      // plus a LABELLED estimate of those days ("~"), and the
+                      // measured figure is always printed next to it.
+                      value={
+                        d!.npmLast30Estimate !== null && d!.npmLast30Estimate !== undefined
+                          ? `~${fmtCompact(d!.npmLast30Estimate)}`
+                          : fmtCompact(d!.npmLast30)
                       }
+                      // the measured figure goes FIRST: the hint truncates on
+                      // narrow screens, and the estimate must never be shown
+                      // without it
+                      hint={[
+                        (d!.npmLast30MissingDays ?? 0) > 0
+                          ? `${fmt(d!.npmLast30)} measured + ${d!.npmLast30MissingDays} days npm did not record, estimated`
+                          : d!.npmLast30MissingDays === null
+                            ? "gaps in npm's data unchecked"
+                            : "",
+                        d!.npmPkg ?? "",
+                        lastNpm ? `through ${lastNpm}` : "",
+                      ]
+                        .filter(Boolean)
+                        .join(" · ") || undefined}
                       tone="accent"
                     />
                   ) : null}

@@ -69,6 +69,16 @@ const kv = (label, value, note) =>
   console.log(`  ${dim(label.padEnd(22))} ${value}${note ? dim("  " + note) : ""}`);
 const rule = (title) => console.log("\n  " + dim("─── ") + accent(title) + dim(" " + "─".repeat(Math.max(0, 46 - title.length))));
 
+// npm serves days it never recorded as 0, so its 30-day total can be short.
+// Say how many days are missing and what the estimate is, next to the measured
+// figure (the API fields: last30MissingDays, last30Estimate).
+function npmHoleNote(npm) {
+  const n = npm?.last30MissingDays ?? 0;
+  if (!n) return "";
+  const est = npm.last30Estimate != null ? `, ~${fmt(npm.last30Estimate)} estimated` : "";
+  return `${n} of 30 days missing in npm's data${est}`;
+}
+
 // A window flag set the caller can pass through to the API unchanged, so the
 // server does the trimming and the terminal never downloads a year to print a
 // week. Returns "" when the caller asked for everything.
@@ -151,7 +161,7 @@ async function dossierView(repo, args, asJson) {
   rule("REAL USAGE");
   if (u.npm) {
     kv("npm package", bold(u.npm.package));
-    kv("downloads · 30d", bold(fmt(u.npm.last30 ?? 0)));
+    kv("downloads · 30d", bold(fmt(u.npm.last30 ?? 0)), npmHoleNote(u.npm));
     if (u.npm.windowTotal != null && u.npm.series) kv("downloads · window", bold(fmt(u.npm.windowTotal)), windowLine(u.npm.series));
     if (u.npm.series?.points?.length > 2) {
       const spark = sparkSeries(u.npm.series.points, (p) => p.d);
@@ -226,7 +236,7 @@ async function usageView(repo, args, asJson) {
   console.log();
   if (u.npm) {
     kv("npm package", bold(u.npm.package));
-    kv("downloads · 30d", bold(fmt(u.npm.last30 ?? 0)));
+    kv("downloads · 30d", bold(fmt(u.npm.last30 ?? 0)), npmHoleNote(u.npm));
     if (u.npm.series) {
       kv("downloads · window", bold(fmt(u.npm.windowTotal ?? 0)), windowLine(u.npm.series));
       const spark = sparkSeries(u.npm.series.points, (p) => p.d);

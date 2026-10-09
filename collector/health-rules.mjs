@@ -324,3 +324,23 @@ export function pipelineRunsGate(responses, lastSnapshotMs) {
   const ref = Number.isFinite(lastSnapshotMs) ? lastSnapshotMs : picked.newest;
   return { ...base, gate: "ok", lagging: laggingTokens(picked.perToken, ref, picked.list.length > 0) };
 }
+
+// npm usage on the house dossier: the weekly breakdown may now be a recorded
+// week (npm-versions fallback while npm's series has holes). That is honest
+// while its date is visible, but a fallback that never refreshes is the panel
+// going quietly stale. And a last-30 total with holes is a published floor:
+// expected upstream noise, reported, never critical.
+export function npmUsageFreshness(npm, todayISO, maxAgeDays = 10) {
+  if (!npm) return { severity: null, note: "no npm channel" };
+  const through = npm.versions?.through ?? null;
+  const ageDays = through ? Math.round((Date.parse(`${todayISO}T00:00:00Z`) - Date.parse(`${through}T00:00:00Z`)) / 864e5) : null;
+  const floor = npm.last30IsLowerBound ? `last30 is a floor (${npm.last30MissingDays} of 30 days missing in npm's data)` : "";
+  // the estimate is the headline when days are missing: its absence is a bug
+  if ((npm.last30MissingDays ?? 0) > 0 && npm.last30Estimate == null) {
+    return { severity: "warn", ageDays, note: `${npm.last30MissingDays} npm days missing but no last30Estimate published` };
+  }
+  if (ageDays !== null && ageDays > maxAgeDays) {
+    return { severity: "warn", ageDays, note: [`NPM BY VERSION is ${ageDays} days old (through ${through})`, floor].filter(Boolean).join(" · ") };
+  }
+  return { severity: null, ageDays, note: [through ? `versions through ${through}` : "no versions", floor].filter(Boolean).join(" · ") };
+}

@@ -88,3 +88,52 @@ export async function npmVersionWeek(pkg: string) {
     return null;
   }
 }
+
+// npm's live reading cannot be dated while its daily series has holes (the
+// point total skips the hole, the per-version counts do not, so the two never
+// agree). Instead of dropping the panel, fall back to the newest week the
+// collector DID date and record (collector/npm-versions.mjs), and show its own
+// week: older but true beats current but undated. File shape:
+// { package, start, end, total, versions: { "1.34.0": 490, ... }, recordedAt }.
+export const RECORDED_MAX_AGE_DAYS = 21; // older than this, show nothing rather than a stale week
+
+export function parseRecordedWeek(
+  json: unknown,
+  pkg: string,
+  todayISO = new Date().toISOString().slice(0, 10),
+): { list: VersionDownloads[]; start: string; end: string } | null {
+  const w = json as { package?: unknown; start?: unknown; end?: unknown; versions?: unknown } | null;
+  if (!w || w.package !== pkg || typeof w.start !== "string" || typeof w.end !== "string") return null;
+  const ageDays = (Date.parse(`${todayISO}T00:00:00Z`) - Date.parse(`${w.end}T00:00:00Z`)) / 86_400_000;
+  if (!(ageDays <= RECORDED_MAX_AGE_DAYS)) return null;
+  const list = parseVersionDownloads({ downloads: w.versions });
+  return list ? { list, start: w.start, end: w.end } : null;
+}
+
+export async function recordedVersionWeek(pkg: string, repoNames: string[]) {
+  const token = process.env.BLOB_READ_WRITE_TOKEN;
+  if (!token) return null;
+  try {
+    const { list, get } = await import("@vercel/blob");
+    // the history lives under the canonical name at write time; a transfer
+    // adds a prefix, so every name the repo has carried is searched
+    const blobs = (
+      await Promise.all(
+        repoNames.map((r) =>
+          list({ prefix: `npm-versions/${r.toLowerCase().replace("/", "--")}/`, token }).then((x) => x.blobs),
+        ),
+      )
+    ).flat();
+    // newest npm week first (the file name IS the week's last day)
+    const newest = blobs.sort((a, b) => b.pathname.localeCompare(a.pathname));
+    for (const b of newest.slice(0, 3)) {
+      const res = await get(b.pathname, { access: "private", token, useCache: false });
+      if (res?.statusCode !== 200 || !res.stream) continue;
+      const week = parseRecordedWeek(JSON.parse(await new Response(res.stream).text()), pkg);
+      if (week) return week;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}

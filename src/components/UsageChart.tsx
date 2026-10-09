@@ -32,7 +32,8 @@ interface Row {
   clones: number | null;
   npmCum: number;
   clonesCum: number;
-  total: number;
+  // null on a day a channel did not record (npm holes): a partial sum is a dip
+  total: number | null;
   totalCum: number;
 }
 
@@ -53,6 +54,10 @@ export default function UsageChart({
   const hasNpm = (npm ?? []).some((p) => p.d > 0);
   if ((!npm || npm.length < 2) && !hasClones) return null;
 
+  // Days npm actually measured. npmHistory arrives with npm's HOLES removed
+  // (days npm never recorded and serves as 0, see npm-gaps.ts); a day that has
+  // clones but no npm entry is one of them, and must draw as a gap.
+  const npmDays = new Set((npm ?? []).map((p) => p.day));
   const byDay = new Map<string, { npm: number; clones: number }>();
   for (const p of npm ?? []) {
     const e = byDay.get(p.day) ?? { npm: 0, clones: 0 };
@@ -86,7 +91,8 @@ export default function UsageChart({
   let cc = 0;
   const rows: Row[] = days.filter((day) => !chartEnd || day <= chartEnd).map((day) => {
     const e = byDay.get(day)!;
-    const npmKnown = lastNpmDay !== null && day <= lastNpmDay;
+    const npmKnown = lastNpmDay !== null && day <= lastNpmDay && npmDays.has(day);
+    const npmHole = hasNpm && lastNpmDay !== null && day <= lastNpmDay && !npmDays.has(day);
     const cloneKnown = lastCloneDay !== null && day <= lastCloneDay;
     if (npmKnown) cn += e.npm;
     if (cloneKnown) cc += e.clones;
@@ -101,7 +107,7 @@ export default function UsageChart({
       // growing, which is exactly what we know.
       npmCum: cn,
       clonesCum: cc,
-      total: (npmKnown ? e.npm : 0) + (cloneKnown ? e.clones : 0),
+      total: npmHole ? null : (npmKnown ? e.npm : 0) + (cloneKnown ? e.clones : 0),
       totalCum: cn + cc,
     };
   });
@@ -146,7 +152,13 @@ export default function UsageChart({
         </span>
         {/* a channel with no data yet for this day is omitted from the tooltip
             rather than shown as 0, which would read as "nobody installed it" */}
-        <TipRow dot={C.white} k="total" v={(np ?? 0) + (cl ?? 0)} />
+        {/* DAILY on an npm hole: the day's total is unknown, so no total row
+            (a clones-only sum would be the same dip the chart no longer draws) */}
+        {mode === "cum" ? (
+          <TipRow dot={C.white} k="total" v={r.totalCum} />
+        ) : r.total !== null ? (
+          <TipRow dot={C.white} k="total" v={r.total} />
+        ) : null}
         {hasClones && cl !== null ? <TipRow dot={C.warn} k="git clones" v={cl} /> : null}
         {hasNpm && np !== null ? <TipRow dot={C.accent} k="npm installs" v={np} /> : null}
       </div>

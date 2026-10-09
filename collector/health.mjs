@@ -33,7 +33,7 @@
 //   --base=X   probe another origin (a preview deployment, say)
 // Exit code 1 when a critical finding is open, so CI turns red by itself.
 import { writeFileSync } from "node:fs";
-import { ARTIFACTS, COLLECTOR_STALE_H, cancelledVerdict, cronLag, etaIncoherences, openPartials, pipelineRunsGate, presenceEval, presenceMap, prflowFreshness, staleArtifacts } from "./health-rules.mjs";
+import { ARTIFACTS, COLLECTOR_STALE_H, cancelledVerdict, cronLag, etaIncoherences, openPartials, pipelineRunsGate, presenceEval, presenceMap, prflowFreshness, staleArtifacts, npmUsageFreshness } from "./health-rules.mjs";
 
 const args = process.argv.slice(2);
 const JSON_OUT = args.includes("--json");
@@ -1032,6 +1032,22 @@ async function checkPresence() {
         { lost: missing.map((m) => m.field).sort(), missing });
     } else pass("presence.transitions", "PRESENCE", `${Object.values(now).filter(Boolean).length}/${Object.keys(now).length} fields present`);
     if (persist) await blobPut(key, { at: new Date().toISOString(), state }).catch(() => {});
+  });
+
+  // npm figures shown to sponsors: a weekly breakdown served from the recorded
+  // history must not freeze unseen, and a last-30 total with npm holes is a
+  // floor (9-oct-2026: 4 of 30 days missing, published as a plain 8,681).
+  await check("presence.npm-usage", "PRESENCE", async () => {
+    const res = await fetch(`${BASE}/api/v1/dossier?repo=${encodeURIComponent(TENANT)}`, {
+      signal: AbortSignal.timeout(30_000),
+    }).catch(() => null);
+    if (!res?.ok) return pass("presence.npm-usage", "PRESENCE", "dossier unreachable, measured by presence.transitions");
+    const npm = (await res.json())?.usage?.npm ?? null;
+    const r = npmUsageFreshness(npm, new Date().toISOString().slice(0, 10));
+    if (r.severity) {
+      fail("presence.npm-usage", "PRESENCE", r.severity, r.note,
+        "The live npm week cannot be dated while npm's daily series has holes, so the panel serves the newest week collector/npm-versions.mjs recorded. If that week is this old, the collector has not recorded one either: check its step in collect.yml and api.npmjs.org/downloads/range/last-month for zero days.");
+    } else pass("presence.npm-usage", "PRESENCE", r.note);
   });
 
   // Guards in the collector (collector/guards.mjs) refuse to publish a

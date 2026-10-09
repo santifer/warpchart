@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { COLLECTOR_STALE_H as APP_STALE_H } from "../src/lib/staleness.ts";
-import { ARTIFACTS, COLLECTOR_STALE_H, cancelledVerdict, cronLag, etaIncoherences, maxAgeFromEnv, newestRunMs, pickFreshestRuns, pipelineRunsGate, RUNS_LIST_TOL_H, runsListStale, openPartials, presenceEval, presenceLost, presenceMap, prflowFreshness, staleArtifacts, watchdogStale } from "./health-rules.mjs";
+import { ARTIFACTS, COLLECTOR_STALE_H, cancelledVerdict, cronLag, etaIncoherences, maxAgeFromEnv, newestRunMs, pickFreshestRuns, pipelineRunsGate, RUNS_LIST_TOL_H, runsListStale, openPartials, presenceEval, presenceLost, presenceMap, prflowFreshness, npmUsageFreshness, staleArtifacts, watchdogStale } from "./health-rules.mjs";
 
 describe("prflowFreshness", () => {
   // 26-sep: the first run after 00:00Z was cancelled and 25-sep never closed.
@@ -468,5 +468,20 @@ describe("pipelineRunsGate", () => {
     const g = pipelineRunsGate([ok([{ event: "schedule", conclusion: "success" }])], snap);
     expect(g.gate).toBe("stale");
     expect(g.newestIso).toBeNull();
+  });
+});
+
+describe("npmUsageFreshness", () => {
+  it("accepts a recorded week while it is recent, and says when the total is a floor", () => {
+    const r = npmUsageFreshness({ versions: { through: "2026-10-04" }, last30IsLowerBound: true, last30MissingDays: 4, last30Estimate: 9905 }, "2026-10-09");
+    expect(r.severity).toBeNull();
+    expect(r.note).toMatch(/4 of 30 days missing/);
+  });
+  it("warns when days are missing but the estimate is not published", () => {
+    const r = npmUsageFreshness({ versions: { through: "2026-10-04" }, last30MissingDays: 4, last30Estimate: null }, "2026-10-09");
+    expect(r.severity).toBe("warn");
+  });
+  it("warns when the breakdown has not moved for more than ten days", () => {
+    expect(npmUsageFreshness({ versions: { through: "2026-09-25" } }, "2026-10-09").severity).toBe("warn");
   });
 });

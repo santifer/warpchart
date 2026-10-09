@@ -205,6 +205,17 @@ export async function GET(req: NextRequest) {
           ? {
               package: dossier.npmPkg,
               last30: dossier.npmLast30,
+              // npm serves days it never recorded as 0 and its last-30 total
+              // sums them as nothing: > 0 here means last30 is a LOWER BOUND.
+              // The series omits those days rather than inventing them.
+              // null = not checkable this time (npm's daily series missing or
+              // short): unknown, not "complete"
+              last30MissingDays: dossier.npmLast30MissingDays ?? null,
+              last30IsLowerBound: dossier.npmLast30MissingDays == null ? null : dossier.npmLast30MissingDays > 0,
+              // last30 + the missing days estimated from the measured days
+              // around each one (~25 % error per day). An ESTIMATE: null when
+              // nothing is missing, never a replacement for last30.
+              last30Estimate: dossier.npmLast30Estimate ?? null,
               windowTotal: npm ? sum(npm.points, "d") : null,
               series: npm,
               // downloads per version over npm's rolling last week (not people)

@@ -474,18 +474,22 @@ export async function repoDossier(owner: string, name: string): Promise<DossierR
   };
 }
 
-// npm registry downloads (no auth, generous limits); null when not a package
-export async function npmDownloads(pkg: string): Promise<number | null> {
+// npm registry downloads (no auth, generous limits); null when not a package.
+// Carries npm's own window (start/end): the holes are counted against THAT
+// window, never against the last day the daily series happens to reach.
+export async function npmDownloadsWindow(
+  pkg: string,
+): Promise<{ downloads: number; start: string; end: string } | null> {
   try {
     const res = await fetch(
       `https://api.npmjs.org/downloads/point/last-month/${encodeURIComponent(pkg)}`,
-      // 8s (was 4s): npm is slow under Vercel load and a timeout returns null,
-      // which poisons the 15-min dossier cache and blanks the Real usage panel.
       { signal: AbortSignal.timeout(8000) }
     );
     if (!res.ok) return null;
-    const j = (await res.json()) as { downloads?: number };
-    return typeof j.downloads === "number" ? j.downloads : null;
+    const j = (await res.json()) as { downloads?: number; start?: string; end?: string };
+    return typeof j.downloads === "number" && typeof j.start === "string" && typeof j.end === "string"
+      ? { downloads: j.downloads, start: j.start, end: j.end }
+      : null;
   } catch {
     return null;
   }

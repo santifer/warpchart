@@ -12,13 +12,15 @@ import {
   neighborsVelocity,
   lowFuel,
   repoDossier,
-  npmDownloads,
+  npmDownloadsWindow,
   npmDownloadsRange,
   type DossierRaw,
 } from "./github";
 import { loadTrafficVault } from "./traffic";
 import { npmCandidates } from "./npm-candidates";
-import { npmVersionWeek, type VersionDownloads } from "./npm-versions";
+import { npmVersionWeek, recordedVersionWeek, type VersionDownloads } from "./npm-versions";
+import { cleanNpmSeries, estimateHoles, holesInWindow } from "./npm-gaps";
+import { allNamesOf } from "./aliases";
 import { reqLog } from "./log";
 import { nextMilestones } from "./milestones";
 import { canonicalVelocity } from "./velocity";
@@ -27,6 +29,15 @@ import type { ChartInputs, Neighbor, RouteRepo } from "./types";
 
 export interface Dossier extends DossierRaw {
   npmLast30: number | null;
+  // days of npmLast30's window that npm never recorded (holes it serves as 0).
+  // > 0 means npmLast30 is a LOWER BOUND; the panel says so. Never imputed.
+  // null = could not be checked (no daily series, or it stops before npm's
+  // window ends): UNKNOWN, never read as "nothing missing".
+  npmLast30MissingDays: number | null;
+  // npmLast30 + a labelled estimate of those missing days (mean of the measured
+  // days around each hole). null when nothing is missing. Shown as "~", always
+  // next to the measured figure, never as if npm had counted it.
+  npmLast30Estimate: number | null;
   // daily download history (since launch) of the resolved npm package, so the
   // panel can draw the usage curve climbing over time, not just one number
   npmHistory: { day: string; d: number }[] | null;
@@ -65,6 +76,8 @@ async function resolveNpmUsage(
 ): Promise<{
   npmPkg: string | null;
   npmLast30: number | null;
+  npmLast30MissingDays: number | null;
+  npmLast30Estimate: number | null;
   npmHistory: { day: string; d: number }[] | null;
   npmVersions: VersionDownloads[] | null;
   npmVersionsStart: string | null;
@@ -82,22 +95,34 @@ async function resolveNpmUsage(
     // the one that exists costs anything), under the /r/ maxDuration; npm resolves as reliably as a
     // single lookup.
     const [dl, npmHistory, npmVersions] = await Promise.all([
-      npmDownloads(cand),
+      npmDownloadsWindow(cand),
       npmDownloadsRange(cand),
       npmVersionWeek(cand),
     ]);
     if (dl !== null) {
+      // holes out (see npm-gaps.ts); the 30-day total is npm's own and stays as
+      // published, its missing days counted against npm's OWN window
+      const cleaned = npmHistory ? cleanNpmSeries(npmHistory) : null;
+      // checkable only when the daily series covers npm's whole window
+      const covers = !!npmHistory?.length && npmHistory.at(-1)!.day >= dl.end;
+      const missingDays = cleaned && covers ? holesInWindow(cleaned.holes, dl.start, dl.end) : null;
+      const missing = missingDays ? missingDays.length : null;
+      const estimate = missingDays?.length && npmHistory ? dl.downloads + estimateHoles(npmHistory, missingDays) : null;
+      // an undatable live week (npm holes) falls back to the newest recorded one
+      const versions = npmVersions ?? (await recordedVersionWeek(cand, allNamesOf(`${owner}/${name}`)));
       return {
         npmPkg: cand,
-        npmLast30: dl,
-        npmHistory,
-        npmVersions: npmVersions?.list ?? null,
-        npmVersionsStart: npmVersions?.start ?? null,
-        npmVersionsThrough: npmVersions?.end ?? null,
+        npmLast30: dl.downloads,
+        npmLast30MissingDays: missing,
+        npmLast30Estimate: estimate,
+        npmHistory: cleaned ? cleaned.series : null,
+        npmVersions: versions?.list ?? null,
+        npmVersionsStart: versions?.start ?? null,
+        npmVersionsThrough: versions?.end ?? null,
       };
     }
   }
-  return { npmPkg: null, npmLast30: null, npmHistory: null, npmVersions: null, npmVersionsStart: null, npmVersionsThrough: null };
+  return { npmPkg: null, npmLast30: null, npmLast30MissingDays: null, npmLast30Estimate: null, npmHistory: null, npmVersions: null, npmVersionsStart: null, npmVersionsThrough: null };
 }
 
 // standalone cached dossier for routes that don't run the full explorer
@@ -105,7 +130,7 @@ async function resolveNpmUsage(
 export async function fetchDossier(owner: string, name: string): Promise<Dossier | null> {
   try {
     const raw = await repoDossier(owner, name);
-    const { npmPkg, npmLast30, npmHistory, npmVersions, npmVersionsStart, npmVersionsThrough } = await resolveNpmUsage(owner, name, raw.npmPkg);
+    const { npmPkg, npmLast30, npmLast30MissingDays, npmLast30Estimate, npmHistory, npmVersions, npmVersionsStart, npmVersionsThrough } = await resolveNpmUsage(owner, name, raw.npmPkg);
     // git clones are the owner's PRIVATE traffic — surface them as a second
     // acquisition channel ONLY for the public house repo (its vault is the
     // opt-in demo). Unique cloners/day = the real-people proxy (raw count
@@ -161,6 +186,8 @@ export async function fetchDossier(owner: string, name: string): Promise<Dossier
       ...raw,
       npmPkg,
       npmLast30,
+      npmLast30MissingDays,
+      npmLast30Estimate,
       npmHistory: past(npmHistory),
       npmVersions,
       npmVersionsStart,
@@ -213,7 +240,8 @@ const cachedDossier = (owner: string, name: string) =>
     // worse than either state. Third time this exact miss has cost a deploy:
     // CHANGE THE SHAPE, CHANGE THE KEY, IN THE SAME COMMIT.
     // v11: adds uniqueCloners14d. CHANGE THE SHAPE, CHANGE THE KEY, SAME COMMIT.
-    ["dossier-v14", `${owner}/${name}`.toLowerCase()],
+    // v15: adds npmLast30MissingDays/npmLast30Estimate; npm holes dropped from npmHistory.
+    ["dossier-v15", `${owner}/${name}`.toLowerCase()],
     { revalidate: 900 },
   )();
 
@@ -390,10 +418,10 @@ export async function getExplorerData(owner: string, name: string): Promise<Expl
   try {
     const [o, n] = repoName.split("/");
     const raw = await repoDossier(o, n);
-    const { npmPkg, npmLast30, npmHistory, npmVersions, npmVersionsStart, npmVersionsThrough } = await resolveNpmUsage(o, n, raw.npmPkg);
+    const { npmPkg, npmLast30, npmLast30MissingDays, npmLast30Estimate, npmHistory, npmVersions, npmVersionsStart, npmVersionsThrough } = await resolveNpmUsage(o, n, raw.npmPkg);
     // clones (private traffic) are surfaced only via the cached dossier path
     // (getCachedDossier -> fetchDossier), which the panels actually render
-    dossier = { ...raw, npmPkg, npmLast30, npmHistory, npmVersions, npmVersionsStart, npmVersionsThrough, clonesHistory: null,
+    dossier = { ...raw, npmPkg, npmLast30, npmLast30MissingDays, npmLast30Estimate, npmHistory, npmVersions, npmVersionsStart, npmVersionsThrough, clonesHistory: null,
                 uniqueCloners14d: null, uniqueCloners14dAt: null };
   } catch (err) {
     log.warn("dossier.failed", { err: err instanceof Error ? err.message.slice(0, 120) : String(err) });
@@ -429,7 +457,9 @@ const getCachedExplorerData = unstable_cache(
     if (data?.degraded) throw new DegradedResult(data);
     return data;
   },
-  ["explorer-data"],
+  // v2: the dossier inside gained npmLast30MissingDays/npmLast30Estimate and
+  // lost npm's holes (same commit as dossier-v15, per INVARIANTS §2)
+  ["explorer-data-v2"],
   { revalidate: 900 },
 );
 

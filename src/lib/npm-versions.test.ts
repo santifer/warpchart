@@ -71,3 +71,31 @@ describe("newest version", () => {
     expect(newestVersion([{ version: "1.34.0-beta.1", d: 5 }, { version: "1.34.0", d: 1 }, { version: "1.9.0", d: 9 }])).toBe("1.34.0");
   });
 });
+
+describe("recorded week fallback", () => {
+  // the collector's file for npm's week ending 2026-10-04, as stored in the Blob
+  const FILE = {
+    package: "@santifer/career-ops",
+    start: "2026-09-28",
+    end: "2026-10-04",
+    total: 2152,
+    versions: { "1.35.0": 1102, "1.34.0": 1001, "1.33.0": 11, "1.8.1": 0 },
+    recordedAt: "2026-10-05T02:10:00Z",
+  };
+  it("serves the recorded week with its own dates, dropping zero rows", async () => {
+    const { parseRecordedWeek } = await import("@/lib/npm-versions");
+    const w = parseRecordedWeek(FILE, "@santifer/career-ops", "2026-10-09");
+    expect(w?.start).toBe("2026-09-28");
+    expect(w?.end).toBe("2026-10-04");
+    expect(w?.list.map((v) => v.version)).toEqual(["1.35.0", "1.34.0", "1.33.0"]);
+  });
+  it("refuses a file recorded for another package or without dates", async () => {
+    const { parseRecordedWeek } = await import("@/lib/npm-versions");
+    expect(parseRecordedWeek(FILE, "career-ops", "2026-10-09")).toBeNull();
+    expect(parseRecordedWeek({ ...FILE, end: undefined }, "@santifer/career-ops", "2026-10-09")).toBeNull();
+  });
+  it("refuses a recorded week older than three weeks instead of serving it as current", async () => {
+    const { parseRecordedWeek } = await import("@/lib/npm-versions");
+    expect(parseRecordedWeek(FILE, "@santifer/career-ops", "2026-10-30")).toBeNull();
+  });
+});
