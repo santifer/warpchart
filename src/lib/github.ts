@@ -248,7 +248,8 @@ interface VelocityRepoNode {
   stargazerCount: number;
   description: string | null;
   primaryLanguage: { name: string } | null;
-  stargazers: { edges: { starredAt: string }[] };
+  // absent since 9-oct-2026: see the query in neighborsVelocity
+  stargazers?: { edges: { starredAt: string }[] };
 }
 
 export async function neighborsVelocity(
@@ -270,9 +271,13 @@ export async function neighborsVelocity(
     const parts = chunk.map((fn, i) => {
       const [o, n] = fn.split("/");
       return `r${i}: repository(owner:${JSON.stringify(o)}, name:${JSON.stringify(n)}){
-        nameWithOwner stargazerCount description primaryLanguage{ name }
-        stargazers(last:30){ edges{ starredAt } } }`;
+        nameWithOwner stargazerCount description primaryLanguage{ name } }`;
     });
+    // No stargazers(last:N) here any more. It never measured a foreign repo
+    // (empty edges for anyone but the owner), and since 9-oct-2026 GitHub
+    // answers the App token with FORBIDDEN on that field: node = null for
+    // every alias, "all chunks failed", and cold /r/ pages broke. Callers
+    // already substitute the registry's canonical rate for the null below.
     return graphql<Record<string, VelocityRepoNode | null>>(`{ ${parts.join("\n")} }`);
   };
 
@@ -300,7 +305,7 @@ export async function neighborsVelocity(
     if (!data) continue;
     for (const d of Object.values(data)) {
       if (!d) continue;
-      const edges = d.stargazers.edges;
+      const edges = d.stargazers?.edges ?? [];
       // UNKNOWN is not ZERO: GitHub returns an EMPTY edges array (not an error)
       // for repos we do not own, so treating that as "grew by 0" publishes a
       // measured-looking zero. Callers that know the canonical 7-day rate

@@ -660,6 +660,35 @@ async function checkPublic() {
     } else pass("public.pages", "PUBLIC", `${pages.length} pages serve`);
   });
 
+  // A /r/ page whose server render throws still answers 200: React streams the
+  // error boundary in with $RX(...) and the body never arrives, so
+  // public.pages saw nothing while cold dossiers failed for every visitor on
+  // 9-oct-2026 (GitHub began answering the App token FORBIDDEN on
+  // stargazers). Judge the HTML, not the status. Registry repos degrade
+  // instead of throwing, so only a repo OUTSIDE the top-10k registry reaches
+  // the boundary: DEEP is a small, stable foreign repo kept out of it on
+  // purpose (chalk/ansi-styles, ~465 stars). Do not swap it for a big one.
+  const DEEP = "chalk/ansi-styles";
+  await check("public.dossier", "PUBLIC", async () => {
+    const broken = [];
+    for (const repo of [DEEP, FOREIGN[1], TENANT]) {
+      const res = await fetch(`${BASE}/r/${repo}`, { signal: AbortSignal.timeout(45_000) }).catch(() => null);
+      const html = res ? await res.text().catch(() => "") : "";
+      const streamedError = html.includes("$RX(");
+      // healthy dossiers weigh 0.8-1 MB; the bare error shell is ~110 KB
+      const tooSmall = html.length < 300_000;
+      if (!res?.ok || streamedError || tooSmall) {
+        broken.push({ repo, status: res?.status ?? "network", streamedError, bytes: html.length });
+      }
+    }
+    if (broken.length) {
+      fail("public.dossier", "PUBLIC", "critical",
+        `${broken.length}/3 dossiers fail to render: ${broken.map((b) => `${b.repo} (${b.status}${b.streamedError ? ", error boundary" : ""}, ${Math.round(b.bytes / 1024)} KB)`).join(" · ")}`,
+        "The explorer threw during the server render. Read the errors: vercel logs --environment production --no-branch --since 3h --level error --json. 'neighborsVelocity: all chunks failed' next to graphql.partial FORBIDDEN means a GitHub token lost access to a field the query asks for (src/lib/github.ts); 'deep-space scans paused' is the low-fuel guard, i.e. the search budget ran out.",
+        broken);
+    } else pass("public.dossier", "PUBLIC", "3 dossiers render, deep-space included");
+  });
+
   await check("public.api", "PUBLIC", async () => {
     const eps = [`/api/v1/repo?repo=${TENANT}`, "/api/v1/velocity?limit=5", "/api/v1/overtakes?limit=5", "/api/v1/leaderboard?limit=5", "/api/og"];
     const broken = [];

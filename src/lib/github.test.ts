@@ -44,6 +44,36 @@ describe("neighborsVelocity (web twin of reposVelocity)", () => {
     expect(out.find((r) => r.r === "big/repo")?.v).toBeNull();
     expect(out.find((r) => r.r === "new/repo")?.v).toBe(0);
   });
+
+  // 9-oct-2026: GitHub started answering the App token with a FORBIDDEN partial
+  // (node = null) for stargazers(last:N) on repos it does not own, so every
+  // chunk came back empty, "all chunks failed" threw, and cold /r/ pages
+  // rendered TELEMETRY LINK FAILED. The stub reproduces that exact payload
+  // whenever the App asks for stargazers.
+  it("survives the App token being FORBIDDEN on stargazers", async () => {
+    vi.doMock("@/lib/ghauth", () => ({
+      pickAuth: async () => ({ token: "app-token", source: "app" }),
+      noteRateLimit: () => {},
+      lowFuel: () => false,
+    }));
+    try {
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(async (_url: string, init: { headers: Record<string, string>; body?: string }) =>
+          init.headers.Authorization === "Bearer app-token" && (init.body ?? "").includes("stargazers")
+            ? json(200, { data: { r0: null, r1: null }, errors: [{ type: "FORBIDDEN" }, { type: "FORBIDDEN" }] })
+            : json(200, { data: { r0: node("big/repo", 61000), r1: node("new/repo", 0) } }),
+        ),
+      );
+      const { neighborsVelocity } = await import("@/lib/github");
+      const out = await neighborsVelocity(["big/repo", "new/repo"], Date.parse("2026-10-09T07:00:00Z"));
+      expect(out.map((r) => r.r).sort()).toEqual(["big/repo", "new/repo"]);
+      // unmeasurable stays unknown, never a measured-looking zero
+      expect(out.find((r) => r.r === "big/repo")?.v).toBeNull();
+    } finally {
+      vi.doUnmock("@/lib/ghauth");
+    }
+  });
 });
 
 describe("graphql partial errors", () => {
