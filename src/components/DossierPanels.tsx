@@ -18,13 +18,16 @@ function ago(iso: string): string {
   return `${(days / 365.25).toFixed(1)}y ago`;
 }
 
-function Metric({ label, value, hint, tone }: { label: string; value: string; hint?: string; tone?: "accent" | "warn" | "ink" }) {
+function Metric({ label, value, hint, note, tone }: { label: string; value: string; hint?: string; note?: string; tone?: "accent" | "warn" | "ink" }) {
   const color = tone === "warn" ? "text-warn" : tone === "accent" ? "text-accent" : "text-ink";
   return (
     <div className="flex min-w-0 flex-col gap-1">
       <span className="numeral text-micro tracking-[0.2em] text-faint">{label}</span>
       <span className={`numeral text-metric leading-none ${color}`}>{value}</span>
       {hint ? <span className="numeral truncate text-micro text-dim">{hint}</span> : null}
+      {/* never truncated: it carries what makes the figure honest (the
+          measured number behind an estimate), so it wraps instead */}
+      {note ? <span className="numeral max-w-[22rem] text-micro leading-snug text-dim">{note}</span> : null}
     </div>
   );
 }
@@ -168,15 +171,17 @@ export function UsagePanel({
                           ? `~${fmtCompact(d!.npmLast30Estimate)}`
                           : fmtCompact(d!.npmLast30)
                       }
-                      // the measured figure goes FIRST: the hint truncates on
-                      // narrow screens, and the estimate must never be shown
-                      // without it
-                      hint={[
+                      // the measured figure rides in `note`, which wraps: the
+                      // hint truncates on a phone, and the estimate must never
+                      // be shown without it
+                      note={
                         (d!.npmLast30MissingDays ?? 0) > 0
                           ? `${fmt(d!.npmLast30)} measured + ${d!.npmLast30MissingDays} days npm did not record, estimated`
                           : d!.npmLast30MissingDays === null
                             ? "gaps in npm's data unchecked"
-                            : "",
+                            : undefined
+                      }
+                      hint={[
                         d!.npmPkg ?? "",
                         lastNpm ? `through ${lastNpm}` : "",
                       ]
