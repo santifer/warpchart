@@ -256,11 +256,13 @@ export default function ContributorChart({
       </svg>
 
       {busFactor ? (
-        <div className="flex items-center gap-3">
+        // wraps on a phone: the shares go under the bar instead of pushing it to
+        // zero width and running off the right edge (iPhone, 2026-10-11)
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
           <span className="numeral shrink-0 text-micro tracking-[0.08em] text-faint">
             BUS FACTOR
           </span>
-          <div className="flex h-1.5 flex-1 gap-0.5">
+          <div className="flex h-1.5 min-w-[6rem] flex-1 gap-0.5">
             <div style={{ width: `${(busFactor.top1Share * 100).toFixed(1)}%`, background: "var(--warn)" }} />
             <div
               style={{
@@ -270,7 +272,7 @@ export default function ContributorChart({
             />
             <div className="flex-1 bg-grid" />
           </div>
-          <span className="numeral shrink-0 text-micro text-faint">
+          <span className="numeral basis-full text-micro text-faint sm:basis-auto sm:shrink-0">
             maintainer {Math.round(busFactor.top1Share * 100)}% · next 4{" "}
             {Math.round((busFactor.top5Share - busFactor.top1Share) * 100)}% · others{" "}
             {Math.round((1 - busFactor.top5Share) * 100)}%
