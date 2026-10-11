@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { COLLECTOR_STALE_H as APP_STALE_H } from "../src/lib/staleness.ts";
-import { ARTIFACTS, COLLECTOR_STALE_H, cancelledVerdict, cronLag, etaIncoherences, maxAgeFromEnv, newestRunMs, pickFreshestRuns, pipelineRunsGate, RUNS_LIST_TOL_H, runsListStale, openPartials, presenceEval, presenceLost, presenceMap, prflowFreshness, npmUsageFreshness, contributorsDrift, staleArtifacts, watchdogStale } from "./health-rules.mjs";
+import { ARTIFACTS, COLLECTOR_STALE_H, cancelledVerdict, cronLag, etaIncoherences, maxAgeFromEnv, newestRunMs, pickFreshestRuns, pipelineRunsGate, RUNS_LIST_TOL_H, runsListStale, openPartials, presenceEval, presenceLost, presenceMap, prflowFreshness, npmUsageFreshness, contributorsDrift, contributorCurve, staleArtifacts, watchdogStale } from "./health-rules.mjs";
 
 describe("prflowFreshness", () => {
   // 26-sep: the first run after 00:00Z was cancelled and 25-sep never closed.
@@ -496,5 +496,24 @@ describe("contributorsDrift", () => {
   it("flags a missing count and skips an unreadable sidebar", () => {
     expect(contributorsDrift(null, 611).severity).toBe("warn");
     expect(contributorsDrift(611, null).severity).toBeNull();
+  });
+});
+
+describe("contributorCurve", () => {
+  const row = (d, c) => ({ day: d, cumulative: c });
+  // the API's real shape: every series goes through windowed() (review, 2026-10-11)
+  const win = (...points) => ({ from: points[0]?.day ?? null, to: points.at(-1)?.day ?? null, days: points.length, points });
+  it("passes when the curve ends on the figure the panel prints", () => {
+    expect(contributorCurve({ total: 614, series: { github: win(row("2026-04-04", 1), row("2026-10-11", 614)) } }).severity).toBeNull();
+  });
+  it("warns when the curve and the number disagree", () => {
+    expect(contributorCurve({ total: 614, series: { github: win(row("2026-10-11", 616)) } }).severity).toBe("warn");
+  });
+  it("warns when the chart fell back to the census toggle", () => {
+    // the dossier of 2026-10-11 before this change: no github series at all
+    expect(contributorCurve({ total: 611, series: { github: null, authors: win(row("2026-10-11", 480)), credited: win() } }).severity).toBe("warn");
+  });
+  it("stays quiet without a live figure (presence.contributors owns that)", () => {
+    expect(contributorCurve({ total: null, series: null }).severity).toBeNull();
   });
 });

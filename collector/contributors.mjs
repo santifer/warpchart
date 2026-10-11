@@ -33,7 +33,8 @@ import { readFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import { createHash } from "node:crypto";
 import { put, get } from "@vercel/blob";
-import { DATA_DIR, ghFetch, readConfig, sleep, allNamesOf, canonicalRepo } from "./lib.mjs";
+import { DATA_DIR, ghFetch, graphql, readConfig, sleep, allNamesOf, canonicalRepo } from "./lib.mjs";
+import { creditCommitAuthors, creditGithub, githubSeries } from "./contributors-core.mjs";
 
 const blobToken = process.env.BLOB_READ_WRITE_TOKEN;
 if (!blobToken) {
@@ -66,6 +67,12 @@ const AI_CO = /copilot|claude|devin|openhands|cursor|\bbot\b|\[bot\]/i;
 // draw a confidently wrong curve, which is the exact bug class (a sample
 // published as a total) this collector exists to end.
 const MAX_PAGES = 400;
+
+// Store shape that carries GitHub's own count (`gh`). A store written before it
+// cannot be patched forward (its people were folded without the credits), so
+// it is rebuilt once from the first commit.
+const GH_VERSION = 1;
+const CO_RE = /co-authored-by:/i;
 
 async function readBlob(key) {
   try {
@@ -110,7 +117,7 @@ async function fetchCommits(repo, { since = null, page = 1 } = {}) {
 
 // Fold a batch of commits into the people map. Returns how many were new
 // (not deduped) so the caller can log honestly.
-function fold(store, commits, seenShas) {
+function fold(store, commits, seenShas, coPending) {
   let folded = 0;
   for (const c of commits) {
     if (!c?.sha || seenShas.has(c.sha)) continue;
@@ -119,6 +126,11 @@ function fold(store, commits, seenShas) {
     if (!at) continue;
     store.totalCommits++;
     foldTrailers(store, c, at); // trailers count even on bot-authored commits
+    // GitHub's count: every linked author, bots and service accounts included
+    // (GitHub counts them); co-authors are resolved the way GitHub links them,
+    // by GraphQL, after the walk
+    creditGithub(store.gh, c.author?.login ?? null, at);
+    if (CO_RE.test(c.commit?.message ?? "")) coPending.push({ sha: c.sha, at });
     const { id, bot } = identityOf(c);
     if (bot) {
       store.botCommits++;
@@ -141,7 +153,7 @@ function fold(store, commits, seenShas) {
 }
 
 // Co-authored-by trailers on ONE already-deduped commit: the people GitHub's
-// own contributors box counts that a plain author census misses (career-ops on
+// Co-authored-by credits that a plain author census misses (career-ops on
 // 2026-08-04: 245 authors but 316 on the repo page - the gap is squash merges,
 // applied suggestions and pairing, where someone's work lands inside a commit
 // authored by someone else). Kept SEPARATE from authors so the panel can offer
@@ -217,8 +229,8 @@ function derive(store) {
 
   // Daily cumulative series, the shape the evolution chart consumes: one
   // [YYYY-MM-DD, cumulative] point per day that gained someone. Two series:
-  // AUTHORS (the strict census) and CREDITED (authors + co-authors, the same
-  // definition GitHub's own contributors box uses). Compact: ~1 point/day.
+  // AUTHORS (the strict census) and CREDITED (authors + human co-authors; NOT
+  // GitHub's count, which is `github` below). Compact: ~1 point/day.
   const dailyCum = (dates) => {
     const perDay = new Map();
     for (const d of dates) {
@@ -232,11 +244,18 @@ function derive(store) {
   const coOnlyFirsts = Object.entries(store.coPeople)
     .filter(([id]) => !store.people[id]) // same login/email-hash = same person
     .map(([, p]) => p.first);
+  const gh = githubSeries(store.gh ?? {}, store.ghListed ?? null);
   store.series = {
     authorsDaily: dailyCum(authorFirsts),
     creditedDaily: dailyCum([...authorFirsts, ...coOnlyFirsts]),
     authors: authorFirsts.length,
     credited: authorFirsts.length + coOnlyFirsts.length,
+    // GitHub's own count rebuilt over time (contributors-core.mjs). vitals.mjs
+    // calibrates it to the live figure GitHub shows.
+    githubDaily: gh.daily,
+    github: gh.total,
+    githubCapped: gh.capped,
+    githubCapApplied: gh.capApplied,
   };
 }
 
@@ -252,10 +271,23 @@ async function census(repo) {
     store = await readBlob(storeKey(name));
     if (store) break;
   }
+  // ALWAYS rebuild from the first commit. The incremental walk (`since` = the
+  // newest committer date seen) skipped every commit that lands on the default
+  // branch with an OLDER committer date - branches merged with their original
+  // commits: production read 2,687 of 2,806 commits and 482 of 499 authors
+  // (2026-10-11). A full walk of career-ops costs 29 REST pages + ~20 GraphQL
+  // batches, ~40 s, inside the step's 4 minutes. The old store is read only to
+  // carry the rename seed and the last cap list.
+  const previousListed = store?.ghListed ?? null;
+  if (store) console.log(`[contributors] ${repo}: rebuilding from the first commit (was ${store.totalCommits} commits)`);
+  store = null;
   const fresh = !store;
   if (fresh) {
     store = { repo, people: {}, coPeople: {}, aiCoCredits: 0, totalCommits: 0, botCommits: 0, cursor: null };
   }
+  store.ghv = GH_VERSION;
+  store.gh ??= {};
+  store.ghListed = previousListed;
   // stores written before co-author tracking existed
   store.coPeople ??= {};
   store.aiCoCredits ??= 0;
@@ -270,6 +302,7 @@ async function census(repo) {
 
   let pages = 0;
   let folded = 0;
+  const coPending = [];
   let newestIso = since;
   let newestShas = new Set(store.cursor?.shas ?? []);
   for (let page = 1; page <= MAX_PAGES; page++) {
@@ -288,7 +321,7 @@ async function census(repo) {
     }
     if (!Array.isArray(rows) || !rows.length) break;
     pages++;
-    folded += fold(store, rows, seenShas);
+    folded += fold(store, rows, seenShas, coPending);
     for (const c of rows) {
       const iso = c.commit?.committer?.date ?? null;
       if (!iso) continue;
@@ -311,6 +344,15 @@ async function census(repo) {
     await sleep(120);
   }
 
+  // Co-authors as GitHub links them (any email tied to an account, not only
+  // noreply ones). A failure throws BEFORE the write: the cursor does not move
+  // and the next run fetches these commits again, so a credit is never lost.
+  await resolveCoAuthors(repo, coPending, store.gh);
+  // Which authors GitHub still links (its 500-email cap). Unreadable: keep the
+  // last list rather than counting everyone.
+  const listed = await listedAuthors(repo);
+  if (listed) store.ghListed = listed;
+
   store.cursor = newestIso ? { iso: newestIso, shas: [...newestShas].slice(0, 200) } : store.cursor;
   derive(store);
   store.updated_at = new Date().toISOString().replace(/\.\d{3}Z$/, "Z");
@@ -322,11 +364,55 @@ async function census(repo) {
     `[contributors] ${repo}: ${humans} authors (${anon} unlinked)` +
       ` · ${store.series?.credited ?? humans} credited incl. co-authors` +
       ` · ${store.aiCoCredits} AI co-credits` +
+      ` · GitHub's count rebuilt ${store.series?.github ?? "?"}` +
+      (store.series?.githubCapApplied ? ` (${store.series.githubCapped} past the 500-email cap)` : " (cap list unreadable)") +
       ` · ${store.totalCommits} commits (${store.botCommits} bot)` +
       ` · +${folded} new commit(s) this run in ${pages} page(s)` +
       (fresh ? " · FULL BACKFILL" : "") +
       (store.busFactor ? ` · top5 ${(store.busFactor.top5Share * 100).toFixed(0)}%` : "")
   );
+}
+
+// GraphQL `authors` on each commit with a Co-authored-by trailer: the accounts
+// GitHub itself credits. 50 commits per call.
+async function resolveCoAuthors(repo, pending, gh) {
+  const [owner, name] = repo.split("/");
+  for (let i = 0; i < pending.length; i += 50) {
+    const batch = pending.slice(i, i + 50);
+    const fields = batch
+      .map((p, j) => `c${j}: object(oid: "${p.sha}") { ... on Commit { authors(first: 30) { nodes { user { login } } } } }`)
+      .join("\n");
+    const data = await graphql(
+      `query($owner: String!, $name: String!) { repository(owner: $owner, name: $name) { ${fields} } }`,
+      { owner, name },
+    );
+    const r = data?.repository;
+    if (!r) throw new Error(`co-author lookup: no repository for ${repo}`);
+    batch.forEach((p, j) => {
+      creditCommitAuthors(gh, r[`c${j}`]?.authors?.nodes, p.at);
+    });
+    await sleep(120);
+  }
+}
+
+// The logins GitHub's REST /contributors still links to an account. Past 500
+// author emails GitHub turns the rest anonymous, and they leave its count.
+// null when unreadable (very large repos answer 403).
+async function listedAuthors(repo) {
+  const out = [];
+  try {
+    for (let page = 1; page <= 100; page++) {
+      const rows = await ghFetch(`/repos/${repo}/contributors?per_page=100&page=${page}`);
+      if (!Array.isArray(rows) || !rows.length) break;
+      for (const r of rows) if (r?.login) out.push(r.login.toLowerCase());
+      if (rows.length < 100) break;
+      await sleep(120);
+    }
+  } catch (err) {
+    console.warn(`[contributors] ${repo}: /contributors unreadable (${err?.message ?? err}); keeping the last list`);
+    return null;
+  }
+  return out.length ? out : null;
 }
 
 async function main() {

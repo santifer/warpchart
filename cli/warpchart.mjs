@@ -140,11 +140,11 @@ async function dossierView(repo, args, asJson) {
   const c = d.contributors;
   if (c) {
     rule("WHO BUILDS IT");
-    kv("contributors", c.total != null ? bold(fmt(c.total)) : dim("unknown"), [c.total != null ? "as GitHub shows it" : "", c.credited ? `${c.authors} commit authors · ${c.credited} incl. co-authors` : ""].filter(Boolean).join(" · "));
+    kv("contributors", c.total != null ? bold(fmt(c.total)) : dim("unknown"), [c.total != null ? "as GitHub counts them" : "", c.authors != null ? `${c.authors} commit authors (warpchart census)` : ""].filter(Boolean).join(" · "));
     if (c.aiCoCredits) kv("AI co-credits", fmt(c.aiCoCredits), "counted, never people");
     kv("merged PRs", fmt(c.mergedTotal ?? 0), c.mergedByDistinct === 1 ? "a single maintainer gate" : c.mergedByDistinct + " maintainers");
     if (c.busFactor) kv("bus factor", `${Math.round(c.busFactor.top1Share * 100)}% / ${Math.round(c.busFactor.top5Share * 100)}%`, "top 1 / top 5 of all commits");
-    const s = c.series?.authors;
+    const s = c.series?.github ?? c.series?.authors;
     if (s?.points?.length > 2) {
       const spark = sparkSeries(s.points, (p) => p.cumulative);
       if (spark) for (const row of spark.split("\n")) console.log("  " + accent(row));
@@ -206,11 +206,12 @@ async function contributorsView(repo, args, asJson) {
   banner(bold(d.repo) + dim(" · who builds it"));
   if (!c) { console.log("\n  " + dim("the contributor census is computed for owned and paid repos") + "\n"); return; }
   console.log();
-  kv("authors", bold(fmt(c.authors ?? c.total)), "landed a commit");
-  if (c.credited != null) kv("credited", bold(fmt(c.credited)), "incl. co-authors (GitHub's own definition)");
+  // one headline: GitHub's own count, the figure on the repo page
+  kv("contributors", c.total != null ? bold(fmt(c.total)) : dim("unknown"), c.total != null ? "as GitHub counts them" : "");
+  if (c.authors != null) kv("commit authors", fmt(c.authors), "warpchart census, bots excluded");
   if (c.aiCoCredits) kv("AI co-credits", fmt(c.aiCoCredits), "counted, never people");
   if (c.busFactor) kv("bus factor", `${Math.round(c.busFactor.top1Share * 100)}% / ${Math.round(c.busFactor.top5Share * 100)}%`, "top 1 / top 5 of all commits");
-  const s = c.series?.authors;
+  const s = c.series?.github ?? c.series?.authors;
   if (s?.points?.length > 2) {
     console.log();
     const spark = sparkSeries(s.points, (p) => p.cumulative);

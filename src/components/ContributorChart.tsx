@@ -11,14 +11,14 @@
 //   width = days). With unequal bins that is the only honest shape: area equals
 //   people, and a strong short month is TALL and narrow, not small.
 //
-// Two readings, one toggle:
+// ONE reading when it exists: GitHub's own contributor count, rebuilt from the
+// commit history with GitHub's rule and ending exactly on the figure GitHub
+// shows (the "N contributors" link above). One number on the page, the same one
+// a reader finds on the repo (2026-10-11). Without it (no live figure, or the
+// rebuild too far off to calibrate) the chart falls back to the census toggle:
 //   AUTHORS   - people who authored a landed commit (the strict census)
-//   CREDITED  - authors plus Co-authored-by humans (squashes, suggestions,
-//               agentic pairing). AI co-credits are counted separately and
-//               never become people. NOT GitHub's definition: GitHub's own
-//               contributor count (shown above as "N contributors") is computed
-//               by GitHub its own way and lands between the two; the legend
-//               under the chart says so, so three numbers never read as a typo.
+//   CREDITED  - authors plus Co-authored-by humans. AI co-credits never become
+//               people.
 //
 // Every number and sentence below is computed from the series at render time.
 // Nothing is hardcoded: the copy recomputes as the data moves.
@@ -26,7 +26,20 @@ import { useMemo, useState } from "react";
 import type { VitalsCensus, VitalsBusFactor } from "@/lib/vitals";
 
 const DAY = 864e5;
-const MN = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"];
+const MN = [
+  "JAN",
+  "FEB",
+  "MAR",
+  "APR",
+  "MAY",
+  "JUN",
+  "JUL",
+  "AUG",
+  "SEP",
+  "OCT",
+  "NOV",
+  "DEC",
+];
 const capMonth = (m: string) => m[0] + m.slice(1).toLowerCase();
 
 type Seg = {
@@ -82,8 +95,17 @@ export default function ContributorChart({
   busFactor: VitalsBusFactor | null;
 }) {
   const [mode, setMode] = useState<"a" | "c">("a");
-  const pts = mode === "a" ? census.authorsDaily : census.creditedDaily;
-  const N = mode === "a" ? census.authors : census.credited;
+  const gh = census.githubDaily?.length && census.github != null;
+  const pts = gh
+    ? census.githubDaily!
+    : mode === "a"
+      ? census.authorsDaily
+      : census.creditedDaily;
+  const N = gh
+    ? census.github!
+    : mode === "a"
+      ? census.authors
+      : census.credited;
 
   const model = useMemo(() => {
     if (!pts.length) return null;
@@ -95,10 +117,15 @@ export default function ContributorChart({
     const maxRate = Math.max(...segs.map((s) => s.rate));
     const complete = segs.filter((s) => !s.partial);
     const cur = segs[segs.length - 1];
-    const best = (complete.length ? complete : segs).reduce((x, y) => (y.nw > x.nw ? y : x));
+    const best = (complete.length ? complete : segs).reduce((x, y) =>
+      y.nw > x.nw ? y : x,
+    );
     const cut30 = endMs - 30 * DAY;
     const last30 = pts.length
-      ? N - (pts.filter(([d]) => Date.parse(d + "T12:00:00Z") < cut30).at(-1)?.[1] ?? 0)
+      ? N -
+        (pts
+          .filter(([d]) => Date.parse(d + "T12:00:00Z") < cut30)
+          .at(-1)?.[1] ?? 0)
       : 0;
     return { endMs, t0, segs, maxRate, cur, best, last30 };
   }, [pts, N, census.measuredAt]);
@@ -129,36 +156,59 @@ export default function ContributorChart({
   }
   path += ` L${x(endMs)},${y(prev)}`;
 
-  const othersPct = busFactor ? Math.round((1 - busFactor.top1Share) * 100) : null;
+  const othersPct = busFactor
+    ? Math.round((1 - busFactor.top1Share) * 100)
+    : null;
   const curDays = Math.max(1, Math.round((endMs - cur.a) / DAY));
   const fastest = cur.rate >= maxRate - 1e-9;
 
   return (
     <div className="flex flex-col gap-2">
       <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
-        <div className="flex border border-grid" role="tablist" aria-label="Contributor definition">
-          {(
-            [
-              ["a", `AUTHORS ${census.authors}`, "People who authored at least one landed commit. Bots and service accounts excluded."],
-              ["c", `+ CO-AUTHORED ${census.credited}`, "Authors plus people credited with Co-authored-by on landed commits (squashes, suggestions, pairing). AI co-credits are not counted as people."],
-            ] as const
-          ).map(([m, label, tip]) => (
-            <button
-              key={m}
-              title={tip}
-              role="tab"
-              aria-selected={mode === m}
-              onClick={() => setMode(m)}
-              className={`numeral cursor-pointer px-3 py-1 text-micro tracking-[0.1em] transition-colors ${
-                mode === m ? "bg-accent/15 text-accent" : "text-faint hover:text-dim"
-              }`}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
+        {gh ? (
+          <span className="numeral text-micro tracking-[0.1em] text-faint">
+            CONTRIBUTORS · GITHUB&apos;S COUNT
+          </span>
+        ) : (
+          <div
+            className="flex border border-grid"
+            role="tablist"
+            aria-label="Contributor definition"
+          >
+            {(
+              [
+                [
+                  "a",
+                  `AUTHORS ${census.authors}`,
+                  "People who authored at least one landed commit. Bots and service accounts excluded.",
+                ],
+                [
+                  "c",
+                  `+ CO-AUTHORED ${census.credited}`,
+                  "Authors plus people credited with Co-authored-by on landed commits (squashes, suggestions, pairing). AI co-credits are not counted as people.",
+                ],
+              ] as const
+            ).map(([m, label, tip]) => (
+              <button
+                key={m}
+                title={tip}
+                role="tab"
+                aria-selected={mode === m}
+                onClick={() => setMode(m)}
+                className={`numeral cursor-pointer px-3 py-1 text-micro tracking-[0.1em] transition-colors ${
+                  mode === m
+                    ? "bg-accent/15 text-accent"
+                    : "text-faint hover:text-dim"
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        )}
         <span className="numeral text-micro text-faint">
-          <span className="text-accent">{last30}</span> of {N} arrived in the last 30 days
+          <span className="text-accent">{last30}</span> of {N} arrived in the
+          last 30 days
         </span>
       </div>
 
@@ -166,11 +216,24 @@ export default function ContributorChart({
         viewBox={`0 0 ${W} ${LBL + 8}`}
         className="block w-full"
         role="img"
-        aria-label={`Cumulative ${mode === "a" ? "authors" : "credited contributors"} over time, daily`}
+        aria-label={`Cumulative ${gh ? "contributors, GitHub's count," : mode === "a" ? "authors" : "credited contributors"} over time, daily`}
       >
         <line x1={X0} y1={CB} x2={X1} y2={CB} stroke="var(--grid)" />
-        <line x1={X0} y1={y(yMax)} x2={X1} y2={y(yMax)} stroke="var(--grid)" opacity=".55" />
-        <text x={X0} y={y(yMax) - 4} className="numeral" fontSize="9" fill="var(--faint)">
+        <line
+          x1={X0}
+          y1={y(yMax)}
+          x2={X1}
+          y2={y(yMax)}
+          stroke="var(--grid)"
+          opacity=".55"
+        />
+        <text
+          x={X0}
+          y={y(yMax) - 4}
+          className="numeral"
+          fontSize="9"
+          fill="var(--faint)"
+        >
           {yMax}
         </text>
         {segs.slice(1).map((s) => (
@@ -201,9 +264,18 @@ export default function ContributorChart({
             </text>
           );
         })}
-        <path d={`${path} L${x(endMs)},${CB} L${x(t0)},${CB} Z`} fill="var(--accent-soft)" />
+        <path
+          d={`${path} L${x(endMs)},${CB} L${x(t0)},${CB} Z`}
+          fill="var(--accent-soft)"
+        />
         <path d={path} fill="none" stroke="var(--accent)" strokeWidth="1.8" />
-        <circle cx={x(endMs)} cy={y(N)} r="6.5" fill="var(--glow)" opacity=".5" />
+        <circle
+          cx={x(endMs)}
+          cy={y(N)}
+          r="6.5"
+          fill="var(--glow)"
+          opacity=".5"
+        />
         <circle cx={x(endMs)} cy={y(N)} r="3" fill="var(--accent)" />
         <text
           x={x(endMs) + 8}
@@ -251,7 +323,9 @@ export default function ContributorChart({
           fill="var(--faint)"
           opacity=".8"
         >
-          NEW {mode === "a" ? "AUTHORS" : "CREDITED PEOPLE"} / DAY
+          NEW{" "}
+          {gh ? "CONTRIBUTORS" : mode === "a" ? "AUTHORS" : "CREDITED PEOPLE"} /
+          DAY
         </text>
       </svg>
 
@@ -263,7 +337,12 @@ export default function ContributorChart({
             BUS FACTOR
           </span>
           <div className="flex h-1.5 min-w-[6rem] flex-1 gap-0.5">
-            <div style={{ width: `${(busFactor.top1Share * 100).toFixed(1)}%`, background: "var(--warn)" }} />
+            <div
+              style={{
+                width: `${(busFactor.top1Share * 100).toFixed(1)}%`,
+                background: "var(--warn)",
+              }}
+            />
             <div
               style={{
                 width: `${((busFactor.top5Share - busFactor.top1Share) * 100).toFixed(1)}%`,
@@ -274,61 +353,103 @@ export default function ContributorChart({
           </div>
           <span className="numeral basis-full text-micro text-faint sm:basis-auto sm:shrink-0">
             maintainer {Math.round(busFactor.top1Share * 100)}% · next 4{" "}
-            {Math.round((busFactor.top5Share - busFactor.top1Share) * 100)}% · others{" "}
-            {Math.round((1 - busFactor.top5Share) * 100)}%
+            {Math.round((busFactor.top5Share - busFactor.top1Share) * 100)}% ·
+            others {Math.round((1 - busFactor.top5Share) * 100)}%
           </span>
         </div>
       ) : null}
 
       <div className="numeral text-micro leading-relaxed text-faint">
-        {mode === "a" ? (
+        {gh ? (
           <>
-            <span className="text-dim">{N} people</span> have authored a landed commit since{" "}
-            {capMonth(segs[0].label)}.
+            <span className="text-dim">{N} contributors</span> since{" "}
+            {capMonth(segs[0].label)} by GitHub&apos;s count: the accounts
+            GitHub credits on a landed commit, as author or co-author.
             {othersPct !== null ? (
               <>
                 {" "}
-                <span className="text-accent">{othersPct}% of all commits</span> come from someone
-                other than the maintainer.
+                <span className="text-accent">
+                  {othersPct}% of all commits
+                </span>{" "}
+                come from someone other than the maintainer.
+              </>
+            ) : null}
+          </>
+        ) : mode === "a" ? (
+          <>
+            <span className="text-dim">{N} people</span> have authored a landed
+            commit since {capMonth(segs[0].label)}.
+            {othersPct !== null ? (
+              <>
+                {" "}
+                <span className="text-accent">
+                  {othersPct}% of all commits
+                </span>{" "}
+                come from someone other than the maintainer.
               </>
             ) : null}
           </>
         ) : (
           <>
-            <span className="text-dim">{N} people</span> are credited on landed commits since{" "}
-            {capMonth(segs[0].label)}: {census.authors} authors plus{" "}
-            <span className="text-accent">{census.credited - census.authors} co-authors</span> via
-            squashes, suggestions and agentic pairing.
+            <span className="text-dim">{N} people</span> are credited on landed
+            commits since {capMonth(segs[0].label)}: {census.authors} authors
+            plus{" "}
+            <span className="text-accent">
+              {census.credited - census.authors} co-authors
+            </span>{" "}
+            via squashes, suggestions and agentic pairing.
           </>
         )}{" "}
-        {capMonth(best.label)} brought <span className="text-dim">{best.nw} first-timers</span>;{" "}
+        {capMonth(best.label)} brought{" "}
+        <span className="text-dim">{best.nw} first-timers</span>;{" "}
         {fastest ? (
           <>
-            <span className="text-accent">{cur.rate.toFixed(1)} new/day</span> so far in{" "}
-            {capMonth(cur.label)}, the fastest pace on record.
+            <span className="text-accent">{cur.rate.toFixed(1)} new/day</span>{" "}
+            so far in {capMonth(cur.label)}, the fastest pace on record.
           </>
         ) : (
           <>
-            <span className="text-dim">{cur.rate.toFixed(1)} new/day</span> so far in{" "}
-            {capMonth(cur.label)}.
+            <span className="text-dim">{cur.rate.toFixed(1)} new/day</span> so
+            far in {capMonth(cur.label)}.
           </>
         )}
       </div>
-      <span className="numeral text-micro text-faint/60">
-        commit census
-        {census.measuredAt ? ` · measured ${census.measuredAt.slice(0, 10)}` : ""} ·{" "}
-        {capMonth(cur.label)} spans {curDays} day{curDays === 1 ? "" : "s"} · bots and service
-        accounts excluded
-        {mode === "c" ? ` · AI co-credits tracked apart (${census.aiCoCredits})` : ""}
-      </span>
-      {/* Three counts sit on this panel (GitHub's, authors, co-authored). Say
-          once, in words that work on a phone, what each one counts, so a reader
-          never takes the gap between them for an error (2026-10-11). */}
-      <span className="numeral text-micro leading-relaxed text-faint/60">
-        <span className="text-faint">contributors</span> = GitHub&apos;s own count, its method ·{" "}
-        <span className="text-faint">authors</span> = people with a landed commit ·{" "}
-        <span className="text-faint">co-authored</span> = authors plus people credited on a commit
-      </span>
+      {gh ? (
+        // One count on the panel, so no legend of definitions: just how the
+        // curve is drawn. GitHub's figure has no dates; the curve does.
+        <span className="numeral text-micro leading-relaxed text-faint/60">
+          GitHub&apos;s contributor count, drawn from the commit history and
+          ending on the figure GitHub shows
+          {census.measuredAt
+            ? ` · measured ${census.measuredAt.slice(0, 10)}`
+            : ""}{" "}
+          · {capMonth(cur.label)} spans {curDays} day{curDays === 1 ? "" : "s"}{" "}
+          · bots and AI accounts count, as on GitHub
+        </span>
+      ) : (
+        <>
+          <span className="numeral text-micro text-faint/60">
+            commit census
+            {census.measuredAt
+              ? ` · measured ${census.measuredAt.slice(0, 10)}`
+              : ""}{" "}
+            · {capMonth(cur.label)} spans {curDays} day
+            {curDays === 1 ? "" : "s"} · bots and service accounts excluded
+            {mode === "c"
+              ? ` · AI co-credits tracked apart (${census.aiCoCredits})`
+              : ""}
+          </span>
+          {/* Fallback only: three counts sit on the panel (GitHub's, authors,
+              co-authored); say what each one counts (2026-10-11). */}
+          <span className="numeral text-micro leading-relaxed text-faint/60">
+            <span className="text-faint">contributors</span> = GitHub&apos;s own
+            count, its method · <span className="text-faint">authors</span> =
+            people with a landed commit ·{" "}
+            <span className="text-faint">co-authored</span> = authors plus
+            people credited on a commit
+          </span>
+        </>
+      )}
     </div>
   );
 }

@@ -338,6 +338,21 @@ export function contributorsDrift(published, github, tolPct = 3) {
     : { severity: null, note: `${published} vs GitHub ${github}` };
 }
 
+// The contributor chart draws GitHub's own count over time and must END on the
+// figure the panel prints (one number on the page, 2026-10-11). A missing curve
+// means the calibration refused (rebuild >5% off) or the census never ran: the
+// chart silently fell back to the authors/co-authored toggle.
+export function contributorCurve(contributors) {
+  if (!contributors) return { severity: null, note: "no contributors block" };
+  const total = contributors.total ?? null;
+  const last = contributors.series?.github?.points?.at(-1)?.cumulative ?? null;
+  if (total == null) return { severity: null, note: "no live figure; covered by presence.contributors" };
+  if (last == null) return { severity: "warn", note: `no GitHub-count curve; the chart fell back to the census toggle (total ${total})` };
+  return last === total
+    ? { severity: null, note: `curve ends on ${total}, GitHub's figure` }
+    : { severity: "warn", note: `curve ends on ${last} but the panel prints ${total}` };
+}
+
 // npm usage on the house dossier: the weekly breakdown may now be a recorded
 // week (npm-versions fallback while npm's series has holes). That is honest
 // while its date is visible, but a fallback that never refreshes is the panel

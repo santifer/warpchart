@@ -33,7 +33,7 @@
 //   --base=X   probe another origin (a preview deployment, say)
 // Exit code 1 when a critical finding is open, so CI turns red by itself.
 import { writeFileSync } from "node:fs";
-import { ARTIFACTS, COLLECTOR_STALE_H, cancelledVerdict, cronLag, etaIncoherences, openPartials, pipelineRunsGate, presenceEval, presenceMap, prflowFreshness, staleArtifacts, npmUsageFreshness, contributorsDrift } from "./health-rules.mjs";
+import { ARTIFACTS, COLLECTOR_STALE_H, cancelledVerdict, cronLag, etaIncoherences, openPartials, pipelineRunsGate, presenceEval, presenceMap, prflowFreshness, staleArtifacts, npmUsageFreshness, contributorsDrift, contributorCurve } from "./health-rules.mjs";
 
 const args = process.argv.slice(2);
 const JSON_OUT = args.includes("--json");
@@ -1055,7 +1055,13 @@ async function checkPresence() {
   await check("presence.contributors", "PRESENCE", async () => {
     const res = await fetch(`${BASE}/api/v1/dossier?repo=${encodeURIComponent(TENANT)}`, { signal: AbortSignal.timeout(30_000) }).catch(() => null);
     if (!res?.ok) return pass("presence.contributors", "PRESENCE", "dossier unreachable, measured by presence.transitions");
-    const published = (await res.json())?.contributors?.total ?? null;
+    const body = await res.json();
+    const published = body?.contributors?.total ?? null;
+    // the curve and the number are one figure (contributorCurve)
+    const curve = contributorCurve(body?.contributors ?? null);
+    if (curve.severity) fail("presence.contributor-curve", "PRESENCE", curve.severity, curve.note,
+      "collector/contributors.mjs rebuilds GitHub's count from commits (contributors-core.mjs) and vitals.mjs calibrates it to the sidebar figure. A missing curve: check the [contributors] log line (\"GitHub's count rebuilt N\") and whether the rebuild drifted >5% from the sidebar.");
+    else pass("presence.contributor-curve", "PRESENCE", curve.note);
     const sb = await fetch(`https://github.com/${TENANT}/_sidebar`, { headers: { Accept: "application/json" }, signal: AbortSignal.timeout(20_000) })
       .then((r) => (r.ok ? r.json() : null)).catch(() => null);
     const github = sb?.contributors?.contributorCount ?? null;

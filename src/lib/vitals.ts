@@ -77,9 +77,9 @@ export interface VitalsBusFactor {
   humans: number;
 }
 
-// daily cumulative contributor series from the commit census. Two readings:
-// AUTHORS (strict) and CREDITED (authors + Co-authored-by humans, the same
-// definition GitHub's own contributors box uses). AI co-credits are counted
+// daily cumulative contributor series from the commit census. Readings:
+// AUTHORS (strict), CREDITED (authors + Co-authored-by humans; NOT GitHub's
+// count) and, when calibrated, GITHUB (GitHub's own count, below). AI co-credits are counted
 // apart and never become people.
 export interface VitalsCensus {
   authorsDaily: [string, number][];
@@ -88,6 +88,14 @@ export interface VitalsCensus {
   credited: number;
   aiCoCredits: number;
   measuredAt: string | null;
+  // GitHub's own count over time: rebuilt from the commit history with GitHub's
+  // rule (accounts credited as author or co-author, bots included, past the
+  // 500-email cap excluded) and calibrated to end on the figure GitHub shows.
+  // Absent when there is no live figure or the rebuild is >5% off.
+  githubDaily?: [string, number][];
+  github?: number; // = community.contributors, the live figure
+  githubRebuilt?: number; // the rebuild before calibration
+  githubResidual?: number; // github - githubRebuilt (a few people GitHub counts its own way)
 }
 
 export interface VitalsCreator {
@@ -222,7 +230,7 @@ export const loadVitals = (owner: string, name: string): Promise<Vitals | null> 
     // the old reading, so a deploy that fixes a number ships looking like it
     // did nothing. v7 was itself a bump for the same reason (sample counts
     // passing for totals) and the lesson still cost 15 minutes today.
-    ["vitals-v9", // v9: contributors now GitHub's own count (sidebar), null when unread
+    ["vitals-v10", // v10: census.githubDaily (GitHub's count over time); v9: contributors = GitHub's sidebar
     `${owner}/${name}`.toLowerCase()],
     { revalidate: 900 },
   )();

@@ -27,6 +27,7 @@ import { join } from "node:path";
 import { get, put } from "@vercel/blob";
 import { DATA_DIR, graphql, ghFetch, sleep, token, readConfig, allNamesOf } from "./lib.mjs";
 import { isBot, derivePrAnalysis, gfiQueries, gfiFromCounts, parseSidebarContributors } from "./vitals-core.mjs";
+import { calibrateToLive } from "./contributors-core.mjs";
 
 token(); // GitHub token: fail fast
 const blobToken = process.env.BLOB_READ_WRITE_TOKEN;
@@ -815,6 +816,22 @@ async function main() {
               aiCoCredits: census.aiCoCredits ?? 0,
               measuredAt: census.updated_at ?? null,
             };
+            // GitHub's own count over time, ending exactly on the figure GitHub
+            // shows (cm.contributors, read from its sidebar this same run). null
+            // when there is no live figure or the rebuild is >5% off: the chart
+            // then falls back to the census readings rather than a stretched curve.
+            // never calibrate a rebuild that could not apply GitHub's email cap
+            // (its /contributors list unreadable): it counts people GitHub does not
+            const cal =
+              census.series.githubDaily?.length && census.series.githubCapApplied
+                ? calibrateToLive(census.series.githubDaily, cm.contributors)
+                : null;
+            if (cal) {
+              cm.census.githubDaily = cal.daily;
+              cm.census.github = cm.contributors;
+              cm.census.githubRebuilt = cal.rebuilt;
+              cm.census.githubResidual = cal.residual;
+            }
           }
         }
       }

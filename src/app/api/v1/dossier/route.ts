@@ -127,6 +127,8 @@ export async function GET(req: NextRequest) {
   const cen = vitals?.community?.census;
   const authors = windowed(censusRows(cen?.authorsDaily), win);
   const credited = windowed(censusRows(cen?.creditedDaily), win);
+  // GitHub's own count over time, ending on `total` (null when not calibrated)
+  const github = cen?.githubDaily?.length ? windowed(censusRows(cen.githubDaily), win) : null;
 
   const house = loadMeta()?.repo ?? "";
   const isHouse = !!house && repo.toLowerCase() === house.toLowerCase();
@@ -195,7 +197,7 @@ export async function GET(req: NextRequest) {
             cohorts: vitals.community.cohorts,
             cohortsSource: vitals.community.cohortsSource ?? "pr-sample",
             measuredAt: cen?.measuredAt ?? null,
-            series: cen ? { authors, credited } : null,
+            series: cen ? { github, authors, credited } : null,
           }
         : null,
 
