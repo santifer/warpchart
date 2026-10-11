@@ -241,7 +241,8 @@ const cachedDossier = (owner: string, name: string) =>
     // CHANGE THE SHAPE, CHANGE THE KEY, IN THE SAME COMMIT.
     // v11: adds uniqueCloners14d. CHANGE THE SHAPE, CHANGE THE KEY, SAME COMMIT.
     // v15: adds npmLast30MissingDays/npmLast30Estimate; npm holes dropped from npmHistory.
-    ["dossier-v15", `${owner}/${name}`.toLowerCase()],
+    // v16: vitals contributors = GitHub's sidebar count, may be null.
+    ["dossier-v16", `${owner}/${name}`.toLowerCase()],
     { revalidate: 900 },
   )();
 

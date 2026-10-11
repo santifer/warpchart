@@ -140,7 +140,7 @@ async function dossierView(repo, args, asJson) {
   const c = d.contributors;
   if (c) {
     rule("WHO BUILDS IT");
-    kv("contributors", bold(fmt(c.total)), c.credited ? `${c.authors} authors · ${c.credited} credited incl. co-authors` : "");
+    kv("contributors", c.total != null ? bold(fmt(c.total)) : dim("unknown"), [c.total != null ? "as GitHub shows it" : "", c.credited ? `${c.authors} commit authors · ${c.credited} incl. co-authors` : ""].filter(Boolean).join(" · "));
     if (c.aiCoCredits) kv("AI co-credits", fmt(c.aiCoCredits), "counted, never people");
     kv("merged PRs", fmt(c.mergedTotal ?? 0), c.mergedByDistinct === 1 ? "a single maintainer gate" : c.mergedByDistinct + " maintainers");
     if (c.busFactor) kv("bus factor", `${Math.round(c.busFactor.top1Share * 100)}% / ${Math.round(c.busFactor.top5Share * 100)}%`, "top 1 / top 5 of all commits");

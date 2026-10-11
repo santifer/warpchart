@@ -28,10 +28,20 @@ export function rankMaintainers(mergerCount, limit = 6) {
     .map(([l]) => l);
 }
 
+// The contributor count GitHub itself shows in the sidebar of the repo page (what
+// a reader sees when they check the panel), read from github.com/{repo}/_sidebar. One request for
+// any repo size. The REST /contributors list it replaces caps at the first 500
+// author emails and calls the rest anonymous: career-ops read 463 there while
+// GitHub showed 611 (2026-10-11). null = could not read it, never a guess.
+export function parseSidebarContributors(json) {
+  const n = json?.contributors?.contributorCount;
+  return Number.isInteger(n) && n > 0 ? n : null;
+}
+
 // One merged-PR sweep -> DORA lead time + the human engine. `nodes` are the
 // merged PRs as GraphQL returns them (newest first), `want` the sample cap the
-// sweep ran with, `contributorsTotal` the repo-wide count from the contributors
-// endpoint (null when it failed), `mergedTotal` GitHub's totalCount.
+// sweep ran with, `contributorsTotal` GitHub's own count from
+// parseSidebarContributors (null when it could not be read), `mergedTotal` GitHub's totalCount.
 export function derivePrAnalysis({ nodes, want = 1000, now = Date.now(), mergedTotal = null, contributorsTotal = null }) {
   const hrs = [];
   const authorCount = new Map();
@@ -104,7 +114,9 @@ export function derivePrAnalysis({ nodes, want = 1000, now = Date.now(), mergedT
   const community = scanned
     ? {
         // the real repo-wide figure; `contributorsSampled` is what the window saw
-        contributors: contributorsTotal ?? humans.length,
+        // null when GitHub's count could not be read: the sample is NOT a total
+        // and must never be published as one
+        contributors: contributorsTotal ?? null,
         contributorsSampled: humans.length,
         mergedTotal, // every merged PR ever, not just the sampled window
         prsSampled: hrs.length,

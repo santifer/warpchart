@@ -54,9 +54,10 @@ export interface VitalsAdoption {
 }
 
 export interface VitalsCommunity {
-  // repo-wide count, the same one github.com/{repo}/graphs/contributors shows,
-  // because the panel links there and the two must not disagree
-  contributors: number;
+  // the count GitHub shows on the repo page (github.com/{repo}/_sidebar), because
+  // the panel links there and the two must not disagree. null = could not be
+  // read; the panel then shows no number (never the PR sample)
+  contributors: number | null;
   contributorsSampled?: number; // unique human PR authors inside the sampled window
   mergedTotal?: number | null; // every merged PR ever
   prsSampled: number; // size of the window the lead time and merge gate come from
@@ -221,6 +222,7 @@ export const loadVitals = (owner: string, name: string): Promise<Vitals | null> 
     // the old reading, so a deploy that fixes a number ships looking like it
     // did nothing. v7 was itself a bump for the same reason (sample counts
     // passing for totals) and the lesson still cost 15 minutes today.
-    ["vitals-v8", `${owner}/${name}`.toLowerCase()],
+    ["vitals-v9", // v9: contributors now GitHub's own count (sidebar), null when unread
+    `${owner}/${name}`.toLowerCase()],
     { revalidate: 900 },
   )();

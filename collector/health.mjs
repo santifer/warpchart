@@ -33,7 +33,7 @@
 //   --base=X   probe another origin (a preview deployment, say)
 // Exit code 1 when a critical finding is open, so CI turns red by itself.
 import { writeFileSync } from "node:fs";
-import { ARTIFACTS, COLLECTOR_STALE_H, cancelledVerdict, cronLag, etaIncoherences, openPartials, pipelineRunsGate, presenceEval, presenceMap, prflowFreshness, staleArtifacts, npmUsageFreshness } from "./health-rules.mjs";
+import { ARTIFACTS, COLLECTOR_STALE_H, cancelledVerdict, cronLag, etaIncoherences, openPartials, pipelineRunsGate, presenceEval, presenceMap, prflowFreshness, staleArtifacts, npmUsageFreshness, contributorsDrift } from "./health-rules.mjs";
 
 const args = process.argv.slice(2);
 const JSON_OUT = args.includes("--json");
@@ -1048,6 +1048,21 @@ async function checkPresence() {
       fail("presence.npm-usage", "PRESENCE", r.severity, r.note,
         "The live npm week cannot be dated while npm's daily series has holes, so the panel serves the newest week collector/npm-versions.mjs recorded. If that week is this old, the collector has not recorded one either: check its step in collect.yml and api.npmjs.org/downloads/range/last-month for zero days.");
     } else pass("presence.npm-usage", "PRESENCE", r.note);
+  });
+
+  // The published contributor count against the one GitHub shows on the repo
+  // page, which is where the panel's link lands (see contributorsDrift).
+  await check("presence.contributors", "PRESENCE", async () => {
+    const res = await fetch(`${BASE}/api/v1/dossier?repo=${encodeURIComponent(TENANT)}`, { signal: AbortSignal.timeout(30_000) }).catch(() => null);
+    if (!res?.ok) return pass("presence.contributors", "PRESENCE", "dossier unreachable, measured by presence.transitions");
+    const published = (await res.json())?.contributors?.total ?? null;
+    const sb = await fetch(`https://github.com/${TENANT}/_sidebar`, { headers: { Accept: "application/json" }, signal: AbortSignal.timeout(20_000) })
+      .then((r) => (r.ok ? r.json() : null)).catch(() => null);
+    const github = sb?.contributors?.contributorCount ?? null;
+    const r = contributorsDrift(published, github);
+    if (r.severity) fail("presence.contributors", "PRESENCE", r.severity, r.note,
+      "The vitals collector reads GitHub's count from github.com/{repo}/_sidebar (collector/vitals.mjs contributorsCount). A big gap means that read failed or the vitals run is stale; never fall back to REST /contributors, which stops naming authors after 500 emails.");
+    else pass("presence.contributors", "PRESENCE", r.note);
   });
 
   // Guards in the collector (collector/guards.mjs) refuse to publish a

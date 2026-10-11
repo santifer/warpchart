@@ -315,7 +315,7 @@ export default function ContributorChart({
         {capMonth(cur.label)} spans {curDays} day{curDays === 1 ? "" : "s"} · bots and service
         accounts excluded
         {mode === "c"
-          ? ` · same definition as GitHub's contributors box · AI co-credits tracked apart (${census.aiCoCredits})`
+          ? ` · commit authors plus Co-authored-by people (GitHub's own box counts differently) · AI co-credits tracked apart (${census.aiCoCredits})`
           : ""}
       </span>
     </div>

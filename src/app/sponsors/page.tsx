@@ -74,7 +74,7 @@ export default function Sponsors() {
           </span>
           <p className="text-data font-light leading-relaxed text-dim">
             Warpchart exists because career-ops needed telemetry. career-ops is the
-            open source AI job search it measures: 68K+ stars, 328 contributors, and a
+            open source AI job search it measures: tens of thousands of stars, hundreds of contributors, and a
             README seen by tens of thousands of developers every month. Founding sponsor
             slots are limited and priced there, not here.
           </p>

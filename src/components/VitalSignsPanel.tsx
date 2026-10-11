@@ -303,7 +303,7 @@ export default function VitalSignsPanel({
                   ))}
                 </div>
                 <span className="numeral text-label text-ink transition-colors group-hover:text-accent">
-                  {fmtCompact(cm.contributors)} contributors ↗
+                  {cm.contributors != null ? `${fmtCompact(cm.contributors)} contributors ↗` : "contributors ↗"}
                 </span>
               </a>
               {cm.cohorts.length >= 2 ? (
@@ -325,15 +325,13 @@ export default function VitalSignsPanel({
             {cm.census ? <ContributorChart census={cm.census} busFactor={cm.busFactor ?? null} /> : null}
             {/* the sentence: pure facts, top-tier by deduction */}
             <div className="numeral text-micro leading-relaxed text-faint">
-              {/* Totals are repo-wide; the merge gate and lead time are measured
-                  over the sampled window, so the sentence says which is which
-                  rather than letting a sample pass for a total. */}
-              {/* Repo-wide totals, and the merge gate verified across all of
-                  them. The lead time names its own window instead of implying
-                  it covers everything. */}
-              {fmtCompact(cm.mergedTotal ?? cm.prsSampled)} pull requests from{" "}
-              <span className="text-dim">{fmtCompact(cm.contributors)} contributors</span>, every one
-              merged through{" "}
+              {/* The total is repo-wide; the merge gate and the lead time come from
+                  the sampled window, so the sentence says so instead of letting a
+                  sample pass for every PR. PRs are counted by their author and
+                  contributors by commits: never join the two counts in one phrase
+                  ("2.1K pull requests from 463 contributors", 2026-10-11). */}
+              {fmtCompact(cm.mergedTotal ?? cm.prsSampled)} pull requests merged.{" "}
+              {cm.mergedTotal && cm.prsSampled < cm.mergedTotal ? `The last ${fmtCompact(cm.prsSampled)}` : "All of them"} went through{" "}
               <span className="text-dim">
                 {cm.mergedByDistinct === 1 ? "a single maintainer" : `${cm.mergedByDistinct} maintainers`}
               </span>

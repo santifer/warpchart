@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { derivePrAnalysis, gfiFromCounts, gfiQueries, rankMaintainers } from "./vitals-core.mjs";
+import { derivePrAnalysis, gfiFromCounts, gfiQueries, parseSidebarContributors, rankMaintainers } from "./vitals-core.mjs";
 
 const now = Date.parse("2026-09-26T12:00:00Z");
 const DAY = 864e5;
@@ -22,9 +22,20 @@ describe("derivePrAnalysis", () => {
     expect(community.contributorsSampled).toBe(138);
   });
 
-  it("falls back to the sample only when the real count could not be read", () => {
+  // 2026-10-11: the panel said "463 contributors" (REST /contributors, which
+  // stops naming authors after 500 emails) and linked to GitHub, which said 611.
+  it("reads the count GitHub shows on the repo page", () => {
+    expect(parseSidebarContributors({ contributors: { contributorCount: 611 } })).toBe(611);
+    expect(parseSidebarContributors({ contributors: {} })).toBeNull();
+    expect(parseSidebarContributors(null)).toBeNull();
+    expect(parseSidebarContributors({ contributors: { contributorCount: 0 } })).toBeNull();
+  });
+
+  it("publishes no count rather than the sample when GitHub's could not be read", () => {
     const nodes = [pr("a", now - DAY), pr("b", now - 2 * DAY)];
-    expect(derivePrAnalysis({ nodes, now, contributorsTotal: null }).community.contributors).toBe(2);
+    const { community } = derivePrAnalysis({ nodes, now, contributorsTotal: null });
+    expect(community.contributors).toBeNull();
+    expect(community.contributorsSampled).toBe(2);
   });
 
   // A capped sweep cannot know who "returned" in its oldest month: the series

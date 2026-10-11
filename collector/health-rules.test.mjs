@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { COLLECTOR_STALE_H as APP_STALE_H } from "../src/lib/staleness.ts";
-import { ARTIFACTS, COLLECTOR_STALE_H, cancelledVerdict, cronLag, etaIncoherences, maxAgeFromEnv, newestRunMs, pickFreshestRuns, pipelineRunsGate, RUNS_LIST_TOL_H, runsListStale, openPartials, presenceEval, presenceLost, presenceMap, prflowFreshness, npmUsageFreshness, staleArtifacts, watchdogStale } from "./health-rules.mjs";
+import { ARTIFACTS, COLLECTOR_STALE_H, cancelledVerdict, cronLag, etaIncoherences, maxAgeFromEnv, newestRunMs, pickFreshestRuns, pipelineRunsGate, RUNS_LIST_TOL_H, runsListStale, openPartials, presenceEval, presenceLost, presenceMap, prflowFreshness, npmUsageFreshness, contributorsDrift, staleArtifacts, watchdogStale } from "./health-rules.mjs";
 
 describe("prflowFreshness", () => {
   // 26-sep: the first run after 00:00Z was cancelled and 25-sep never closed.
@@ -483,5 +483,18 @@ describe("npmUsageFreshness", () => {
   });
   it("warns when the breakdown has not moved for more than ten days", () => {
     expect(npmUsageFreshness({ versions: { through: "2026-09-25" } }, "2026-10-09").severity).toBe("warn");
+  });
+});
+
+describe("contributorsDrift", () => {
+  it("flags the REST cap that published 463 while GitHub showed 611", () => {
+    expect(contributorsDrift(463, 611).severity).toBe("warn");
+  });
+  it("tolerates the hours between two daily readings", () => {
+    expect(contributorsDrift(606, 611).severity).toBeNull();
+  });
+  it("flags a missing count and skips an unreadable sidebar", () => {
+    expect(contributorsDrift(null, 611).severity).toBe("warn");
+    expect(contributorsDrift(611, null).severity).toBeNull();
   });
 });

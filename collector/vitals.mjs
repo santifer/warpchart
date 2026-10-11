@@ -26,7 +26,7 @@ import { readFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import { get, put } from "@vercel/blob";
 import { DATA_DIR, graphql, ghFetch, sleep, token, readConfig, allNamesOf } from "./lib.mjs";
-import { isBot, derivePrAnalysis, gfiQueries, gfiFromCounts } from "./vitals-core.mjs";
+import { isBot, derivePrAnalysis, gfiQueries, gfiFromCounts, parseSidebarContributors } from "./vitals-core.mjs";
 
 token(); // GitHub token: fail fast
 const blobToken = process.env.BLOB_READ_WRITE_TOKEN;
@@ -174,24 +174,24 @@ async function lightActivity(repo) {
 // panels for the price of one pagination.
 // BOTS / isBot live in vitals-core.mjs (shared with the tests).
 
-// TRUE number of contributors, the same one github.com/{repo}/graphs/contributors
-// shows. The PR sample below can only ever see the authors inside its window
-// (138 of the real 213 on 2026-07-28), and the panel links straight to that
-// GitHub page - so publishing the sample's count meant the figure contradicted
-// itself the moment anyone clicked it.
+// The contributor count GitHub shows in the sidebar of the repo page
+// (parseSidebarContributors explains why not REST /contributors). Unauthenticated,
+// one request whatever the repo size; a couple of retries for GitHub's 5xx blips.
 async function contributorsCount(repo) {
-  try {
-    let total = 0;
-    for (let page = 1; page <= 6; page++) {
-      const rows = await ghFetch(`/repos/${repo}/contributors?per_page=100&anon=0&page=${page}`);
-      if (!Array.isArray(rows)) break;
-      total += rows.length;
-      if (rows.length < 100) break; // last page
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      const res = await fetch(`https://github.com/${repo}/_sidebar`, {
+        headers: { Accept: "application/json", "User-Agent": "warpchart-vitals" },
+        signal: AbortSignal.timeout(20_000),
+      });
+      if (res.ok) return parseSidebarContributors(await res.json());
+      if (res.status < 500 && res.status !== 429) return null; // 429 = rate limited: retry
+    } catch {
+      /* network or timeout: retry */
     }
-    return total || null;
-  } catch {
-    return null; // fall back to the sample count rather than invent one
+    await sleep(1500 * (attempt + 1));
   }
+  return null; // unknown, published as such (never the PR sample)
 }
 
 // want=1000 covers a repo's ENTIRE merged history up to that size (career-ops

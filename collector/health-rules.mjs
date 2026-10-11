@@ -325,6 +325,19 @@ export function pipelineRunsGate(responses, lastSnapshotMs) {
   return { ...base, gate: "ok", lagging: laggingTokens(picked.perToken, ref, picked.list.length > 0) };
 }
 
+// The contributor count the dossier publishes must be the one GitHub shows on the
+// repo page (the panel links there). Both move daily, so a small gap is the two
+// readings being hours apart; a large one is the REST /contributors cap (463 vs
+// 611 on 2026-10-11) or a stale vitals run.
+export function contributorsDrift(published, github, tolPct = 3) {
+  if (published == null) return { severity: "warn", note: "dossier publishes no contributor count (GitHub's could not be read)" };
+  if (github == null) return { severity: null, note: "GitHub sidebar unreadable this run; not compared" };
+  const gap = Math.abs(published - github) / github * 100;
+  return gap > tolPct
+    ? { severity: "warn", note: `dossier says ${published} contributors, GitHub shows ${github} (${gap.toFixed(1)}% apart)` }
+    : { severity: null, note: `${published} vs GitHub ${github}` };
+}
+
 // npm usage on the house dossier: the weekly breakdown may now be a recorded
 // week (npm-versions fallback while npm's series has holes). That is honest
 // while its date is visible, but a fallback that never refreshes is the panel
