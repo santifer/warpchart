@@ -277,7 +277,7 @@ export default function VitalSignsPanel({
                 target="_blank"
                 rel="noopener noreferrer"
                 className="group flex items-center gap-3"
-                title="Contributors on GitHub"
+                title="GitHub's own contributor count, measured by GitHub. The authors and co-authored figures below come from warpchart's commit census and count differently."
               >
                 {/* The ring must be the PANEL BACKGROUND so overlapping faces
                     read as cut out of it. It said ring-panel, and there is no

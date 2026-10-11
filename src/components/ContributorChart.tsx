@@ -13,10 +13,12 @@
 //
 // Two readings, one toggle:
 //   AUTHORS   - people who authored a landed commit (the strict census)
-//   CREDITED  - authors plus Co-authored-by humans, the same definition
-//               GitHub's own contributors box uses (squashes, suggestions,
+//   CREDITED  - authors plus Co-authored-by humans (squashes, suggestions,
 //               agentic pairing). AI co-credits are counted separately and
-//               never become people.
+//               never become people. NOT GitHub's definition: GitHub's own
+//               contributor count (shown above as "N contributors") is computed
+//               by GitHub its own way and lands between the two; the legend
+//               under the chart says so, so three numbers never read as a typo.
 //
 // Every number and sentence below is computed from the series at render time.
 // Nothing is hardcoded: the copy recomputes as the data moves.
@@ -137,12 +139,13 @@ export default function ContributorChart({
         <div className="flex border border-grid" role="tablist" aria-label="Contributor definition">
           {(
             [
-              ["a", `AUTHORS ${census.authors}`],
-              ["c", `+ CO-AUTHORED ${census.credited}`],
+              ["a", `AUTHORS ${census.authors}`, "People who authored at least one landed commit. Bots and service accounts excluded."],
+              ["c", `+ CO-AUTHORED ${census.credited}`, "Authors plus people credited with Co-authored-by on landed commits (squashes, suggestions, pairing). AI co-credits are not counted as people."],
             ] as const
-          ).map(([m, label]) => (
+          ).map(([m, label, tip]) => (
             <button
               key={m}
+              title={tip}
               role="tab"
               aria-selected={mode === m}
               onClick={() => setMode(m)}
@@ -314,9 +317,15 @@ export default function ContributorChart({
         {census.measuredAt ? ` · measured ${census.measuredAt.slice(0, 10)}` : ""} ·{" "}
         {capMonth(cur.label)} spans {curDays} day{curDays === 1 ? "" : "s"} · bots and service
         accounts excluded
-        {mode === "c"
-          ? ` · commit authors plus Co-authored-by people (GitHub's own box counts differently) · AI co-credits tracked apart (${census.aiCoCredits})`
-          : ""}
+        {mode === "c" ? ` · AI co-credits tracked apart (${census.aiCoCredits})` : ""}
+      </span>
+      {/* Three counts sit on this panel (GitHub's, authors, co-authored). Say
+          once, in words that work on a phone, what each one counts, so a reader
+          never takes the gap between them for an error (2026-10-11). */}
+      <span className="numeral text-micro leading-relaxed text-faint/60">
+        <span className="text-faint">contributors</span> = GitHub&apos;s own count, its method ·{" "}
+        <span className="text-faint">authors</span> = people with a landed commit ·{" "}
+        <span className="text-faint">co-authored</span> = authors plus people credited on a commit
       </span>
     </div>
   );
