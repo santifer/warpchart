@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { compareVersions, datedWeek, newestVersion, parseVersionDownloads, summarizeVersions } from "@/lib/npm-versions";
+import { compareVersions, datedWeek, newestVersion, parseVersionDownloads, summarizeVersions, versionFootnote } from "@/lib/npm-versions";
 
 describe("npm downloads by version", () => {
   it("reads npm's per-version week, busiest first", () => {
@@ -97,5 +97,27 @@ describe("recorded week fallback", () => {
   it("refuses a recorded week older than three weeks instead of serving it as current", async () => {
     const { parseRecordedWeek } = await import("@/lib/npm-versions");
     expect(parseRecordedWeek(FILE, "@santifer/career-ops", "2026-10-30")).toBeNull();
+  });
+});
+
+describe("versionFootnote", () => {
+  // 2026-10-12: the recorded week (Sep 28-Oct 4) predates v1.36.0 (Oct 10) and
+  // the panel said "newest v1.35.0" as if it were the newest release
+  const week = [
+    { version: "1.34.0", d: 1046 },
+    { version: "1.35.0", d: 1030 },
+    { version: "1.33.0", d: 11 },
+  ];
+  it("says a newer release exists when the week predates it", () => {
+    expect(versionFootnote(newestVersion(week), "1.36.0")).toBe("newest that week v1.35.0 · latest v1.36.0, released after");
+  });
+  it("keeps the short form when the week already has the latest", () => {
+    expect(versionFootnote("1.36.0", "1.36.0")).toBe("newest v1.36.0");
+  });
+  it("never claims a newer release when npm could not be read", () => {
+    expect(versionFootnote("1.35.0", null)).toBe("newest v1.35.0");
+  });
+  it("ignores a latest tag older than the week (a tag moved back)", () => {
+    expect(versionFootnote("1.35.0", "1.34.0")).toBe("newest v1.35.0");
   });
 });

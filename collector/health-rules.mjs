@@ -370,5 +370,11 @@ export function npmUsageFreshness(npm, todayISO, maxAgeDays = 10) {
   if (ageDays !== null && ageDays > maxAgeDays) {
     return { severity: "warn", ageDays, note: [`NPM BY VERSION is ${ageDays} days old (through ${through})`, floor].filter(Boolean).join(" · ") };
   }
+  // without npm's `latest` the footnote can only name the newest version IN a
+  // possibly old week, which read as "newest release" (v1.35.0 two days after
+  // v1.36.0 shipped, 2026-10-12)
+  if (npm.versions && !npm.latest) {
+    return { severity: "warn", ageDays, note: "npm `latest` dist-tag missing: the version footnote cannot tell a newer release apart (a one-off npm registry blip also lands here)", latestMissing: true };
+  }
   return { severity: null, ageDays, note: [through ? `versions through ${through}` : "no versions", floor].filter(Boolean).join(" · ") };
 }

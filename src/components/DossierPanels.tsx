@@ -8,7 +8,7 @@ import UsageChart from "./UsageChart";
 import { fmt, fmtCompact } from "@/lib/format";
 import type { Dossier } from "@/lib/explorer";
 import { shortTag } from "@/lib/release-assets";
-import { newestVersion, summarizeVersions } from "@/lib/npm-versions";
+import { newestVersion, summarizeVersions, versionFootnote } from "@/lib/npm-versions";
 
 function ago(iso: string): string {
   const days = Math.max(0, (Date.now() - new Date(iso).getTime()) / 864e5);
@@ -226,6 +226,9 @@ export function UsagePanel({
                   const v = summarizeVersions(d!.npmVersions!, 4);
                   const max = Math.max(1, ...v.rows.map((r) => r.d));
                   const newest = newestVersion(d!.npmVersions!);
+                  // accent only on the release npm serves as latest; an older
+                  // week's newest row is not "the" newest (2026-10-12)
+                  const latest = d!.npmLatest ?? null;
                   const weekEnd = d!.npmVersionsThrough
                     ? new Date(`${d!.npmVersionsThrough}T00:00:00Z`).toLocaleDateString("en-US", {
                         month: "short",
@@ -242,7 +245,7 @@ export function UsagePanel({
                       {v.rows.map((r) => (
                         <div key={r.version} className="flex items-center gap-2">
                           <span
-                            className={`numeral w-24 truncate text-micro ${r.version === newest ? "text-accent" : "text-dim"}`}
+                            className={`numeral w-24 truncate text-micro ${r.version === newest && (!latest || latest === newest) ? "text-accent" : "text-dim"}`}
                             title={`${d!.npmPkg}@${r.version}`}
                           >
                             v{r.version}
@@ -258,7 +261,7 @@ export function UsagePanel({
                       ))}
                       <span className="numeral text-micro text-faint">
                         {v.rest ? `+${v.rest.versions} older · ${fmtCompact(v.rest.d)} · ` : ""}
-                        newest v{newest} · downloads, not people
+                        {versionFootnote(newest, latest)} · downloads, not people
                       </span>
                     </div>
                   );

@@ -18,7 +18,7 @@ import {
 } from "./github";
 import { loadTrafficVault } from "./traffic";
 import { npmCandidates } from "./npm-candidates";
-import { npmVersionWeek, recordedVersionWeek, type VersionDownloads } from "./npm-versions";
+import { npmLatestVersion, npmVersionWeek, recordedVersionWeek, type VersionDownloads } from "./npm-versions";
 import { cleanNpmSeries, estimateHoles, holesInWindow } from "./npm-gaps";
 import { allNamesOf } from "./aliases";
 import { reqLog } from "./log";
@@ -47,6 +47,7 @@ export interface Dossier extends DossierRaw {
   // npm's own week for that reading (through = last day included), never the fetch time
   npmVersionsStart: string | null;
   npmVersionsThrough: string | null;
+  npmLatest: string | null; // npm's `latest` dist-tag today; the week above can predate it
   // daily git clones (the other acquisition channel for clone-and-run repos),
   // from the Traffic Vault. Only populated for the public house repo — every
   // other repo's traffic stays private.
@@ -82,6 +83,7 @@ async function resolveNpmUsage(
   npmVersions: VersionDownloads[] | null;
   npmVersionsStart: string | null;
   npmVersionsThrough: string | null;
+  npmLatest: string | null; // npm's `latest` dist-tag today; the week above can predate it
 }> {
   // Every name the repo has carried, canonical first (see npm-candidates.ts:
   // a transfer renames the repo, never the package).
@@ -94,10 +96,11 @@ async function resolveNpmUsage(
     // ~24s (a missing package is a fast 404, not a timeout, so in practice only
     // the one that exists costs anything), under the /r/ maxDuration; npm resolves as reliably as a
     // single lookup.
-    const [dl, npmHistory, npmVersions] = await Promise.all([
+    const [dl, npmHistory, npmVersions, npmLatest] = await Promise.all([
       npmDownloadsWindow(cand),
       npmDownloadsRange(cand),
       npmVersionWeek(cand),
+      npmLatestVersion(cand),
     ]);
     if (dl !== null) {
       // holes out (see npm-gaps.ts); the 30-day total is npm's own and stays as
@@ -119,10 +122,11 @@ async function resolveNpmUsage(
         npmVersions: versions?.list ?? null,
         npmVersionsStart: versions?.start ?? null,
         npmVersionsThrough: versions?.end ?? null,
+        npmLatest,
       };
     }
   }
-  return { npmPkg: null, npmLast30: null, npmLast30MissingDays: null, npmLast30Estimate: null, npmHistory: null, npmVersions: null, npmVersionsStart: null, npmVersionsThrough: null };
+  return { npmPkg: null, npmLast30: null, npmLast30MissingDays: null, npmLast30Estimate: null, npmHistory: null, npmVersions: null, npmVersionsStart: null, npmVersionsThrough: null, npmLatest: null };
 }
 
 // standalone cached dossier for routes that don't run the full explorer
@@ -130,7 +134,7 @@ async function resolveNpmUsage(
 export async function fetchDossier(owner: string, name: string): Promise<Dossier | null> {
   try {
     const raw = await repoDossier(owner, name);
-    const { npmPkg, npmLast30, npmLast30MissingDays, npmLast30Estimate, npmHistory, npmVersions, npmVersionsStart, npmVersionsThrough } = await resolveNpmUsage(owner, name, raw.npmPkg);
+    const { npmPkg, npmLast30, npmLast30MissingDays, npmLast30Estimate, npmHistory, npmVersions, npmVersionsStart, npmVersionsThrough, npmLatest } = await resolveNpmUsage(owner, name, raw.npmPkg);
     // git clones are the owner's PRIVATE traffic — surface them as a second
     // acquisition channel ONLY for the public house repo (its vault is the
     // opt-in demo). Unique cloners/day = the real-people proxy (raw count
@@ -192,6 +196,7 @@ export async function fetchDossier(owner: string, name: string): Promise<Dossier
       npmVersions,
       npmVersionsStart,
       npmVersionsThrough,
+      npmLatest,
       clonesHistory: past(clonesHistory),
       uniqueCloners14d,
       uniqueCloners14dAt,
@@ -242,7 +247,7 @@ const cachedDossier = (owner: string, name: string) =>
     // v11: adds uniqueCloners14d. CHANGE THE SHAPE, CHANGE THE KEY, SAME COMMIT.
     // v15: adds npmLast30MissingDays/npmLast30Estimate; npm holes dropped from npmHistory.
     // v16: vitals contributors = GitHub's sidebar count, may be null.
-    ["dossier-v16", `${owner}/${name}`.toLowerCase()],
+    ["dossier-v17", `${owner}/${name}`.toLowerCase()],
     { revalidate: 900 },
   )();
 
@@ -419,10 +424,10 @@ export async function getExplorerData(owner: string, name: string): Promise<Expl
   try {
     const [o, n] = repoName.split("/");
     const raw = await repoDossier(o, n);
-    const { npmPkg, npmLast30, npmLast30MissingDays, npmLast30Estimate, npmHistory, npmVersions, npmVersionsStart, npmVersionsThrough } = await resolveNpmUsage(o, n, raw.npmPkg);
+    const { npmPkg, npmLast30, npmLast30MissingDays, npmLast30Estimate, npmHistory, npmVersions, npmVersionsStart, npmVersionsThrough, npmLatest } = await resolveNpmUsage(o, n, raw.npmPkg);
     // clones (private traffic) are surfaced only via the cached dossier path
     // (getCachedDossier -> fetchDossier), which the panels actually render
-    dossier = { ...raw, npmPkg, npmLast30, npmLast30MissingDays, npmLast30Estimate, npmHistory, npmVersions, npmVersionsStart, npmVersionsThrough, clonesHistory: null,
+    dossier = { ...raw, npmPkg, npmLast30, npmLast30MissingDays, npmLast30Estimate, npmHistory, npmVersions, npmVersionsStart, npmVersionsThrough, npmLatest, clonesHistory: null,
                 uniqueCloners14d: null, uniqueCloners14dAt: null };
   } catch (err) {
     log.warn("dossier.failed", { err: err instanceof Error ? err.message.slice(0, 120) : String(err) });
@@ -458,9 +463,9 @@ const getCachedExplorerData = unstable_cache(
     if (data?.degraded) throw new DegradedResult(data);
     return data;
   },
-  // v2: the dossier inside gained npmLast30MissingDays/npmLast30Estimate and
-  // lost npm's holes (same commit as dossier-v15, per INVARIANTS §2)
-  ["explorer-data-v2"],
+  // v3: the dossier inside gained npmLatest (same commit as dossier-v17);
+  // v2: npmLast30MissingDays/npmLast30Estimate, npm's holes out (dossier-v15)
+  ["explorer-data-v3"],
   { revalidate: 900 },
 );
 

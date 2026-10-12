@@ -473,7 +473,7 @@ describe("pipelineRunsGate", () => {
 
 describe("npmUsageFreshness", () => {
   it("accepts a recorded week while it is recent, and says when the total is a floor", () => {
-    const r = npmUsageFreshness({ versions: { through: "2026-10-04" }, last30IsLowerBound: true, last30MissingDays: 4, last30Estimate: 9905 }, "2026-10-09");
+    const r = npmUsageFreshness({ versions: { through: "2026-10-04" }, last30IsLowerBound: true, last30MissingDays: 4, last30Estimate: 9905, latest: "1.35.0" }, "2026-10-09");
     expect(r.severity).toBeNull();
     expect(r.note).toMatch(/4 of 30 days missing/);
   });
@@ -515,5 +515,16 @@ describe("contributorCurve", () => {
   });
   it("stays quiet without a live figure (presence.contributors owns that)", () => {
     expect(contributorCurve({ total: null, series: null }).severity).toBeNull();
+  });
+});
+
+describe("npmUsageFreshness: npm latest", () => {
+  const versions = { start: "2026-09-28", through: "2026-10-04", list: [{ version: "1.35.0", d: 1030 }] };
+  it("warns when the versions week ships without npm's latest tag", () => {
+    // the dossier of 2026-10-12 had no `latest` at all
+    expect(npmUsageFreshness({ versions }, "2026-10-12").severity).toBe("warn");
+  });
+  it("passes with the latest tag alongside", () => {
+    expect(npmUsageFreshness({ versions, latest: "1.36.0" }, "2026-10-12").severity).toBeNull();
   });
 });

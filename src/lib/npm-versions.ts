@@ -50,6 +50,32 @@ export function compareVersions(a: string, b: string): number {
 export const newestVersion = (list: VersionDownloads[]) =>
   [...list].map((v) => v.version).sort((a, b) => compareVersions(b, a))[0] ?? null;
 
+// The version npm serves today as `latest` (its dist-tag), or null when npm
+// could not be read. The week breakdown can be a recorded week from before a
+// release, so "newest in the list" is NOT "newest published" (2026-10-12: the
+// panel said "newest v1.35.0" two days after v1.36.0 shipped).
+export async function npmLatestVersion(pkg: string): Promise<string | null> {
+  try {
+    const res = await fetch(`https://registry.npmjs.org/-/package/${encodeURIComponent(pkg)}/dist-tags`, {
+      signal: AbortSignal.timeout(8000),
+    });
+    if (!res.ok) return null;
+    const latest = (await res.json())?.latest;
+    return typeof latest === "string" && latest ? latest : null;
+  } catch {
+    return null;
+  }
+}
+
+// The footnote under the breakdown. Says which version is newest IN THE WEEK
+// shown, and, when a newer one has been published since, that it exists and
+// is simply not in this week yet.
+export function versionFootnote(newestInWeek: string | null, latest: string | null): string {
+  if (!newestInWeek) return latest ? `latest v${latest}` : "";
+  if (!latest || compareVersions(latest, newestInWeek) <= 0) return `newest v${newestInWeek}`;
+  return `newest that week v${newestInWeek} · latest v${latest}, released after`;
+}
+
 // The rows the panel shows: the top versions by downloads, the rest folded into
 // one line, and each version's share of the week.
 export function summarizeVersions(list: VersionDownloads[], top = 4) {

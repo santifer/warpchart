@@ -1045,8 +1045,9 @@ async function checkPresence() {
     const npm = (await res.json())?.usage?.npm ?? null;
     const r = npmUsageFreshness(npm, new Date().toISOString().slice(0, 10));
     if (r.severity) {
-      fail("presence.npm-usage", "PRESENCE", r.severity, r.note,
-        "The live npm week cannot be dated while npm's daily series has holes, so the panel serves the newest week collector/npm-versions.mjs recorded. If that week is this old, the collector has not recorded one either: check its step in collect.yml and api.npmjs.org/downloads/range/last-month for zero days.");
+      fail("presence.npm-usage", "PRESENCE", r.severity, r.note, r.latestMissing
+        ? "src/lib/npm-versions.ts npmLatestVersion reads registry.npmjs.org/-/package/{pkg}/dist-tags; check it answers, and that explorer.ts passes npmLatest through fetchDossier AND getExplorerData (dossier-v17 / explorer-data-v3). One run in red can be an npm blip."
+        : "The live npm week cannot be dated while npm's daily series has holes, so the panel serves the newest week collector/npm-versions.mjs recorded. If that week is this old, the collector has not recorded one either: check its step in collect.yml and api.npmjs.org/downloads/range/last-month for zero days.");
     } else pass("presence.npm-usage", "PRESENCE", r.note);
   });
 
