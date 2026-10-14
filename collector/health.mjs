@@ -660,6 +660,21 @@ async function checkPublic() {
     } else pass("public.pages", "PUBLIC", `${pages.length} pages serve`);
   });
 
+  // Production must never serve the fork demo. One Blob 500 at build time made
+  // the prebuild seed data-sample/ and warpchart.dev showed "DEMO ·
+  // warpchart/sample" with 200s everywhere (2026-10-14 18:34Z). The build now
+  // refuses (scripts/sync-from-blob.mjs); this catches any other path to it.
+  await check("public.real-data", "PUBLIC", async () => {
+    const res = await fetch(`${BASE}/`, { signal: AbortSignal.timeout(30_000) }).catch(() => null);
+    if (!res?.ok) return pass("public.real-data", "PUBLIC", "home unreachable, measured by public.pages");
+    const html = await res.text();
+    // class attribute / banner copy, not the CSS selector (inlined CSS would carry it)
+    if (html.includes('class="demo-banner__tag"') || html.includes("synthetic telemetry · this fork ships sample data")) {
+      fail("public.real-data", "PUBLIC", "critical", "production is serving the SAMPLE dataset (DEMO banner)",
+        "The build could not read the private Blob store and seeded data-sample/. Redeploy the latest production deployment (vercel redeploy <url> --target production) once Blob answers; check its build log for [sync-from-blob].");
+    } else pass("public.real-data", "PUBLIC", "home serves the real dataset");
+  });
+
   // A /r/ page whose server render throws still answers 200: React streams the
   // error boundary in with $RX(...) and the body never arrives, so
   // public.pages saw nothing while cold dossiers failed for every visitor on

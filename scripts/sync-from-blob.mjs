@@ -21,7 +21,7 @@ async function pull() {
   const blobs = [];
   let cursor;
   do {
-    const res = await list({ prefix: PREFIX, cursor, token });
+    const res = await list({ prefix: PREFIX, cursor, token, abortSignal: AbortSignal.timeout(60_000) });
     blobs.push(...res.blobs);
     cursor = res.cursor;
   } while (cursor);
@@ -33,7 +33,7 @@ async function pull() {
     mkdirSync(dirname(dest), { recursive: true });
     // useCache:false: the collector read-modify-writes this copy, and a CDN
     // copy of a file rewritten minutes ago would be written back over it.
-    const res = await get(b.pathname, { access: "private", token, useCache: false });
+    const res = await get(b.pathname, { access: "private", token, useCache: false, abortSignal: AbortSignal.timeout(60_000) });
     if (res?.statusCode === 200 && res.stream) {
       const buf = Buffer.from(await new Response(res.stream).arrayBuffer());
       writeFileSync(dest, buf);
@@ -53,11 +53,31 @@ function seedFromSample() {
   }
 }
 
-try {
-  const ok = await pull();
-  if (!ok) seedFromSample();
-} catch (err) {
-  console.error(`[sync-from-blob] failed: ${err.message}`);
-  // never fail the build: fall back to whatever local/sample data exists
-  if (!existsSync(join(DATA, "meta.json"))) seedFromSample();
+// The sample fallback is for FORKS (no token). With a token, a failed pull is
+// an outage of the private store, not a fork: on 2026-10-14 18:34Z one Blob
+// 500 made a production build seed data-sample/ and warpchart.dev served
+// "DEMO · warpchart/sample" instead of career-ops until a manual redeploy.
+// So with a token we retry, and if the store still fails we FAIL THE BUILD:
+// Vercel then keeps the last good deployment live.
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+let ok = false;
+let lastErr = null;
+for (let attempt = 1; attempt <= (token ? 4 : 1); attempt++) {
+  try {
+    ok = await pull();
+    lastErr = null;
+    break;
+  } catch (err) {
+    lastErr = err;
+    console.error(`[sync-from-blob] attempt ${attempt} failed: ${err.message}`);
+    if (token && attempt < 4) await sleep(3000 * attempt);
+  }
 }
+if (token && (lastErr || !ok)) {
+  console.error(
+    `[sync-from-blob] the private store could not be read (${lastErr ? lastErr.message : "no files under data/"}). ` +
+      "Refusing to build production on sample data; the previous deployment stays live.",
+  );
+  process.exit(1);
+}
+if (!ok) seedFromSample();
