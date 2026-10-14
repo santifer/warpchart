@@ -292,16 +292,37 @@ export async function withLiveTotal(curve: Curve, owner: string, name: string): 
 }
 
 // Exact curve for the tracked tenant, straight from the local archive.
+// The house curve from the collector's star timestamps. That file only grows:
+// a star taken back (an unstar, a purged fake account) keeps its timestamp, so
+// counting rows gives GROSS stars ever given. Every other repo's curve is NET
+// (built from today's stargazers), so on /compare career-ops read ~1,490 stars
+// high and "passed 75K on Oct 12" while GitHub showed 74.4K (2026-10-14).
+// netCurvePoints spreads the gap pro rata (unstar dates are unknown) so the
+// curve ends exactly on the net count, in whole stars, never going down.
+export function netCurvePoints(timestamps: string[], net: number | null, maxPts = 140): { t: number; v: number }[] {
+  const n = timestamps.length;
+  if (!n) return [];
+  // a net count far below the rows is not unstars but a broken read: keep gross
+  const k = net != null && net > 0 && net < n && (n - net) / n <= 0.05 ? net / n : 1;
+  const step = Math.max(1, Math.floor(n / maxPts));
+  const pts: { t: number; v: number }[] = [];
+  let prev = 0;
+  for (let i = 0; i < n; i += step) {
+    const v = Math.max(prev, Math.round((i + 1) * k));
+    pts.push({ t: Date.parse(timestamps[i]), v });
+    prev = v;
+  }
+  pts.push({ t: Date.parse(timestamps[n - 1]), v: k < 1 ? net! : n });
+  return pts;
+}
+
 export function tenantCurve(maxPts = 140): Curve | null {
   const timestamps = loadTimestamps();
   const meta = loadMeta();
   if (!timestamps.length || !meta) return null;
-  const n = timestamps.length;
-  const step = Math.max(1, Math.floor(n / maxPts));
-  const pts: { t: number; v: number }[] = [];
-  for (let i = 0; i < n; i += step) pts.push({ t: Date.parse(timestamps[i]), v: i + 1 });
-  pts.push({ t: Date.parse(timestamps[n - 1]), v: n });
-  return { repo: meta.repo, total: lastSnapshot()?.stars ?? n, pts, dashedFrom: null, archiveFrom: null };
+  const net = lastSnapshot()?.stars ?? null;
+  const pts = netCurvePoints(timestamps, net, maxPts);
+  return { repo: meta.repo, total: net ?? timestamps.length, pts, dashedFrom: null, archiveFrom: null };
 }
 
 export function isTenantRepo(repo: string): boolean {

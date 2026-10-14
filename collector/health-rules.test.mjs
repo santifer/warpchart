@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { COLLECTOR_STALE_H as APP_STALE_H } from "../src/lib/staleness.ts";
-import { ARTIFACTS, COLLECTOR_STALE_H, cancelledVerdict, cronLag, etaIncoherences, maxAgeFromEnv, newestRunMs, pickFreshestRuns, pipelineRunsGate, RUNS_LIST_TOL_H, runsListStale, openPartials, presenceEval, presenceLost, presenceMap, prflowFreshness, npmUsageFreshness, contributorsDrift, contributorCurve, staleArtifacts, watchdogStale } from "./health-rules.mjs";
+import { ARTIFACTS, COLLECTOR_STALE_H, cancelledVerdict, cronLag, etaIncoherences, maxAgeFromEnv, newestRunMs, pickFreshestRuns, pipelineRunsGate, RUNS_LIST_TOL_H, runsListStale, openPartials, presenceEval, presenceLost, presenceMap, prflowFreshness, npmUsageFreshness, contributorsDrift, contributorCurve, curveEndsOnTotal, staleArtifacts, watchdogStale } from "./health-rules.mjs";
 
 describe("prflowFreshness", () => {
   // 26-sep: the first run after 00:00Z was cancelled and 25-sep never closed.
@@ -526,5 +526,15 @@ describe("npmUsageFreshness: npm latest", () => {
   });
   it("passes with the latest tag alongside", () => {
     expect(npmUsageFreshness({ versions, latest: "1.36.0" }, "2026-10-12").severity).toBeNull();
+  });
+});
+
+describe("curveEndsOnTotal", () => {
+  it("warns on the gross curve of 2026-10-14", () => {
+    // /api/curve?repo=career-ops-hq/career-ops: last point 75,922, total 74,432
+    expect(curveEndsOnTotal({ total: 74432, pts: [{ t: 1, v: 1 }, { t: 2, v: 75922 }] }).severity).toBe("warn");
+  });
+  it("passes when the curve ends on the net count", () => {
+    expect(curveEndsOnTotal({ total: 74432, pts: [{ t: 1, v: 1 }, { t: 2, v: 74432 }] }).severity).toBeNull();
   });
 });

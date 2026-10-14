@@ -33,7 +33,7 @@
 //   --base=X   probe another origin (a preview deployment, say)
 // Exit code 1 when a critical finding is open, so CI turns red by itself.
 import { writeFileSync } from "node:fs";
-import { ARTIFACTS, COLLECTOR_STALE_H, cancelledVerdict, cronLag, etaIncoherences, openPartials, pipelineRunsGate, presenceEval, presenceMap, prflowFreshness, staleArtifacts, npmUsageFreshness, contributorsDrift, contributorCurve } from "./health-rules.mjs";
+import { ARTIFACTS, COLLECTOR_STALE_H, cancelledVerdict, cronLag, etaIncoherences, openPartials, pipelineRunsGate, presenceEval, presenceMap, prflowFreshness, staleArtifacts, npmUsageFreshness, contributorsDrift, contributorCurve, curveEndsOnTotal } from "./health-rules.mjs";
 
 const args = process.argv.slice(2);
 const JSON_OUT = args.includes("--json");
@@ -1070,6 +1070,16 @@ async function checkPresence() {
     if (r.severity) fail("presence.contributors", "PRESENCE", r.severity, r.note,
       "The vitals collector reads GitHub's count from github.com/{repo}/_sidebar (collector/vitals.mjs contributorsCount). A big gap means that read failed or the vitals run is stale; never fall back to REST /contributors, which stops naming authors after 500 emails.");
     else pass("presence.contributors", "PRESENCE", r.note);
+  });
+
+  // The house curve (/compare, embeds, OG) must end on the net star count.
+  await check("presence.house-curve", "PRESENCE", async () => {
+    const res = await fetch(`${BASE}/api/curve?repo=${encodeURIComponent(TENANT)}`, { signal: AbortSignal.timeout(30_000) }).catch(() => null);
+    if (!res?.ok) return pass("presence.house-curve", "PRESENCE", "curve unreachable, measured by presence.transitions");
+    const r = curveEndsOnTotal(await res.json());
+    if (r.severity) fail("presence.house-curve", "PRESENCE", r.severity, r.note,
+      "src/lib/curve.ts tenantCurve builds the curve from data/stargazer_timestamps.txt, which keeps unstarred rows; netCurvePoints scales it to the net count (lastSnapshot().stars). A gap means that read failed or the scaling was bypassed.");
+    else pass("presence.house-curve", "PRESENCE", r.note);
   });
 
   // Guards in the collector (collector/guards.mjs) refuse to publish a

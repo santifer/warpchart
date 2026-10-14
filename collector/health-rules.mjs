@@ -353,6 +353,20 @@ export function contributorCurve(contributors) {
     : { severity: "warn", note: `curve ends on ${last} but the panel prints ${total}` };
 }
 
+// /compare and the embeds draw the house curve from the star timestamps, which
+// only grow (unstars keep their row). Its last point must be the net count it
+// reports as `total`: on 2026-10-14 it ended 1,490 stars high (75,922 vs 74,432)
+// and the race page showed career-ops passing 75K before it had.
+export function curveEndsOnTotal(curve) {
+  const last = curve?.pts?.at(-1)?.v ?? null;
+  const total = curve?.total ?? null;
+  if (last == null || total == null) return { severity: "warn", note: "house curve unreadable" };
+  const gap = last - total;
+  return Math.abs(gap) <= Math.max(5, total * 0.001)
+    ? { severity: null, note: `curve ends on ${last}, total ${total}` }
+    : { severity: "warn", note: `curve ends on ${last} but the repo has ${total} stars (${gap > 0 ? "+" : ""}${gap})` };
+}
+
 // npm usage on the house dossier: the weekly breakdown may now be a recorded
 // week (npm-versions fallback while npm's series has holes). That is honest
 // while its date is visible, but a fallback that never refreshes is the panel
