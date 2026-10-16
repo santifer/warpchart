@@ -8,7 +8,7 @@ import type { ChartInputs, Neighbor } from "@/lib/types";
 import { loadRoute, loadMeta, lastSnapshot } from "@/lib/history";
 import { neighborsVelocity } from "@/lib/github";
 import { buildRouteLayers } from "@/lib/bundle";
-import { canonicalVelocity } from "@/lib/velocity";
+import { canonicalVelocity, velocityQuality } from "@/lib/velocity";
 
 function seedFrom(text: string): number {
   let h = 2166136261;
@@ -46,6 +46,7 @@ export async function buildDemoSpotlight(): Promise<DemoSpotlight | null> {
   const routeV7 = new Map<string, number | null>(
     route.repos.map((p) => [p.r.toLowerCase(), canonicalVelocity(p)]),
   );
+  const routeByName = new Map(route.repos.map((p) => [p.r.toLowerCase(), p] as const));
   let neighbors: Neighbor[] = [];
   let heroV = 0;
   try {
@@ -59,7 +60,7 @@ export async function buildDemoSpotlight(): Promise<DemoSpotlight | null> {
         const rv = routeV7.get(v.r.toLowerCase());
         // v.v is null when GitHub would not let us measure that repo; the
         // registry rate is the answer, and 0 only when we have neither.
-        return { r: v.r, s: v.s, v: rv ?? v.v ?? 0, d: v.d, l: v.l };
+        return { r: v.r, s: v.s, v: rv ?? v.v ?? 0, d: v.d, l: v.l, ...(rv != null ? velocityQuality(routeByName.get(v.r.toLowerCase())) : {}) };
       });
   } catch {
     /* route-only degradation */
@@ -82,6 +83,8 @@ export async function buildDemoSpotlight(): Promise<DemoSpotlight | null> {
       stars: hero.s,
       rank: idx + 1,
       v7d: heroV,
+      vTrend: velocityQuality(hero).trend,
+      vAsOf: velocityQuality(hero).v7_to,
       neighbors,
       milestones,
       apex,

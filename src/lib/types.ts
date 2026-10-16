@@ -4,7 +4,14 @@ export interface Neighbor {
   v: number; // stars/day over its last 100 stars
   d?: string | null; // description, trimmed
   l?: string | null; // primary language
+  // carried from the registry with its v7 (see RouteRepo): why `v` may not
+  // hold, and when it was measured. Absent = unknown, never "steady".
+  trend?: VelocityTrend | null;
+  v7_to?: string | null;
 }
+
+// v1/v7 > 2 = "accel", < 0.5 = "decay" (collector/velocity7-core.mjs trendOf).
+export type VelocityTrend = "accel" | "decay";
 
 export interface Apex {
   r: string;
@@ -27,11 +34,24 @@ export interface RouteRepo {
   // noisy ~1-day v, so projections agree across the product. Absent until the
   // repo has a 7-day baseline recorded.
   v7?: number | null;
+  // Written WITH v7 by velocity7.mjs. v1 = the last full day's rate (null =
+  // not measurable: no point ~24 h before, or a purge-size drop). v7_to = ISO
+  // of the point the 7-day window closes on: the AGE of v7 (> 26 h = stale).
+  // trend = v1/v7 > 2 "accel", < 0.5 "decay", null = no doubt OR no data; a
+  // trend means v7 is not a pace to project (a wave starting or ending).
+  v1?: number | null;
+  v7_to?: string | null;
+  trend?: VelocityTrend | null;
 }
 
 export interface RouteFile {
   generated_at: string;
-  repos: { r: string; s: number; d?: string | null; l?: string | null; f?: number; v?: number | null; v7?: number | null }[];
+  // later of generated_at and the newest rank-history capture: what v7 was computed for
+  v7_at?: string;
+  repos: {
+    r: string; s: number; d?: string | null; l?: string | null; f?: number; v?: number | null; v7?: number | null;
+    v1?: number | null; v7_to?: string | null; trend?: VelocityTrend | null;
+  }[];
 }
 
 // data/catalog.json, written daily by collector/route-history.mjs from the same
@@ -173,6 +193,10 @@ export interface ChartInputs {
   stars: number;
   rank: number | null;
   v7d: number;
+  // the focal repo's v7 trend and window close (RouteRepo.trend / v7_to), so
+  // an ETA built on a shifting or stale own rate is flagged, not stated
+  vTrend?: VelocityTrend | null;
+  vAsOf?: string | null;
   neighbors: Neighbor[];
   // `at` is the DRAWN position: the midpoint between the stars of rank N
   // and rank N-1, so the gate reads as a doorway BETWEEN both ships instead

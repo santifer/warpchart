@@ -85,8 +85,12 @@ export async function runCollisionScan({ enrich = true, force = false } = {}) {
   if (!force && existsSync(OUT)) {
     try {
       const done = JSON.parse(readFileSync(OUT, "utf8"));
-      if (done?.baseline?.to && done.baseline.to === current.generated_at) {
-        console.log(`[collisions] already scanned registry ${current.generated_at}, skipping`);
+      // ...and per v7 stamp: velocity7 now recomputes when a new day is
+      // recorded without a registry refresh, and a scan left on the previous
+      // v7 contradicts the registry (data.collisions-source).
+      if (done?.baseline?.to && done.baseline.to === current.generated_at &&
+          (done.v7_at ?? null) === (current.v7_at ?? null)) {
+        console.log(`[collisions] already scanned registry ${current.generated_at} (v7 ${current.v7_at ?? "none"}), skipping`);
         return done;
       }
     } catch { /* unreadable output: just rescan */ }
@@ -224,6 +228,7 @@ export async function runCollisionScan({ enrich = true, force = false } = {}) {
   const out = {
     generated_at: new Date().toISOString(),
     baseline: { from: prev.generated_at, to: current.generated_at, days: Math.round(days * 100) / 100 },
+    v7_at: current.v7_at ?? null,
     collisions,
     entrants,
   };

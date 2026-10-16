@@ -22,12 +22,15 @@ const rnd = (v: number | null | undefined): number | null => (v == null ? null :
 
 export interface RegistryMeta {
   size: number;
-  asOf: string | null;
+  asOf: string | null; // when the registry's star counts were taken
+  // when the velocities were computed (route.v7_at): later than asOf when a
+  // newer rank-history day closed the 7-day window after the registry refresh
+  velocityAsOf: string | null;
 }
 
 export function registryMeta(): RegistryMeta {
   const r = loadRoute();
-  return { size: r?.repos.length ?? 0, asOf: r?.generated_at ?? null };
+  return { size: r?.repos.length ?? 0, asOf: r?.generated_at ?? null, velocityAsOf: r?.v7_at ?? r?.generated_at ?? null };
 }
 
 export interface NeighborStat {

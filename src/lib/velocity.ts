@@ -20,3 +20,17 @@ export const canonicalVelocity = (p: HasVelocity): number | null => p.v7 ?? p.v 
 // Canonical stars/day for ranking, gates and aggregation: never negative, never
 // null (a missing or negative rate counts as zero momentum).
 export const canonicalVel0 = (p: HasVelocity): number => Math.max(0, p.v7 ?? p.v ?? 0);
+
+// Why the canonical rate may not be a pace to project, and when it was
+// measured (collector/velocity7.mjs writes trend/v7_to WITH v7). Only said
+// when the canonical rate IS v7: the ~1-day `v` fallback has no window to
+// date. Absent = unknown, never "steady"; stale is judged against a clock by
+// projectCrossing (V7_STALE_MS), not here.
+export interface VelocityQualityFields {
+  trend: "accel" | "decay" | null;
+  v7_to: string | null;
+}
+export const velocityQuality = (
+  p: (HasVelocity & { trend?: "accel" | "decay" | null; v7_to?: string | null }) | null | undefined,
+): VelocityQualityFields =>
+  p && p.v7 != null ? { trend: p.trend ?? null, v7_to: p.v7_to ?? null } : { trend: null, v7_to: null };

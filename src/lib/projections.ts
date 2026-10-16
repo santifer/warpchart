@@ -1,7 +1,8 @@
 // ETA math with moving thresholds. Thresholds (stars of the repo at rank N)
 // rise over time, so the chase speed is own velocity minus threshold drift.
 import type { Neighbor } from "./types";
-import { projectCrossing } from "./compare";
+import { projectCrossing, type Unsteady, type VelocityQuality } from "./compare";
+import { fmtEtaDays, fmtEtaRange } from "./format";
 
 const DAY = 86_400_000;
 
@@ -75,16 +76,31 @@ export interface NeighborEta extends Neighbor {
   // urgent number on the chart, it must never hide inside "passed".
   catchDays: number | null;
   receding: boolean;
-  confidence?: "firm" | "soft" | "noisy"; // confidence of the ETA
+  confidence?: "firm" | "soft" | "noisy" | "upper"; // confidence of the ETA (upper = a ceiling)
   etaRange?: { min: number; max: number } | null; // range when soft/noisy
+  // set when a velocity behind the eta is shifting or stale: show the reason,
+  // not a date (unsteadyLabel)
+  unsteady?: Unsteady | null;
 }
 
-export function neighborEtas(neighbors: Neighbor[], stars: number, vOwn: number): NeighborEta[] {
+// `own` is OUR rate's quality (ChartInputs.vTrend / vAsOf) and `nowMs` the
+// reference clock (ChartInputs.nowMs: never Date.now() in SSR state).
+export function neighborEtas(
+  neighbors: Neighbor[],
+  stars: number,
+  vOwn: number,
+  own?: VelocityQuality,
+  nowMs?: number,
+): NeighborEta[] {
   // one projection source of truth (see compare.ts projectCrossing): the
   // scan-cards, the race chart and the OG card all meet a rival through the
   // same math, so an ETA here can never disagree with the same pair elsewhere.
   return neighbors.map((n) => {
-    const x = projectCrossing(stars, vOwn, n.s, n.v);
+    const x = projectCrossing(stars, vOwn, n.s, n.v, {
+      a: own,
+      b: { trend: n.trend ?? null, asOf: n.v7_to ?? null },
+      nowMs,
+    });
     const ahead = x.gap > 0;
     const isEta = ahead && x.closing > 0; // we pass them
     const isCatch = !ahead && x.closing < 0; // they catch us
@@ -97,6 +113,7 @@ export function neighborEtas(neighbors: Neighbor[], stars: number, vOwn: number)
       receding: ahead && x.closing <= 0,
       confidence: x.confidence,
       etaRange: (isEta || isCatch) ? x.etaRange : null,
+      unsteady: (isEta || isCatch) ? x.unsteady ?? null : null,
     };
   });
 }
@@ -114,4 +131,34 @@ export function pendingMilestones<T extends { threshold: number }>(
   liveStars: number
 ): T[] {
   return milestones.filter((m) => m.threshold > liveStars);
+}
+
+// What to show INSTEAD of an eta whose velocity is not a pace to project
+// (null when the eta stands, firm or as a ceiling). Builder-quiet, no numbers.
+export function unsteadyLabel(u: Unsteady | null | undefined): string | null {
+  if (!u || u.bound === "upper") return null;
+  if (u.why === "stale") return u.side === "b" ? "rate over a day old" : "our rate over a day old";
+  if (u.side === "b") return u.why === "accel" ? "accelerating" : "cooling";
+  return u.why === "accel" ? "we are accelerating" : "we are cooling";
+}
+
+// A ceiling is rounded UP at the unit it is shown in (5.3 d is "≤6d", never
+// "≤5d", which would claim more than the math does). Returns days.
+export function ceilEta(days: number): number {
+  if (days <= 0) return 0;
+  if (days < 1) return Math.ceil(days * 24) / 24;
+  return Math.ceil(days);
+}
+
+// The eta text for a neighbor: "≤6d" when the v7 eta is a ceiling, the usual
+// "5d" / "~3-8d" otherwise. `days` is etaDays or catchDays.
+export function etaText(n: Pick<NeighborEta, "confidence" | "etaRange">, days: number | null): string {
+  if (n.confidence === "upper" && days !== null && days > 0) {
+    const c = ceilEta(days);
+    if (c < 1) return "≤" + Math.round(c * 24) + "h";
+    if (c < 60) return "≤" + c + "d";
+    if (c < 365) return "≤" + Math.ceil(c / 30.44) + "mo";
+    return "≤" + fmtEtaDays(c);
+  }
+  return fmtEtaRange(days, n.etaRange);
 }

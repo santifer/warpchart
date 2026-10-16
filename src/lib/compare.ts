@@ -1,6 +1,7 @@
 // Shared, pure helpers for the multi-repo comparison ("the race"): used by the
 // client lab AND the server OG card, so the math stays identical in both.
 // No DOM, no React — safe on the edge.
+import type { VelocityTrend } from "./types";
 
 export interface CurvePoint {
   t: number;
@@ -116,12 +117,70 @@ export function rateAt(pts: CurvePoint[], t: number, windowMs = 7 * DAY): number
 // `confidence` flags how trustworthy the single number is: eta = gap/closing is
 // hypersensitive when `closing` is small, so a near-tie projected far out is
 // "noisy" and the UI should show a band, not a hard date (the honesty layer).
+//
+// A velocity can also be the wrong one to project even when the gap math is
+// fine: a 7-day rate inflated by a wave that is over (Apollo-11 read 366/d on
+// a 76-140/d day), one that a wave just started to outrun, or one whose window
+// closed more than a day ago. Pass each side's `trend` / `asOf` (the registry's
+// trend and v7_to) and `nowMs`, and the doubt is read in its DIRECTION:
+//   - a shift that can only SHORTEN the meeting (the chaser accelerating, the
+//     chased cooling) makes the v7 eta an upper bound: confidence "upper",
+//     shown as "eta ≤5d" (career-ops accelerating must not blank every eta);
+//   - a shift that can LENGTHEN or reverse it (the chaser cooling, the chased
+//     accelerating), a non-converging pair, or a window closed > 26 h ago:
+//     "noisy", and the UI names the reason instead of a date.
+export const V7_STALE_MS = 26 * 3_600_000;
+
+export interface VelocityQuality {
+  trend?: VelocityTrend | null;
+  asOf?: string | null; // ISO the rate's window closes on (v7_to)
+}
+
+export interface Unsteady {
+  side: "a" | "b";
+  why: VelocityTrend | "stale";
+  // "upper": this shift can only bring the meeting closer, the eta still holds
+  // as a bound; null: it can push it out or cancel it, no eta to show
+  bound: "upper" | null;
+}
+
 export interface Crossing {
   gap: number; // bStars - aStars (positive = B is ahead of A)
   closing: number; // aVel - bVel (positive = A is gaining on B)
   etaDays: number | null; // days until they meet (>= 0); null = not converging
-  confidence: "firm" | "soft" | "noisy";
+  confidence: "firm" | "soft" | "noisy" | "upper"; // upper = etaDays is a ceiling
   etaRange?: { min: number; max: number } | null; // range when soft/noisy; null if not applicable
+  // why a velocity behind this eta is not a pace to project; null = no reason known
+  unsteady?: Unsteady | null;
+}
+
+// The reason the eta is in doubt, by priority: a stale rate (a data problem),
+// then a shift that can lengthen the meeting, then one that can only shorten
+// it. B (the rival the label sits on) before A. `gap`/`closing` as in Crossing.
+export function unsteadyOf(
+  q: { a?: VelocityQuality; b?: VelocityQuality; nowMs?: number } | undefined,
+  gap = 0,
+  closing = 0,
+): Unsteady | null {
+  if (!q) return null;
+  const stale = (x?: VelocityQuality) => {
+    if (q.nowMs == null || !x?.asOf) return false;
+    const t = Date.parse(x.asOf);
+    return Number.isFinite(t) && q.nowMs - t > V7_STALE_MS;
+  };
+  if (stale(q.b)) return { side: "b", why: "stale", bound: null };
+  if (stale(q.a)) return { side: "a", why: "stale", bound: null };
+  // who is chasing: A when behind and closing, B when behind and closing
+  const chaser: "a" | "b" | null = gap > 0 && closing > 0 ? "a" : gap < 0 && closing < 0 ? "b" : null;
+  // shortens iff the chaser speeds up or the chased slows down
+  const shortens = (side: "a" | "b", t: VelocityTrend) =>
+    chaser !== null && (side === chaser) === (t === "accel");
+  const reasons: Unsteady[] = [];
+  for (const side of ["b", "a"] as const) {
+    const t = q[side]?.trend;
+    if (t) reasons.push({ side, why: t, bound: shortens(side, t) ? "upper" : null });
+  }
+  return reasons.find((r) => r.bound === null) ?? reasons[0] ?? null;
 }
 
 export function projectCrossing(
@@ -129,6 +188,7 @@ export function projectCrossing(
   aVel: number,
   bStars: number,
   bVel: number,
+  quality?: { a?: VelocityQuality; b?: VelocityQuality; nowMs?: number },
 ): Crossing {
   const gap = bStars - aStars;
   const closing = Math.round((aVel - bVel) * 10) / 10;
@@ -144,6 +204,11 @@ export function projectCrossing(
   if (etaDays === null) confidence = "noisy";
   else if (Math.abs(closing) < 3 || etaDays > 25) confidence = "noisy";
   else if (etaDays > 8) confidence = "soft";
+  const unsteady = unsteadyOf(quality, gap, closing);
+  // a ceiling only replaces a firm/soft reading; an already noisy one keeps its band
+  if (unsteady?.bound === "upper") {
+    if (confidence !== "noisy") confidence = "upper";
+  } else if (unsteady) confidence = "noisy";
 
   // Calculate confidence range for soft/noisy projections
   let etaRange: { min: number; max: number } | null = null;
@@ -158,7 +223,7 @@ export function projectCrossing(
     };
   }
 
-  return { gap, closing, etaDays, confidence, etaRange };
+  return { gap, closing, etaDays, confidence, etaRange, unsteady };
 }
 
 export function shortRepo(repo: string): string {

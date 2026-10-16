@@ -96,6 +96,10 @@ if (openMarker && openMarker.resolved === false && openMarker.day === today && (
 // to the committed top-1000 route.json; a 1,000-repo "top-10k day" is exactly
 // the truncated day the guard below refuses, so it is gone.)
 let ranked = [];
+// WHEN this day's counts were taken: the first run after 00:00Z, not noon.
+// velocity7 dates each point with it (meta.capturedAt), so the 7-day window is
+// measured between real capture times instead of a 7-12 h guess.
+const capturedAt = new Date().toISOString();
 try {
   const deep = await topReposDeep(LIMIT);
   ranked = deep.map((r, i) => ({ ...r, rank: i + 1 }));
@@ -126,6 +130,7 @@ if (!verdict.ok) {
 // first run only: seed yesterday from the committed top-1000 route-prev.json so
 // the locked preview has a real two-point trajectory from day one
 let seedDay = null;
+let seedAt = null;
 let seedRanked = [];
 if (!meta.days.length) {
   const prevPath = join(DATA_DIR, "route-prev.json");
@@ -135,6 +140,7 @@ if (!meta.days.length) {
       const d = (prev.generated_at ?? "").slice(0, 10);
       if (d && d < today) {
         seedDay = d;
+        seedAt = prev.generated_at;
         seedRanked = (prev.repos ?? []).map((r, i) => ({ ...r, rank: i + 1 }));
       }
     } catch {
@@ -211,6 +217,14 @@ meta.days = [...new Set(meta.days)].sort().slice(-CAP_DAYS);
 // the size of each recorded day, so the next sweep can be checked against it
 meta.counts = Object.fromEntries(
   Object.entries({ ...(meta.counts ?? {}), [today]: ranked.length }).filter(([d]) => meta.days.includes(d)),
+);
+// real capture time per day; the seed day was counted when route-prev was built
+meta.capturedAt = Object.fromEntries(
+  Object.entries({
+    ...(meta.capturedAt ?? {}),
+    ...(seedDay ? { [seedDay]: seedAt } : {}),
+    [today]: capturedAt,
+  }).filter(([d, iso]) => meta.days.includes(d) && typeof iso === "string"),
 );
 meta.shards = SHARDS;
 meta.updatedAt = new Date().toISOString();

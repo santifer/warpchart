@@ -69,3 +69,14 @@ export function timeAgo(iso: string | null, nowMs: number): string {
   if (s < 3600) return `${Math.floor(s / 60)}m ago`;
   return `${Math.floor(s / 3600)}h ago`;
 }
+
+// "Oct 16 00:25 UTC": a measurement time, in UTC on every client (no locale,
+// no viewer timezone, so server and client render the same string).
+const MON = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+export function fmtUtcStamp(iso: string): string {
+  const d = new Date(iso);
+  if (!Number.isFinite(d.getTime())) return "n/a";
+  const hh = String(d.getUTCHours()).padStart(2, "0");
+  const mm = String(d.getUTCMinutes()).padStart(2, "0");
+  return `${MON[d.getUTCMonth()]} ${d.getUTCDate()} ${hh}:${mm} UTC`;
+}

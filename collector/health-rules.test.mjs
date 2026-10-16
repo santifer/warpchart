@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { COLLECTOR_STALE_H as APP_STALE_H } from "../src/lib/staleness.ts";
-import { ARTIFACTS, COLLECTOR_STALE_H, cancelledVerdict, cronLag, etaIncoherences, maxAgeFromEnv, newestRunMs, pickFreshestRuns, pipelineRunsGate, RUNS_LIST_TOL_H, runsListStale, openPartials, presenceEval, presenceLost, presenceMap, prflowFreshness, npmUsageFreshness, contributorsDrift, contributorCurve, curveEndsOnTotal, staleArtifacts, watchdogStale } from "./health-rules.mjs";
+import { ARTIFACTS, COLLECTOR_STALE_H, cancelledVerdict, cronLag, etaIncoherences, maxAgeFromEnv, newestRunMs, pickFreshestRuns, pipelineRunsGate, RUNS_LIST_TOL_H, runsListStale, openPartials, presenceEval, presenceLost, presenceMap, prflowFreshness, npmUsageFreshness, contributorsDrift, contributorCurve, curveEndsOnTotal, staleArtifacts, watchdogStale, v7StampLags, v7WindowFreshness } from "./health-rules.mjs";
 
 describe("prflowFreshness", () => {
   // 26-sep: the first run after 00:00Z was cancelled and 25-sep never closed.
@@ -536,5 +536,43 @@ describe("curveEndsOnTotal", () => {
   });
   it("passes when the curve ends on the net count", () => {
     expect(curveEndsOnTotal({ total: 74432, pts: [{ t: 1, v: 1 }, { t: 2, v: 74432 }] }).severity).toBeNull();
+  });
+});
+
+// route.json as served on 2026-10-16 ~11Z: the registry refreshed the day before
+// at 11:20Z and the v7 closed there, though the 16th was already recorded.
+describe("fresh.v7-window: the age of the house repo's 7-day rate", () => {
+  const NOW = Date.parse("2026-10-16T11:00:00Z");
+  const served = {
+    generated_at: "2026-10-15T11:20:12Z",
+    v7_at: "2026-10-15T11:20:12Z",
+    repos: [{ r: "career-ops-hq/career-ops", s: 74799, v: 333.1, v7: 151.6 }],
+  };
+
+  it("fails when the rate cannot be dated (the payload served on 2026-10-16)", () => {
+    expect(v7WindowFreshness(served, "career-ops-hq/career-ops", NOW)).toMatchObject({ ok: false, reason: "absent" });
+  });
+
+  it("fails when the window closed more than 26 h ago", () => {
+    const old = { ...served, repos: [{ ...served.repos[0], v7_to: "2026-10-15T08:00:00.000Z" }] };
+    expect(v7WindowFreshness(old, "career-ops-hq/career-ops", NOW)).toMatchObject({ ok: false, reason: "stale" });
+  });
+
+  it("stays quiet on a normal day (closed on the 00:25Z capture)", () => {
+    const ok = { ...served, repos: [{ ...served.repos[0], v7_to: "2026-10-16T00:25:00.000Z" }] };
+    const r = v7WindowFreshness(ok, "career-ops-hq/career-ops", NOW);
+    expect(r.ok).toBe(true);
+    expect(r.ageH).toBeCloseTo(10.58, 1);
+  });
+
+  it("fails when the house repo is missing from the registry", () => {
+    expect(v7WindowFreshness({ repos: [] }, "career-ops-hq/career-ops", NOW)).toMatchObject({ ok: false, reason: "missing" });
+  });
+
+  it("fresh.v7 accepts a stamp NEWER than the registry (a recorded day) and flags an older one", () => {
+    expect(v7StampLags({ generated_at: "2026-10-15T11:20:12Z", v7_at: "2026-10-16T00:24:58.644Z" })).toBe(false);
+    expect(v7StampLags({ generated_at: "2026-10-15T11:20:12Z", v7_at: "2026-10-15T11:20:12Z" })).toBe(false);
+    expect(v7StampLags({ generated_at: "2026-10-16T11:20:12Z", v7_at: "2026-10-15T11:20:12Z" })).toBe(true);
+    expect(v7StampLags({ generated_at: "2026-10-16T11:20:12Z" })).toBe(true);
   });
 });

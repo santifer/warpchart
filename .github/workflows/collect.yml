@@ -116,13 +116,32 @@ jobs:
           ALERT_WEBHOOK_URL: ${{ secrets.ALERT_WEBHOOK_URL }}
           WARM_BASE_URL: ${{ vars.WARM_BASE_URL }}
 
+      # 3a. Record one daily point of the worldwide top-10k rank distribution
+      #     into the private Blob (route-history/shard-*.json). The un-backfillable
+      #     moat: any top-10k repo's world-rank-over-time, ready at pay-time.
+      #     Idempotent on the UTC day (checks meta before the ~100-call deep
+      #     sweep); never allowed to fail the run. MUST run BEFORE velocity7:
+      #     the 7-day window closes on the newest recorded day, and when this
+      #     ran after it the published v7 lagged the day just recorded by up to
+      #     ~24 h (ruflo 95.5/d vs ~139/d on 2026-10-16).
+      - name: Record rank-distribution history
+        run: node collector/route-history.mjs
+        continue-on-error: true
+        timeout-minutes: 7
+        env:
+          BLOB_READ_WRITE_TOKEN: ${{ secrets.BLOB_READ_WRITE_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
       # 3b. Stabilise route.json velocity: add a 7-day rate (`v7`) per repo from
       #     the rank-history shards, so every consumer that reads route velocity
       #     inherits ONE stable number instead of the noisy ~1-day `v`. Additive
-      #     (never touches `v`), idempotent per route refresh, never fails the run.
+      #     (never touches `v`), idempotent per route refresh OR newly recorded
+      #     day (route.v7_at), never fails the run.
       - name: Stabilise route velocity (7-day)
         run: node collector/velocity7.mjs
         continue-on-error: true
+        # 32 shard reads from the Blob: a hung read must not eat the job cap
+        timeout-minutes: 5
         env:
           BLOB_READ_WRITE_TOKEN: ${{ secrets.BLOB_READ_WRITE_TOKEN }}
           V7_FORCE: ${{ inputs.force_v7 && '1' || '' }}
@@ -152,19 +171,6 @@ jobs:
         run: node scripts/sync-to-blob.mjs
         env:
           BLOB_READ_WRITE_TOKEN: ${{ secrets.BLOB_READ_WRITE_TOKEN }}
-
-      # 4b. Record one daily point of the worldwide top-10k rank distribution
-      #     into the private Blob (route-history/shard-*.json). The un-backfillable
-      #     moat: any top-10k repo's world-rank-over-time, ready at pay-time.
-      #     Idempotent on the UTC day (checks meta before the ~100-call deep
-      #     sweep); never allowed to fail the run.
-      - name: Record rank-distribution history
-        run: node collector/route-history.mjs
-        continue-on-error: true
-        timeout-minutes: 7
-        env:
-          BLOB_READ_WRITE_TOKEN: ${{ secrets.BLOB_READ_WRITE_TOKEN }}
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       # 4b-bis. Build the daily rising-by-category catalog (data/catalog.json in
       #     the private Blob) from its own shallow top-3000 sweep. Powers /c,

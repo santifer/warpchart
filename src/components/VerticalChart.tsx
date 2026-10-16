@@ -16,8 +16,8 @@ import type { ChartInputs } from "@/lib/types";
 import type { Palette } from "@/lib/theme";
 import { usePalette } from "@/lib/usePalette";
 import { dopplerTilt } from "@/lib/doppler";
-import { fmt, fmtCompact, fmtEtaDays, fmtEtaRange, shortName } from "@/lib/format";
-import { neighborEtas, type NeighborEta } from "@/lib/projections";
+import { fmt, fmtCompact, fmtEtaDays, shortName } from "@/lib/format";
+import { neighborEtas, unsteadyLabel, etaText, type NeighborEta } from "@/lib/projections";
 
 const W = 390;
 const AXIS_X = 30;
@@ -113,7 +113,7 @@ export default function VerticalChart({
     );
   };
   const { stars, rank, v7d: vOwn, apex } = inputs;
-  const etas = neighborEtas(inputs.neighbors, stars, vOwn);
+  const etas = neighborEtas(inputs.neighbors, stars, vOwn, { trend: inputs.vTrend, asOf: inputs.vAsOf }, inputs.nowMs);
 
   // Own trail vs the local traffic's median pace (same scale as neighbors).
   const vsSorted = inputs.neighbors.map((n) => n.v).filter((v) => v > 0).sort((a, b) => a - b);
@@ -428,12 +428,16 @@ export default function VerticalChart({
                   }
                 >
                   {n.catchDays !== null && !isAhead
-                    ? `catches you in ${fmtEtaRange(n.catchDays, n.etaRange)}`
+                    ? unsteadyLabel(n.unsteady)
+                      ? `closing in · ${unsteadyLabel(n.unsteady)}`
+                      : `catches you in ${etaText(n, n.catchDays)}`
                     : !isAhead
                       ? "passed"
                       : n.receding
                         ? "pulling away"
-                        : `eta ${fmtEtaRange(n.etaDays, n.etaRange)}`}
+                        : unsteadyLabel(n.unsteady)
+                          ? `no firm eta · ${unsteadyLabel(n.unsteady)}`
+                          : `eta ${etaText(n, n.etaDays)}`}
                 </tspan>
                 {signal ? <tspan fill={C.accent}> · ◌</tspan> : null}
               </text>

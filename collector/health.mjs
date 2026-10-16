@@ -33,7 +33,7 @@
 //   --base=X   probe another origin (a preview deployment, say)
 // Exit code 1 when a critical finding is open, so CI turns red by itself.
 import { writeFileSync } from "node:fs";
-import { ARTIFACTS, COLLECTOR_STALE_H, cancelledVerdict, cronLag, etaIncoherences, openPartials, pipelineRunsGate, presenceEval, presenceMap, prflowFreshness, staleArtifacts, npmUsageFreshness, contributorsDrift, contributorCurve, curveEndsOnTotal } from "./health-rules.mjs";
+import { ARTIFACTS, COLLECTOR_STALE_H, cancelledVerdict, cronLag, etaIncoherences, openPartials, pipelineRunsGate, presenceEval, presenceMap, prflowFreshness, staleArtifacts, npmUsageFreshness, contributorsDrift, contributorCurve, curveEndsOnTotal, v7StampLags, v7WindowFreshness, V7_WINDOW_MAX_H } from "./health-rules.mjs";
 
 const args = process.argv.slice(2);
 const JSON_OUT = args.includes("--json");
@@ -335,10 +335,27 @@ async function checkFreshness(route) {
       return fail("fresh.v7", "FRESH", "warn", "route.json carries no v7_at stamp",
         "collector/velocity7.mjs did not run or bailed early. Velocities fall back to the noisy 1-day diff.");
     }
-    if (route.v7_at !== route.generated_at) {
+    // v7_at is the later of the registry refresh and the newest recorded day,
+    // so it may be NEWER than generated_at; only older is a lag
+    if (v7StampLags(route)) {
       fail("fresh.v7", "FRESH", "warn", `v7 was computed for ${route.v7_at} but the registry is ${route.generated_at}`,
         "Velocities lag their star counts. Re-run collect with force_v7=true: gh workflow run collect.yml -R santifer/warpchart -f force_v7=true", { v7_at: route.v7_at, generated_at: route.generated_at });
-    } else pass("fresh.v7", "FRESH", "v7 matches the registry");
+    } else pass("fresh.v7", "FRESH", `v7 computed for ${route.v7_at} (registry ${route.generated_at})`);
+  });
+
+  // The age of the house repo's 7-day rate: where its window CLOSES. Before
+  // 2026-10-16 it closed on the registry refresh and could be ~24 h old while
+  // a fresher day sat in the rank history (ruflo read 95.5/d, really ~139/d).
+  await check("fresh.v7-window", "FRESH", async () => {
+    if (!route) return;
+    const r = v7WindowFreshness(route, TENANT);
+    if (r.ok) return pass("fresh.v7-window", "FRESH", `${TENANT} v7 closes ${r.ageH.toFixed(1)}h ago (${r.v7_to})`);
+    const what = r.reason === "missing" ? `${TENANT} is not in the registry`
+      : r.reason === "absent" ? `${TENANT} has no v7_to: its 7-day rate cannot be dated`
+      : `${TENANT}'s 7-day rate closes ${r.ageH.toFixed(0)}h ago (limit ${V7_WINDOW_MAX_H}h)`;
+    fail("fresh.v7-window", "FRESH", "warn", what,
+      "The window closes on the newest rank-history day or the registry refresh. Check, in this order: did route-history record today (route-history/meta.json days + capturedAt)? Did velocity7 run AFTER it in collect.yml (its log line prints the stamp)? Recompute now: gh workflow run collect.yml -R santifer/warpchart -f force_v7=true",
+      { v7_to: r.v7_to, ageH: r.ageH, v7_at: route.v7_at, generated_at: route.generated_at });
   });
 }
 

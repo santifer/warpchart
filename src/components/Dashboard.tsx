@@ -53,6 +53,8 @@ function ChartIsland({
       stars: live.stars,
       rank: live.rank,
       v7d: bundle.v7d,
+      vTrend: bundle.vTrend,
+      vAsOf: bundle.vAsOf,
       neighbors: live.neighbors,
       milestones: bundle.milestones,
       apex: bundle.apex,

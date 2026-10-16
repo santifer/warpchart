@@ -26,7 +26,7 @@ import type { DashboardBundle } from "@/lib/bundle";
 import type { Dossier } from "@/lib/explorer";
 import type { ChartInputs } from "@/lib/types";
 import { fmt, fmtCompact, fmtEtaDays, fmtEtaRange, shortName } from "@/lib/format";
-import { neighborEtas, milestoneEta } from "@/lib/projections";
+import { neighborEtas, milestoneEta, unsteadyLabel, etaText } from "@/lib/projections";
 
 // Big glanceable number for the KPI strip.
 function Metric({
@@ -99,6 +99,8 @@ export default function CommandDeck({
       stars: live.stars,
       rank: live.rank,
       v7d: bundle.v7d,
+      vTrend: bundle.vTrend,
+      vAsOf: bundle.vAsOf,
       neighbors: live.neighbors,
       milestones: bundle.milestones,
       apex: bundle.apex,
@@ -172,7 +174,7 @@ export default function CommandDeck({
     ...milestoneEta(m.rank, m.threshold, live.stars, vOwn, m.drift),
   }));
   const nextGate = gates.find((g) => g.gap > 0) ?? null;
-  const etas = neighborEtas(live.neighbors, live.stars, vOwn);
+  const etas = neighborEtas(live.neighbors, live.stars, vOwn, { trend: bundle.vTrend, asOf: bundle.vAsOf }, live.nowMs);
   const chase = target ? etas.find((n) => n.r === target) ?? null : null;
   const nextOvertake =
     etas
@@ -254,14 +256,14 @@ export default function CommandDeck({
               label="CHASE TARGET"
               tone="accent"
               name={shortName(chase.r)}
-              sub={chase.gap <= 0 ? "passed" : `gap ${fmt(chase.gap)} · eta ${chase.etaDays !== null ? fmtEtaRange(chase.etaDays, chase.etaRange) : "n/a"}`}
+              sub={chase.gap <= 0 ? "passed" : `gap ${fmt(chase.gap)} · ${chase.etaDays === null ? "eta n/a" : unsteadyLabel(chase.unsteady) ? `no firm eta · ${unsteadyLabel(chase.unsteady)}` : `eta ${etaText(chase, chase.etaDays)}`}`}
             />
           ) : nextOvertake ? (
             <Pill
               label="NEXT OVERTAKE"
               tone="accent"
               name={shortName(nextOvertake.r)}
-              sub={`gap ${fmt(nextOvertake.gap)} · eta ${fmtEtaRange(nextOvertake.etaDays!, nextOvertake.etaRange)}`}
+              sub={`gap ${fmt(nextOvertake.gap)} · ${unsteadyLabel(nextOvertake.unsteady) ? `no firm eta · ${unsteadyLabel(nextOvertake.unsteady)}` : `eta ${etaText(nextOvertake, nextOvertake.etaDays)}`}`}
             />
           ) : null}
           {threat ? (
@@ -269,7 +271,7 @@ export default function CommandDeck({
               label="INBOUND THREAT"
               tone="warn"
               name={shortName(threat.r)}
-              sub={`catches you in ${fmtEtaRange(threat.catchDays, threat.etaRange)} · ${Math.round(threat.v)}/d`}
+              sub={`${unsteadyLabel(threat.unsteady) ? `closing in · ${unsteadyLabel(threat.unsteady)}` : `catches you in ${etaText(threat, threat.catchDays)}`} · ${Math.round(threat.v)}/d`}
             />
           ) : null}
         </div>

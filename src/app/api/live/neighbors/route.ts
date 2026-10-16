@@ -1,6 +1,6 @@
 import { starsBatch } from "@/lib/github";
 import { lastSnapshot, lastNeighborsSnapshot, loadRoute } from "@/lib/history";
-import { canonicalVelocity } from "@/lib/velocity";
+import { canonicalVelocity, velocityQuality } from "@/lib/velocity";
 import type { Neighbor } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -55,6 +55,8 @@ export async function GET() {
         v: canonicalVelocity(p ?? {}) ?? before?.v ?? 0,
         d: p?.d ?? before?.d ?? null,
         l: p?.l ?? before?.l ?? null,
+        // the rate's doubt and age travel with it (eta labels read them)
+        ...velocityQuality(p),
       };
     });
     return Response.json(

@@ -11,10 +11,11 @@ import {
 import { driftPerDay } from "./projections";
 import { detectEvents, captainsLog, surgeEvents } from "./events";
 import { repoBadges, type RepoBadges } from "./badges";
-import { canonicalVelocity } from "./velocity";
+import { canonicalVelocity, velocityQuality } from "./velocity";
 import type {
   RepoMetaFile, Snapshot, HourPoint, DayPoint, CumPoint, RankPoint,
   FloorPoint, Neighbor, Apex, RouteRepo, MissionEvent, Spike,
+  VelocityTrend,
 } from "./types";
 
 const HOUR = 3600_000;
@@ -43,6 +44,9 @@ export interface DashboardBundle {
   cumulative: CumPoint[];
   heatmap: number[][];
   v7d: number;
+  // v7d's trend and window close when it is the registry v7 (null otherwise)
+  vTrend: VelocityTrend | null;
+  vAsOf: string | null;
   recent48h: string[];
   rankHistory: RankPoint[];
   neighbors: Neighbor[];
@@ -211,14 +215,16 @@ export function buildBundle(
   // prefer the stable 7-day route rate (v7) over the noisy ~1-day v, so the
   // scan-card ETAs match the race and the overtake scan. Enrich the focal
   // velocity and every neighbor from the same source.
+  const routeByName = new Map((route?.repos ?? []).map((p) => [p.r.toLowerCase(), p] as const));
   const routeV7 = new Map(
     (route?.repos ?? []).map((p) => [p.r.toLowerCase(), canonicalVelocity(p)] as const),
   );
   neighbors = neighbors.map((n) => {
     const rv = routeV7.get(n.r.toLowerCase());
-    return rv != null ? { ...n, v: rv } : n;
+    return rv != null ? { ...n, v: rv, ...velocityQuality(routeByName.get(n.r.toLowerCase())) } : n;
   });
   const focalV7 = meta?.repo ? routeV7.get(meta.repo.toLowerCase()) ?? null : null;
+  const focalQ = velocityQuality(focalV7 != null && meta?.repo ? routeByName.get(meta.repo.toLowerCase()) : null);
   let forkRatio: number | null = null;
   let forkPercentile: number | null = null;
   if (meta && meta.forks > 0 && netStars > 0) {
@@ -241,6 +247,8 @@ export function buildBundle(
     cumulative: cumulativeSeries(timestamps),
     heatmap: heatmapMatrix(timestamps),
     v7d: focalV7 ?? velocity7d(timestamps, nowMs),
+    vTrend: focalQ.trend,
+    vAsOf: focalQ.v7_to,
     recent48h: recentTimestamps(timestamps, 48, nowMs),
     rankHistory: rankSeries(history),
     neighbors,

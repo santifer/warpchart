@@ -392,3 +392,31 @@ export function npmUsageFreshness(npm, todayISO, maxAgeDays = 10) {
   }
   return { severity: null, ageDays, note: [through ? `versions through ${through}` : "no versions", floor].filter(Boolean).join(" · ") };
 }
+
+// The 7-day rate of the house repo must close on a point younger than this.
+// The window closes on the newest recorded day (captured ~00:25Z) or the
+// registry refresh (~daily, later in the day), whichever is newer, so a normal
+// day never sees it older than ~20 h. On 2026-10-16 the site served a v7 that
+// closed ~24 h back, while a fresher day already sat in the rank history.
+export const V7_WINDOW_MAX_H = 26;
+
+// { ok, reason, ageH, v7_to } for `repo` in route.json. Absence fails: a repo
+// without v7_to is a repo whose rate nobody can date (presence check).
+export function v7WindowFreshness(route, repo, now = Date.now(), maxH = V7_WINDOW_MAX_H) {
+  const p = (route?.repos ?? []).find((x) => x?.r?.toLowerCase() === repo.toLowerCase());
+  if (!p) return { ok: false, reason: "missing", ageH: null, v7_to: null };
+  const ms = typeof p.v7_to === "string" ? Date.parse(p.v7_to) : NaN;
+  if (!Number.isFinite(ms)) return { ok: false, reason: "absent", ageH: null, v7_to: p.v7_to ?? null };
+  const ageH = (now - ms) / HOUR;
+  return { ok: ageH <= maxH, reason: ageH <= maxH ? null : "stale", ageH, v7_to: p.v7_to };
+}
+
+// route.v7_at is the later of the registry refresh and the newest recorded
+// day; one OLDER than generated_at means v7 was computed for a previous
+// registry and lags its own star counts.
+export function v7StampLags(route) {
+  const a = Date.parse(route?.v7_at ?? "");
+  const g = Date.parse(route?.generated_at ?? "");
+  if (!Number.isFinite(a)) return true;
+  return Number.isFinite(g) && a < g;
+}

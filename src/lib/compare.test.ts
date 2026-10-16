@@ -37,3 +37,64 @@ describe("projectCrossing (the single crossing math)", () => {
     expect(poisoned.etaDays).toBeLessThan(0.1);
   });
 });
+
+// 2026-10-16: career-ops-hq/career-ops (74,799★, v7 151.6) vs ruvnet/ruflo
+// (74,759★, v7 95.5) and chrislgarry/Apollo-11 (75,085★, v7 366.3 from a wave
+// that was over: 76-140/d that day). Every eta came out with no doubt attached.
+describe("projectCrossing: a shifting or stale rate is not a pace to project", () => {
+  const NOW = Date.parse("2026-10-16T11:00:00Z");
+  const FRESH = "2026-10-16T00:25:00.000Z";
+
+  it("is noisy when the rival's rate is a wave that is over (Apollo-11, decay)", () => {
+    // us (75,053★ at 174/d) with an Apollo-shaped hunter 300★ behind at its
+    // wave-inflated 343/d: without the doubt this is a firm ~2-day catch
+    expect(projectCrossing(75053, 174, 74753, 343).confidence).toBe("firm");
+    const x = projectCrossing(75053, 174, 74753, 343, {
+      a: { trend: null, asOf: FRESH }, b: { trend: "decay", asOf: FRESH }, nowMs: NOW,
+    });
+    // it chases us and is cooling: the catch can only come LATER, or never
+    expect(x.confidence).toBe("noisy");
+    expect(x.unsteady).toEqual({ side: "b", why: "decay", bound: null });
+  });
+
+  it("we accelerate while closing on a rival ahead: the v7 eta is a ceiling ('upper', not 'no firm eta')", () => {
+    // career-ops (74,799, v7 151.6, accel) behind a 300★-ahead rival at 95.5/d
+    const x = projectCrossing(74799, 151.6, 75099, 95.5, { a: { trend: "accel" }, b: {}, nowMs: NOW });
+    expect(x.confidence).toBe("upper");
+    expect(x.etaDays).toBe(5.3);
+    expect(x.etaRange).toBeNull();
+    expect(x.unsteady).toEqual({ side: "a", why: "accel", bound: "upper" });
+  });
+
+  it("a rival cooling while we close on it is also a ceiling", () => {
+    const x = projectCrossing(74799, 151.6, 75099, 95.5, { a: {}, b: { trend: "decay" }, nowMs: NOW });
+    expect(x.confidence).toBe("upper");
+  });
+
+  it("a rival accelerating while we close on it can push the meeting out: noisy", () => {
+    const x = projectCrossing(74799, 151.6, 75099, 95.5, { a: { trend: "accel" }, b: { trend: "accel" }, nowMs: NOW });
+    expect(x.confidence).toBe("noisy");
+    expect(x.unsteady).toEqual({ side: "b", why: "accel", bound: null });
+  });
+
+  it("an accelerating hunter makes its catch a ceiling; us cooling too", () => {
+    expect(projectCrossing(75053, 174, 74753, 343, { b: { trend: "accel" }, nowMs: NOW }).confidence).toBe("upper");
+    expect(projectCrossing(75053, 174, 74753, 343, { a: { trend: "decay" }, nowMs: NOW }).confidence).toBe("upper");
+    // ...but us accelerating away from it can stretch or cancel the catch
+    expect(projectCrossing(75053, 174, 74753, 343, { a: { trend: "accel" }, nowMs: NOW }).confidence).toBe("noisy");
+  });
+
+  it("is noisy when a window closed more than 26 h ago (the v7 served on the 16th closed on the 15th 11:20Z)", () => {
+    const x = projectCrossing(74759, 300, 74799, 151.6, {
+      a: { asOf: FRESH }, b: { asOf: "2026-10-15T08:00:00Z" }, nowMs: NOW,
+    });
+    expect(x.confidence).toBe("noisy");
+    expect(x.unsteady).toEqual({ side: "b", why: "stale", bound: null });
+  });
+
+  it("stays firm with two steady, fresh rates", () => {
+    const x = projectCrossing(1000, 120, 1300, 20, { a: { asOf: FRESH }, b: { asOf: FRESH }, nowMs: NOW });
+    expect(x.confidence).toBe("firm");
+    expect(x.unsteady).toBeNull();
+  });
+});

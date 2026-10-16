@@ -23,7 +23,7 @@ import { cleanNpmSeries, estimateHoles, holesInWindow } from "./npm-gaps";
 import { allNamesOf } from "./aliases";
 import { reqLog } from "./log";
 import { nextMilestones } from "./milestones";
-import { canonicalVelocity } from "./velocity";
+import { canonicalVelocity, velocityQuality } from "./velocity";
 import { buildRouteLayers, forkRatioPercentile } from "./bundle";
 import type { ChartInputs, Neighbor, RouteRepo } from "./types";
 
@@ -370,11 +370,13 @@ export async function getExplorerData(owner: string, name: string): Promise<Expl
   const routeV7 = new Map<string, number | null>(
     ranked.map((p) => [p.r.toLowerCase(), p.v7 ?? p.v ?? null]),
   );
+  const routeByName = new Map(ranked.map((p) => [p.r.toLowerCase(), p] as const));
   const focalV7 = routeV7.get(repoName.toLowerCase());
   if (focalV7 != null) v7d = focalV7;
+  const focalQ = velocityQuality(focalV7 != null ? routeByName.get(repoName.toLowerCase()) : null);
   neighbors = neighbors.map((n) => {
     const rv = routeV7.get(n.r.toLowerCase());
-    return rv != null ? { ...n, v: rv } : n;
+    return rv != null ? { ...n, v: rv, ...velocityQuality(routeByName.get(n.r.toLowerCase())) } : n;
   });
 
   const milestoneRanks = nextMilestones(rank, 4).filter((m) => m <= ranked.length);
@@ -404,6 +406,8 @@ export async function getExplorerData(owner: string, name: string): Promise<Expl
     stars,
     rank,
     v7d,
+    vTrend: focalQ.trend,
+    vAsOf: focalQ.v7_to,
     neighbors,
     milestones,
     apex,
@@ -463,9 +467,10 @@ const getCachedExplorerData = unstable_cache(
     if (data?.degraded) throw new DegradedResult(data);
     return data;
   },
+  // v4: neighbors gained trend/v7_to and inputs vTrend/vAsOf (v7 window fix);
   // v3: the dossier inside gained npmLatest (same commit as dossier-v17);
   // v2: npmLast30MissingDays/npmLast30Estimate, npm's holes out (dossier-v15)
-  ["explorer-data-v3"],
+  ["explorer-data-v4"],
   { revalidate: 900 },
 );
 
