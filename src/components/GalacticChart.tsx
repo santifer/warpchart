@@ -1361,7 +1361,9 @@ export default function GalacticChart({
                             ? `closing in · ${unsteadyLabel(n.unsteady)}`
                             : `catches you in ${etaText(n, n.catchDays)}`
                           : n.receding
-                            ? "pulling away"
+                            ? unsteadyLabel(n.unsteady)
+                              ? `no firm eta · ${unsteadyLabel(n.unsteady)}`
+                              : "pulling away"
                             : unsteadyLabel(n.unsteady)
                               ? `no firm eta · ${unsteadyLabel(n.unsteady)}`
                               : `eta ${etaText(n, n.etaDays)}`}

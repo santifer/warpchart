@@ -113,9 +113,24 @@ export function neighborEtas(
       receding: ahead && x.closing <= 0,
       confidence: x.confidence,
       etaRange: (isEta || isCatch) ? x.etaRange : null,
-      unsteady: (isEta || isCatch) ? x.unsteady ?? null : null,
+      unsteady: (isEta || isCatch) ? x.unsteady ?? null : turning(ahead && x.closing <= 0, own, n.trend ?? null),
     };
   });
+}
+
+// A receding leader is only "pulling away" while the pace behind that is
+// steady. If the leader is cooling or we are accelerating, its 7-day lead in
+// pace can be gone today (Apollo-11 on 16-oct: v7 336/d, last day 151, ours
+// 365): say why there is no eta instead of promising the gap only grows.
+function turning(
+  receding: boolean,
+  own: VelocityQuality | undefined,
+  theirs: VelocityQuality["trend"],
+): Unsteady | null {
+  if (!receding) return null;
+  if (theirs === "decay") return { side: "b", why: "decay", bound: null };
+  if (own?.trend === "accel") return { side: "a", why: "accel", bound: null };
+  return null;
 }
 
 // A milestone the repo has already passed is not a projection, it is history:

@@ -434,7 +434,9 @@ export default function VerticalChart({
                     : !isAhead
                       ? "passed"
                       : n.receding
-                        ? "pulling away"
+                        ? unsteadyLabel(n.unsteady)
+                          ? `no firm eta · ${unsteadyLabel(n.unsteady)}`
+                          : "pulling away"
                         : unsteadyLabel(n.unsteady)
                           ? `no firm eta · ${unsteadyLabel(n.unsteady)}`
                           : `eta ${etaText(n, n.etaDays)}`}

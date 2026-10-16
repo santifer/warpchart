@@ -26,10 +26,25 @@ describe("neighborEtas carries the doubt to the label", () => {
     expect(etaText(n, n.etaDays)).toBe("≤6d");
   });
 
-  it("no eta, no doubt to show (pulling away keeps its own word)", () => {
-    const [n] = neighborEtas([{ ...hunter, s: 76000, v: 500 }], 75053, 174, {}, NOW);
+  it("a steady leader pulling away keeps its own word", () => {
+    const [n] = neighborEtas([{ ...hunter, trend: null, s: 76000, v: 500 }], 75053, 174, {}, NOW);
     expect(n.receding).toBe(true);
     expect(n.unsteady).toBeNull();
+  });
+
+  // Real payload, 16-oct 11:28Z: Apollo-11 v7 335.5 but last day 150.6 (decay);
+  // career-ops v7 176, last day 364.9 (accel). "pulling away" was false that day.
+  it("a cooling leader is not 'pulling away': Apollo-11 on 16-oct", () => {
+    const apollo = { r: "chrislgarry/Apollo-11", s: 75285, v: 335.5, trend: "decay" as const, v7_to: "2026-10-16T11:28:12.000Z" };
+    const [n] = neighborEtas([apollo], 75149, 176, { trend: "accel" }, NOW);
+    expect(n.receding).toBe(true);
+    expect(unsteadyLabel(n.unsteady)).toBe("cooling");
+  });
+
+  it("our acceleration behind a steady leader is named as ours", () => {
+    const lead = { r: "x/lead", s: 75285, v: 335.5, trend: null, v7_to: "2026-10-16T11:28:12.000Z" };
+    const [n] = neighborEtas([lead], 75149, 176, { trend: "accel" }, NOW);
+    expect(unsteadyLabel(n.unsteady)).toBe("we are accelerating");
   });
 });
 
