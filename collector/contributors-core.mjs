@@ -58,7 +58,7 @@ export function githubSeries(gh, listed) {
   }
   let cum = 0;
   const daily = [...perDay.keys()].sort().map((day) => [day, (cum += perDay.get(day))]);
-  return { daily, total: firsts.length, capped, capApplied: !!L };
+  return { daily, total: firsts.length, capped, capApplied: !!L, uncapped: firsts.length + capped };
 }
 
 // Make the rebuilt curve end on the live figure GitHub shows. Scales every
@@ -67,12 +67,30 @@ export function githubSeries(gh, listed) {
 // that the rebuild is measuring something else and stretching it would hide it.
 // 2%, not 5%: the residuals measured were 0-0.9% (5 repos, 2026-10-11), while a
 // rebuild WITHOUT the email cap was 4.5% off and slipped under a 5% bar.
-export function calibrateToLive(daily, live, tolPct = 2) {
+//
+// `uncapped` (optional): the same rebuild WITHOUT the 500-email cap. GitHub's
+// sidebar keeps counting some authors past the cap that /contributors turns
+// anonymous (career-ops: 30 capped on 10-11, 52 on 10-16, while the live count
+// went 614 -> 634 and the capped rebuild only 616 -> 620). The truth then lies
+// BETWEEN the two rebuilds, so a live figure inside [capped, uncapped] is not a
+// different measurement, it is the cap's blind spot: calibrate. Outside that
+// bracket (plus tolPct) it still refuses.
+// The bracket is bounded: if the uncapped rebuild sits more than
+// MAX_CAP_BRACKET_PCT above the capped one, the census itself is suspect
+// (wrong store, rename carried another repo's people) and it does not open.
+export const MAX_CAP_BRACKET_PCT = 15;
+export function calibrateToLive(daily, live, tolPct = 2, { uncapped = null, bracketTolPct = 2 } = {}) {
   if (!Array.isArray(daily) || !daily.length || !Number.isInteger(live) || live <= 0) return null;
   const total = daily[daily.length - 1][1];
   if (!total) return null;
   const gapPct = (Math.abs(live - total) / total) * 100;
-  if (gapPct > tolPct) return null;
+  const bracketed =
+    Number.isInteger(uncapped) &&
+    uncapped > total &&
+    ((uncapped - total) / total) * 100 <= MAX_CAP_BRACKET_PCT &&
+    live >= total &&
+    live <= uncapped * (1 + bracketTolPct / 100);
+  if (gapPct > tolPct && !bracketed) return null;
   const k = live / total;
   let prev = 0;
   const out = [];

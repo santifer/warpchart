@@ -119,3 +119,30 @@ describe("calibrateToLive", () => {
     expect(calibrateToLive([], 614)).toBeNull();
   });
 });
+
+// career-ops 2026-10-16 (real run 38893893115): capped rebuild 620, no-cap
+// rebuild 672, GitHub's sidebar 634 (2.26% off the capped one). The chart fell
+// back to "516 authors" although 634 sits inside the bracket the cap opens.
+describe("calibrateToLive brackets the 500-email cap's blind spot", () => {
+  const daily = [
+    ["2026-04-04", 1],
+    ["2026-07-01", 300],
+    ["2026-10-16", 620],
+  ];
+  it("calibrates a live figure between the capped and uncapped rebuilds", () => {
+    const c = calibrateToLive(daily, 634, 2, { uncapped: 672 });
+    expect(c).not.toBeNull();
+    expect(c.daily.at(-1)).toEqual(["2026-10-16", 634]);
+    expect(c.residual).toBe(14);
+  });
+  it("still refuses past the uncapped rebuild (+2%) or below the capped one (-2%)", () => {
+    expect(calibrateToLive(daily, 700, 2, { uncapped: 672 })).toBeNull();
+    expect(calibrateToLive(daily, 600, 2, { uncapped: 672 })).toBeNull();
+  });
+  it("does not open when the uncapped rebuild is implausibly far (suspect census)", () => {
+    expect(calibrateToLive(daily, 700, 2, { uncapped: 760 })).toBeNull(); // 22.6% wide
+  });
+  it("without an uncapped figure the old 2% rule stands", () => {
+    expect(calibrateToLive(daily, 634)).toBeNull();
+  });
+});

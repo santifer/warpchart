@@ -824,7 +824,9 @@ async function main() {
             // (its /contributors list unreadable): it counts people GitHub does not
             const cal =
               census.series.githubDaily?.length && census.series.githubCapApplied
-                ? calibrateToLive(census.series.githubDaily, cm.contributors)
+                ? calibrateToLive(census.series.githubDaily, cm.contributors, 2, {
+                    uncapped: census.series.githubUncapped ?? null,
+                  })
                 : null;
             if (cal) {
               cm.census.githubDaily = cal.daily;

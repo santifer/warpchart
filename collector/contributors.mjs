@@ -256,6 +256,9 @@ function derive(store) {
     github: gh.total,
     githubCapped: gh.capped,
     githubCapApplied: gh.capApplied,
+    // the same rebuild with no cap at all: the upper end of where GitHub's
+    // count can sit (calibrateToLive brackets the live figure with it)
+    githubUncapped: gh.uncapped,
   };
 }
 

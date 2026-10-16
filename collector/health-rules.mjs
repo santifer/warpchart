@@ -347,7 +347,9 @@ export function contributorCurve(contributors) {
   const total = contributors.total ?? null;
   const last = contributors.series?.github?.points?.at(-1)?.cumulative ?? null;
   if (total == null) return { severity: null, note: "no live figure; covered by presence.contributors" };
-  if (last == null) return { severity: "warn", note: `no GitHub-count curve; the chart fell back to the census toggle (total ${total})` };
+  // critical, not warn: on 2026-10-16 the house panel fell back to "516
+  // authors" for hours and only Santiago saw it (a warn opens no issue)
+  if (last == null) return { severity: "critical", note: `no GitHub-count curve; the chart fell back to the census toggle (total ${total})` };
   return last === total
     ? { severity: null, note: `curve ends on ${total}, GitHub's figure` }
     : { severity: "warn", note: `curve ends on ${last} but the panel prints ${total}` };

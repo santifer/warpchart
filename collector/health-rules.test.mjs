@@ -511,7 +511,7 @@ describe("contributorCurve", () => {
   });
   it("warns when the chart fell back to the census toggle", () => {
     // the dossier of 2026-10-11 before this change: no github series at all
-    expect(contributorCurve({ total: 611, series: { github: null, authors: win(row("2026-10-11", 480)), credited: win() } }).severity).toBe("warn");
+    expect(contributorCurve({ total: 611, series: { github: null, authors: win(row("2026-10-11", 480)), credited: win() } }).severity).toBe("critical");
   });
   it("stays quiet without a live figure (presence.contributors owns that)", () => {
     expect(contributorCurve({ total: null, series: null }).severity).toBeNull();
