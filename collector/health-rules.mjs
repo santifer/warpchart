@@ -338,6 +338,22 @@ export function contributorsDrift(published, github, tolPct = 3) {
     : { severity: null, note: `${published} vs GitHub ${github}` };
 }
 
+// BUILDERS WALL (/api/builders, collector/builders.mjs): the README image of
+// everyone who landed work. It prints "N joined this week", so a wall that
+// stops refreshing lies within days. Missing = never published (or wiped);
+// older than maxH = builders.yml stopped or keeps refusing (see its partial
+// marker). A wall that LOST people means the census shrank: never expected.
+export function buildersWallFreshness(meta, now = Date.now(), maxH = 30) {
+  if (!meta?.generatedAt) return { severity: "warn", note: "no builders wall published (builders/{repo}.json missing)" };
+  const ageH = (now - Date.parse(meta.generatedAt)) / 3600e3;
+  if (!(ageH <= maxH)) return { severity: "warn", note: `builders wall is ${ageH.toFixed(0)} h old (max ${maxH} h): builders.yml stopped or refuses` };
+  if (!meta.langs?.includes("en")) return { severity: "warn", note: "builders wall has no English version (the route's fallback)" };
+  // the route caches the SVG in Next's data cache, which silently skips entries
+  // over 2 MB; the collector refuses at 1.8 MB, so this only fires if that guard went
+  if (meta.bytes > 1.8 * 1024 * 1024) return { severity: "warn", note: `builders wall is ${(meta.bytes / 1048576).toFixed(2)} MB (cache limit 2 MB)` };
+  return { severity: null, note: `${meta.people} people, ${meta.week} this week, ${meta.langs.length} languages, ${ageH.toFixed(1)} h old` };
+}
+
 // The contributor chart draws GitHub's own count over time and must END on the
 // figure the panel prints (one number on the page, 2026-10-11). A missing curve
 // means the calibration refused (rebuild >5% off) or the census never ran: the

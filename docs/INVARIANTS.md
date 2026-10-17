@@ -23,6 +23,7 @@ a different question. It never throws, never logs, and the panel stays green.
 | Check the size of the universe before a percentile. | A truncated day (6,010 of ~10,000 repos) made every rank look better. | `collector/guards.test.mjs`; route-history and the catalog refuse a short sweep and leave a marker (`data.partial-markers`) |
 | UI order never comes from a `Set`. | Insertion order made the newest merger "operate" a 70K-star repo. | `collector/vitals-core.test.mjs` |
 | A stamp of the ATTEMPT is not freshness of the DATA. | A vault stamped `updatedAt` every run while upstream had stopped publishing. | `fresh.traffic-days` |
+| A number printed inside an image ages with the image. | The builders wall (`/api/builders`) prints "N joined this week" in 19 READMEs; a wall that stops refreshing keeps saying it. It shows people (census minus bots and AI pairing tools), never a total (so it cannot contradict GitHub's sidebar count), and says nothing instead of "0 joined". | `collector/builders-core.test.mjs`, `presence.builders-wall` (≤30 h) |
 
 ## 2. Caches and deploys
 
@@ -77,6 +78,7 @@ a different question. It never throws, never logs, and the panel stays green.
 | `prflow/*` | `collector/prflow.mjs` | full recompute each run |
 | `vitals/*` | `collector/vitals.mjs` | `_dist` only published when the sweep completed |
 | `contributors/*` | `collector/contributors.mjs` | refuses a truncated backfill |
+| `builders/*` | `collector/builders.mjs` (workflow `builders.yml`) | SVGs per language first, `.json` meta last (the commit point); refuses when the census shrinks or >5% of avatars fail |
 | `traffic/*` | `collector/traffic.mjs` | merges, never drops days |
 | `health/*` | `collector/health.mjs` | |
 | `live/*` | `collector/live.mjs` **and** `src/lib/live-blob.ts` (webhook seed) | two writers: the seed only writes a first point |

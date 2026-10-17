@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { COLLECTOR_STALE_H as APP_STALE_H } from "../src/lib/staleness.ts";
-import { ARTIFACTS, COLLECTOR_STALE_H, cancelledVerdict, cronLag, etaIncoherences, maxAgeFromEnv, newestRunMs, pickFreshestRuns, pipelineRunsGate, RUNS_LIST_TOL_H, runsListStale, openPartials, presenceEval, presenceLost, presenceMap, prflowFreshness, npmUsageFreshness, contributorsDrift, contributorCurve, curveEndsOnTotal, staleArtifacts, watchdogStale, v7StampLags, v7WindowFreshness } from "./health-rules.mjs";
+import { ARTIFACTS, COLLECTOR_STALE_H, cancelledVerdict, cronLag, etaIncoherences, maxAgeFromEnv, newestRunMs, pickFreshestRuns, pipelineRunsGate, RUNS_LIST_TOL_H, runsListStale, openPartials, presenceEval, presenceLost, presenceMap, prflowFreshness, npmUsageFreshness, contributorsDrift, contributorCurve, buildersWallFreshness, curveEndsOnTotal, staleArtifacts, watchdogStale, v7StampLags, v7WindowFreshness } from "./health-rules.mjs";
 
 describe("prflowFreshness", () => {
   // 26-sep: the first run after 00:00Z was cancelled and 25-sep never closed.
@@ -574,5 +574,28 @@ describe("fresh.v7-window: the age of the house repo's 7-day rate", () => {
     expect(v7StampLags({ generated_at: "2026-10-15T11:20:12Z", v7_at: "2026-10-15T11:20:12Z" })).toBe(false);
     expect(v7StampLags({ generated_at: "2026-10-16T11:20:12Z", v7_at: "2026-10-15T11:20:12Z" })).toBe(true);
     expect(v7StampLags({ generated_at: "2026-10-16T11:20:12Z" })).toBe(true);
+  });
+});
+
+describe("buildersWallFreshness", () => {
+  const now = Date.parse("2026-10-17T18:00:00Z");
+  it("missing wall is a warning, not silence", () => {
+    expect(buildersWallFreshness(null, now).severity).toBe("warn");
+  });
+  it("a wall older than 30 h warns (it prints 'joined this week')", () => {
+    expect(buildersWallFreshness({ generatedAt: "2026-10-16T08:00:00Z", langs: ["en"], people: 667, week: 34 }, now).severity).toBe("warn");
+  });
+  it("a fresh wall with English passes", () => {
+    expect(buildersWallFreshness({ generatedAt: "2026-10-17T12:00:00Z", langs: ["en", "es"], people: 667, week: 34 }, now).severity).toBeNull();
+  });
+  it("a wall without the English fallback warns", () => {
+    expect(buildersWallFreshness({ generatedAt: "2026-10-17T12:00:00Z", langs: ["es"], people: 667, week: 34 }, now).severity).toBe("warn");
+  });
+});
+
+describe("buildersWallFreshness: size", () => {
+  it("warns past 1.8 MB (Next's data cache skips entries over 2 MB without a word)", () => {
+    const now = Date.parse("2026-10-17T18:00:00Z");
+    expect(buildersWallFreshness({ generatedAt: "2026-10-17T12:00:00Z", langs: ["en"], people: 1600, week: 40, bytes: 1.9 * 1048576 }, now).severity).toBe("warn");
   });
 });

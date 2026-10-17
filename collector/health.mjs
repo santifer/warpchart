@@ -33,7 +33,7 @@
 //   --base=X   probe another origin (a preview deployment, say)
 // Exit code 1 when a critical finding is open, so CI turns red by itself.
 import { writeFileSync } from "node:fs";
-import { ARTIFACTS, COLLECTOR_STALE_H, cancelledVerdict, cronLag, etaIncoherences, openPartials, pipelineRunsGate, presenceEval, presenceMap, prflowFreshness, staleArtifacts, npmUsageFreshness, contributorsDrift, contributorCurve, curveEndsOnTotal, v7StampLags, v7WindowFreshness, V7_WINDOW_MAX_H } from "./health-rules.mjs";
+import { ARTIFACTS, COLLECTOR_STALE_H, cancelledVerdict, cronLag, etaIncoherences, openPartials, pipelineRunsGate, presenceEval, presenceMap, prflowFreshness, staleArtifacts, npmUsageFreshness, contributorsDrift, contributorCurve, curveEndsOnTotal, buildersWallFreshness, v7StampLags, v7WindowFreshness, V7_WINDOW_MAX_H } from "./health-rules.mjs";
 
 const args = process.argv.slice(2);
 const JSON_OUT = args.includes("--json");
@@ -1102,6 +1102,25 @@ async function checkPresence() {
     if (r.severity) fail("presence.contributors", "PRESENCE", r.severity, r.note,
       "The vitals collector reads GitHub's count from github.com/{repo}/_sidebar (collector/vitals.mjs contributorsCount). A big gap means that read failed or the vitals run is stale; never fall back to REST /contributors, which stops naming authors after 500 emails.");
     else pass("presence.contributors", "PRESENCE", r.note);
+  });
+
+  // The README's builders wall: published, fresh, and actually served.
+  await check("presence.builders-wall", "PRESENCE", async () => {
+    if (!BLOB_TOKEN) return pass("presence.builders-wall", "PRESENCE", "no Blob token, skipped");
+    const meta = await blobJson("builders/career-ops-hq--career-ops.json").catch(() => undefined);
+    const res = await fetch(`${BASE}/api/builders`, { signal: AbortSignal.timeout(30_000) }).catch(() => null);
+    const served = !!res?.ok && /svg/.test(res.headers.get("content-type") ?? "");
+    let r;
+    // blobJson answers null both for "missing" and for a failed read: if the
+    // route still serves a wall, "could not measure" must not read as "missing"
+    if (meta == null) r = served ? { severity: null, note: "meta unreadable this run; /api/builders serves the wall" } : { severity: "warn", note: `meta unreadable and /api/builders answers ${res?.status ?? "nothing"}` };
+    else {
+      r = buildersWallFreshness(meta);
+      if (!r.severity && !served) r = { severity: "warn", note: `published but /api/builders answers ${res?.status ?? "nothing"}` };
+    }
+    if (r.severity) fail("presence.builders-wall", "PRESENCE", r.severity, r.note,
+      "collector/builders.mjs (workflow builders.yml, every 6 h) renders it from the contributor census into builders/{repo}.{lang}.svg; it refuses (partial marker 'builders') when the census shrinks or >5% of avatars fail. Re-run: gh workflow run builders.yml -f force=true.");
+    else pass("presence.builders-wall", "PRESENCE", r.note);
   });
 
   // The house curve (/compare, embeds, OG) must end on the net star count.

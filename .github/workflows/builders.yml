@@ -1,0 +1,41 @@
+name: builders
+# The BUILDERS WALL (/api/builders): every person who has landed work on the
+# house repo, one avatar each, as an animated SVG for the README (one per
+# README language). Its own workflow, never a step of collect.yml: fetching
+# ~700 avatars must not eat the moat collector's time budget.
+# Every 6 h at :37 (after collect.yml's :07 runs refresh the contributor
+# census); the script skips itself when the census has not changed and the
+# wall is younger than 20 h, so most runs cost a single Blob read.
+on:
+  schedule:
+    - cron: "37 */6 * * *"
+  workflow_dispatch:
+    inputs:
+      force:
+        description: "Re-render even if the census has not changed (use after changing the copy or the design)"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: builders
+  cancel-in-progress: false
+
+jobs:
+  wall:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+      # pinned to the versions in package-lock.json
+      - run: npm install @vercel/blob@2.4.0 sharp@0.34.5 --no-save --no-audit --no-fund
+      - name: Render and publish the builders wall
+        run: node collector/builders.mjs ${{ inputs.force && '--force' || '' }}
+        timeout-minutes: 6
+        env:
+          BLOB_READ_WRITE_TOKEN: ${{ secrets.BLOB_READ_WRITE_TOKEN }}

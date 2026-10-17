@@ -1,0 +1,10 @@
+{
+  "_doc": "Copy of the builders wall, one entry per README language (keys = LOCALES in builders-core.mjs). Placeholders: {since} month of the first arrival, {week} people in the last 7 days, {ago} time since the latest arrival (Intl, localized), {n} people shown, {month} month during the build. captionQuiet replaces caption when fewer than WEEK_MIN people joined in the last 7 days. A language missing here is not rendered and the route serves English. en: narrative-ops + venture-ops, 17-oct-2026. Never translate: career-ops, CareerOps, GitHub; 'A room, not a club' / 'the door is open' take the wording that README already uses.",
+  "en": {
+    "title": "Built in the open, one person at a time",
+    "caption": "Since {since} · {week} joined this week · the door is open",
+    "captionQuiet": "Since {since} · latest arrival {ago} · the door is open",
+    "building": "{month} · {n} in the room",
+    "alt": "Animated wall of contributors' GitHub avatars, filling in order of arrival since {since}, with the next square left open."
+  }
+}
