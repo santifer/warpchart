@@ -1,10 +1,136 @@
 {
-  "_doc": "Copy of the builders wall, one entry per README language (keys = LOCALES in builders-core.mjs). Placeholders: {since} month of the first arrival, {week} people in the last 7 days, {ago} time since the latest arrival (Intl, localized), {n} people shown, {month} month during the build. captionQuiet replaces caption when fewer than WEEK_MIN people joined in the last 7 days. A language missing here is not rendered and the route serves English. en: narrative-ops + venture-ops, 17-oct-2026. Never translate: career-ops, CareerOps, GitHub; 'A room, not a club' / 'the door is open' take the wording that README already uses.",
+  "_doc": "Copy of the builders wall, one entry per README language (keys = LOCALES in builders-core.mjs). Placeholders: {since} month of the first arrival, {week} people in the last 7 days, {ago} time since the latest arrival (Intl, localized), {n} people shown, {month} month during the build. captionQuiet replaces caption when fewer than WEEK_MIN people joined in the last 7 days. A language missing here is not rendered and the route serves English. en: narrative-ops + venture-ops, 17-oct-2026. Never translate: career-ops, CareerOps, GitHub; 'A room, not a club' / 'the door is open' take the wording that README already uses. Translations: career-ops-docs, 17-oct-2026 (es, fr, de, pt-BR, cn, zh-TW with its career-ops.org terminology; the rest without a native reviewer).",
   "en": {
     "title": "Built in the open, one person at a time",
     "caption": "Since {since} · {week} joined this week · the door is open",
     "captionQuiet": "Since {since} · latest arrival {ago} · the door is open",
     "building": "{month} · {n} in the room",
     "alt": "Animated wall of contributors' GitHub avatars, filling in order of arrival since {since}, with the next square left open."
+  },
+  "ar": {
+    "title": "يُبنى في العلن، شخصًا تلو الآخر",
+    "caption": "منذ {since} · انضم {week} هذا الأسبوع · الباب مفتوح",
+    "captionQuiet": "منذ {since} · آخر وصول {ago} · الباب مفتوح",
+    "building": "{month} · {n} في الغرفة",
+    "alt": "جدار متحرك لصور المساهمين الرمزية على GitHub، يمتلئ بترتيب الوصول منذ {since}، مع ترك المربع التالي مفتوحًا."
+  },
+  "cn": {
+    "title": "公开构建，一个人接一个人",
+    "caption": "自 {since} 起 · 本周新加入 {week} 人 · 门是开着的",
+    "captionQuiet": "自 {since} 起 · 最近一位{ago}加入 · 门是开着的",
+    "building": "{month} · 房间里 {n} 人",
+    "alt": "贡献者 GitHub 头像组成的动态墙，自 {since} 起按加入顺序依次填满，下一个方格留空。"
+  },
+  "da": {
+    "title": "Bygget i det åbne, én person ad gangen",
+    "caption": "Siden {since} · {week} kom til i denne uge · døren er åben",
+    "captionQuiet": "Siden {since} · nyeste {ago} · døren er åben",
+    "building": "{month} · {n} i rummet",
+    "alt": "Animeret væg med bidragydernes GitHub-avatarer, der fyldes op i den rækkefølge, de kom til siden {since}, med det næste felt holdt åbent."
+  },
+  "de": {
+    "title": "Offen gebaut, ein Mensch nach dem anderen",
+    "caption": "Seit {since} · {week} neu diese Woche · die Tür ist offen",
+    "captionQuiet": "Seit {since} · zuletzt dazu {ago} · Tür ist offen",
+    "building": "{month} · {n} im Raum",
+    "alt": "Animierte Wand mit den GitHub-Avataren der Mitwirkenden, die sich seit {since} in der Reihenfolge ihrer Ankunft füllt; das nächste Feld bleibt frei."
+  },
+  "es": {
+    "title": "Construido en abierto, persona a persona",
+    "caption": "Desde {since} · {week} llegadas esta semana · puerta abierta",
+    "captionQuiet": "Desde {since} · última llegada {ago} · puerta abierta",
+    "building": "{month} · {n} en la sala",
+    "alt": "Muro animado con los avatares de GitHub de quienes contribuyen, que se llena por orden de llegada desde {since} y deja libre la siguiente casilla."
+  },
+  "fr": {
+    "title": "Construit en public, une personne à la fois",
+    "caption": "Depuis {since} · {week} arrivées cette semaine · porte ouverte",
+    "captionQuiet": "Depuis {since} · dernière arrivée {ago} · porte ouverte",
+    "building": "{month} · {n} dans la salle",
+    "alt": "Mur animé des avatars GitHub des contributeurs, qui se remplit par ordre d'arrivée depuis {since}, la case suivante restant libre."
+  },
+  "hi": {
+    "title": "खुले में बना, एक-एक व्यक्ति से",
+    "caption": "{since} से · इस हफ़्ते {week} जुड़े · दरवाज़ा खुला है",
+    "captionQuiet": "{since} से · आख़िरी आगमन {ago} · दरवाज़ा खुला है",
+    "building": "{month} · कमरे में {n}",
+    "alt": "योगदानकर्ताओं के GitHub अवतारों की एनिमेटेड दीवार, जो {since} से आने के क्रम में भरती जाती है, और अगला खाना खुला छोड़ा गया है।"
+  },
+  "id": {
+    "title": "Dibangun secara terbuka, orang demi orang",
+    "caption": "Sejak {since} · {week} bergabung minggu ini · pintu terbuka",
+    "captionQuiet": "Sejak {since} · terakhir {ago} · pintu terbuka",
+    "building": "{month} · {n} di ruang bersama",
+    "alt": "Dinding animasi berisi avatar GitHub para kontributor, terisi sesuai urutan kedatangan sejak {since}, dengan kotak berikutnya dibiarkan kosong."
+  },
+  "ja": {
+    "title": "公開の場で、ひとりずつ築かれている",
+    "caption": "{since}から · 今週{week}人が参加 · 扉は開いている",
+    "captionQuiet": "{since}から · 最新の参加は{ago} · 扉は開いている",
+    "building": "{month} · 部屋に{n}人",
+    "alt": "コントリビューターの GitHub アバターが {since} から参加順に埋まっていくアニメーションの壁。次のマスは空けてある。"
+  },
+  "ko-KR": {
+    "title": "공개적으로, 한 사람씩 만들어 갑니다",
+    "caption": "{since}부터 · 이번 주 {week}명 합류 · 문은 열려 있습니다",
+    "captionQuiet": "{since}부터 · 최근 합류 {ago} · 문은 열려 있습니다",
+    "building": "{month} · 방에 {n}명",
+    "alt": "기여자들의 GitHub 아바타가 {since}부터 도착한 순서대로 채워지는 애니메이션 벽. 다음 칸은 비워 두었습니다."
+  },
+  "pl": {
+    "title": "Budowane otwarcie, osoba po osobie",
+    "caption": "Od {since} · {week} nowych w tym tygodniu · drzwi otwarte",
+    "captionQuiet": "Od {since} · ostatnia osoba {ago} · drzwi otwarte",
+    "building": "{month} · {n} w pokoju",
+    "alt": "Animowana ściana awatarów GitHub osób współtworzących projekt, wypełniana w kolejności dołączania od {since}, z kolejnym polem pozostawionym wolnym."
+  },
+  "pt-BR": {
+    "title": "Construído em público, uma pessoa por vez",
+    "caption": "Desde {since} · {week} chegadas esta semana · porta aberta",
+    "captionQuiet": "Desde {since} · última chegada {ago} · porta aberta",
+    "building": "{month} · {n} na sala",
+    "alt": "Mural animado com os avatares do GitHub de quem contribui, preenchido por ordem de chegada desde {since}, com o próximo quadrado deixado livre."
+  },
+  "ru": {
+    "title": "Строится открыто, человек за человеком",
+    "caption": "С {since} · новых за неделю: {week} · дверь открыта",
+    "captionQuiet": "С {since} · последний {ago} · дверь открыта",
+    "building": "{month} · {n} в комнате",
+    "alt": "Анимированная стена из GitHub-аватаров участников, которая заполняется в порядке прихода с {since}; следующая клетка оставлена свободной."
+  },
+  "ta": {
+    "title": "வெளிப்படையாக, ஒவ்வொருவராகக் கட்டப்படுகிறது",
+    "caption": "{since} முதல் · இந்த வாரம் {week} பேர் இணைந்தனர் · கதவு திறந்துள்ளது",
+    "captionQuiet": "{since} முதல் · கடைசி வருகை {ago} · கதவு திறந்துள்ளது",
+    "building": "{month} · அறையில் {n} பேர்",
+    "alt": "பங்களிப்பாளர்களின் GitHub அவதார்களால் ஆன அசையும் சுவர்; {since} முதல் வந்த வரிசையில் நிரம்புகிறது, அடுத்த கட்டம் திறந்தே விடப்பட்டுள்ளது."
+  },
+  "tr": {
+    "title": "Herkesin önünde, kişi kişi inşa ediliyor",
+    "caption": "Başlangıç {since} · bu hafta {week} kişi katıldı · kapı açık",
+    "captionQuiet": "Başlangıç {since} · son katılım {ago} · kapı açık",
+    "building": "{month} · odada {n} kişi",
+    "alt": "Katkıda bulunanların GitHub avatarlarından oluşan hareketli duvar; {since} tarihinden beri geliş sırasına göre doluyor ve sıradaki kare boş bırakılıyor."
+  },
+  "ua": {
+    "title": "Будується відкрито, людина за людиною",
+    "caption": "З {since} · нових за тиждень: {week} · двері відчинені",
+    "captionQuiet": "З {since} · останній {ago} · двері відчинені",
+    "building": "{month} · {n} у кімнаті",
+    "alt": "Анімована стіна з GitHub-аватарів учасників, що заповнюється в порядку приходу з {since}; наступна клітинка лишається вільною."
+  },
+  "vi": {
+    "title": "Xây dựng công khai, từng người một",
+    "caption": "Từ {since} · {week} người tham gia tuần này · cửa luôn mở",
+    "captionQuiet": "Từ {since} · người mới nhất {ago} · cửa luôn mở",
+    "building": "{month} · {n} trong phòng",
+    "alt": "Bức tường động gồm ảnh đại diện GitHub của những người đóng góp, lấp đầy theo thứ tự tham gia từ {since}, với ô tiếp theo để trống."
+  },
+  "zh-TW": {
+    "title": "公開打造，一個人接一個人",
+    "caption": "自 {since} 起 · 本週新加入 {week} 人 · 門是開著的",
+    "captionQuiet": "自 {since} 起 · 最近一位{ago}加入 · 門是開著的",
+    "building": "{month} · 房間裡 {n} 人",
+    "alt": "貢獻者 GitHub 頭像組成的動態牆，自 {since} 起依加入順序逐一填滿，下一格留空。"
   }
 }
