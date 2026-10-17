@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { COLLECTOR_STALE_H as APP_STALE_H } from "../src/lib/staleness.ts";
-import { ARTIFACTS, COLLECTOR_STALE_H, cancelledVerdict, cronLag, etaIncoherences, maxAgeFromEnv, newestRunMs, pickFreshestRuns, pipelineRunsGate, RUNS_LIST_TOL_H, runsListStale, openPartials, presenceEval, presenceLost, presenceMap, prflowFreshness, npmUsageFreshness, contributorsDrift, contributorCurve, buildersWallFreshness, curveEndsOnTotal, staleArtifacts, watchdogStale, v7StampLags, v7WindowFreshness } from "./health-rules.mjs";
+import { ARTIFACTS, COLLECTOR_STALE_H, cancelledVerdict, cronLag, etaIncoherences, maxAgeFromEnv, newestRunMs, pickFreshestRuns, pipelineRunsGate, RUNS_LIST_TOL_H, runsListStale, openPartials, presenceEval, presenceLost, presenceMap, prflowFreshness, npmUsageFreshness, contributorsDrift, contributorCurve, buildersWallFreshness, buildersLangMismatch, curveEndsOnTotal, staleArtifacts, watchdogStale, v7StampLags, v7WindowFreshness } from "./health-rules.mjs";
 
 describe("prflowFreshness", () => {
   // 26-sep: the first run after 00:00Z was cancelled and 25-sep never closed.
@@ -597,5 +597,16 @@ describe("buildersWallFreshness: size", () => {
   it("warns past 1.8 MB (Next's data cache skips entries over 2 MB without a word)", () => {
     const now = Date.parse("2026-10-17T18:00:00Z");
     expect(buildersWallFreshness({ generatedAt: "2026-10-17T12:00:00Z", langs: ["en"], people: 1600, week: 40, bytes: 1.9 * 1048576 }, now).severity).toBe("warn");
+  });
+});
+
+describe("buildersLangMismatch", () => {
+  it("flags a language served as the English fallback (es/pt-BR on 17-oct)", () => {
+    const r = buildersLangMismatch(["en", "es", "pt-BR", "ja"], { en: "en", es: "en", "pt-BR": "en", ja: "ja" });
+    expect(r.severity).toBe("warn");
+    expect(r.note).toContain("es→en");
+  });
+  it("passes when every language answers in itself", () => {
+    expect(buildersLangMismatch(["en", "ja"], { en: "en", ja: "ja" }).severity).toBeNull();
   });
 });

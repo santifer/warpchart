@@ -354,6 +354,17 @@ export function buildersWallFreshness(meta, now = Date.now(), maxH = 30) {
   return { severity: null, note: `${meta.people} people, ${meta.week} this week, ${meta.langs.length} languages, ${ageH.toFixed(1)} h old` };
 }
 
+// Each published language must be SERVED in that language: on 17-oct-2026
+// ?lang=es and ?lang=pt-BR kept the English fallback for an hour after their
+// walls existed (a cached "not found"), and only Santiago saw it. served:
+// { lang: Content-Language answered, or null if the request failed }.
+export function buildersLangMismatch(langs, served) {
+  const bad = (langs ?? []).filter((l) => served?.[l] !== l);
+  return bad.length
+    ? { severity: "warn", note: `builders wall not served in its language: ${bad.map((l) => `${l}→${served?.[l] ?? "error"}`).join(", ")}` }
+    : { severity: null, note: `${(langs ?? []).length} languages served in their own language` };
+}
+
 // The contributor chart draws GitHub's own count over time and must END on the
 // figure the panel prints (one number on the page, 2026-10-11). A missing curve
 // means the calibration refused (rebuild >5% off) or the census never ran: the

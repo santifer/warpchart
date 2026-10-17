@@ -5,7 +5,8 @@
 // Cache-only: the SVG is rendered by collector/builders.mjs (builders.yml) into
 // the private Blob; a view never touches GitHub. A language without its own
 // copy falls back to English rather than breaking the README image.
-import { get, BlobNotFoundError } from "@vercel/blob";
+import { get } from "@vercel/blob";
+import { loadWall, WallMissing } from "@/lib/builders-wall";
 import { unstable_cache } from "next/cache";
 import { REPO } from "@/lib/config";
 import { canonicalRepo } from "@/lib/aliases";
@@ -21,26 +22,21 @@ const LANG_BY_LOWER = new Map(LANGS.map((l) => [l.toLowerCase(), l]));
 
 // Blob get() is CDN-cached for weeks unless told otherwise; the wall changes
 // daily, so read from origin and let this 30-min cache absorb the traffic.
-// Only a definite "not found" returns null: a transient error THROWS, and
-// unstable_cache does not store a throw, so one bad read cannot pin a broken
-// image on every README for half an hour.
+// NOTHING but a found wall is cached (see loadWall). Known trade-off: once a
+// language is cached, deleting its SVG does not demote it to English until the
+// entry expires and a revalidation succeeds; Next serves the stale copy if the
+// background revalidation throws. builders.mjs only deletes a language when it
+// is dropped from the messages file, which is a deliberate act.
 const readWall = unstable_cache(
-  async (slug: string, lang: string): Promise<string | null> => {
-    const token = process.env.BLOB_READ_WRITE_TOKEN;
-    if (!token) return null;
-    try {
-      const res = await get(`builders/${slug}.${lang}.svg`, { access: "private", token, useCache: false });
-      if (res?.statusCode === 200 && res.stream) return await new Response(res.stream).text();
-      if (!res) return null; // the SDK's not-found shape
-      throw new Error(`blob status ${res.statusCode}`);
-    } catch (e) {
-      if (e instanceof BlobNotFoundError || (e as Error)?.name === "BlobNotFoundError") return null;
-      throw e;
-    }
-  },
-  ["builders-wall-v1"],
+  (slug: string, lang: string) => loadWall(get, process.env.BLOB_READ_WRITE_TOKEN, slug, lang),
+  ["builders-wall-v2"],
   { revalidate: 1800 },
 );
+const readWallOrNull = (slug: string, lang: string) =>
+  readWall(slug, lang).catch((e) => {
+    if (e instanceof WallMissing) return null;
+    throw e;
+  });
 
 export async function GET(req: Request) {
   const url = new URL(req.url);
@@ -55,10 +51,10 @@ export async function GET(req: Request) {
   let lang = lang0;
   let svg: string | null;
   try {
-    svg = await readWall(slug, lang);
+    svg = await readWallOrNull(slug, lang);
     if (!svg && lang !== "en") {
       lang = "en";
-      svg = await readWall(slug, lang);
+      svg = await readWallOrNull(slug, lang);
     }
   } catch (e) {
     log.error("blob", e);
@@ -75,7 +71,8 @@ export async function GET(req: Request) {
   return new Response(svg, {
     headers: {
       "Content-Type": "image/svg+xml; charset=utf-8",
-      "Cache-Control": embedCache(3600, 86_400),
+      // a fallback is a stand-in: keep it short so the real language replaces it
+      "Cache-Control": lang === lang0 ? embedCache(3600, 86_400) : "public, max-age=300, s-maxage=300",
       "Content-Language": lang,
       "x-warp-request": log.reqId,
     },

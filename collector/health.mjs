@@ -33,7 +33,7 @@
 //   --base=X   probe another origin (a preview deployment, say)
 // Exit code 1 when a critical finding is open, so CI turns red by itself.
 import { writeFileSync } from "node:fs";
-import { ARTIFACTS, COLLECTOR_STALE_H, cancelledVerdict, cronLag, etaIncoherences, openPartials, pipelineRunsGate, presenceEval, presenceMap, prflowFreshness, staleArtifacts, npmUsageFreshness, contributorsDrift, contributorCurve, curveEndsOnTotal, buildersWallFreshness, v7StampLags, v7WindowFreshness, V7_WINDOW_MAX_H } from "./health-rules.mjs";
+import { ARTIFACTS, COLLECTOR_STALE_H, cancelledVerdict, cronLag, etaIncoherences, openPartials, pipelineRunsGate, presenceEval, presenceMap, prflowFreshness, staleArtifacts, npmUsageFreshness, contributorsDrift, contributorCurve, curveEndsOnTotal, buildersWallFreshness, buildersLangMismatch, v7StampLags, v7WindowFreshness, V7_WINDOW_MAX_H } from "./health-rules.mjs";
 
 const args = process.argv.slice(2);
 const JSON_OUT = args.includes("--json");
@@ -1117,6 +1117,25 @@ async function checkPresence() {
     else {
       r = buildersWallFreshness(meta);
       if (!r.severity && !served) r = { severity: "warn", note: `published but /api/builders answers ${res?.status ?? "nothing"}` };
+      if (!r.severity) {
+        // the headers are enough: cancel each ~700 KB body. A language that
+        // answers wrong is retried once past the edge cache (a fresh query
+        // string): a fallback stays cached 5 min after a language is published,
+        // and the job has no time to wait it out (12-min cap).
+        const probe = async (l, bust = "") => {
+          const x = await fetch(`${BASE}/api/builders?lang=${encodeURIComponent(l)}${bust}`, { signal: AbortSignal.timeout(20_000) }).catch(() => null);
+          await x?.body?.cancel().catch(() => {});
+          return x?.ok ? x.headers.get("content-language") : null;
+        };
+        const got = {};
+        for (const l of meta.langs) got[l] = await probe(l);
+        let m = buildersLangMismatch(meta.langs, got);
+        if (m.severity) {
+          for (const l of meta.langs) if (got[l] !== l) got[l] = await probe(l, `&_=${Date.now()}`);
+          m = buildersLangMismatch(meta.langs, got);
+        }
+        r = m.severity ? m : { severity: null, note: `${r.note}; ${m.note}` };
+      }
     }
     if (r.severity) fail("presence.builders-wall", "PRESENCE", r.severity, r.note,
       "collector/builders.mjs (workflow builders.yml, every 6 h) renders it from the contributor census into builders/{repo}.{lang}.svg; it refuses (partial marker 'builders') when the census shrinks or >5% of avatars fail. Re-run: gh workflow run builders.yml -f force=true.");
