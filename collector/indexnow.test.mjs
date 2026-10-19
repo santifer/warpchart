@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { mkdtempSync, writeFileSync, mkdirSync, existsSync, copyFileSync } from "node:fs";
+import { mkdtempSync, writeFileSync, mkdirSync, existsSync, copyFileSync, readdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -17,13 +17,18 @@ globalThis.fetch = (u, init) => new Promise((_, rej) => {
 });`);
 
 // lib.mjs resolves data/ next to collector/, so the script runs from a copy
-// whose data/ holds a one-repo registry.
+// of collector/ whose data/ holds a one-repo registry.
 function run(env) {
   const root = mkdtempSync(join(tmpdir(), "indexnow-"));
   const dataDir = join(root, "data");
   mkdirSync(join(root, "collector"));
   mkdirSync(dataDir);
-  for (const f of ["indexnow.mjs", "lib.mjs"]) copyFileSync(new URL(`./${f}`, import.meta.url), join(root, "collector", f));
+  // every collector module (not only indexnow's direct imports), so a new
+  // shared module never breaks this copy
+  const here = new URL("./", import.meta.url);
+  for (const f of readdirSync(here).filter((n) => n.endsWith(".mjs") && !n.endsWith(".test.mjs"))) {
+    copyFileSync(new URL(f, here), join(root, "collector", f));
+  }
   writeFileSync(join(dataDir, "route.json"), JSON.stringify({ repos: [{ r: "a/b" }] }));
   return new Promise((resolve) => {
     const started = Date.now();
