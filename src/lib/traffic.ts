@@ -2,10 +2,11 @@
 // the accumulated daily views, daily clones and latest top referrers that GitHub
 // itself deletes after 14 days. Server-side only, cached. Returns null when no
 // vault exists yet (no token configured, or first run pending): the panel then
-// shows its empty/locked state.
-import { get } from "@vercel/blob";
+// shows its empty/locked state. Rejects when the store could not be read, and
+// that is never cached: /api/traffic answers 503, not an empty vault.
 import { unstable_cache } from "next/cache";
 import { allNamesOf, canonicalRepo } from "./aliases";
+import { readPrivateJson } from "./blob-read";
 
 interface RawVault {
   repo: string;
@@ -62,65 +63,56 @@ function blobKey(repo: string): string {
   return `traffic/${repo.toLowerCase().replace("/", "--")}.json`;
 }
 
+// null = no vault under this name. A failed read throws (readPrivateJson).
 async function readOneVault(key: string, token: string): Promise<RawVault | null> {
-  try {
-    const res = await get(key, { access: "private", token });
-    if (!res || res.statusCode !== 200 || !res.stream) return null;
-    const raw = JSON.parse(await new Response(res.stream).text()) as RawVault;
-    return raw?.views ? raw : null;
-  } catch {
-    return null;
-  }
+  const raw = await readPrivateJson<RawVault>(key, token);
+  return raw?.views ? raw : null;
 }
 
 async function readVault(repo: string): Promise<TrafficVault | null> {
   const token = process.env.BLOB_READ_WRITE_TOKEN;
   if (!token) return null;
-  try {
-    // A renamed/transferred repo's vault history stays under its OLD blob key
-    // while the collector writes new days under the new one. Read every name
-    // the repo ever had and merge day-by-day; canonical (last) wins overlaps.
-    // The vault is append-only per day, so the merge is lossless.
-    const vaults = (
-      await Promise.all(allNamesOf(repo).map((n) => readOneVault(blobKey(n), token)))
-    ).filter((v): v is RawVault => v !== null);
-    if (!vaults.length) return null;
-    const raw: RawVault = vaults[0];
-    for (const v of vaults.slice(1)) {
-      raw.views = { ...raw.views, ...v.views };
-      raw.clones = { ...raw.clones, ...v.clones };
-      // point-in-time fields: keep the freshest snapshot's
-      if ((v.updatedAt ?? "") >= (raw.updatedAt ?? "")) {
-        raw.referrers = v.referrers;
-        raw.referrersAt = v.referrersAt;
-        raw.updatedAt = v.updatedAt;
-        raw.uniq14 = v.uniq14;
-      }
+  // A renamed/transferred repo's vault history stays under its OLD blob key
+  // while the collector writes new days under the new one. Read every name
+  // the repo ever had and merge day-by-day; canonical (last) wins overlaps.
+  // The vault is append-only per day, so the merge is lossless.
+  const vaults = (
+    await Promise.all(allNamesOf(repo).map((n) => readOneVault(blobKey(n), token)))
+  ).filter((v): v is RawVault => v !== null);
+  if (!vaults.length) return null;
+  const raw: RawVault = vaults[0];
+  for (const v of vaults.slice(1)) {
+    raw.views = { ...raw.views, ...v.views };
+    raw.clones = { ...raw.clones, ...v.clones };
+    // point-in-time fields: keep the freshest snapshot's
+    if ((v.updatedAt ?? "") >= (raw.updatedAt ?? "")) {
+      raw.referrers = v.referrers;
+      raw.referrersAt = v.referrersAt;
+      raw.updatedAt = v.updatedAt;
+      raw.uniq14 = v.uniq14;
     }
-    const dates = new Set([...Object.keys(raw.views ?? {}), ...Object.keys(raw.clones ?? {})]);
-    const days: TrafficDay[] = [...dates]
-      .sort()
-      .map((d) => ({
-        d,
-        views: raw.views?.[d]?.c ?? 0,
-        viewsU: raw.views?.[d]?.u ?? 0,
-        clones: raw.clones?.[d]?.c ?? 0,
-        clonesU: raw.clones?.[d]?.u ?? 0,
-      }));
-    if (!days.length) return null;
-    return {
-      days,
-      referrers: raw.referrers ?? [],
-      totalViews: days.reduce((s, d) => s + d.views, 0),
-      totalClones: days.reduce((s, d) => s + d.clones, 0),
-      daysKept: days.length,
-      updatedAt: raw.updatedAt ?? null,
-      newestDay: days[days.length - 1]?.d ?? null,
-      uniq14: raw.uniq14 ?? null,
-    };
-  } catch {
-    return null;
   }
+  const dates = new Set([...Object.keys(raw.views ?? {}), ...Object.keys(raw.clones ?? {})]);
+  const days: TrafficDay[] = [...dates]
+    .sort()
+    .map((d) => ({
+      d,
+      views: raw.views?.[d]?.c ?? 0,
+      viewsU: raw.views?.[d]?.u ?? 0,
+      clones: raw.clones?.[d]?.c ?? 0,
+      clonesU: raw.clones?.[d]?.u ?? 0,
+    }));
+  if (!days.length) return null;
+  return {
+    days,
+    referrers: raw.referrers ?? [],
+    totalViews: days.reduce((s, d) => s + d.views, 0),
+    totalClones: days.reduce((s, d) => s + d.clones, 0),
+    daysKept: days.length,
+    updatedAt: raw.updatedAt ?? null,
+    newestDay: days[days.length - 1]?.d ?? null,
+    uniq14: raw.uniq14 ?? null,
+  };
 }
 
 export function loadTrafficVault(repo: string): Promise<TrafficVault | null> {

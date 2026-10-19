@@ -57,6 +57,13 @@ export async function GET(req: NextRequest) {
   if (!authorized) {
     return NextResponse.json({ error: "forbidden" }, { status: 403, headers: NO_STORE });
   }
-  const vault = await loadTrafficVault(repo);
+  // A store that could not be read is a 503, never `vault: null`: the panel
+  // tells "your key was refused" (403) from "try again shortly" (5xx).
+  let vault;
+  try {
+    vault = await loadTrafficVault(repo);
+  } catch {
+    return NextResponse.json({ error: "vault temporarily unavailable" }, { status: 503, headers: NO_STORE });
+  }
   return NextResponse.json({ vault, public: false }, { headers: NO_STORE });
 }

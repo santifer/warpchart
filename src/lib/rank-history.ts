@@ -10,9 +10,9 @@
 // because Next's data cache caps a cached item at 2MB and the full index is
 // ~22MB. A repo query reads exactly one shard (~0.7MB), cached at most once per
 // hour. The shard hash MUST stay identical to shardOf() in route-history.mjs.
-import { get } from "@vercel/blob";
 import { unstable_cache } from "next/cache";
 import { allNamesOf } from "./aliases";
+import { readPrivateJson } from "./blob-read";
 import { toTrajectory } from "./trajectory";
 
 const SHARDS = 32; // MUST match collector/route-history.mjs
@@ -39,17 +39,13 @@ function shardOf(repo: string): number {
   return (h >>> 0) % SHARDS;
 }
 
+// null = nothing recorded in this shard yet. A failed read throws, so the
+// hour-long cache below never stores an empty shard in front of a full one.
 async function readShard(i: number): Promise<Shard | null> {
   const token = process.env.BLOB_READ_WRITE_TOKEN;
   if (!token) return null;
-  try {
-    const res = await get(`route-history/shard-${i}.json`, { access: "private", token });
-    if (!res || res.statusCode !== 200 || !res.stream) return null;
-    const parsed = JSON.parse(await new Response(res.stream).text()) as Shard;
-    return parsed?.series ? parsed : null;
-  } catch {
-    return null;
-  }
+  const parsed = await readPrivateJson<Shard>(`route-history/shard-${i}.json`, token);
+  return parsed?.series ? parsed : null;
 }
 
 function cachedShard(i: number): Promise<Shard | null> {
@@ -71,18 +67,12 @@ interface ArchiveShard {
 async function readArchiveShard(i: number): Promise<ArchiveShard | null> {
   const token = process.env.BLOB_READ_WRITE_TOKEN;
   if (!token) return null;
-  try {
-    const res = await get(`route-history/archive/shard-${i}.json`, {
-      access: "private",
-      token,
-      useCache: false,
-    });
-    if (!res || res.statusCode !== 200 || !res.stream) return null;
-    const parsed = JSON.parse(await new Response(res.stream).text()) as ArchiveShard;
-    return parsed?.series ? parsed : null;
-  } catch {
-    return null;
-  }
+  // the archive only grows, so give it more room than a hot shard
+  const parsed = await readPrivateJson<ArchiveShard>(`route-history/archive/shard-${i}.json`, token, {
+    useCache: false,
+    timeoutMs: 20_000,
+  });
+  return parsed?.series ? parsed : null;
 }
 
 // case-insensitive lookup of a repo's points in a shard's series map
@@ -100,7 +90,9 @@ function pullSeries(
 
 // A repo's world-rank trajectory from the accumulated distribution. Empty array
 // when the repo has never been in the recorded top 10k (or nothing recorded
-// yet): callers degrade gracefully.
+// yet): callers degrade gracefully. REJECTS when a shard could not be read: an
+// empty trajectory from a failed read is not "never ranked", and the curve
+// would cache it for 6 h as a repo with no daily record.
 // includeArchive merges the cold archive (the full >90-day record) and is the
 // AUTHORIZED-only path: the archive read is uncached (useCache:false), so firing
 // it on every public render (pricing, /r/, teasers) would be an unbounded private-
@@ -120,8 +112,8 @@ export async function repoRankTrajectory(
   const shards = [...new Set(names.map((n) => shardOf(n)))];
   const reads = await Promise.all(
     shards.map(async (i) => ({
-      hot: await cachedShard(i).catch(() => null),
-      archive: opts?.includeArchive ? await readArchiveShard(i).catch(() => null) : null,
+      hot: await cachedShard(i),
+      archive: opts?.includeArchive ? await readArchiveShard(i) : null,
     })),
   );
   // archive (older, evicted days) first, hot (recent 90d) second so it wins on
