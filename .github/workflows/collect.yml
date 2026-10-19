@@ -336,7 +336,9 @@ jobs:
         timeout-minutes: 2
         with:
           node-version: 22
-      - run: npm install @vercel/blob --no-save --no-audit --no-fund
+          cache: npm
+      # watchdog-alive.mjs needs @vercel/blob, from the lockfile
+      - run: npm ci --no-audit --no-fund
         timeout-minutes: 3
 
       # 6. Mutual attestation. health.yml checks production; this checks that
