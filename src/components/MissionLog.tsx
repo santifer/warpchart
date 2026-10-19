@@ -1,6 +1,7 @@
 "use client";
 
 import type { MissionEvent } from "@/lib/types";
+import { fmtUtcStamp } from "@/lib/format";
 
 const GLYPH: Record<MissionEvent["kind"], { g: string; cls: string }> = {
   gate: { g: "◆", cls: "text-accent" },
@@ -9,13 +10,6 @@ const GLYPH: Record<MissionEvent["kind"], { g: string; cls: string }> = {
   online: { g: "●", cls: "text-faint" },
   spike: { g: "◈", cls: "text-warn" },
 };
-
-function fmtTs(ts: string): string {
-  const d = new Date(ts);
-  return d.toLocaleString("en-US", {
-    month: "short", day: "numeric", hour: "2-digit", minute: "2-digit", hour12: false,
-  });
-}
 
 export default function MissionLog({
   events,
@@ -37,7 +31,10 @@ export default function MissionLog({
           {reversed.map((e, i) => (
             <li key={`${e.ts}-${i}`} className="numeral flex items-baseline gap-3 text-data">
               <span className={`shrink-0 ${GLYPH[e.kind].cls}`}>{GLYPH[e.kind].g}</span>
-              <span className="shrink-0 text-faint" suppressHydrationWarning>{fmtTs(e.ts)}</span>
+              {/* UTC: day-level events are stamped on the UTC day (a record at
+                  23:59:59Z), which the viewer's zone moved to the next day
+                  east of Greenwich, and server and client disagreed */}
+              <span className="shrink-0 text-faint">{fmtUtcStamp(e.ts)}</span>
               {e.url ? (
                 <a
                   href={e.url}

@@ -5,7 +5,7 @@
 // the same boxes, and boxes never move once drawn (zero-CLS contract).
 import Panel from "./Panel";
 import UsageChart from "./UsageChart";
-import { fmt, fmtCompact } from "@/lib/format";
+import { fmt, fmtCompact, fmtUtcDay } from "@/lib/format";
 import type { Dossier } from "@/lib/explorer";
 import { shortTag } from "@/lib/release-assets";
 import { newestVersion, summarizeVersions, versionFootnote } from "@/lib/npm-versions";
@@ -145,11 +145,8 @@ export function UsagePanel({
               // page linked in sponsor emails. Clone events accumulate honestly;
               // people do not accumulate from this data at all.
               const cloneTotal = ch ? ch.reduce((s, x) => s + x.c, 0) : 0;
-              const fmtDay = (day: string) =>
-                new Date(`${day}T00:00:00Z`).toLocaleDateString("en-US", {
-                  month: "short",
-                  day: "numeric",
-                });
+              // day keys are UTC: the viewer's zone moved "since" a day early
+              const fmtDay = (day: string) => fmtUtcDay(day);
               const since = ch && ch.length ? fmtDay(ch[0].day) : "";
               // Name the last day each channel actually covers. Without it a
               // silently stalled feed looks identical to a live one, which is
