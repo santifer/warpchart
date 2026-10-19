@@ -177,3 +177,25 @@ export function etaText(n: Pick<NeighborEta, "confidence" | "etaRange">, days: n
   }
   return fmtEtaRange(days, n.etaRange);
 }
+
+// A neighbor's worldwide rank, derived from OUR live rank and the neighbors'
+// stars, never from the daily registry (RouteRepo.rank). The collector takes
+// the neighbors from the same GitHub search that counts our rank: the 15
+// repos right above and the 5 right below, contiguous. So a neighbor's rank
+// is ours minus the neighbors between us. The registry is up to a day old: on
+// 2026-10-19 the header said #250 while the scan card put LlamaFactory, 11
+// stars above us, at #247 (two repos had passed both since the snapshot).
+// null = not one of the neighbors or no rank of our own: the caller falls
+// back to the dated registry figure.
+export function neighborRank(
+  neighbors: Pick<Neighbor, "r" | "s">[],
+  stars: number,
+  rank: number | null,
+  repo: string,
+): number | null {
+  if (!rank) return null;
+  const n = neighbors.find((m) => m.r.toLowerCase() === repo.toLowerCase());
+  if (!n) return null;
+  if (n.s > stars) return rank - neighbors.filter((m) => m.s > stars && m.s <= n.s).length;
+  return rank + neighbors.filter((m) => m.s <= stars && m.s >= n.s).length;
+}

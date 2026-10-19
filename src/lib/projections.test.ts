@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ceilEta, etaText, neighborEtas, unsteadyLabel } from "@/lib/projections";
+import { ceilEta, etaText, neighborEtas, neighborRank, unsteadyLabel } from "@/lib/projections";
 
 // The chart label under a rival: a doubtful rate says why instead of a date.
 describe("neighborEtas carries the doubt to the label", () => {
@@ -56,5 +56,32 @@ describe("a ceiling rounds up in its own unit", () => {
     expect(etaText(up, 61)).toBe("≤3mo");
     expect(ceilEta(5.3)).toBe(6);
     expect(ceilEta(0.21)).toBeCloseTo(6 / 24, 10);
+  });
+});
+
+// 2026-10-19 ~10:40Z, live GitHub stars around career-ops (#250 in the header).
+// The daily registry still had LlamaFactory at #247 and career-ops at #248:
+// VoiceStudio and hackingtool had passed both since that snapshot.
+describe("neighborRank: a scan card agrees with the live header rank", () => {
+  const OWN = 75570;
+  const near = [
+    { r: "eugeny/tabby", s: 75025 },
+    { r: "apache/superset", s: 75210 },
+    { r: "chrislgarry/Apollo-11", s: 75457 },
+    { r: "hiyouga/LlamaFactory", s: 75581 },
+    { r: "typicode/json-server", s: 75730 },
+    { r: "headroomlabs-ai/headroom", s: 75956 },
+  ];
+  it("the repo 11 stars above us is #249, not the registry's #247", () => {
+    expect(neighborRank(near, OWN, 250, "hiyouga/LlamaFactory")).toBe(249);
+    expect(neighborRank(near, OWN, 250, "headroomlabs-ai/headroom")).toBe(247);
+  });
+  it("below us counts down from our rank (Apollo-11 just passed: #251)", () => {
+    expect(neighborRank(near, OWN, 250, "chrislgarry/Apollo-11")).toBe(251);
+    expect(neighborRank(near, OWN, 250, "eugeny/tabby")).toBe(253);
+  });
+  it("unknown repo or no own rank -> null (caller shows the dated registry rank)", () => {
+    expect(neighborRank(near, OWN, 250, "facebook/react")).toBeNull();
+    expect(neighborRank(near, OWN, null, "hiyouga/LlamaFactory")).toBeNull();
   });
 });

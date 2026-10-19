@@ -18,7 +18,7 @@ import type { Palette } from "@/lib/theme";
 import { usePalette } from "@/lib/usePalette";
 import { dopplerTilt } from "@/lib/doppler";
 import { fmt, fmtCompact, fmtEtaDays, fmtUtcStamp, etaDate, shortName } from "@/lib/format";
-import { neighborEtas, unsteadyLabel, etaText, ceilEta, type NeighborEta } from "@/lib/projections";
+import { neighborEtas, neighborRank, unsteadyLabel, etaText, ceilEta, type NeighborEta } from "@/lib/projections";
 import { velocityQuality } from "@/lib/velocity";
 import { sound } from "@/lib/sound";
 import { ghAvatar } from "@/lib/avatar";
@@ -1711,7 +1711,9 @@ export default function GalacticChart({
               rank={
                 scan.kind === "route"
                   ? scan.p.rank
-                  : inputs.routeAll.find((p) => p.r.toLowerCase() === scan.n.r.toLowerCase())?.rank ?? null
+                  : neighborRank(inputs.neighbors, stars, rank, scan.n.r) ??
+                    inputs.routeAll.find((p) => p.r.toLowerCase() === scan.n.r.toLowerCase())?.rank ??
+                    null
               }
             />
             <div className="mt-2 flex items-center gap-2 border-t border-grid pt-2">
