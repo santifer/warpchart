@@ -1,23 +1,13 @@
 import { expect, test } from "@playwright/test";
-import { brokenImages, horizontalOverflow, lowContrast } from "./sensors";
-
-// The public surfaces a visitor lands on, each with a literal text that proves
-// the real page rendered (not an error shell or an empty skeleton).
-const PAGES: { path: string; expect: RegExp }[] = [
-  { path: "/", expect: /warpchart/i },
-  { path: "/r/career-ops-hq/career-ops", expect: /PR flow/i },
-  { path: "/velocity", expect: /velocity|stars\/day/i },
-  { path: "/pricing", expect: /pricing|plan/i },
-  { path: "/methodology", expect: /methodology/i },
-  { path: "/compare", expect: /compare/i },
-];
+import { PAGES } from "./pages";
+import { brokenImages, horizontalOverflow, lowContrast, visibleText } from "./sensors";
 
 for (const p of PAGES) {
   test(`${p.path} renders whole in the real client`, async ({ page }) => {
     // LiveProvider pages poll forever and never reach network idle
     const res = await page.goto(p.path, { waitUntil: "domcontentloaded" });
     expect(res?.status(), "HTTP status").toBeLessThan(400);
-    await expect(page.locator("body")).toContainText(p.expect, { timeout: 30_000 });
+    await expect.poll(() => visibleText(page), { message: "page-specific text", timeout: 30_000 }).toMatch(p.expect);
     await page.waitForTimeout(3_000); // let above-the-fold images settle
     expect(await brokenImages(page), "broken images").toEqual([]);
     expect(await horizontalOverflow(page), "horizontal overflow").toEqual([]);
