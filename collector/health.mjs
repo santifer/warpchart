@@ -579,7 +579,7 @@ async function checkContracts() {
         if (k === "stargazersForeign" && to === 200) {
           fail("contract.transitions", "CONTRACT", "info",
             `GitHub REOPENED stargazer listing for foreign repos (${from} -> ${to})`,
-            "Opportunity, not a bug: per-star history for any repo is available again. The probe in restSample (src/lib/curve.ts) already reactivates sampling automatically, so charts will deepen on the next cache cycle - but consider bumping CURVE_VERSION to purge the shallow curves built while it was closed.", { key: k, from, to });
+            "Opportunity, not a bug: per-star history for any repo is available again. The probe in restSample (src/lib/curve.ts) already reactivates sampling automatically, so charts will deepen on the next cache cycle - but consider bumping SHAPE_VERSION.curve (src/lib/shape-versions.ts) to purge the shallow curves built while it was closed.", { key: k, from, to });
         } else if (k === "stargazersOwn" && to !== 200) {
           fail("contract.transitions", "CONTRACT", "critical",
             `we lost stargazer listing on our OWN repos (${from} -> ${to})`,
@@ -857,7 +857,7 @@ async function checkCurves() {
     if (problems.length) {
       fail("curve.shape", "CURVE", "warn",
         problems.map((p) => `${p.repo}: ${p.issue}`).join(" · "),
-        "A top-1000 repo should always reach stage 2 of the cascade (repoRankTrajectory). If it does not, the rank-history shards are unreadable from the render path, or the curve cache predates the fix - bump CURVE_VERSION in src/lib/curve.ts to purge.",
+        "A top-1000 repo should always reach stage 2 of the cascade (repoRankTrajectory). If it does not, the rank-history shards are unreadable from the render path, or the curve cache predates the fix - bump SHAPE_VERSION.curve in src/lib/shape-versions.ts to purge.",
         problems);
     } else pass("curve.shape", "CURVE", `${FOREIGN.length} curves well-formed`);
   });

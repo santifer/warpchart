@@ -13,6 +13,7 @@
 import { get } from "@vercel/blob";
 import { unstable_cache } from "next/cache";
 import { allNamesOf } from "./aliases";
+import { cacheKey } from "./shape-versions";
 
 export interface VitalsActivity {
   commits30: number;
@@ -176,6 +177,7 @@ export interface VitalsOnboarding {
   goodFirstIssuesFree?: number | null;
 }
 
+// SHAPE: bump SHAPE_VERSION.vitals (src/lib/shape-versions.ts) when this changes.
 export interface Vitals {
   repo: string;
   computedAt: string;
@@ -225,12 +227,7 @@ async function readVitals(owner: string, name: string): Promise<Vitals | null> {
 export const loadVitals = (owner: string, name: string): Promise<Vitals | null> =>
   unstable_cache(
     () => readVitals(owner, name),
-    // v8: onboarding carries goodFirstIssuesFree. BUMP THIS WHENEVER THE SHAPE
-    // CHANGES - an entry cached under the old shape does not fail, it serves
-    // the old reading, so a deploy that fixes a number ships looking like it
-    // did nothing. v7 was itself a bump for the same reason (sample counts
-    // passing for totals) and the lesson still cost 15 minutes today.
-    ["vitals-v10", // v10: census.githubDaily (GitHub's count over time); v9: contributors = GitHub's sidebar
-    `${owner}/${name}`.toLowerCase()],
+    // derived from SHAPE_VERSION.vitals: bump it when the shape changes
+    [cacheKey("vitals"), `${owner}/${name}`.toLowerCase()],
     { revalidate: 900 },
   )();
