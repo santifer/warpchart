@@ -2,7 +2,7 @@
 
 // COMMAND DECK: the whole mission promoted to a fullscreen flight console.
 // It does NOT reinvent any card: it REUSES the exact panels from the console
-// (CumulativeChart, VelocityChart, DailyLadder, Heatmap, RankChart,
+// (CurveChart, VelocityChart, DailyLadder, Heatmap, RankChart,
 // Projections, PulsePanel, UsagePanel) and only relocates them, with the star
 // race as a big hero on top and the eight telemetry cards in a grid below. A
 // live KPI strip rides on top. The recharts cards take a `fill` prop so they
