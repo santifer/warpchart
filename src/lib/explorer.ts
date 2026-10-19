@@ -259,9 +259,6 @@ export interface ExplorerData {
   inTop1000: boolean;
   forkRatio: number | null;
   forkPercentile: number | null;
-  // public maintenance pulse + real usage; null when the extra call failed
-  // (the page renders fine without it)
-  dossier: Dossier | null;
   degraded: boolean; // velocity telemetry unavailable this refresh
   generatedAt: string;
 }
@@ -422,21 +419,10 @@ export async function getExplorerData(owner: string, name: string): Promise<Expl
   const forkPercentile =
     forkRatio !== null ? forkRatioPercentile(forkRatio, route?.repos ?? []) : null;
 
-  // the dossier (maintenance pulse + real usage) is best-effort: one extra
-  // GraphQL call plus an unauthenticated npm lookup, never page-fatal
-  let dossier: Dossier | null = null;
-  try {
-    const [o, n] = repoName.split("/");
-    const raw = await repoDossier(o, n);
-    const { npmPkg, npmLast30, npmLast30MissingDays, npmLast30Estimate, npmHistory, npmVersions, npmVersionsStart, npmVersionsThrough, npmLatest } = await resolveNpmUsage(o, n, raw.npmPkg);
-    // clones (private traffic) are surfaced only via the cached dossier path
-    // (getCachedDossier -> fetchDossier), which the panels actually render
-    dossier = { ...raw, npmPkg, npmLast30, npmLast30MissingDays, npmLast30Estimate, npmHistory, npmVersions, npmVersionsStart, npmVersionsThrough, npmLatest, clonesHistory: null,
-                uniqueCloners14d: null, uniqueCloners14dAt: null };
-  } catch (err) {
-    log.warn("dossier.failed", { err: err instanceof Error ? err.message.slice(0, 120) : String(err) });
-  }
-
+  // No dossier here. This used to assemble an inline copy of fetchDossier that
+  // had drifted (it kept npm's still-accumulating day) and, cached inside this
+  // snapshot, pinned a failed fetch as `dossier: null` for 15 minutes. The page
+  // reads getCachedDossier, which retries a cached failure live.
   return {
     inputs,
     desc,
@@ -445,7 +431,6 @@ export async function getExplorerData(owner: string, name: string): Promise<Expl
     inTop1000,
     forkRatio,
     forkPercentile,
-    dossier,
     degraded,
     generatedAt: new Date().toISOString(),
   };
@@ -467,10 +452,12 @@ const getCachedExplorerData = unstable_cache(
     if (data?.degraded) throw new DegradedResult(data);
     return data;
   },
+  // v5: the dossier moved out (the page reads getCachedDossier). CHANGE THE
+  // SHAPE, CHANGE THE KEY, SAME COMMIT.
   // v4: neighbors gained trend/v7_to and inputs vTrend/vAsOf (v7 window fix);
   // v3: the dossier inside gained npmLatest (same commit as dossier-v17);
   // v2: npmLast30MissingDays/npmLast30Estimate, npm's holes out (dossier-v15)
-  ["explorer-data-v4"],
+  ["explorer-data-v5"],
   { revalidate: 900 },
 );
 

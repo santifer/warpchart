@@ -153,3 +153,35 @@ describe("ghFetch: a 403 with quota left is a permission denial", () => {
     await expect(lib.ghFetch("/repos/x/y/commits")).rejects.toThrow(/every token in the pool/);
   });
 });
+
+describe("toRegistry: the top-1000 registry's index is the rank", () => {
+  // Search items as GitHub answers them. topRepos fetches ten pages one after
+  // another while stars move, so a repo that gains a few stars between two
+  // calls slides back across the boundary and arrives on both pages.
+  const item = (i, stars) => ({
+    full_name: `org${i}/repo${i}`,
+    stargazers_count: stars,
+    description: null,
+    language: null,
+    forks_count: 0,
+    topics: [],
+    created_at: "2020-01-01T00:00:00Z",
+  });
+  const pageOf = (n) => Array.from({ length: 100 }, (_, k) => item((n - 1) * 100 + k, 500000 - ((n - 1) * 100 + k) * 100));
+
+  it("drops a repo that slid across a page boundary, so no rank below it shifts", async () => {
+    const lib = await freshLib(() => json(500, {}));
+    const page1 = pageOf(1);
+    const page2 = pageOf(2);
+    // page 2 opens with page 1's last repo again (3 more stars, its name in
+    // another case), which pushed org100/repo100 off both pages
+    page2[0] = { ...item(99, 500000 - 99 * 100 + 3), full_name: "Org99/Repo99" };
+    const route = lib.toRegistry([...page1, ...page2]);
+    const names = route.map((p) => p.r.toLowerCase());
+    expect(new Set(names).size).toBe(names.length);
+    expect(route).toHaveLength(199);
+    // ordered by stars, so route[i] really is rank i + 1
+    expect(route.every((p, i) => i === 0 || route[i - 1].s >= p.s)).toBe(true);
+    expect(names.indexOf("org101/repo101")).toBe(100);
+  });
+});

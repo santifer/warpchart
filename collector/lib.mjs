@@ -324,27 +324,49 @@ export async function apexRepo() {
   return item ? { r: item.full_name, s: item.stargazers_count } : null;
 }
 
-// The worldwide top 1000 (search enumeration cap), used as route landmarks
-// and as the population for fork-ratio percentiles. 10 search calls.
-export async function topRepos() {
+// One registry row from a search item. Shared by the top-1000 and the top-10k.
+function registryEntry(item) {
+  return {
+    r: item.full_name,
+    s: item.stargazers_count,
+    d: item.description ? item.description.slice(0, 160) : null,
+    l: item.language ?? null,
+    f: item.forks_count ?? 0,
+    t: (item.topics ?? []).slice(0, 8),
+    c: item.created_at ?? null,
+  };
+}
+
+// The ten search pages are fetched one after another while stars keep moving,
+// so a repo can slide across a page boundary and arrive twice. route.json's
+// index IS the rank, so one duplicate pushes every repo below it down a place.
+// Dedup by name (GitHub names are case-insensitive) and order by stars before
+// anyone reads an index; equal counts keep the search order.
+export function toRegistry(items) {
+  const seen = new Set();
   const out = [];
-  for (let page = 1; page <= 10; page++) {
+  for (const item of items) {
+    const key = item?.full_name?.toLowerCase();
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    out.push(registryEntry(item));
+  }
+  return out.sort((a, b) => b.s - a.s);
+}
+
+// The worldwide top 1000 (search enumeration cap), used as route landmarks
+// and as the population for fork-ratio percentiles. 10 search calls. The
+// caller decides whether a short result may be published (acceptUniverse).
+export const ROUTE_SIZE = 1000;
+export async function topRepos() {
+  const items = [];
+  for (let page = 1; page <= ROUTE_SIZE / 100; page++) {
     const r = await search({
       q: "stars:>10000", sort: "stars", order: "desc", per_page: "100", page: String(page),
     });
-    for (const item of r.items ?? []) {
-      out.push({
-        r: item.full_name,
-        s: item.stargazers_count,
-        d: item.description ? item.description.slice(0, 160) : null,
-        l: item.language ?? null,
-        f: item.forks_count ?? 0,
-        t: (item.topics ?? []).slice(0, 8),
-        c: item.created_at ?? null,
-      });
-    }
+    items.push(...(r.items ?? []));
   }
-  return out;
+  return toRegistry(items);
 }
 
 // The worldwide top N (default 10,000) for the rank-distribution moat. Search
@@ -370,15 +392,7 @@ export async function topReposDeep(limit = 10000) {
         for (const item of items) {
           if (seen.has(item.full_name)) continue;
           seen.add(item.full_name);
-          out.push({
-            r: item.full_name,
-            s: item.stargazers_count,
-            d: item.description ? item.description.slice(0, 160) : null,
-            l: item.language ?? null,
-            f: item.forks_count ?? 0,
-            t: (item.topics ?? []).slice(0, 8),
-            c: item.created_at ?? null,
-          });
+          out.push(registryEntry(item));
           added++;
         }
         if (items.length < 100) break; // window exhausted before 1000

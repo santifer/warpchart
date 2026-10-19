@@ -20,7 +20,9 @@ const accent = (s) => c("38;5;45", s);
 const dim = (s) => c("2", s);
 const bold = (s) => c("1", s);
 const warn = (s) => c("38;5;214", s);
-const fmt = (n) => Number(n).toLocaleString("en-US");
+// Absence is "—", never a number: Number(null) is 0 and Number(undefined) NaN,
+// so a field the API could not measure used to print as "0" (or "#0").
+const fmt = (n) => (n == null || !Number.isFinite(Number(n)) ? "—" : Number(n).toLocaleString("en-US"));
 const short = (r) => r.split("/")[1] || r;
 
 async function getJSON(path) {
@@ -115,7 +117,7 @@ async function dossierView(repo, args, asJson) {
   rule("REGISTRY");
   kv("worldwide rank", accent("#" + fmt(r.rank)));
   kv("stars", bold(fmt(r.stars)) + (r.velocityPerDay != null ? accent("  ▲ " + r.velocityPerDay + "/day") : ""));
-  kv("forks", fmt(r.forks ?? 0), r.stars ? `${((r.forks / r.stars) * 100).toFixed(1)}% of stars` : "");
+  kv("forks", fmt(r.forks), r.stars && r.forks != null ? `${((r.forks / r.stars) * 100).toFixed(1)}% of stars` : "");
   if (r.nextGate) kv("next gate", accent("top " + r.nextGate.rank), fmt(r.nextGate.gap) + " ★ to go");
 
   const v = d.vitals;
@@ -123,7 +125,7 @@ async function dossierView(repo, args, asJson) {
   if (v?.locked) {
     console.log("  " + dim(v.reason));
   } else if (v) {
-    kv("activity rank", accent("#" + fmt(v.activityRank)) + dim(" of " + fmt(v.universe)), "top " + Math.max(1, Math.ceil((v.activityRank / v.universe) * 100)) + "%");
+    kv("activity rank", accent("#" + fmt(v.activityRank)) + dim(" of " + fmt(v.universe)), v.activityRank != null && v.universe ? "top " + Math.max(1, Math.ceil((v.activityRank / v.universe) * 100)) + "%" : "");
     kv("verdict", v.verdict === "ALIVE" ? accent("● ALIVE") : warn("○ MONUMENT"));
     if (v.leadTime) kv("lead time", bold(v.leadTime.medianH + "h"), `DORA ${v.leadTime.tier} · ${v.leadTime.pctUnder24h}% under a day · ${v.leadTime.windowDays}d window`);
     if (v.deploy) kv("deploy freq", bold(v.deploy.perWeek + "/wk"), v.deploy.tier);
@@ -142,7 +144,7 @@ async function dossierView(repo, args, asJson) {
     rule("WHO BUILDS IT");
     kv("contributors", c.total != null ? bold(fmt(c.total)) : dim("unknown"), [c.total != null ? "as GitHub counts them" : "", c.authors != null ? `${c.authors} commit authors (warpchart census)` : ""].filter(Boolean).join(" · "));
     if (c.aiCoCredits) kv("AI co-credits", fmt(c.aiCoCredits), "counted, never people");
-    kv("merged PRs", fmt(c.mergedTotal ?? 0), c.mergedByDistinct === 1 ? "a single maintainer gate" : c.mergedByDistinct + " maintainers");
+    kv("merged PRs", fmt(c.mergedTotal), c.mergedByDistinct == null ? "maintainers unmeasured" : c.mergedByDistinct === 1 ? "a single maintainer gate" : c.mergedByDistinct + " maintainers");
     if (c.busFactor) kv("bus factor", `${Math.round(c.busFactor.top1Share * 100)}% / ${Math.round(c.busFactor.top5Share * 100)}%`, "top 1 / top 5 of all commits");
     const s = c.series?.github ?? c.series?.authors;
     if (s?.points?.length > 2) {
@@ -161,7 +163,7 @@ async function dossierView(repo, args, asJson) {
   rule("REAL USAGE");
   if (u.npm) {
     kv("npm package", bold(u.npm.package));
-    kv("downloads · 30d", bold(fmt(u.npm.last30 ?? 0)), npmHoleNote(u.npm));
+    kv("downloads · 30d", bold(fmt(u.npm.last30)), npmHoleNote(u.npm));
     if (u.npm.windowTotal != null && u.npm.series) kv("downloads · window", bold(fmt(u.npm.windowTotal)), windowLine(u.npm.series));
     if (u.npm.series?.points?.length > 2) {
       const spark = sparkSeries(u.npm.series.points, (p) => p.d);
@@ -190,9 +192,9 @@ async function dossierView(repo, args, asJson) {
   const a = d.activity30d;
   if (a) {
     rule("LAST 30 DAYS");
-    kv("commits", fmt(a.commits ?? 0));
-    kv("PRs merged", fmt(a.prsMerged ?? 0));
-    kv("issues", `${fmt(a.issuesClosed ?? 0)} closed`, `${fmt(a.issuesOpened ?? 0)} opened · ${fmt(a.openIssues ?? 0)} open`);
+    kv("commits", fmt(a.commits));
+    kv("PRs merged", fmt(a.prsMerged));
+    kv("issues", `${fmt(a.issuesClosed)} closed`, `${fmt(a.issuesOpened)} opened · ${fmt(a.openIssues)} open`);
     if (a.releases?.length) kv("latest release", bold(a.releases[0].tag), day(a.releases[0].at));
   }
 
@@ -237,9 +239,9 @@ async function usageView(repo, args, asJson) {
   console.log();
   if (u.npm) {
     kv("npm package", bold(u.npm.package));
-    kv("downloads · 30d", bold(fmt(u.npm.last30 ?? 0)), npmHoleNote(u.npm));
+    kv("downloads · 30d", bold(fmt(u.npm.last30)), npmHoleNote(u.npm));
     if (u.npm.series) {
-      kv("downloads · window", bold(fmt(u.npm.windowTotal ?? 0)), windowLine(u.npm.series));
+      kv("downloads · window", bold(fmt(u.npm.windowTotal)), windowLine(u.npm.series));
       const spark = sparkSeries(u.npm.series.points, (p) => p.d);
       if (spark) { console.log(); for (const row of spark.split("\n")) console.log("  " + accent(row)); }
     }
@@ -387,7 +389,7 @@ async function compareView(repos) {
     const name = (r.stats?.repo || r.repo).padEnd(26).slice(0, 26);
     if (!r.stats) { console.log(`  ${bold(name)}  ${dim("not in top-1000")}`); continue; }
     const s = r.stats;
-    console.log(`  ${bold(name)}  ${accent(("#" + fmt(s.rank)).padEnd(8))}${(fmt(s.stars) + "★").padEnd(12)}${accent("▲" + (s.velocityPerDay ?? 0) + "/d")}`);
+    console.log(`  ${bold(name)}  ${accent(("#" + fmt(s.rank)).padEnd(8))}${(fmt(s.stars) + "★").padEnd(12)}${s.velocityPerDay != null ? accent("▲" + s.velocityPerDay + "/d") : dim("▲ —")}`);
   }
   console.log();
 }
