@@ -21,10 +21,9 @@
 // Usage: BLOB_READ_WRITE_TOKEN=... GH_TOKEN=... node collector/route-history.mjs
 import { readFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
-import { put, get } from "@vercel/blob";
 import { DATA_DIR, topReposDeep } from "./lib.mjs";
 import { acceptUniverse } from "./guards.mjs";
-import { markPartial, markComplete, readFresh, partialKey } from "./blob.mjs";
+import { markPartial, markComplete, readFresh, partialKey, readJsonStrict, writeJsonIf } from "./blob.mjs";
 
 const SHARDS = 32; // MUST match src/lib/rank-history.ts
 const CAP_DAYS = 90; // a touch over the 2-month chart window; bounds shard size
@@ -49,34 +48,26 @@ function shardOf(repo) {
   return (h >>> 0) % SHARDS;
 }
 
-async function readJson(key, useCache = true) {
-  try {
-    // useCache=false bypasses the Blob CDN cache so a just-written object is read
-    // back from origin (a stale CDN copy would drop the same-run archive append).
-    const res = await get(key, { access: "private", token, useCache });
-    if (res?.statusCode === 200 && res.stream) {
-      return JSON.parse(await new Response(res.stream).text());
-    }
-  } catch {
-    /* missing or transient */
-  }
-  return null;
-}
-
-async function writeJson(key, value) {
-  await put(key, JSON.stringify(value), {
-    access: "private",
-    addRandomSuffix: false,
-    allowOverwrite: true,
-    contentType: "application/json",
-    token,
-  });
-}
-
 const today = new Date().toISOString().slice(0, 10);
 
+// Every read below feeds a write, so it is fresh (useCache:false) and honest:
+// only a 404 is "nothing stored yet". A read that fails stops the run before it
+// writes anything. It used to read as empty, and then a 503 on meta restarted
+// the series from the seed day, and a 503 on a shard replaced 90 days of it
+// with today. The day stays open for the next run, and the watchdog is told.
+async function readOrStop(key) {
+  try {
+    return await readJsonStrict(key);
+  } catch (err) {
+    await markPartial("route-history", { day: today, reason: `could not read ${key}: ${err.message}` });
+    console.log(`[route-history] NOT recording ${today}: could not read ${key} (${err.message}). Nothing was written.`);
+    process.exit(0);
+  }
+}
+
 // idempotent: bail before the expensive deep fetch if today is already recorded
-const meta = (await readJson(META_KEY)) ?? { days: [] };
+const metaRead = await readOrStop(META_KEY);
+const meta = metaRead.state === "data" ? metaRead.value : { days: [] };
 meta.days ??= [];
 if (meta.days.includes(today)) {
   console.log(`[route-history] ${today} already recorded (${meta.days.length} days), nothing to do`);
@@ -164,7 +155,20 @@ let maxShardBytes = 0;
 for (let i = 0; i < SHARDS; i++) {
   const { today: tlist, seed: slist } = byShard[i];
   if (!tlist.length && !slist.length) continue;
-  const shard = (await readJson(`${PREFIX}/shard-${i}.json`)) ?? { dates: [], series: {} };
+  const shardKey = `${PREFIX}/shard-${i}.json`;
+  const shardRead = await readOrStop(shardKey);
+  // Every shard holds every recorded day (10k repos spread over 32 shards), so
+  // a shard that comes back empty while meta has days in the window is not a
+  // new shard: writing it would keep only today. Refuse before any write.
+  if (shardRead.state === "absent" || !shardRead.value?.dates?.length) {
+    const inWindow = meta.days.filter((d) => d >= cutoffIso);
+    if (inWindow.length) {
+      await markPartial("route-history", { day: today, reason: `${shardKey} is empty but meta records ${inWindow.length} days` });
+      console.log(`[route-history] NOT recording ${today}: ${shardKey} is empty but meta records ${inWindow.length} days.`);
+      process.exit(0);
+    }
+  }
+  const shard = shardRead.state === "data" ? shardRead.value : { dates: [], series: {} };
   shard.dates ??= [];
   shard.series ??= {};
 
@@ -188,13 +192,14 @@ for (let i = 0; i < SHARDS; i++) {
   }
   if (evicting.length) {
     const aKey = `${PREFIX}/archive/shard-${i}.json`;
-    const arch = (await readJson(aKey, false)) ?? { series: {} };
+    const archRead = await readOrStop(aKey);
+    const arch = archRead.state === "data" ? archRead.value : { series: {} };
     arch.series ??= {};
     for (const [repo, day, rank, stars] of evicting) {
       const arr = (arch.series[repo] ??= []);
       if (!arr.some((q) => q[0] === day)) arr.push([day, rank, stars]);
     }
-    await writeJson(aKey, arch);
+    await writeJsonIf(aKey, arch, archRead.etag);
   }
 
   // roll the window
@@ -207,7 +212,7 @@ for (let i = 0; i < SHARDS; i++) {
 
   const body = JSON.stringify(shard);
   maxShardBytes = Math.max(maxShardBytes, Buffer.byteLength(body));
-  await writeJson(`${PREFIX}/shard-${i}.json`, shard);
+  await writeJsonIf(shardKey, shard, shardRead.etag);
 }
 
 // update meta last (so a mid-run failure just retries next run)
@@ -228,7 +233,7 @@ meta.capturedAt = Object.fromEntries(
 );
 meta.shards = SHARDS;
 meta.updatedAt = new Date().toISOString();
-await writeJson(META_KEY, meta);
+await writeJsonIf(META_KEY, meta, metaRead.etag);
 await markComplete("route-history", { day: today, got: ranked.length });
 
 console.log(
