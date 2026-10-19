@@ -27,30 +27,37 @@ concurrency:
 jobs:
   snapshot:
     runs-on: ubuntu-latest
-    # Room for every step's own cap to apply BEFORE the job's: a job-level
-    # timeout cancels the remaining steps silently (that is what killed
-    # 'Trigger deploy' and froze the site on 2026-07-19), whereas a step-level
-    # one is contained and visible.
+    # Every step has its own cap, and the caps add up to LESS than this one, so
+    # a step cap always fires first. A job-level timeout cancels the remaining
+    # steps silently (that is what killed 'Trigger deploy' and froze the site
+    # on 2026-07-19), whereas a step-level one is contained and visible.
     # 15 stopped being room on 2026-09-21: the first run of each UTC day also
     # does the daily sweeps (rank history ~255 s, Vital Signs ~195 s, catalog
     # ~68 s, overtakes ~65 s), and when GitHub delays that run to ~04:40Z
     # 'Collect snapshot' alone takes 147-470 s instead of ~21 s. The job hit 15
     # minutes on 21, 24 and 26-sep and cancelled everything from Vital Signs on,
     # 'Trigger deploy' included. No single step overran; the sum did.
-    timeout-minutes: 25
+    # The deploy no longer lives in this job (see `deploy` below), so even a
+    # cancelled snapshot ships what the earlier steps mirrored.
+    # collector/workflow-caps.test.mjs checks both rules.
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@v5
+        timeout-minutes: 2
       - uses: actions/setup-node@v5
+        timeout-minutes: 2
         with:
           node-version: 22
       # @vercel/blob is the only dependency the sync scripts need (the collector
       # itself is built-ins only).
       - run: npm install @vercel/blob --no-save --no-audit --no-fund
+        timeout-minutes: 3
 
       # 1. Hydrate data/ from the PRIVATE Blob store — the accumulated history
       #    no longer lives in git, so the collector reads its prior state here.
       - name: Hydrate data from private Blob
         run: node scripts/sync-from-blob.mjs
+        timeout-minutes: 6
         env:
           BLOB_READ_WRITE_TOKEN: ${{ secrets.BLOB_READ_WRITE_TOKEN }}
 
@@ -58,6 +65,7 @@ jobs:
       #    falls back to data-sample/; appending to it and mirroring back would
       #    overwrite the real moat. Abort instead.
       - name: Verify real data hydrated
+        timeout-minutes: 1
         run: |
           node -e "const fs=require('fs');const m=JSON.parse(fs.readFileSync('./data/meta.json','utf8'));if(m.repo==='warpchart/sample'){console.error('hydrate fell back to sample — aborting to protect the Blob moat');process.exit(1)}console.log('hydrated: '+m.repo)"
 
@@ -93,8 +101,11 @@ jobs:
           BLOB_READ_WRITE_TOKEN: ${{ secrets.BLOB_READ_WRITE_TOKEN }}
 
       # 3. Collect one snapshot (appends to the hydrated data/).
+      # Normally ~21 s; 147-470 s on the first run of the UTC day. The
+      # production cache warm used to run inside it and now has its own step.
       - name: Collect snapshot
         run: node collector/collect.mjs
+        timeout-minutes: 12
         env:
           # The automatic Actions token used to cover every public-data read the
           # collector needs. It no longer does: since GitHub restricted stargazer
@@ -114,7 +125,6 @@ jobs:
           # Optional: a Discord or Slack incoming-webhook URL for milestone /
           # overtake alerts.
           ALERT_WEBHOOK_URL: ${{ secrets.ALERT_WEBHOOK_URL }}
-          WARM_BASE_URL: ${{ vars.WARM_BASE_URL }}
 
       # 3a. Record one daily point of the worldwide top-10k rank distribution
       #     into the private Blob (route-history/shard-*.json). The un-backfillable
@@ -165,10 +175,12 @@ jobs:
       - name: Submit corpus to IndexNow
         run: node collector/indexnow.mjs
         continue-on-error: true
+        timeout-minutes: 2
 
       # 4. Mirror the updated data/ back UP to the private Blob — the moat.
       - name: Mirror data to private Blob
         run: node scripts/sync-to-blob.mjs
+        timeout-minutes: 6
         env:
           BLOB_READ_WRITE_TOKEN: ${{ secrets.BLOB_READ_WRITE_TOKEN }}
 
@@ -191,6 +203,7 @@ jobs:
       - name: Snapshot Traffic Vault
         run: node collector/traffic.mjs
         continue-on-error: true
+        timeout-minutes: 3
         env:
           BLOB_READ_WRITE_TOKEN: ${{ secrets.BLOB_READ_WRITE_TOKEN }}
           TRAFFIC_TOKEN: ${{ secrets.TRAFFIC_TOKEN }}
@@ -275,12 +288,39 @@ jobs:
       - name: Attribute spikes
         run: node collector/attribute.mjs
         continue-on-error: true
+        timeout-minutes: 2
         env:
           BLOB_READ_WRITE_TOKEN: ${{ secrets.BLOB_READ_WRITE_TOKEN }}
 
-      # 5. No data in git: a tiny stamp commit triggers the Vercel build, whose
-      #    prebuild pulls the fresh data/ from the Blob.
+      # 4e. Pre-render on production what 'Collect snapshot' planned: once a
+      #     day (04 UTC) the featured charts and our neighbors, and after a
+      #     registry refresh the new spotlight's surface. Best effort, last, and
+      #     every fetch has its own timeout (collector/warm.mjs).
+      - name: Warm production cache
+        run: node collector/warm.mjs
+        continue-on-error: true
+        timeout-minutes: 3
+        env:
+          WARM_BASE_URL: ${{ vars.WARM_BASE_URL }}
+
+  # 5. Its own job, so no cap on `snapshot` can cancel it: `always()` runs it
+  #    after a failed, timed-out or cancelled snapshot too. Whatever the earlier
+  #    steps mirrored to the Blob is what the build reads; if nothing was, the
+  #    build reads yesterday's data, and a store outage fails the build
+  #    (sync-from-blob.mjs) so the last good deployment stays live.
+  deploy:
+    needs: snapshot
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+        timeout-minutes: 2
+
+      # No data in git: a tiny stamp commit triggers the Vercel build, whose
+      # prebuild pulls the fresh data/ from the Blob.
       - name: Trigger deploy
+        timeout-minutes: 2
         run: |
           git config user.name "warpchart-bot"
           git config user.email "warpchart-bot@users.noreply.github.com"
@@ -291,6 +331,13 @@ jobs:
             git pull --rebase
             git push
           }
+
+      - uses: actions/setup-node@v5
+        timeout-minutes: 2
+        with:
+          node-version: 22
+      - run: npm install @vercel/blob --no-save --no-audit --no-fund
+        timeout-minutes: 3
 
       # 6. Mutual attestation. health.yml checks production; this checks that
       #    health.yml is still running at all - otherwise a stopped watchdog is

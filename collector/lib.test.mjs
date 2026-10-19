@@ -8,7 +8,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const json = (status, body, headers = {}) =>
   new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json", ...headers } });
 
-const ENV_KEYS = ["GH_TOKEN", "GH_TOKEN_FALLBACKS", "GITHUB_TOKEN"];
+const ENV_KEYS = ["GH_TOKEN", "GH_TOKEN_FALLBACKS", "GITHUB_TOKEN", "GH_FETCH_TIMEOUT_MS"];
 let savedEnv;
 let calls;
 
@@ -151,5 +151,43 @@ describe("ghFetch: a 403 with quota left is a permission denial", () => {
       json(403, { message: "denied" }, { "x-ratelimit-remaining": "3718" }),
     );
     await expect(lib.ghFetch("/repos/x/y/commits")).rejects.toThrow(/every token in the pool/);
+  });
+});
+
+describe("ghFetch: a GitHub call that never answers", () => {
+  // The 2026-07-19 and 2026-09-21/24/26 freezes: a call with no timeout held
+  // its step until a cap fired, and the job cap took 'Trigger deploy' with it.
+  it("gives up after its retries instead of hanging the step", async () => {
+    vi.resetModules();
+    process.env.GH_TOKEN = "tokA";
+    process.env.GH_FETCH_TIMEOUT_MS = "20";
+    let attempts = 0;
+    // a socket that never answers: only the caller's signal ends it
+    vi.stubGlobal("fetch", vi.fn((url, init) => {
+      attempts++;
+      return new Promise((_, reject) => {
+        init?.signal?.addEventListener("abort", () => reject(init.signal.reason));
+      });
+    }));
+    const { ghFetch } = await import("./lib.mjs");
+    // the retry backoff (2 + 8 + 30 s) runs on fake time; the abort is real
+    vi.useFakeTimers({ toFake: ["setTimeout"] });
+    try {
+      let settled = null;
+      ghFetch("/repos/a/b").then(
+        () => (settled = "resolved"),
+        (err) => (settled = err),
+      );
+      const deadline = performance.now() + 5_000;
+      while (settled === null && performance.now() < deadline) {
+        await vi.advanceTimersByTimeAsync(31_000);
+        await new Promise((r) => setImmediate(r));
+      }
+      expect(settled).toBeInstanceOf(Error);
+      expect(settled.name).toBe("TimeoutError");
+      expect(attempts).toBe(4);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

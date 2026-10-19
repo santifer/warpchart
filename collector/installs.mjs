@@ -218,6 +218,7 @@ async function main() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(url.includes("hooks.slack.com") ? { text } : { content: text }),
+        signal: AbortSignal.timeout(15_000),
       });
       console.log(
         `[installs] alert sent (${pageable.length} wave(s);` +

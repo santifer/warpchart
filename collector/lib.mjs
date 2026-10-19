@@ -115,6 +115,11 @@ function noteToken(kind, idx) {
   console.log(`[gh] ${kind} served by token #${idx} of ${tokens().length}`);
 }
 
+// A GitHub call that never answers must not hold a collect step until its cap
+// (or, uncapped, the job's: the 2026-07-19 and 2026-09-21/24/26 freezes). A
+// timed-out attempt is retried like a network error.
+const GH_FETCH_TIMEOUT_MS = Number(process.env.GH_FETCH_TIMEOUT_MS) || 30_000;
+
 // Fetch with retries and rate-limit awareness.
 export async function ghFetch(path, { method = "GET", body, tokenOverride = null } = {}) {
   const url = path.startsWith("http") ? path : API + path;
@@ -131,6 +136,7 @@ export async function ghFetch(path, { method = "GET", body, tokenOverride = null
           "User-Agent": "mission-control",
           ...(body ? { "Content-Type": "application/json" } : {}),
         },
+        signal: AbortSignal.timeout(GH_FETCH_TIMEOUT_MS),
       });
     } catch (err) {
       if (attempt >= delays.length) throw err;
@@ -399,7 +405,7 @@ export async function topReposDeep(limit = 10000) {
 
 async function getJsonQuiet(url, headers = {}) {
   try {
-    const res = await fetch(url, { headers: { "User-Agent": "mission-control", ...headers } });
+    const res = await fetch(url, { headers: { "User-Agent": "mission-control", ...headers }, signal: AbortSignal.timeout(15_000) });
     if (!res.ok) return null;
     return await res.json();
   } catch {
