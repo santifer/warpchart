@@ -34,6 +34,7 @@
 // Exit code 1 when a critical finding is open, so CI turns red by itself.
 import { writeFileSync } from "node:fs";
 import { ARTIFACTS, COLLECTOR_STALE_H, cancelledVerdict, cronLag, etaIncoherences, openPartials, pipelineRunsGate, presenceEval, presenceMap, prflowFreshness, staleArtifacts, npmUsageFreshness, contributorsDrift, contributorCurve, curveEndsOnTotal, buildersWallFreshness, buildersLangMismatch, v7StampLags, v7WindowFreshness, V7_WINDOW_MAX_H } from "./health-rules.mjs";
+import { canonicalVelocity, rankByStars } from "./rules.mjs";
 
 const args = process.argv.slice(2);
 const JSON_OUT = args.includes("--json");
@@ -434,7 +435,7 @@ async function checkData(route) {
   await check("data.collisions-source", "DATA", async () => {
     const col = await blobJson("data/collisions.json").catch(() => null);
     if (!col?.collisions?.length) return pass("data.collisions-source", "DATA", "no collisions recorded");
-    const canon = new Map(repos.map((p) => [p.r?.toLowerCase(), p.v7 ?? p.v ?? null]));
+    const canon = new Map(repos.map((p) => [p.r?.toLowerCase(), canonicalVelocity(p)]));
     const off = [];
     for (const c of col.collisions.slice(0, 40)) {
       for (const side of ["hunter", "victim"]) {
@@ -817,14 +818,16 @@ async function checkCoherence(route) {
     } else pass("coherence.reality", "COHERENCE", `within ${(drift * 100).toFixed(2)}% of GitHub`);
   });
 
-  // Rank is a position in a sorted list; it must match the list we publish.
+  // Rank is the count of registry repos with more stars (collector/rules.mjs,
+  // the definition the API uses); it must match the registry we publish.
   await check("coherence.rank", "COHERENCE", async () => {
     const { body } = await fetchJson(`${BASE}/api/v1/repo?repo=${TENANT}`);
-    const idx = (route?.repos ?? []).findIndex((p) => p.r?.toLowerCase() === TENANT);
-    if (idx < 0 || !body?.rank) return pass("coherence.rank", "COHERENCE", "skipped");
-    if (Math.abs(body.rank - (idx + 1)) > 1) {
-      fail("coherence.rank", "COHERENCE", "warn", `the API says rank #${body.rank}, the registry position is #${idx + 1}`,
-        "The API is serving a different (probably cached) registry than the one in the Blob. Confirm the deploy pulled fresh data: the build's prebuild step downloads data/ from the Blob.", { api: body.rank, registry: idx + 1 });
+    const me = (route?.repos ?? []).find((p) => p.r?.toLowerCase() === TENANT);
+    if (!me || !body?.rank) return pass("coherence.rank", "COHERENCE", "skipped");
+    const counted = rankByStars(route.repos, me.s);
+    if (Math.abs(body.rank - counted) > 1) {
+      fail("coherence.rank", "COHERENCE", "warn", `the API says rank #${body.rank}, the registry counts #${counted}`,
+        "The API is serving a different (probably cached) registry than the one in the Blob. Confirm the deploy pulled fresh data: the build's prebuild step downloads data/ from the Blob.", { api: body.rank, registry: counted });
     } else pass("coherence.rank", "COHERENCE", `#${body.rank} matches the registry`);
   });
 }

@@ -15,6 +15,7 @@ import { risingOverall } from "@/lib/catalog";
 import { repoBadges } from "@/lib/badges";
 import { badgeColor } from "@/components/BadgeSigil";
 import { ghAvatar } from "@/lib/avatar";
+import { rankByStars } from "@/lib/rank";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -80,13 +81,11 @@ async function tenantData(): Promise<CardData | null> {
 }
 
 // Worldwide rank for a star count, by counting the registry rather than reading
-// a position out of it. The registry reorders at most once every 20 hours while
-// the star counts around it move constantly, so a stored index goes stale the
-// moment anything changes. Counting is always consistent with the number shown.
-function rankByStars(stars: number): number | null {
+// a position out of it (src/lib/rank.ts, the one definition).
+function registryRank(stars: number): number | null {
   const route = loadRoute();
   if (!route?.repos.length) return null;
-  return route.repos.reduce((n, p) => (p.s > stars ? n + 1 : n), 1);
+  return rankByStars(route.repos, stars);
 }
 
 async function repoData(repoParam: string): Promise<CardData | null> {
@@ -108,10 +107,10 @@ async function repoData(repoParam: string): Promise<CardData | null> {
     // in the same image came from different clocks, and the stale one was the
     // headline. Counting keeps both on the same clock and costs nothing.
     //
-    // Still slightly generous (their counts are last night's too), but it is
-    // the same basis the site, the API and the collector already use, so the
-    // card can no longer contradict the page it links to.
-    const rank = rankByStars(e.s);
+    // Still slightly generous (their counts are last night's too). The /r/
+    // page, the API, the badge and the chart count the same way
+    // (src/lib/rank.ts); the live rank asks GitHub the same question.
+    const rank = registryRank(e.s);
     return { repo: e.r, desc: e.d ?? null, rank, stars: e.s, vPerDay: rv != null ? Math.round(rv) : null };
   }
   const [owner, name] = repoParam.split("/");
@@ -479,7 +478,7 @@ export async function GET(req: Request) {
         // the local registry, whose numbers are from last night's reorder, so
         // it read one place better than the page it links to. Same question,
         // same answer now. Registry count stays as the offline fallback.
-        data.rank = await worldwideRank(fresh).catch(() => rankByStars(fresh) ?? data.rank);
+        data.rank = await worldwideRank(fresh).catch(() => registryRank(fresh) ?? data.rank);
       }
       data.stars = fresh;
     }

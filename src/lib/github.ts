@@ -5,6 +5,7 @@
 import { reqLog, serializeError } from "@/lib/log";
 import { pickAuth, noteRateLimit, lowFuel } from "@/lib/ghauth";
 import { softwareDownloads } from "@/lib/release-assets";
+import { rankQuery } from "@/lib/rank";
 
 export { lowFuel };
 
@@ -180,7 +181,7 @@ export async function searchNeighbors(
 
 export async function worldwideRank(stars: number): Promise<number> {
   const r = await ghFetch<{ total_count: number }>(
-    `/search/repositories?q=${encodeURIComponent(`stars:>${stars}`)}&per_page=1`
+    `/search/repositories?q=${encodeURIComponent(rankQuery(stars))}&per_page=1`
   );
   return r.total_count + 1;
 }

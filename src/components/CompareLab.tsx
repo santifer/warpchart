@@ -17,7 +17,7 @@ import {
 import { usePalette } from "@/lib/usePalette";
 import { fmt, fmtCompact } from "@/lib/format";
 import {
-  DAY, repoColor, rateAt, lastCrossover, projectCrossing, shortRepo, type CurvePoint,
+  DAY, repoColor, rateAt, compareRate, lastCrossover, projectCrossing, shortRepo, type CurvePoint,
 } from "@/lib/compare";
 import { useRace } from "./RaceContext";
 import BadgeSigil from "./BadgeSigil";
@@ -292,11 +292,7 @@ export default function CompareLab({
 
     // zoom-to-crossover only makes sense on the calendar cumulative view
     const zoomable = zoom && metric === "cumulative" && !align && series.length >= 1;
-    const velOf = (s: S) => {
-      const st = stats[s.repo.toLowerCase()];
-      if (st && st.velocityPerDay != null) return st.velocityPerDay;
-      return rateAt(s.c.pts, s.c.pts[s.c.pts.length - 1].t);
-    };
+    const velOf = (s: S) => compareRate(stats[s.repo.toLowerCase()]?.velocityPerDay, s.c.pts);
 
     type Cross = { t: number; val: number; winner: number; loser: number; future: boolean };
     let focus: { t: number; val: number } | null = null;
@@ -468,8 +464,9 @@ export default function CompareLab({
       .filter((x): x is { repo: string; c: Curve } => !!x.c && x.c.pts.length > 1);
     if (ready.length < 1) return null;
     const biggest = [...ready].sort((a, b) => b.c.total - a.c.total)[0];
+    // the same rate the legend prints (compareRate), not a second one
     const fastest = [...ready]
-      .map((x) => ({ repo: x.repo, rate: rateAt(x.c.pts, x.c.pts[x.c.pts.length - 1].t) }))
+      .map((x) => ({ repo: x.repo, rate: compareRate(stats[x.repo.toLowerCase()]?.velocityPerDay, x.c.pts) }))
       .sort((a, b) => b.rate - a.rate)[0];
     let cross: { a: string; b: string; t: number } | null = null;
     for (let i = 0; i < ready.length; i++)
@@ -487,7 +484,7 @@ export default function CompareLab({
       fastestRate: Math.round(fastest.rate),
       cross,
     };
-  }, [repos, curves]);
+  }, [repos, curves, stats]);
 
 
   const shareUrl = useMemo(() => {

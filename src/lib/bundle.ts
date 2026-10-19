@@ -12,6 +12,7 @@ import { driftPerDay } from "./projections";
 import { detectEvents, captainsLog, surgeEvents } from "./events";
 import { repoBadges, type RepoBadges } from "./badges";
 import { canonicalVelocity, velocityQuality } from "./velocity";
+import { rankedRegistry } from "./rank";
 import type {
   RepoMetaFile, Snapshot, HourPoint, DayPoint, CumPoint, RankPoint,
   FloorPoint, Neighbor, Apex, RouteRepo, MissionEvent, Spike,
@@ -93,7 +94,8 @@ export function buildRouteLayers(
   // tails, drift positions, promoted-dot ETAs and scan-card readouts all read
   // dot.v, so this one override makes the explorer chart agree with /velocity,
   // the API and the headline figure instead of showing the 1-day diff.
-  const ranked: RouteRepo[] = route.repos.map((p, i) => ({ ...p, rank: i + 1, v: canonicalVelocity(p) }));
+  // counted ranks (src/lib/rank.ts), so a scan card agrees with the stars it prints
+  const ranked: RouteRepo[] = rankedRegistry(route.repos).map((p) => ({ ...p, v: canonicalVelocity(p) }));
   const thresholdsAsc = milestones
     .map((m) => m.threshold)
     .filter((t) => t > stars)

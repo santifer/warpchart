@@ -8,6 +8,7 @@
 // phase C focus math). No fs, no React.
 import { fmtCompact } from "@/lib/format";
 import { canonicalVel0 } from "@/lib/velocity";
+import { rankedRegistry } from "@/lib/rank";
 
 export const GX_W = 1560;
 export const GX_H = 640;
@@ -138,7 +139,7 @@ export function buildGalaxy(
   const core = repos[0];
   const floor = repos[repos.length - 1];
   const scale = logScale(core.s, floor.s);
-  const rankOf = new Map(repos.map((p, i) => [p.r, i + 1]));
+  const rankOf = new Map(rankedRegistry(repos).map((p) => [p.r, p.rank]));
   const proj = (p: { r: string; s: number }) => projectGalaxy(p.r, p.s, core.s, floor.s);
 
   // candidates in priority order: the head of the ranking (the famous names
