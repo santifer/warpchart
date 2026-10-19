@@ -40,6 +40,7 @@ import PrFlowPanel from "@/components/PrFlowPanel";
 import { getCachedCodex, listCodexes } from "@/lib/codex";
 import { loadExplorerData, getCachedDossier } from "@/lib/explorer";
 import { fmt, fmtCompact, fmtEtaDays } from "@/lib/format";
+import { milestoneEta } from "@/lib/projections";
 import { ghAvatar, ghAvatarForRepo } from "@/lib/avatar";
 
 // Same template as the unlocked mission console: identical panels in identical
@@ -220,9 +221,10 @@ export default async function ExplorerPage({
   // the dossier tagline shown inline (unique content up front, not hidden
   // behind the button) and the one-line verdict numbers
   const codex = await getCachedCodex(repoLabel).catch(() => null);
-  const gap = next ? Math.max(0, next.threshold - inputs.stars) : null;
-  const netV = next ? inputs.v7d - (next.drift ?? 0) : 0;
-  const eta = next && gap !== null && gap > 0 && netV > 0 ? fmtEtaDays(gap / netV) : null;
+  // the one gate eta (projections.ts milestoneEta), same as the star chart's
+  const nextEta = next ? milestoneEta(next.rank, next.threshold, inputs.stars, inputs.v7d, next.drift) : null;
+  const gap = nextEta ? nextEta.gap : null;
+  const eta = nextEta && nextEta.gap > 0 && nextEta.etaDays !== null ? fmtEtaDays(nextEta.etaDays) : null;
 
   // the house tenant's repo NAME — only for the "see the live demo" links below.
   // We deliberately do NOT build its bundle: its data must never feed a
