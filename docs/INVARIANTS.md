@@ -28,7 +28,25 @@ a different question. It never throws, never logs, and the panel stays green.
 ## 2. Caches and deploys
 
 - **`git push` does not deploy the data.** The collector's `.deploy-stamp` commit triggers the Vercel build; a code push builds too, but a data fix without a new run shows nothing.
-- **`unstable_cache` (the Data Cache) survives a deploy.** When the SHAPE or the meaning of a cached value changes, bump its key in the same commit: `dossier-vN`, `vitals-vN`, `prflow-v1`, `CURVE_VERSION`. Otherwise production serves the old reading for up to 15 minutes and the fix "does not work".
+- **`unstable_cache` (the Data Cache) survives a deploy.** When the SHAPE or the meaning of a cached value changes, bump its key in the same commit. Otherwise production keeps serving the old reading until the entry's TTL runs out, and the fix "does not work". These are every key in `src/` today:
+
+  | Key | Where | TTL |
+  |---|---|---|
+  | `dossier-vN` | `src/lib/explorer.ts` | 15 min |
+  | `explorer-data-vN` | `src/lib/explorer.ts` | 15 min. It embeds the dossier: a dossier bump bumps this too. |
+  | `vitals-vN` | `src/lib/vitals.ts` | 15 min |
+  | `prflow-vN` | `src/lib/prflow.ts` | 15 min |
+  | `traffic-vault-vN` | `src/lib/traffic.ts` | 5 min |
+  | `embed-chart-curve-v${CURVE_VERSION}` | `src/lib/curve.ts` | 6 h |
+  | `archive-monthly-vN` | `src/lib/curve.ts` | 30 days |
+  | `builders-wall-vN` | `src/app/api/builders/route.ts` | 30 min |
+  | `route-history-shard` | `src/lib/rank-history.ts` | 1 h |
+  | `live-snapshot` | `src/lib/live-blob.ts` | 1 min |
+  | `earned-badges` | `src/lib/earned.ts` | 1 h |
+  | `codex-listing` | `src/lib/codex.ts` | 5 min |
+  | `explore-search` | `src/app/api/search/route.ts` | 1 h |
+
+  The last five carry no version. The first shape change to one of them adds `-v2` to its key.
 - **`@vercel/blob` `get()` caches on the CDN by default** (weeks). Any read-modify-write, freshness check or watchdog read uses `useCache: false`.
 - A `?query` in a page URL breaks the ISR/edge cache key (each variant renders from scratch). UI state between pages goes in the `#hash`.
 - An explicit `cache: "no-store"` in shared fetch code turns an ISR page dynamic.
@@ -37,8 +55,10 @@ a different question. It never throws, never logs, and the panel stays green.
 
 ## 3. GitHub API
 
-- **GraphQL partial errors:** aliased batches return `errors` (e.g. NOT_FOUND for one renamed repo) together with valid `data`. Throw only when there is no data at all; otherwise warn and keep the rest. Both clients do this (`collector/lib.test.mjs`, `src/lib/github.test.ts`).
-- **GraphQL answers HTTP 200 with a `FORBIDDEN` error object**, not a 403. Token failover for GraphQL lives in `graphql()`, not in the status check.
+- **GraphQL partial errors:** aliased batches return `errors` (e.g. NOT_FOUND for one renamed repo) together with valid `data`. The two clients do not keep the same partial answers yet:
+  - The collector (`graphql()` in `collector/lib.mjs`) keeps an answer only when every error is a whole top-level alias that came back `null` and another alias has data. An error nested inside a field throws, because a timeout inside `releases` read as partial data published `commits30=0` as a measurement (`collector/lib.test.mjs`).
+  - The app (`graphql()` in `src/lib/github.ts`) keeps any answer whose `data` is not `null`, and logs `graphql.partial`. It throws only when `data` is `null` (`src/lib/github.test.ts`). A nested error therefore reaches its caller as data.
+- **GraphQL answers HTTP 200 with a `FORBIDDEN` error object**, not a 403. In the collector, token failover for GraphQL lives in `graphql()`, not in the status check. The app's `graphql()` has no failover. Calls that read stargazers pin the classic PAT (`auth: "pat"`), because the App token gets `FORBIDDEN` on stargazers of repos it does not own.
 - **A 403 with `x-ratelimit-remaining > 0` and no `retry-after` is a permission error, not quota.** Fail over to the next token instead of sleeping (`collector/lib.test.mjs`). Each run logs which token of the pool served REST and GraphQL.
 - Listing stargazers of repos we do not own is closed by GitHub. The Actions installation token and fine-grained PATs cannot list stargazers at all; only classic PAT/OAuth tokens can.
 - Search `is:closed is:unmerged closed:A..B` undercounts (7 vs 31). For closure series use GraphQL with `state` + `closedAt`.
@@ -60,29 +80,27 @@ a different question. It never throws, never logs, and the panel stays green.
 
 ## 5. UI
 
-- **Velocity has one definition:** `src/lib/velocity.ts` (`v7 ?? v`). The crossing math has one definition in the app: `projectCrossing` in `src/lib/compare.ts`. The one exception is the collector-side overtake scan (`runCollisionScan` in `collector/collisions.mjs`), which feeds `/api/v1/overtakes` with its own rounding (velocities whole, `etaDays` to 0.01); `coherence.eta` checks those ETAs against exactly that rounding (`etaIncoherences` in `collector/health-rules.mjs`).
+- **Velocity should have one definition:** `canonicalVelocity` in `src/lib/velocity.ts` (`v7 ?? v`). Today that is a goal, not a fact. The same expression is retyped in `src/app/r/[owner]/[name]/page.tsx`, `src/lib/explorer.ts`, `collector/collect.mjs`, `collector/health.mjs` and `collector/vitals.mjs`; the /r/ page and `collector/vitals.mjs` fall back to `0` where the others give `null`. The OG card (`src/app/api/og/route.tsx`) and `collector/collisions.mjs` fall back to a rate of their own instead of `v`. No test checks that the copies agree, so change them together until they share one module with a parity test. The crossing math has one definition in the app: `projectCrossing` in `src/lib/compare.ts`. The one exception is the collector-side overtake scan (`runCollisionScan` in `collector/collisions.mjs`), which feeds `/api/v1/overtakes` with its own rounding (velocities whole, `etaDays` to 0.01); `coherence.eta` checks those ETAs against exactly that rounding (`etaIncoherences` in `collector/health-rules.mjs`).
 - **Tailwind drops an unknown utility silently**: `ring-panel` (no such token) fell back to `currentColor`. Lint rule: `better-tailwindcss/no-unknown-classes`. Our own plain-CSS classes are read from `globals.css`.
 - Color has two sources that must move together: `src/app/globals.css` (CSS vars) and `src/lib/theme.ts` (chart palettes).
 - Avatars go through `src/lib/avatar.ts` (`github.com/{login}.png` is a redirect that fails on iOS). Broken images, horizontal scroll and AA contrast in both themes are checked in WebKit after every production deploy (`smoke.yml`).
 - Panel order and grid live only in `src/components/ConsoleLayout.tsx`; the loading skeleton mirrors it by hand.
 - No `Date.now()` in SSR initial state (hydration mismatch). Use the bundle's `generatedAt`, then go live after mount.
 
-## 6. One writer per Blob key
+## 6. Blob keys and their writers
 
-| Key / prefix | Writer | Notes |
-|---|---|---|
-| `data/**` | `scripts/sync-to-blob.mjs` (mirror of the collector's `data/`) | except `data/tenants.json` |
-| `data/tenants.json` | `src/lib/tenants-store.ts` (payment webhook) only | excluded from the mirror; reads with `useCache: false`, throws on anything but 404 |
-| `route-history/*` | `collector/route-history.mjs` | daily; a partial universe must not mark the day done |
-| `data/catalog.json` | `collector/catalog.mjs` (+ re-mirrored by sync) | |
-| `prflow/*` | `collector/prflow.mjs` | full recompute each run |
-| `vitals/*` | `collector/vitals.mjs` | `_dist` only published when the sweep completed |
-| `contributors/*` | `collector/contributors.mjs` | refuses a truncated backfill |
-| `builders/*` | `collector/builders.mjs` (workflow `builders.yml`) | SVGs per language first, `.json` meta last (the commit point); refuses when the census shrinks or >5% of avatars fail |
-| `traffic/*` | `collector/traffic.mjs` | merges, never drops days |
-| `health/*` | `collector/health.mjs` | |
-| `live/*` | `collector/live.mjs` **and** `src/lib/live-blob.ts` (webhook seed) | two writers: the seed only writes a first point |
-| `embeds/seen.json` | `src/app/api/embeds/route.ts` **and** `src/lib/embed-track.ts` | two writers |
-| `data/attribution.json` | `collector/attribute.mjs` (+ re-mirrored by sync) | |
+The inventory of stored families, with the cadence each must keep, is `ARTIFACTS` in `collector/health-rules.mjs`. The watchdog raises `inventory.coverage` when a periodic family stops updating, and `inventory.undeclared` for a key nobody declared. A new family is declared there, not here.
+
+Most families have one writer: the collector script with the family's name (`route-history/*` is `collector/route-history.mjs`, `vitals/*` is `collector/vitals.mjs`, and so on). Families that refuse a short sweep (route-history, catalog, vitals' `_dist`, contributors, builders) follow §4's "Validate before publishing". Builders writes its SVGs first and its `.json` meta last, which is the commit point. Traffic merges into the stored vault and never drops a day.
+
+These keys have a second writer, or a writer you would not guess:
+
+- **`data/**`**: `scripts/sync-to-blob.mjs` mirrors the collector's local `data/` up on every run, everything except `data/tenants.json`.
+- **`data/catalog.json`, `data/attribution.json`, `data/enrichment.json`**: written straight to the Blob by `collector/catalog.mjs`, `collector/attribute.mjs` and `collector/enrich.mjs`, **and** re-uploaded by the mirror from the copy hydrated at the start of the run. In `collect.yml` the mirror runs before catalog and attribute, so it rewrites the previous version. Its upload time is the one `inventory.coverage` reads. **Known gap:** a producer of one of these three that stops still looks fresh to the watchdog.
+- **`data/tenants.json`**: the Polar webhook (`src/lib/tenants-store.ts`) only. It is kept out of the mirror, because a mirrored copy would clobber a tenant who paid mid-run. Reads use `useCache: false` and throw on anything but a 404.
+- **`health/partial/*`**: `markPartial` / `markComplete` in `collector/blob.mjs`, called by route-history, catalog, prflow and builders. `collector/health.mjs` reads them, and writes the rest of `health/*`.
+- **`live/*`**: `collector/live.mjs` **and** `src/lib/live-blob.ts`. The webhook seeds one first point at provisioning.
+- **`embeds/seen.json`**: `src/lib/embed-track.ts` (a first sighting) **and** `src/app/api/embeds/route.ts` (`?forget=`). Both read, modify and write the whole map without a lock.
+- **Written by the app, not the collector:** `alerts/sent.json` (`/api/cron/alerts`), `badges-earned.json` (`/api/cron/badges`) and `codex/*` (`src/lib/codex.ts`, on a repo's first visit).
 
 Adding a writer to a key that already has one is a design change: say so in the PR.
