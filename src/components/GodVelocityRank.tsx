@@ -10,12 +10,12 @@
 // the trailing 7-day median (the trend under the noise). A gap is a day we did
 // not measure, never drawn as a bad day.
 import { useEffect, useMemo, useState } from "react";
-import { ComposedChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
-import { usePalette } from "@/lib/usePalette";
-import { fillCalendar, rankTicks, trailingMedian, weekOverWeek } from "@/lib/velocity-rank-view";
+import { ComposedChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceArea, ReferenceLine } from "recharts";
+import { usePalette, useThemeMode } from "@/lib/usePalette";
+import { fillCalendar, lastDays, monthStarts, rankTicks, tierOf, TIERS, type TierKey, trailingMedian, weekOverWeek } from "@/lib/velocity-rank-view";
 import { StepsSilhouette } from "./PanelSilhouettes";
 
-type Pt = { day: string; rank: number | null; gain: number | null; n: number; hours: number | null; inTop?: boolean; why?: string };
+type Pt = { day: string; rank: number | null; gain: number | null; n: number; hours: number | null; inTop?: boolean; reconstructed?: boolean; why?: string };
 type State =
   | { kind: "locked" }
   | { kind: "unavailable" }
@@ -23,6 +23,15 @@ type State =
   | { kind: "data"; top: number; pts: Pt[] };
 
 const H = 260;
+
+// RPG rarity colours for the background zones, one set per theme: saturated
+// enough to name the zone at a glance, faint enough (fill opacity) that the
+// marks on top keep the contrast. Common gets no fill: the default zone.
+const TIER_COLOR: Record<"dark" | "light", Record<TierKey, string>> = {
+  dark: { legendary: "#ff8c1a", epic: "#b06cff", rare: "#4c8dff", uncommon: "#34c26b", common: "#8a94a6" },
+  light: { legendary: "#e07000", epic: "#9333ea", rare: "#2563eb", uncommon: "#15924a", common: "#6b7280" },
+};
+const TIER_FILL: Record<"dark" | "light", number> = { dark: 0.11, light: 0.09 };
 const dayLabel = (d: string) => new Date(`${d}T12:00:00Z`).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
 
 function LockedTeaser({ repo }: { repo: string }) {
@@ -43,7 +52,10 @@ function LockedTeaser({ repo }: { repo: string }) {
 
 export default function GodVelocityRank({ repo }: { repo: string }) {
   const C = usePalette();
+  const { resolved } = useThemeMode();
+  const TC = TIER_COLOR[resolved];
   const [state, setState] = useState<State>({ kind: "locked" });
+  const [range, setRange] = useState<0 | 90 | 30>(0); // 0 = ALL
 
   useEffect(() => {
     // starts (and, without a token, stays) locked; the teaser shows while the
@@ -71,14 +83,42 @@ export default function GodVelocityRank({ repo }: { repo: string }) {
   const view = useMemo(() => {
     if (state.kind !== "data") return null;
     // every calendar day, so an unmeasured day breaks the line instead of
-    // being bridged
+    // being bridged; the median runs on the FULL series and the range only
+    // slices it, so a 30-day view opens on a real 7-day median
     const full = fillCalendar(state.pts) as (Partial<Pt> & { day: string; rank: number | null })[];
-    const med = trailingMedian(full);
-    const data = full.map((p, i) => ({ ...p, t: Date.parse(`${p.day}T12:00:00Z`), med: med[i] }));
-    const worst = Math.max(...state.pts.map((p) => p.rank ?? 0));
+    // the reconstructed stretch (before the live record) and the live record
+    // each get their OWN 7-day median: one never borrows the other's days
+    const firstLive = full.find((p) => p.rank != null && !p.reconstructed)?.day ?? null;
+    const isRec = (p: { day: string; reconstructed?: boolean }) => !!p.reconstructed || (firstLive == null || p.day < firstLive);
+    const medLive = trailingMedian(full.map((p) => (isRec(p) ? { ...p, rank: null } : p)));
+    const medRecon = trailingMedian(full.map((p) => (isRec(p) ? p : { ...p, rank: null })));
+    const data = lastDays(
+      full.map((p, i) => ({
+        ...p,
+        t: Date.parse(`${p.day}T12:00:00Z`),
+        rec: isRec(p),
+        med: isRec(p) ? null : medLive[i],
+        medRec: isRec(p) ? medRecon[i] : null,
+      })),
+      range,
+    );
+    const ranks = data.map((p) => p.rank).filter((r): r is number => r != null);
+    const worst = Math.max(...ranks, 10);
     const yMax = Math.min(state.top, Math.ceil((worst * 1.05) / 10) * 10);
-    return { data, wow: weekOverWeek(state.pts), yMax, ticks: rankTicks(yMax) };
-  }, [state]);
+    // round ticks plus the zone edges, so a tick always marks where a zone starts
+    const ticks = [...new Set([...rankTicks(yMax), ...TIERS.map((t) => t.to).filter((v) => v <= yMax)])].sort((a, b) => a - b);
+    const months = monthStarts(data[0].day, data[data.length - 1].day).map((d) => ({
+      t: Date.parse(`${d}T00:00:00Z`),
+      label: new Date(`${d}T12:00:00Z`).toLocaleDateString("en-US", { month: "short", timeZone: "UTC" }).toUpperCase(),
+    }));
+    // last day and the week-over-week are about NOW whatever the range; BEST is the range's
+    const wow = weekOverWeek(state.pts);
+    const best = weekOverWeek(data.filter((p) => p.rank != null) as { day: string; rank: number }[]).best;
+    const bestRec = best ? !!data.find((p) => p.day === best.day)?.rec : false;
+    // where the live record starts, if both parts are in view
+    const liveT = firstLive && data.some((p) => p.rec) && data.some((p) => !p.rec) ? Date.parse(`${firstLive}T00:00:00Z`) : null;
+    return { data, wow: { ...wow, best }, bestRec, yMax, ticks, months, liveT, firstLive };
+  }, [state, range]);
 
   if (state.kind === "locked") return <LockedTeaser repo={repo} />;
   if (state.kind === "unavailable" || state.kind === "empty") {
@@ -93,9 +133,13 @@ export default function GodVelocityRank({ repo }: { repo: string }) {
     );
   }
 
-  const { data, wow, yMax, ticks } = view!;
+  const { data, wow, bestRec, yMax, ticks, months, liveT, firstLive } = view!;
+  const medTier = wow.thisWeek != null ? tierOf(wow.thisWeek) : null;
   const top = state.top.toLocaleString("en-US");
-  const since = dayLabel(state.pts[0].day);
+  // the live record's first day, never a reconstructed one (30D/90D views
+  // hold no reconstructed day and used to say "recorded since Apr 5")
+  const firstLiveDay = state.pts.find((p) => p.rank != null && !p.reconstructed)?.day;
+  const since = firstLiveDay ? dayLabel(firstLiveDay) : null;
   const better = wow.thisWeek != null && wow.prevWeek != null ? wow.prevWeek - wow.thisWeek : null;
 
   return (
@@ -109,6 +153,12 @@ export default function GodVelocityRank({ repo }: { repo: string }) {
           <span className="numeral text-label text-ink">
             <span className="text-micro tracking-[0.2em] text-faint">7-DAY MEDIAN </span>
             {wow.thisWeek != null ? `#${wow.thisWeek}` : "n/a"}
+            {medTier && (
+              <span className="text-micro tracking-[0.2em] text-faint">
+                {" "}
+                <span style={{ color: TC[medTier.key] }} aria-hidden>◆</span> {medTier.key.toUpperCase()}
+              </span>
+            )}
             {better != null && (
               <span className="text-micro text-faint">
                 {" "}
@@ -118,17 +168,64 @@ export default function GodVelocityRank({ repo }: { repo: string }) {
           </span>
           {wow.best && (
             <span className="numeral text-label text-ink">
-              <span className="text-micro tracking-[0.2em] text-faint">BEST </span>#{wow.best.rank}
-              <span className="text-micro text-faint"> · {dayLabel(wow.best.day)}</span>
+              <span className="text-micro tracking-[0.2em] text-faint">BEST{range ? ` ${range}D` : ""} </span>#{wow.best.rank}
+              <span className="text-micro text-faint"> · {dayLabel(wow.best.day)}{bestRec ? " (reconstructed)" : ""}</span>
             </span>
           )}
         </div>
-        <span className="numeral text-micro tracking-[0.24em] text-accent/70">◈ GOD MODE</span>
+        <div className="flex items-center gap-3">
+          <div className="flex gap-1">
+            {([30, 90, 0] as const).map((r) => (
+              <button
+                key={r}
+                type="button"
+                onClick={() => setRange(r)}
+                aria-pressed={range === r}
+                className={`numeral border px-1.5 py-0.5 text-micro tracking-[0.16em] transition-colors ${
+                  range === r ? "border-accent/50 text-accent" : "border-grid text-faint hover:text-dim"
+                }`}
+              >
+                {r === 0 ? "ALL" : `${r}D`}
+              </button>
+            ))}
+          </div>
+          <span className="numeral text-micro tracking-[0.24em] text-accent/70">◈ GOD MODE</span>
+        </div>
       </div>
       <div style={{ height: H }}>
         <ResponsiveContainer width="100%" height="100%">
           <ComposedChart data={data} margin={{ top: 10, right: 18, left: -14, bottom: 0 }}>
+            {TIERS.filter((t) => t.from <= yMax && t.key !== "common").map((t) => (
+              <ReferenceArea
+                key={t.key}
+                y1={t.from}
+                y2={Math.min(t.to, yMax)}
+                fill={TC[t.key]}
+                // orange over navy reads brown at the shared opacity: legendary gets a little more
+                fillOpacity={TIER_FILL[resolved] * (t.key === "legendary" && resolved === "dark" ? 1.7 : 1)}
+                stroke="none"
+                ifOverflow="hidden"
+              />
+            ))}
             <CartesianGrid stroke={C.grid} strokeDasharray="2 6" vertical={false} />
+            {liveT != null && (
+              <ReferenceLine
+                x={liveT}
+                stroke={C.accent}
+                strokeOpacity={0.5}
+                label={{ value: "RECORDED LIVE ▸", position: "insideBottomRight", fill: C.faint, fontSize: 8, letterSpacing: "0.2em" }}
+              />
+            )}
+            {months.map((m) => (
+              <ReferenceLine
+                key={m.t}
+                x={m.t}
+                stroke={C.dim}
+                strokeOpacity={0.45}
+                strokeDasharray="3 4"
+                label={{ value: m.label, position: "insideTopLeft", fill: C.faint, fontSize: 8, letterSpacing: "0.2em" }}
+              />
+            ))}
             <XAxis
               dataKey="t"
               type="number"
@@ -140,8 +237,12 @@ export default function GodVelocityRank({ repo }: { repo: string }) {
               axisLine={{ stroke: C.grid }}
               minTickGap={56}
             />
+            {/* square-root scale: the top zones (10, 40, 50 places wide) get
+                room to read, and the long tail of common days is compressed.
+                Distances near #1 are worth more than distances near #200. */}
             <YAxis
               reversed
+              scale="sqrt"
               domain={[1, yMax]}
               ticks={ticks}
               allowDecimals={false}
@@ -158,13 +259,17 @@ export default function GodVelocityRank({ repo }: { repo: string }) {
               formatter={(value, name, item) => {
                 const p = (item as { payload?: (typeof data)[number] })?.payload;
                 if (name === "med") return [value != null ? `#${value}` : "n/a", "7-day median"];
+                if (name === "medRec") return [value != null ? `#${value}` : "n/a", "7-day median (reconstructed)"];
                 if (!p || p.rank == null) return [p?.why === "step" ? "star purge or restore: not ranked" : "not measured", "that day"];
                 const w = p.hours != null ? ` in ${p.hours} h` : "";
                 const g = p.gain ?? 0;
-                const net = `${g >= 0 ? "+" : "−"}${Math.abs(g).toLocaleString("en-US")} net ★${w}`;
+                // reconstructed: GitHub's star history counts current stargazers per UTC day, not a net
+                const net = p.rec
+                  ? `+${g.toLocaleString("en-US")} ★ (Pacific-time day, reconstructed)`
+                  : `${g >= 0 ? "+" : "−"}${Math.abs(g).toLocaleString("en-US")} net ★${w}`;
                 // outside the top 1,000 the rank is where it WOULD have placed
                 const place = p.inTop === false ? `would place #${p.rank}` : `#${p.rank} of ${(p.n ?? 0).toLocaleString("en-US")}`;
-                return [`${place} · ${net}`, "by new stars"];
+                return [`${place} · ${tierOf(p.rank).key} · ${net}`, "by new stars"];
               }}
             />
             <Line
@@ -173,9 +278,30 @@ export default function GodVelocityRank({ repo }: { repo: string }) {
               stroke={C.dim}
               strokeOpacity={0.55}
               strokeWidth={1}
-              dot={{ r: 2, fill: C.dim, strokeWidth: 0 }}
+              // hollow = reconstructed, solid = recorded live
+              dot={(props: { cx?: number; cy?: number; index?: number; payload?: { rec?: boolean; rank?: number | null } }) =>
+                props.cx == null || props.cy == null || props.payload?.rank == null ? (
+                  <g key={props.index} />
+                ) : props.payload.rec ? (
+                  <circle key={props.index} cx={props.cx} cy={props.cy} r={2.2} fill={C.hull} stroke={C.dim} strokeWidth={1} />
+                ) : (
+                  <circle key={props.index} cx={props.cx} cy={props.cy} r={2} fill={C.dim} />
+                )
+              }
               activeDot={{ r: 4 }}
               connectNulls={false}
+              isAnimationActive={false}
+            />
+            <Line
+              dataKey="medRec"
+              name="medRec"
+              stroke={C.accent}
+              strokeOpacity={0.75}
+              strokeWidth={2}
+              strokeDasharray="5 4"
+              dot={false}
+              connectNulls={false}
+              type="monotone"
               isAnimationActive={false}
             />
             <Line
@@ -191,8 +317,19 @@ export default function GodVelocityRank({ repo }: { repo: string }) {
           </ComposedChart>
         </ResponsiveContainer>
       </div>
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 px-1">
+        {TIERS.filter((t) => t.from <= yMax).map((t) => (
+          <span key={t.key} className="numeral text-micro tracking-[0.18em] text-faint">
+            <span style={{ color: TC[t.key] }} aria-hidden>◆</span> {t.label}
+            {t.key === "common" ? " · 251+" : ""}
+          </span>
+        ))}
+      </div>
       <span className="numeral px-1 text-micro text-faint">
-        {state.pts.some((p) => p.inTop === false) ? `where it placed (or would have) among the worldwide top ${top}` : `place among the worldwide top ${top}`} by net new stars that day · lower is better · line = 7-day median · gaps = day not measured · recorded since {since}
+        {state.pts.some((p) => p.inTop === false) ? `where it placed (or would have) among the worldwide top ${top}` : `place among the worldwide top ${top}`} by net new stars that day · lower is better · line = 7-day median · gaps = day not measured · √ scale ·{" "}
+        {data.some((p) => p.rec)
+          ? `hollow dots + dashed line = reconstructed from GitHub's star history (current stargazers per Pacific-time day; ~10% of the rank off the live record on a median day, closer at the top)${firstLive ? ` · recorded live since ${dayLabel(firstLive)}` : ""}`
+          : since ? `recorded since ${since}` : ""}
       </span>
     </div>
   );
