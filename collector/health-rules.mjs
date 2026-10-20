@@ -210,6 +210,11 @@ export const ARTIFACTS = [
   { prefix: "data/attribution.json", kind: "periodic", maxAgeH: 72, what: "spike attribution" },
   { prefix: "data/indexnow-stamp.txt", kind: "periodic", maxAgeH: 48, what: "the IndexNow ping stamp" },
   { prefix: "route-history/", kind: "periodic", maxAgeH: 36, what: "the daily rank moat" },
+  // rebuilt once per recorded rank-history day (collector/velocity-rank.mjs)
+  { prefix: "velocity-rank/", kind: "periodic", maxAgeH: 36, what: "the daily velocity-rank table" },
+  // builders.yml every 6 h; it skips while the people are the same and the
+  // wall is under 20 h old, so a healthy wall is at most ~26 h old
+  { prefix: "builders/", kind: "periodic", maxAgeH: 30, what: "the README builders wall" },
   { prefix: "vitals/", kind: "periodic", maxAgeH: 72, what: "the Vital Signs panel" },
   { prefix: "contributors/", kind: "periodic", maxAgeH: 12, what: "the contributor census (cohorts source)" },
   { prefix: "traffic/", kind: "periodic", maxAgeH: 12, what: "the Traffic Vault" },
