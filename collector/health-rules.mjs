@@ -354,6 +354,26 @@ export function buildersWallFreshness(meta, now = Date.now(), maxH = 30) {
   return { severity: null, note: `${meta.people} people, ${meta.week} this week, ${meta.langs.length} languages, ${ageH.toFixed(1)} h old` };
 }
 
+// DAILY VELOCITY RANK (collector/velocity-rank.mjs -> velocity-rank/*.json):
+// the locked "place among the top 1,000 by new stars" chart. It is rebuilt in
+// the same collect run that records a rank-history day, so a table that does
+// not reach the newest recorded day more than `graceH` after its capture has
+// stopped (or keeps refusing: see its partial marker 'velocity-rank').
+// rhLast = newest route-history day, rhAt = its capture ISO (or null).
+// graceH is above the collect cadence on purpose: runs have come 8 h apart
+// (19-oct, 04:40 -> 12:58Z), and a threshold under the real cadence is how
+// the 30-sep false alarms happened. lastN < minN = the newest day ranked a
+// top 1,000 with holes in it (the 2026-06-29 shape): every rank reads better.
+export function velocityRankFreshness(meta, rhLast, rhAt, now = Date.now(), graceH = 10, minN = 990) {
+  if (!meta?.lastTo) return { severity: "warn", note: "no velocity-rank table published (velocity-rank/meta.json missing)" };
+  if (meta.lastN != null && meta.lastN < minN) return { severity: "warn", note: `newest velocity-rank day (${meta.last}) ranked only ${meta.lastN} of the top 1,000` };
+  if (!rhLast) return { severity: null, note: "rank-history unreadable this run; not compared" };
+  if (meta.lastTo >= rhLast) return { severity: null, note: `${meta.days} days (${meta.first} .. ${meta.last}), built through ${meta.lastTo}` };
+  const sinceH = (now - Date.parse(rhAt ?? `${rhLast}T00:00:00Z`)) / 3600e3;
+  if (!(sinceH > graceH)) return { severity: null, note: `rank-history recorded ${rhLast} ${sinceH.toFixed(1)} h ago; table still on ${meta.lastTo}` };
+  return { severity: "warn", note: `velocity-rank table stops at ${meta.lastTo}, rank-history has ${rhLast} (${sinceH.toFixed(0)} h ago)` };
+}
+
 // Each published language must be SERVED in that language: on 17-oct-2026
 // ?lang=es and ?lang=pt-BR kept the English fallback for an hour after their
 // walls existed (a cached "not found"), and only Santiago saw it. served:
