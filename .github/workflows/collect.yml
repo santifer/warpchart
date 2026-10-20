@@ -167,6 +167,8 @@ jobs:
         continue-on-error: true
 
       # 4. Mirror the updated data/ back UP to the private Blob — the moat.
+      #    Keys with their own direct writer (tenants, catalog, attribution,
+      #    enrichment) are skipped: MIRROR_SKIP in scripts/sync-to-blob-core.mjs.
       - name: Mirror data to private Blob
         run: node scripts/sync-to-blob.mjs
         env:

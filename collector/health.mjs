@@ -33,7 +33,7 @@
 //   --base=X   probe another origin (a preview deployment, say)
 // Exit code 1 when a critical finding is open, so CI turns red by itself.
 import { writeFileSync } from "node:fs";
-import { ARTIFACTS, COLLECTOR_STALE_H, cancelledVerdict, cronLag, etaIncoherences, openPartials, pipelineRunsGate, presenceEval, presenceMap, prflowFreshness, staleArtifacts, npmUsageFreshness, contributorsDrift, contributorCurve, curveEndsOnTotal, buildersWallFreshness, buildersLangMismatch, v7StampLags, v7WindowFreshness, V7_WINDOW_MAX_H } from "./health-rules.mjs";
+import { ARTIFACTS, COLLECTOR_STALE_H, cancelledVerdict, cronLag, etaIncoherences, openPartials, pipelineRunsGate, presenceEval, presenceMap, prflowFreshness, newestByFamily, staleArtifacts, npmUsageFreshness, contributorsDrift, contributorCurve, curveEndsOnTotal, buildersWallFreshness, buildersLangMismatch, v7StampLags, v7WindowFreshness, V7_WINDOW_MAX_H } from "./health-rules.mjs";
 
 const args = process.argv.slice(2);
 const JSON_OUT = args.includes("--json");
@@ -880,10 +880,13 @@ async function checkCurves() {
 // KNOWN BLIND SPOT (declared 2026-09-26): scripts/sync-to-blob.mjs re-uploads
 // every hydrated data/* file on every run, so for the data/ family uploadedAt
 // proves the MIRROR ran, not that the producer did. Skipping unchanged files
-// would fix that but turn legitimately quiet artifacts (meta in a quiet hour,
-// attribution with no spikes) into false alarms. Content-level checks carry the
-// data/ family instead (fresh.snapshot, fresh.v7, fresh.traffic-days,
-// fresh.prflow, presence.transitions); enrichment/forensics/attribution have none yet.
+// would fix that but turn legitimately quiet artifacts (meta in a quiet hour)
+// into false alarms. Content-level checks carry the data/ family instead
+// (fresh.snapshot, fresh.v7, fresh.traffic-days, fresh.prflow,
+// presence.transitions); forensics has none yet. catalog.json and
+// attribution.json are out of the blind spot: they have their own direct
+// writers, the mirror skips them (MIRROR_SKIP in scripts/sync-to-blob-core.mjs),
+// so their uploadedAt is the producer's.
 async function checkInventory() {
   await check("inventory.coverage", "INVENTORY", async () => {
     if (!BLOB_TOKEN) return pass("inventory.coverage", "INVENTORY", "no Blob token, skipped");
@@ -895,17 +898,7 @@ async function checkInventory() {
       cursor = r.cursor;
     } while (cursor);
 
-    // newest upload per declared family, so one live file proves the family runs
-    const newest = new Map();
-    const undeclared = new Map();
-    for (const b of blobs) {
-      const t = new Date(b.uploadedAt).getTime();
-      const decl = ARTIFACTS.find((a) => b.pathname === a.prefix || (a.prefix.endsWith("/") && b.pathname.startsWith(a.prefix)));
-      const key = decl ? decl.prefix : (b.pathname.includes("/") ? b.pathname.split("/")[0] + "/" : b.pathname);
-      const bag = decl ? newest : undeclared;
-      if (!bag.has(key) || bag.get(key) < t) bag.set(key, t);
-    }
-
+    const { newest, undeclared } = newestByFamily(blobs);
     const { stale, missing } = staleArtifacts(newest);
 
     if (stale.length) {
