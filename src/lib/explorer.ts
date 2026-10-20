@@ -487,10 +487,14 @@ const getCachedExplorerData = unstable_cache(
     if (data?.degraded) throw new DegradedResult(data);
     return data;
   },
+  // v5: inputs.routeAll/routeDots/routeLandmarks trimmed to the client fields
+  //     (clientRouteRepo: no f/v1, no null fields), and the (owner, name)
+  //     arguments, which unstable_cache folds into the key, are lowercased so
+  //     /r/Foo/Bar and /r/foo/bar share one entry;
   // v4: neighbors gained trend/v7_to and inputs vTrend/vAsOf (v7 window fix);
   // v3: the dossier inside gained npmLatest (same commit as dossier-v17);
   // v2: npmLast30MissingDays/npmLast30Estimate, npm's holes out (dossier-v15)
-  ["explorer-data-v4"],
+  ["explorer-data-v5"],
   { revalidate: 900 },
 );
 
@@ -513,7 +517,11 @@ export async function loadExplorerData(
   const recent = degradedCache.get(key);
   if (recent && recent.until > Date.now()) return recent.data;
   try {
-    return await getCachedExplorerData(owner, name);
+    // GitHub names are case-insensitive and the arguments are part of the
+    // cache key: lowercased, every casing of a URL reads one entry instead of
+    // paying its own scan. Nothing case-bearing leaks into the result (the
+    // repo's display name comes from the registry or from GitHub).
+    return await getCachedExplorerData(owner.toLowerCase(), name.toLowerCase());
   } catch (err) {
     if (err instanceof DegradedResult) {
       degradedCache.set(key, { data: err.data, until: Date.now() + 180_000 });
