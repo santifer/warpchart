@@ -15,7 +15,7 @@ import { usePalette, useThemeMode } from "@/lib/usePalette";
 import { fillCalendar, lastDays, monthStarts, rankTicks, tierOf, TIERS, type TierKey, trailingMedian, weekOverWeek } from "@/lib/velocity-rank-view";
 import { StepsSilhouette } from "./PanelSilhouettes";
 
-type Pt = { day: string; rank: number | null; gain: number | null; n: number; hours: number | null; inTop?: boolean; why?: string };
+type Pt = { day: string; rank: number | null; gain: number | null; n: number; hours: number | null; inTop?: boolean; reconstructed?: boolean; why?: string };
 type State =
   | { kind: "locked" }
   | { kind: "unavailable" }
@@ -86,8 +86,22 @@ export default function GodVelocityRank({ repo }: { repo: string }) {
     // being bridged; the median runs on the FULL series and the range only
     // slices it, so a 30-day view opens on a real 7-day median
     const full = fillCalendar(state.pts) as (Partial<Pt> & { day: string; rank: number | null })[];
-    const med = trailingMedian(full);
-    const data = lastDays(full.map((p, i) => ({ ...p, t: Date.parse(`${p.day}T12:00:00Z`), med: med[i] })), range);
+    // the reconstructed stretch (before the live record) and the live record
+    // each get their OWN 7-day median: one never borrows the other's days
+    const firstLive = full.find((p) => p.rank != null && !p.reconstructed)?.day ?? null;
+    const isRec = (p: { day: string; reconstructed?: boolean }) => !!p.reconstructed || (firstLive == null || p.day < firstLive);
+    const medLive = trailingMedian(full.map((p) => (isRec(p) ? { ...p, rank: null } : p)));
+    const medRecon = trailingMedian(full.map((p) => (isRec(p) ? p : { ...p, rank: null })));
+    const data = lastDays(
+      full.map((p, i) => ({
+        ...p,
+        t: Date.parse(`${p.day}T12:00:00Z`),
+        rec: isRec(p),
+        med: isRec(p) ? null : medLive[i],
+        medRec: isRec(p) ? medRecon[i] : null,
+      })),
+      range,
+    );
     const ranks = data.map((p) => p.rank).filter((r): r is number => r != null);
     const worst = Math.max(...ranks, 10);
     const yMax = Math.min(state.top, Math.ceil((worst * 1.05) / 10) * 10);
@@ -100,7 +114,10 @@ export default function GodVelocityRank({ repo }: { repo: string }) {
     // last day and the week-over-week are about NOW whatever the range; BEST is the range's
     const wow = weekOverWeek(state.pts);
     const best = weekOverWeek(data.filter((p) => p.rank != null) as { day: string; rank: number }[]).best;
-    return { data, wow: { ...wow, best }, yMax, ticks, months };
+    const bestRec = best ? !!data.find((p) => p.day === best.day)?.rec : false;
+    // where the live record starts, if both parts are in view
+    const liveT = firstLive && data.some((p) => p.rec) && data.some((p) => !p.rec) ? Date.parse(`${firstLive}T00:00:00Z`) : null;
+    return { data, wow: { ...wow, best }, bestRec, yMax, ticks, months, liveT, firstLive };
   }, [state, range]);
 
   if (state.kind === "locked") return <LockedTeaser repo={repo} />;
@@ -116,10 +133,13 @@ export default function GodVelocityRank({ repo }: { repo: string }) {
     );
   }
 
-  const { data, wow, yMax, ticks, months } = view!;
+  const { data, wow, bestRec, yMax, ticks, months, liveT, firstLive } = view!;
   const medTier = wow.thisWeek != null ? tierOf(wow.thisWeek) : null;
   const top = state.top.toLocaleString("en-US");
-  const since = dayLabel(state.pts[0].day);
+  // the live record's first day, never a reconstructed one (30D/90D views
+  // hold no reconstructed day and used to say "recorded since Apr 5")
+  const firstLiveDay = state.pts.find((p) => p.rank != null && !p.reconstructed)?.day;
+  const since = firstLiveDay ? dayLabel(firstLiveDay) : null;
   const better = wow.thisWeek != null && wow.prevWeek != null ? wow.prevWeek - wow.thisWeek : null;
 
   return (
@@ -149,7 +169,7 @@ export default function GodVelocityRank({ repo }: { repo: string }) {
           {wow.best && (
             <span className="numeral text-label text-ink">
               <span className="text-micro tracking-[0.2em] text-faint">BEST{range ? ` ${range}D` : ""} </span>#{wow.best.rank}
-              <span className="text-micro text-faint"> · {dayLabel(wow.best.day)}</span>
+              <span className="text-micro text-faint"> · {dayLabel(wow.best.day)}{bestRec ? " (reconstructed)" : ""}</span>
             </span>
           )}
         </div>
@@ -188,6 +208,14 @@ export default function GodVelocityRank({ repo }: { repo: string }) {
               />
             ))}
             <CartesianGrid stroke={C.grid} strokeDasharray="2 6" vertical={false} />
+            {liveT != null && (
+              <ReferenceLine
+                x={liveT}
+                stroke={C.accent}
+                strokeOpacity={0.5}
+                label={{ value: "RECORDED LIVE ▸", position: "insideBottomRight", fill: C.faint, fontSize: 8, letterSpacing: "0.2em" }}
+              />
+            )}
             {months.map((m) => (
               <ReferenceLine
                 key={m.t}
@@ -231,10 +259,14 @@ export default function GodVelocityRank({ repo }: { repo: string }) {
               formatter={(value, name, item) => {
                 const p = (item as { payload?: (typeof data)[number] })?.payload;
                 if (name === "med") return [value != null ? `#${value}` : "n/a", "7-day median"];
+                if (name === "medRec") return [value != null ? `#${value}` : "n/a", "7-day median (reconstructed)"];
                 if (!p || p.rank == null) return [p?.why === "step" ? "star purge or restore: not ranked" : "not measured", "that day"];
                 const w = p.hours != null ? ` in ${p.hours} h` : "";
                 const g = p.gain ?? 0;
-                const net = `${g >= 0 ? "+" : "−"}${Math.abs(g).toLocaleString("en-US")} net ★${w}`;
+                // reconstructed: GitHub's star history counts current stargazers per UTC day, not a net
+                const net = p.rec
+                  ? `+${g.toLocaleString("en-US")} ★ (Pacific-time day, reconstructed)`
+                  : `${g >= 0 ? "+" : "−"}${Math.abs(g).toLocaleString("en-US")} net ★${w}`;
                 // outside the top 1,000 the rank is where it WOULD have placed
                 const place = p.inTop === false ? `would place #${p.rank}` : `#${p.rank} of ${(p.n ?? 0).toLocaleString("en-US")}`;
                 return [`${place} · ${tierOf(p.rank).key} · ${net}`, "by new stars"];
@@ -246,9 +278,30 @@ export default function GodVelocityRank({ repo }: { repo: string }) {
               stroke={C.dim}
               strokeOpacity={0.55}
               strokeWidth={1}
-              dot={{ r: 2, fill: C.dim, strokeWidth: 0 }}
+              // hollow = reconstructed, solid = recorded live
+              dot={(props: { cx?: number; cy?: number; index?: number; payload?: { rec?: boolean; rank?: number | null } }) =>
+                props.cx == null || props.cy == null || props.payload?.rank == null ? (
+                  <g key={props.index} />
+                ) : props.payload.rec ? (
+                  <circle key={props.index} cx={props.cx} cy={props.cy} r={2.2} fill={C.hull} stroke={C.dim} strokeWidth={1} />
+                ) : (
+                  <circle key={props.index} cx={props.cx} cy={props.cy} r={2} fill={C.dim} />
+                )
+              }
               activeDot={{ r: 4 }}
               connectNulls={false}
+              isAnimationActive={false}
+            />
+            <Line
+              dataKey="medRec"
+              name="medRec"
+              stroke={C.accent}
+              strokeOpacity={0.75}
+              strokeWidth={2}
+              strokeDasharray="5 4"
+              dot={false}
+              connectNulls={false}
+              type="monotone"
               isAnimationActive={false}
             />
             <Line
@@ -273,7 +326,10 @@ export default function GodVelocityRank({ repo }: { repo: string }) {
         ))}
       </div>
       <span className="numeral px-1 text-micro text-faint">
-        {state.pts.some((p) => p.inTop === false) ? `where it placed (or would have) among the worldwide top ${top}` : `place among the worldwide top ${top}`} by net new stars that day · lower is better · line = 7-day median · gaps = day not measured · √ scale · recorded since {since}
+        {state.pts.some((p) => p.inTop === false) ? `where it placed (or would have) among the worldwide top ${top}` : `place among the worldwide top ${top}`} by net new stars that day · lower is better · line = 7-day median · gaps = day not measured · √ scale ·{" "}
+        {data.some((p) => p.rec)
+          ? `hollow dots + dashed line = reconstructed from GitHub's star history (current stargazers per Pacific-time day; ~10% of the rank off the live record on a median day, closer at the top)${firstLive ? ` · recorded live since ${dayLabel(firstLive)}` : ""}`
+          : since ? `recorded since ${since}` : ""}
       </span>
     </div>
   );

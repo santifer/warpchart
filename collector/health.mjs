@@ -33,7 +33,7 @@
 //   --base=X   probe another origin (a preview deployment, say)
 // Exit code 1 when a critical finding is open, so CI turns red by itself.
 import { writeFileSync } from "node:fs";
-import { ARTIFACTS, COLLECTOR_STALE_H, cancelledVerdict, cronLag, etaIncoherences, openPartials, pipelineRunsGate, presenceEval, presenceMap, prflowFreshness, staleArtifacts, npmUsageFreshness, contributorsDrift, contributorCurve, curveEndsOnTotal, buildersWallFreshness, buildersLangMismatch, velocityRankFreshness, v7StampLags, v7WindowFreshness, V7_WINDOW_MAX_H } from "./health-rules.mjs";
+import { ARTIFACTS, COLLECTOR_STALE_H, cancelledVerdict, cronLag, etaIncoherences, openPartials, pipelineRunsGate, presenceEval, presenceMap, prflowFreshness, staleArtifacts, npmUsageFreshness, contributorsDrift, contributorCurve, curveEndsOnTotal, buildersWallFreshness, buildersLangMismatch, velocityRankFreshness, velocityRankReconstructed, v7StampLags, v7WindowFreshness, V7_WINDOW_MAX_H } from "./health-rules.mjs";
 
 const args = process.argv.slice(2);
 const JSON_OUT = args.includes("--json");
@@ -1152,11 +1152,20 @@ async function checkPresence() {
     const rhLast = [...(rh?.days ?? [])].sort().at(-1) ?? null;
     // blobJson answers null for "missing" AND for a failed read: only call the
     // table missing when the moat's own meta read fine in the same run
-    const r = meta == null && rh == null
+    let r = meta == null && rh == null
       ? { severity: null, note: "Blob unreadable this run; not measured" }
       : velocityRankFreshness(meta, rhLast, rh?.capturedAt?.[rhLast] ?? null);
+    // the hand-made reconstruction must still be there (only when the Blob read at all)
+    if (!r.severity && rh != null) {
+      const rec = await blobJson("velocity-rank/reconstructed.json").catch(() => undefined);
+      if (rec !== undefined) {
+        const rr = velocityRankReconstructed(rec);
+        if (rr.severity) r = rr;
+        else r = { severity: null, note: `${r.note}; ${rr.note}` };
+      }
+    }
     if (r.severity) fail("presence.velocity-rank", "PRESENCE", r.severity, r.note,
-      "collector/velocity-rank.mjs runs in collect.yml right after route-history and rebuilds velocity-rank/{YYYY-MM}.json from the 64 rank-history shards; it refuses (partial marker 'velocity-rank') on any unreadable shard or when the table would lose days. Look at its log line in the last collect run. If it refused because the table would lose days and that is real, rebuild once by hand: BLOB_READ_WRITE_TOKEN=... node collector/velocity-rank.mjs --force.");
+      "collector/velocity-rank.mjs runs in collect.yml right after route-history and rebuilds velocity-rank/{YYYY-MM}.json from the 64 rank-history shards; it refuses (partial marker 'velocity-rank') on any unreadable shard or when the table would lose days. The reconstructed part (before 14 Jun) is velocity-rank/reconstructed.json, made once by hand with collector/velocity-rank-backfill.mjs (bump the cache key in src/lib/velocity-rank.ts when re-uploading). Look at its log line in the last collect run. If it refused because the table would lose days and that is real, rebuild once by hand: BLOB_READ_WRITE_TOKEN=... node collector/velocity-rank.mjs --force.");
     else pass("presence.velocity-rank", "PRESENCE", r.note);
   });
 

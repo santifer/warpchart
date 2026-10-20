@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildDays, dailyDeltas, rankAmong, repoDailyRanks } from "./velocity-rank-core.mjs";
+import { buildDays, dailyDeltas, rankAmong, reconstructDays, repoDailyRanks, repoReconstructedRanks } from "./velocity-rank-core.mjs";
 
 // A tiny universe: minUniverse is lowered so a handful of repos stand in for
 // the 10k sweep; the rules are the same.
@@ -104,5 +104,47 @@ describe("repoDailyRanks", () => {
     const rows = repoDailyRanks(days, [["2026-09-02", 9, 50_000], ["2026-09-03", 9, 40_000]]);
     expect(rows[0]).toMatchObject({ rank: null, why: "unrecorded" });
     expect(rows[1]).toMatchObject({ rank: null, why: "step" });
+  });
+});
+
+describe("reconstructDays (before the moat, from /stargazers/history)", () => {
+  const days = ["2026-04-04", "2026-04-05", "2026-04-06"];
+  // career-ops-like: born on 4 Apr, ~7,000/day; two old giants; a small one
+  const repos = {
+    "career-ops-hq/career-ops": { end: 19_249, g: [4_857, 7_353, 7_039] },
+    "big/old": { end: 50_300, g: [100, 100, 100] },
+    "mid/old": { end: 15_060, g: [20, 20, 20] },
+    "small/x": { end: 3_000, g: [500, 500, 500] },
+  };
+  const r = reconstructDays(days, repos, { top: 3 });
+
+  it("walks stars back from the window's end: membership changes as a newborn repo climbs", () => {
+    // 4 Apr: career-ops had 4,857 at the end of the day -> 3rd of {50.1k, 15.02k, 4.857k, 2k}
+    expect([...r[0].inTopOf].sort()).toEqual(["big/old", "career-ops-hq/career-ops", "mid/old"]);
+    expect(r[0].gains).toEqual([4_857, 100, 20]);
+  });
+
+  it("ranks the repo on each day and flags the rows as reconstructed", () => {
+    const rows = repoReconstructedRanks(r, repos, ["santifer/career-ops", "career-ops-hq/career-ops"]);
+    expect(rows.map((x) => x.rank)).toEqual([1, 1, 1]);
+    expect(rows.every((x) => x.reconstructed && x.inTop)).toBe(true);
+    expect(repoReconstructedRanks(r, repos, ["nobody/here"])).toEqual([]);
+  });
+
+  it("days before a repo existed are 'unborn', never drawn as #1000", () => {
+    const rows = repoReconstructedRanks(reconstructDays(days, { ...repos, "new/born": { end: 900, g: [0, 0, 900] } }), { ...repos, "new/born": { end: 900, g: [0, 0, 900] } }, ["new/born"]);
+    expect(rows.map((x) => x.why ?? x.rank)).toEqual(["unborn", "unborn", 2]); // 900 that day, behind career-ops's 7,039
+  });
+
+  it("a day WITH stars is never 'unborn', even when end walked back below zero (the rival lost 43 days that way)", () => {
+    const odd = { ...repos, "rival/x": { end: 500, g: [600, 300, 100] } }; // end < sum(g)
+    const rows = repoReconstructedRanks(reconstructDays(days, odd), odd, ["rival/x"]);
+    expect(rows.map((x) => x.why ?? "ranked")).toEqual(["ranked", "ranked", "ranked"]);
+  });
+
+  it("a repo not yet born has 0 stars and is never in the top", () => {
+    const r2 = reconstructDays(days, { ...repos, "new/born": { end: 900, g: [0, 0, 900] } }, { top: 5 });
+    expect(r2[0].inTopOf.has("new/born")).toBe(false);
+    expect(r2[2].inTopOf.has("new/born")).toBe(true);
   });
 });

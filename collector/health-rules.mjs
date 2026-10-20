@@ -379,6 +379,17 @@ export function velocityRankFreshness(meta, rhLast, rhAt, now = Date.now(), grac
   return { severity: "warn", note: `velocity-rank table stops at ${meta.lastTo}, rank-history has ${rhLast} (${sinceH.toFixed(0)} h ago)` };
 }
 
+// The reconstructed days before the live record (velocity-rank/reconstructed.json,
+// written once by hand by collector/velocity-rank-backfill.mjs). Nothing
+// rewrites it, so the only failure is that it is gone or truncated: then the
+// chart silently starts on 14 Jun instead of in April.
+export function velocityRankReconstructed(rec) {
+  if (!rec) return { severity: "warn", note: "velocity-rank/reconstructed.json missing: the chart starts at the live record" };
+  const repos = Object.keys(rec.repos ?? {}).length;
+  if (!(rec.days?.length >= 60) || repos < 1900) return { severity: "warn", note: `reconstructed table truncated: ${rec.days?.length ?? 0} days, ${repos} repos` };
+  return { severity: null, note: `reconstructed ${rec.from} .. ${rec.to}, ${repos} repos` };
+}
+
 // Each published language must be SERVED in that language: on 17-oct-2026
 // ?lang=es and ?lang=pt-BR kept the English fallback for an hour after their
 // walls existed (a cached "not found"), and only Santiago saw it. served:

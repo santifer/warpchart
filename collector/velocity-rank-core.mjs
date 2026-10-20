@@ -131,3 +131,69 @@ export function repoDailyRanks(days, series) {
     return { day: d.day, rank: rankAmong(d.gains, x.gain), gain: x.gain, n: d.n, inTop: x.rankTo <= TOP };
   });
 }
+
+// ---------------------------------------------------------------------------
+// RECONSTRUCTED days (before the moat existed, 2026-06-14). GitHub's
+// /repos/{o}/{r}/stargazers/history gives any repo's stars per day for the
+// last 30 weeks. Its days are PACIFIC-time days (checked against starredAt on
+// 12-15 Oct: UTC-7 matched to the star, UTC did not), labelled with the date; so the top 1,000 of a past day can be rebuilt from
+// today's top 2,000: stars at the end of day D = stars at the end of the
+// window minus what came after. Honest limits, carried by the `reconstructed`
+// flag all the way to the chart: it counts CURRENT stargazers only (un-stars
+// and purged farms vanish, so a past day reads a little low), repos deleted
+// since are missing, and the window is the Pacific-time day, not capture to
+// capture. Every repo shares that window, so the RANK is still like for like.
+// Measured against ~56k repo-days of the live record (14 Jun-31 Jul): median
+// gap 2 places in the top 50, 12 in 51-250, 54 in 251-1000 (~10% of the rank).
+//
+// repos: { name: { end, g } } where g[i] = stars that came in on days[i] and
+// end = stars at the end of the last day of the window.
+export function reconstructDays(days, repos, { top = TOP } = {}) {
+  const names = Object.keys(repos);
+  // stars at the end of each day, walking back from the window's end
+  const endOf = new Map();
+  for (const n of names) {
+    const { end, g } = repos[n];
+    const arr = new Array(days.length);
+    let s = end;
+    for (let i = days.length - 1; i >= 0; i--) {
+      arr[i] = s;
+      s -= g[i] ?? 0;
+    }
+    endOf.set(n, arr);
+  }
+  return days.map((day, i) => {
+    // a repo with stars that day exists even if `end` walked back below zero
+    // (end is taken hours after the window; 38 repos, the rival by -942)
+    const ranked = names
+      .filter((n) => endOf.get(n)[i] > 0 || (repos[n].g[i] ?? 0) > 0)
+      .sort((a, b) => endOf.get(b)[i] - endOf.get(a)[i])
+      .slice(0, top);
+    const gains = ranked.map((n) => repos[n].g[i] ?? 0).sort((a, b) => b - a);
+    return { day, n: gains.length, gains, reconstructed: true, inTopOf: new Set(ranked) };
+  });
+}
+
+// A repo's rows on reconstructed days. names = every name it carried
+// (lowercased); the first one present in `repos` is used.
+// Days before the repo existed (0 stars at the end of the day) come back as
+// rank null, why "unborn", so the caller can trim them instead of drawing a
+// newborn repo at #1000.
+export function repoReconstructedRanks(rdays, repos, names) {
+  const key = names.map((n) => n.toLowerCase()).find((n) => repos[n]);
+  if (!key) return [];
+  const { end, g } = repos[key];
+  let after = 0;
+  const starsEnd = new Array(rdays.length);
+  for (let i = rdays.length - 1; i >= 0; i--) {
+    starsEnd[i] = end - after;
+    after += g[i] ?? 0;
+  }
+  return rdays.map((d, i) => {
+    const gain = g[i] ?? 0;
+    // unborn = no stars yet AND none that day (a day with stars is a real day,
+    // even when `end` walked back below zero)
+    if (!(starsEnd[i] > 0) && gain === 0) return { day: d.day, rank: null, gain: null, n: d.n, why: "unborn", reconstructed: true };
+    return { day: d.day, rank: rankAmong(d.gains, gain), gain, n: d.n, inTop: d.inTopOf.has(key), reconstructed: true };
+  });
+}

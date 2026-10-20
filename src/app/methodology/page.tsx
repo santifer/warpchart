@@ -45,7 +45,7 @@ const QA: { q: string; a: string }[] = [
   },
   {
     q: "Why does the worldwide-rank history only go back a few days for some repos?",
-    a: "Worldwide rank requires a snapshot of the entire distribution on a given day, and Warpchart shows it from the day it started recording that distribution. The underlying events can be approximately reconstructed from public archives like GH Archive, but those reconstructions drift: they miss un-stars, can double-count, and GitHub's API returns only current stargazers. So a reconstruction is an estimate, not the authoritative daily rank Warpchart captures live. The history grows by one point every day. A repository's raw star history, by contrast, goes back to its creation.",
+    a: "Worldwide rank requires a snapshot of the entire distribution on a given day, and Warpchart shows it from the day it started recording that distribution. The underlying events can be approximately reconstructed from public archives like GH Archive, but those reconstructions drift: they miss un-stars, can double-count, and GitHub's API returns only current stargazers. So a reconstruction is an estimate, not the authoritative daily rank Warpchart captures live. The history grows by one point every day. A repository's raw star history, by contrast, goes back to its creation. The one place Warpchart shows a reconstruction is the daily velocity rank before 14 June 2026, rebuilt from GitHub's star history and always drawn as reconstructed (hollow points, dashed line), never mixed with the live record.",
   },
   {
     q: "Is a star the same as an endorsement?",
@@ -53,7 +53,7 @@ const QA: { q: string; a: string }[] = [
   },
   {
     q: "Who builds and runs Warpchart?",
-    a: "Warpchart is built and maintained by Santiago Fernández (santifer on GitHub). It is open source under the MIT license and can be self-hosted; the public console you see is the same code anyone can run.",
+    a: "Warpchart is built and maintained by Santiago Fernández de Valderrama (santifer on GitHub). It is open source under the MIT license and can be self-hosted; the public console you see is the same code anyone can run.",
   },
   {
     q: "Do you sell the data?",
