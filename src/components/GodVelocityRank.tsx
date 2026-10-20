@@ -12,7 +12,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { ComposedChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceArea, ReferenceLine } from "recharts";
 import { usePalette, useThemeMode } from "@/lib/usePalette";
-import { fillCalendar, monthStarts, rankTicks, tierOf, TIERS, type TierKey, trailingMedian, weekOverWeek } from "@/lib/velocity-rank-view";
+import { fillCalendar, lastDays, monthStarts, rankTicks, tierOf, TIERS, type TierKey, trailingMedian, weekOverWeek } from "@/lib/velocity-rank-view";
 import { StepsSilhouette } from "./PanelSilhouettes";
 
 type Pt = { day: string; rank: number | null; gain: number | null; n: number; hours: number | null; inTop?: boolean; why?: string };
@@ -55,6 +55,7 @@ export default function GodVelocityRank({ repo }: { repo: string }) {
   const { resolved } = useThemeMode();
   const TC = TIER_COLOR[resolved];
   const [state, setState] = useState<State>({ kind: "locked" });
+  const [range, setRange] = useState<0 | 90 | 30>(0); // 0 = ALL
 
   useEffect(() => {
     // starts (and, without a token, stays) locked; the teaser shows while the
@@ -82,20 +83,25 @@ export default function GodVelocityRank({ repo }: { repo: string }) {
   const view = useMemo(() => {
     if (state.kind !== "data") return null;
     // every calendar day, so an unmeasured day breaks the line instead of
-    // being bridged
+    // being bridged; the median runs on the FULL series and the range only
+    // slices it, so a 30-day view opens on a real 7-day median
     const full = fillCalendar(state.pts) as (Partial<Pt> & { day: string; rank: number | null })[];
     const med = trailingMedian(full);
-    const data = full.map((p, i) => ({ ...p, t: Date.parse(`${p.day}T12:00:00Z`), med: med[i] }));
-    const worst = Math.max(...state.pts.map((p) => p.rank ?? 0));
+    const data = lastDays(full.map((p, i) => ({ ...p, t: Date.parse(`${p.day}T12:00:00Z`), med: med[i] })), range);
+    const ranks = data.map((p) => p.rank).filter((r): r is number => r != null);
+    const worst = Math.max(...ranks, 10);
     const yMax = Math.min(state.top, Math.ceil((worst * 1.05) / 10) * 10);
     // round ticks plus the zone edges, so a tick always marks where a zone starts
     const ticks = [...new Set([...rankTicks(yMax), ...TIERS.map((t) => t.to).filter((v) => v <= yMax)])].sort((a, b) => a - b);
-    const months = monthStarts(state.pts[0].day, state.pts[state.pts.length - 1].day).map((d) => ({
+    const months = monthStarts(data[0].day, data[data.length - 1].day).map((d) => ({
       t: Date.parse(`${d}T00:00:00Z`),
       label: new Date(`${d}T12:00:00Z`).toLocaleDateString("en-US", { month: "short", timeZone: "UTC" }).toUpperCase(),
     }));
-    return { data, wow: weekOverWeek(state.pts), yMax, ticks, months };
-  }, [state]);
+    // last day and the week-over-week are about NOW whatever the range; BEST is the range's
+    const wow = weekOverWeek(state.pts);
+    const best = weekOverWeek(data.filter((p) => p.rank != null) as { day: string; rank: number }[]).best;
+    return { data, wow: { ...wow, best }, yMax, ticks, months };
+  }, [state, range]);
 
   if (state.kind === "locked") return <LockedTeaser repo={repo} />;
   if (state.kind === "unavailable" || state.kind === "empty") {
@@ -142,12 +148,29 @@ export default function GodVelocityRank({ repo }: { repo: string }) {
           </span>
           {wow.best && (
             <span className="numeral text-label text-ink">
-              <span className="text-micro tracking-[0.2em] text-faint">BEST </span>#{wow.best.rank}
+              <span className="text-micro tracking-[0.2em] text-faint">BEST{range ? ` ${range}D` : ""} </span>#{wow.best.rank}
               <span className="text-micro text-faint"> · {dayLabel(wow.best.day)}</span>
             </span>
           )}
         </div>
-        <span className="numeral text-micro tracking-[0.24em] text-accent/70">◈ GOD MODE</span>
+        <div className="flex items-center gap-3">
+          <div className="flex gap-1">
+            {([30, 90, 0] as const).map((r) => (
+              <button
+                key={r}
+                type="button"
+                onClick={() => setRange(r)}
+                aria-pressed={range === r}
+                className={`numeral border px-1.5 py-0.5 text-micro tracking-[0.16em] transition-colors ${
+                  range === r ? "border-accent/50 text-accent" : "border-grid text-faint hover:text-dim"
+                }`}
+              >
+                {r === 0 ? "ALL" : `${r}D`}
+              </button>
+            ))}
+          </div>
+          <span className="numeral text-micro tracking-[0.24em] text-accent/70">◈ GOD MODE</span>
+        </div>
       </div>
       <div style={{ height: H }}>
         <ResponsiveContainer width="100%" height="100%">

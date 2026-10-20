@@ -108,3 +108,12 @@ export function monthStarts(firstDay: string, lastDay: string): string[] {
   }
   return out;
 }
+
+// The last `days` calendar days ending on the newest point (0 = everything).
+// Slice AFTER computing the trailing median on the full series, so the first
+// days of a 30-day view keep the median of the week before them.
+export function lastDays<T extends { day: string }>(points: T[], days: number): T[] {
+  if (!days || !points.length) return points;
+  const cut = ms(points[points.length - 1].day) - (days - 1) * DAY;
+  return points.filter((p) => ms(p.day) >= cut);
+}

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { fillCalendar, monthStarts, rankTicks, tierOf, trailingMedian, weekOverWeek } from "./velocity-rank-view";
+import { fillCalendar, lastDays, monthStarts, rankTicks, tierOf, trailingMedian, weekOverWeek } from "./velocity-rank-view";
 
 // career-ops, 6-19 Oct 2026 (collector/velocity-rank.mjs on the real moat),
 // (the gap cases below use their own series)
@@ -65,5 +65,14 @@ describe("tierOf / monthStarts", () => {
     expect(monthStarts("2026-06-14", "2026-10-19")).toEqual(["2026-07-01", "2026-08-01", "2026-09-01", "2026-10-01"]);
     expect(monthStarts("2026-12-30", "2027-01-02")).toEqual(["2027-01-01"]);
     expect(monthStarts("2026-10-01", "2026-10-19")).toEqual([]);
+  });
+});
+
+describe("lastDays", () => {
+  it("keeps exactly the last N calendar days, ALL keeps everything", () => {
+    const f = fillCalendar([{ day: "2026-09-01", rank: 95 }, { day: "2026-10-19", rank: 81 }]);
+    expect(lastDays(f, 30).map((p) => p.day)[0]).toBe("2026-09-20");
+    expect(lastDays(f, 30)).toHaveLength(30);
+    expect(lastDays(f, 0)).toHaveLength(f.length);
   });
 });
