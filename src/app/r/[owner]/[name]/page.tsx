@@ -8,6 +8,7 @@ import ConsoleLayout from "@/components/ConsoleLayout";
 import { RaceProvider, RaceToggle } from "@/components/RaceContext";
 import GalacticChart from "@/components/GalacticChart";
 import VerticalChart from "@/components/VerticalChart";
+import ChartSwitch from "@/components/ChartSwitch";
 import LockedRankPreview from "@/components/LockedRankPreview";
 import {
   VelocitySilhouette,
@@ -412,12 +413,10 @@ export default async function ExplorerPage({
                     ⛶ COMMAND DECK · ◈ LOCKED — SEE IT ON THE DEMO →
                   </a>
                 </div>
-                <div className="hidden landscape:block lg:block">
-                  <GalacticChart inputs={inputs} liveLocals charted={chartedRepos} />
-                </div>
-                <div className="landscape:hidden lg:hidden">
-                  <VerticalChart inputs={inputs} charted={chartedRepos} />
-                </div>
+                <ChartSwitch
+                  wide={<GalacticChart inputs={inputs} liveLocals charted={chartedRepos} />}
+                  narrow={<VerticalChart inputs={inputs} charted={chartedRepos} />}
+                />
               </>
             ),
           }}
