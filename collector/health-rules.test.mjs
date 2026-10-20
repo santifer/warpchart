@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { COLLECTOR_STALE_H as APP_STALE_H } from "../src/lib/staleness.ts";
-import { ARTIFACTS, COLLECTOR_STALE_H, cancelledVerdict, cronLag, etaIncoherences, maxAgeFromEnv, newestRunMs, pickFreshestRuns, pipelineRunsGate, RUNS_LIST_TOL_H, runsListStale, openPartials, presenceEval, presenceLost, presenceMap, prflowFreshness, npmUsageFreshness, contributorsDrift, contributorCurve, buildersWallFreshness, buildersLangMismatch, curveEndsOnTotal, staleArtifacts, watchdogStale, v7StampLags, v7WindowFreshness } from "./health-rules.mjs";
+import { ARTIFACTS, COLLECTOR_STALE_H, cancelledVerdict, cronLag, etaIncoherences, maxAgeFromEnv, newestRunMs, pickFreshestRuns, pipelineRunsGate, RUNS_LIST_TOL_H, runsListStale, openPartials, presenceEval, presenceLost, presenceMap, prflowFreshness, npmUsageFreshness, contributorsDrift, contributorCurve, buildersWallFreshness, buildersLangMismatch, velocityRankFreshness, velocityRankReconstructed, curveEndsOnTotal, staleArtifacts, watchdogStale, v7StampLags, v7WindowFreshness } from "./health-rules.mjs";
 
 describe("prflowFreshness", () => {
   // 26-sep: the first run after 00:00Z was cancelled and 25-sep never closed.
@@ -608,5 +608,37 @@ describe("buildersLangMismatch", () => {
   });
   it("passes when every language answers in itself", () => {
     expect(buildersLangMismatch(["en", "ja"], { en: "en", ja: "ja" }).severity).toBeNull();
+  });
+});
+
+describe("velocityRankFreshness", () => {
+  const meta = { days: 108, first: "2026-06-14", last: "2026-10-19", lastTo: "2026-10-20" };
+  const now = Date.parse("2026-10-20T09:00:00Z");
+  it("passes when the table reaches the newest recorded day", () => {
+    expect(velocityRankFreshness(meta, "2026-10-20", "2026-10-20T04:42:17Z", now).severity).toBeNull();
+  });
+  it("gives the run that recorded the day time to build it", () => {
+    expect(velocityRankFreshness({ ...meta, lastTo: "2026-10-19" }, "2026-10-20", "2026-10-20T04:42:17Z", now).severity).toBeNull();
+  });
+  it("warns when the table stays behind the moat past the grace", () => {
+    const r = velocityRankFreshness({ ...meta, lastTo: "2026-10-19" }, "2026-10-20", "2026-10-19T22:00:00Z", now);
+    expect(r.severity).toBe("warn");
+    expect(r.note).toMatch(/stops at 2026-10-19/);
+  });
+  it("warns when the newest day ranked a top 1,000 with holes (2026-06-29 kept 909)", () => {
+    expect(velocityRankFreshness({ ...meta, lastN: 909 }, "2026-10-20", "2026-10-20T04:42:17Z", now).severity).toBe("warn");
+    expect(velocityRankFreshness({ ...meta, lastN: 999 }, "2026-10-20", "2026-10-20T04:42:17Z", now).severity).toBeNull();
+  });
+  it("a missing table is a warning, never a pass", () => {
+    expect(velocityRankFreshness(null, "2026-10-20", null, now).severity).toBe("warn");
+  });
+});
+
+describe("velocityRankReconstructed", () => {
+  it("warns when the hand-made reconstruction is gone or truncated, passes on the real shape", () => {
+    expect(velocityRankReconstructed(null).severity).toBe("warn");
+    expect(velocityRankReconstructed({ days: Array(74).fill("d"), repos: { a: {} } }).severity).toBe("warn");
+    const repos = Object.fromEntries(Array.from({ length: 2000 }, (_, i) => [`r/${i}`, {}]));
+    expect(velocityRankReconstructed({ from: "2026-04-01", to: "2026-06-13", days: Array(74).fill("d"), repos }).severity).toBeNull();
   });
 });

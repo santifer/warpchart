@@ -210,6 +210,11 @@ export const ARTIFACTS = [
   { prefix: "data/attribution.json", kind: "periodic", maxAgeH: 72, what: "spike attribution" },
   { prefix: "data/indexnow-stamp.txt", kind: "periodic", maxAgeH: 48, what: "the IndexNow ping stamp" },
   { prefix: "route-history/", kind: "periodic", maxAgeH: 36, what: "the daily rank moat" },
+  // rebuilt once per recorded rank-history day (collector/velocity-rank.mjs)
+  { prefix: "velocity-rank/", kind: "periodic", maxAgeH: 36, what: "the daily velocity-rank table" },
+  // builders.yml every 6 h; it skips while the people are the same and the
+  // wall is under 20 h old, so a healthy wall is at most ~26 h old
+  { prefix: "builders/", kind: "periodic", maxAgeH: 30, what: "the README builders wall" },
   { prefix: "vitals/", kind: "periodic", maxAgeH: 72, what: "the Vital Signs panel" },
   { prefix: "contributors/", kind: "periodic", maxAgeH: 12, what: "the contributor census (cohorts source)" },
   { prefix: "traffic/", kind: "periodic", maxAgeH: 12, what: "the Traffic Vault" },
@@ -352,6 +357,37 @@ export function buildersWallFreshness(meta, now = Date.now(), maxH = 30) {
   // over 2 MB; the collector refuses at 1.8 MB, so this only fires if that guard went
   if (meta.bytes > 1.8 * 1024 * 1024) return { severity: "warn", note: `builders wall is ${(meta.bytes / 1048576).toFixed(2)} MB (cache limit 2 MB)` };
   return { severity: null, note: `${meta.people} people, ${meta.week} this week, ${meta.langs.length} languages, ${ageH.toFixed(1)} h old` };
+}
+
+// DAILY VELOCITY RANK (collector/velocity-rank.mjs -> velocity-rank/*.json):
+// the locked "place among the top 1,000 by new stars" chart. It is rebuilt in
+// the same collect run that records a rank-history day, so a table that does
+// not reach the newest recorded day more than `graceH` after its capture has
+// stopped (or keeps refusing: see its partial marker 'velocity-rank').
+// rhLast = newest route-history day, rhAt = its capture ISO (or null).
+// graceH is above the collect cadence on purpose: runs have come 8 h apart
+// (19-oct, 04:40 -> 12:58Z), and a threshold under the real cadence is how
+// the 30-sep false alarms happened. lastN < minN = the newest day ranked a
+// top 1,000 with holes in it (the 2026-06-29 shape): every rank reads better.
+export function velocityRankFreshness(meta, rhLast, rhAt, now = Date.now(), graceH = 10, minN = 990) {
+  if (!meta?.lastTo) return { severity: "warn", note: "no velocity-rank table published (velocity-rank/meta.json missing)" };
+  if (meta.lastN != null && meta.lastN < minN) return { severity: "warn", note: `newest velocity-rank day (${meta.last}) ranked only ${meta.lastN} of the top 1,000` };
+  if (!rhLast) return { severity: null, note: "rank-history unreadable this run; not compared" };
+  if (meta.lastTo >= rhLast) return { severity: null, note: `${meta.days} days (${meta.first} .. ${meta.last}), built through ${meta.lastTo}` };
+  const sinceH = (now - Date.parse(rhAt ?? `${rhLast}T00:00:00Z`)) / 3600e3;
+  if (!(sinceH > graceH)) return { severity: null, note: `rank-history recorded ${rhLast} ${sinceH.toFixed(1)} h ago; table still on ${meta.lastTo}` };
+  return { severity: "warn", note: `velocity-rank table stops at ${meta.lastTo}, rank-history has ${rhLast} (${sinceH.toFixed(0)} h ago)` };
+}
+
+// The reconstructed days before the live record (velocity-rank/reconstructed.json,
+// written once by hand by collector/velocity-rank-backfill.mjs). Nothing
+// rewrites it, so the only failure is that it is gone or truncated: then the
+// chart silently starts on 14 Jun instead of in April.
+export function velocityRankReconstructed(rec) {
+  if (!rec) return { severity: "warn", note: "velocity-rank/reconstructed.json missing: the chart starts at the live record" };
+  const repos = Object.keys(rec.repos ?? {}).length;
+  if (!(rec.days?.length >= 60) || repos < 1900) return { severity: "warn", note: `reconstructed table truncated: ${rec.days?.length ?? 0} days, ${repos} repos` };
+  return { severity: null, note: `reconstructed ${rec.from} .. ${rec.to}, ${repos} repos` };
 }
 
 // Each published language must be SERVED in that language: on 17-oct-2026

@@ -33,7 +33,7 @@
 //   --base=X   probe another origin (a preview deployment, say)
 // Exit code 1 when a critical finding is open, so CI turns red by itself.
 import { writeFileSync } from "node:fs";
-import { ARTIFACTS, COLLECTOR_STALE_H, cancelledVerdict, cronLag, etaIncoherences, openPartials, pipelineRunsGate, presenceEval, presenceMap, prflowFreshness, staleArtifacts, npmUsageFreshness, contributorsDrift, contributorCurve, curveEndsOnTotal, buildersWallFreshness, buildersLangMismatch, v7StampLags, v7WindowFreshness, V7_WINDOW_MAX_H } from "./health-rules.mjs";
+import { ARTIFACTS, COLLECTOR_STALE_H, cancelledVerdict, cronLag, etaIncoherences, openPartials, pipelineRunsGate, presenceEval, presenceMap, prflowFreshness, staleArtifacts, npmUsageFreshness, contributorsDrift, contributorCurve, curveEndsOnTotal, buildersWallFreshness, buildersLangMismatch, velocityRankFreshness, velocityRankReconstructed, v7StampLags, v7WindowFreshness, V7_WINDOW_MAX_H } from "./health-rules.mjs";
 import { canonicalVelocity, rankByStars } from "./rules.mjs";
 
 const args = process.argv.slice(2);
@@ -1143,6 +1143,33 @@ async function checkPresence() {
     if (r.severity) fail("presence.builders-wall", "PRESENCE", r.severity, r.note,
       "collector/builders.mjs (workflow builders.yml, every 6 h) renders it from the contributor census into builders/{repo}.{lang}.svg; it refuses (partial marker 'builders') when the census shrinks or >5% of avatars fail. Re-run: gh workflow run builders.yml -f force=true.");
     else pass("presence.builders-wall", "PRESENCE", r.note);
+  });
+
+  // The locked daily velocity-rank table keeps up with the rank-history moat.
+  await check("presence.velocity-rank", "PRESENCE", async () => {
+    if (!BLOB_TOKEN) return pass("presence.velocity-rank", "PRESENCE", "no Blob token, skipped");
+    const [meta, rh] = await Promise.all([
+      blobJson("velocity-rank/meta.json").catch(() => undefined),
+      blobJson("route-history/meta.json").catch(() => undefined),
+    ]);
+    const rhLast = [...(rh?.days ?? [])].sort().at(-1) ?? null;
+    // blobJson answers null for "missing" AND for a failed read: only call the
+    // table missing when the moat's own meta read fine in the same run
+    let r = meta == null && rh == null
+      ? { severity: null, note: "Blob unreadable this run; not measured" }
+      : velocityRankFreshness(meta, rhLast, rh?.capturedAt?.[rhLast] ?? null);
+    // the hand-made reconstruction must still be there (only when the Blob read at all)
+    if (!r.severity && rh != null) {
+      const rec = await blobJson("velocity-rank/reconstructed.json").catch(() => undefined);
+      if (rec !== undefined) {
+        const rr = velocityRankReconstructed(rec);
+        if (rr.severity) r = rr;
+        else r = { severity: null, note: `${r.note}; ${rr.note}` };
+      }
+    }
+    if (r.severity) fail("presence.velocity-rank", "PRESENCE", r.severity, r.note,
+      "collector/velocity-rank.mjs runs in collect.yml right after route-history and rebuilds velocity-rank/{YYYY-MM}.json from the 64 rank-history shards; it refuses (partial marker 'velocity-rank') on any unreadable shard or when the table would lose days. The reconstructed part (before 14 Jun) is velocity-rank/reconstructed.json, made once by hand with collector/velocity-rank-backfill.mjs (bump the cache key in src/lib/velocity-rank.ts when re-uploading). Look at its log line in the last collect run. If it refused because the table would lose days and that is real, rebuild once by hand: BLOB_READ_WRITE_TOKEN=... node collector/velocity-rank.mjs --force.");
+    else pass("presence.velocity-rank", "PRESENCE", r.note);
   });
 
   // The house curve (/compare, embeds, OG) must end on the net star count.

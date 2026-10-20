@@ -20,6 +20,7 @@ import { repoRankTrajectory } from "@/lib/rank-history";
 import { rankByStars } from "@/lib/rank";
 import { canonicalVelocity } from "@/lib/velocity";
 import GodRank from "@/components/GodRank";
+import GodVelocityRank from "@/components/GodVelocityRank";
 import JsonLd, { repoGraph } from "@/components/JsonLd";
 import Dashboard from "@/components/Dashboard";
 import Badges from "@/components/Badges";
@@ -478,6 +479,10 @@ export default async function ExplorerPage({
                 }
               />
             ),
+          }}
+          velocityRank={{
+            meta: "by new stars each day · unlocks with tracking",
+            node: <GodVelocityRank repo={repoLabel} />,
           }}
           traffic={{
             meta: "private · unlocks with tracking",
