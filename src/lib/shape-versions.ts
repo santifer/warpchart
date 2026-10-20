@@ -42,6 +42,11 @@ export const SHAPE_VERSION = {
   archiveMonthly: 1,
   // a builders-wall SVG (src/app/api/builders/route.ts)
   buildersWall: 2,
+  // the daily velocity-rank table (src/lib/velocity-rank.ts): its meta, one
+  // month of days, and the reconstructed days before the live record
+  velocityRankMeta: 2,
+  velocityRankMonth: 2,
+  velocityRankReconstructed: 2,
 } as const;
 
 export type ShapeType = keyof typeof SHAPE_VERSION;
@@ -57,6 +62,9 @@ const CACHED: Record<ShapeType, { prefix: string; embeds: ShapeType[] }> = {
   curve: { prefix: "embed-chart-curve", embeds: [] },
   archiveMonthly: { prefix: "archive-monthly", embeds: [] },
   buildersWall: { prefix: "builders-wall", embeds: [] },
+  velocityRankMeta: { prefix: "velocity-rank-meta", embeds: [] },
+  velocityRankMonth: { prefix: "velocity-rank-month", embeds: [] },
+  velocityRankReconstructed: { prefix: "velocity-rank-reconstructed", embeds: [] },
 };
 
 // Every type reachable from `type` through what it embeds, excluding itself.

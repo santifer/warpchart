@@ -10,6 +10,7 @@ import { unstable_cache } from "next/cache";
 import { repoRankSeries } from "./rank-history";
 import { reconstructDays, repoDailyRanks, repoReconstructedRanks } from "../../collector/velocity-rank-core.mjs";
 import { allNamesOf } from "./aliases";
+import { cacheKey } from "./shape-versions";
 
 export interface VelocityRankDay {
   day: string; // UTC day the stars came in (the capture of `day` -> the capture of the next day)
@@ -64,14 +65,14 @@ const found = <T,>(what: string) => (v: T | null): T => {
 };
 const readMetaCached = unstable_cache(
   async () => found<Meta>("velocity-rank/meta.json")(await readBlob<Meta>("velocity-rank/meta.json")),
-  ["velocity-rank-meta-v2"],
+  [cacheKey("velocityRankMeta")],
   { revalidate: 3600 },
 );
 const readMeta = () => readMetaCached().catch(() => null);
 const readMonth = (m: string) =>
   unstable_cache(
     async () => found<{ days: VelocityRankDay[] }>(m)(await readBlob<{ days: VelocityRankDay[] }>(`velocity-rank/${m}.json`)),
-    ["velocity-rank-month-v2", m],
+    [cacheKey("velocityRankMonth"), m],
     { revalidate: 3600 },
   )().catch(() => null);
 
@@ -91,7 +92,7 @@ const readReconstructedCached = unstable_cache(
     if (!r?.days?.length) throw new Error("velocity-rank/reconstructed.json missing");
     return r;
   },
-  ["velocity-rank-reconstructed-v2"],
+  [cacheKey("velocityRankReconstructed")],
   { revalidate: 86_400 },
 );
 // re-uploading the file needs a NEW key above, or the old one is served a day

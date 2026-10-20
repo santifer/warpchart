@@ -40,6 +40,8 @@ a different question. It never throws, never logs, and the panel stays green.
   | Curve | `embed-chart-curve-vN` | 6 h |
   | OSS Insight monthly archive | `archive-monthly-vN` | 30 days |
   | Builders wall | `builders-wall-vN` | 30 min |
+  | Velocity rank: meta, month | `velocity-rank-{meta,month}-vN` | 1 h |
+  | Velocity rank: reconstructed days | `velocity-rank-reconstructed-vN` | 1 day |
 - **`@vercel/blob` `get()` caches on the CDN by default** (weeks). Any read-modify-write, freshness check or watchdog read uses `useCache: false`.
 - A `?query` in a page URL breaks the ISR/edge cache key (each variant renders from scratch). UI state between pages goes in the `#hash`.
 - An explicit `cache: "no-store"` in shared fetch code turns an ISR page dynamic.

@@ -13,7 +13,7 @@ describe("derived cache keys", () => {
     expect(cacheKey("dossier", bumped)).not.toBe(cacheKey("dossier"));
     expect(cacheKey("explorerData", bumped)).not.toBe(cacheKey("explorerData"));
     // and nothing that does not embed a Dossier
-    for (const t of ["vitals", "trafficVault", "prFlow", "curve", "archiveMonthly", "buildersWall"] as ShapeType[]) {
+    for (const t of (Object.keys(SHAPE_VERSION) as ShapeType[]).filter((k) => k !== "dossier" && k !== "explorerData")) {
       expect(cacheKey(t, bumped)).toBe(cacheKey(t));
     }
   });
@@ -33,6 +33,9 @@ describe("derived cache keys", () => {
     expect(cacheKey("archiveMonthly")).toBe("archive-monthly-v1");
     expect(cacheKey("buildersWall")).toBe("builders-wall-v2");
     expect(cacheKey("explorerData")).toBe("explorer-data-v4.dossier17");
+    expect(cacheKey("velocityRankMeta")).toBe("velocity-rank-meta-v2");
+    expect(cacheKey("velocityRankMonth")).toBe("velocity-rank-month-v2");
+    expect(cacheKey("velocityRankReconstructed")).toBe("velocity-rank-reconstructed-v2");
   });
 });
 
