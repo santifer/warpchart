@@ -12,6 +12,7 @@ import { readTenantsBlob, writeTenantsBlob } from "@/lib/tenants-store";
 import { sendEmail } from "@/lib/email";
 import { loadRoute } from "@/lib/history";
 import { writeLiveSnapshot } from "@/lib/live-blob";
+import { reqLog, type Log } from "@/lib/log";
 
 export const maxDuration = 30;
 
@@ -56,6 +57,7 @@ async function gh(path: string, init?: RequestInit) {
 }
 
 async function provision(
+  log: Log,
   repo: string,
   plan: "hosted" | "fleet",
   email: string,
@@ -82,10 +84,11 @@ async function provision(
   // next 2h cron tick (best effort). The collector's sync-from-blob picks up the
   // new tenant from the Blob, backwalks it, and the deploy makes loadTenants
   // (disk) see it — console unlocks in minutes.
-  await gh("/actions/workflows/collect.yml/dispatches", {
+  const dispatch = await gh("/actions/workflows/collect.yml/dispatches", {
     method: "POST",
     body: JSON.stringify({ ref: "main" }),
   }).catch(() => null);
+  if (!dispatch?.ok) log.warn("collector.dispatch-failed", { repo, status: dispatch?.status ?? "network" });
   return { action: "provisioned", vaultKey };
 }
 
@@ -142,20 +145,25 @@ async function sendWelcomeEmail(
   });
 }
 
-async function notify(text: string) {
+// Best-effort operator alert; the log line next to each call is the record
+// that survives a missing or failing webhook.
+async function notify(text: string): Promise<boolean> {
   const hook = process.env.ALERT_WEBHOOK_URL;
-  if (!hook) return;
+  if (!hook) return false;
   const payload = hook.includes("slack.com") ? { text } : { content: text };
-  await fetch(hook, {
+  const res = await fetch(hook, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
   }).catch(() => null);
+  return res?.ok ?? false;
 }
 
 export async function POST(req: NextRequest) {
   const body = await req.text();
+  const log = reqLog("polar");
   if (!verify(req, body)) {
+    log.warn("signature.invalid", { webhookId: req.headers.get("webhook-id") });
     return NextResponse.json({ error: "invalid signature" }, { status: 401 });
   }
   const event = JSON.parse(body) as {
@@ -182,13 +190,16 @@ export async function POST(req: NextRequest) {
 
   if (event.type === "order.paid") {
     if (!/^[\w.-]+\/[\w.-]+$/.test(repo)) {
-      await notify(
+      // 200 on purpose: a retry carries the same order and cannot fix it. This
+      // line is what records a paid order nobody has provisioned yet.
+      const notified = await notify(
         `💸 PAID but no valid repo in order ${d.id}: "${repo}" (${plan}, ${email}). Provision manually + send welcome email.`,
       );
+      log.error("order.paid.no-repo", undefined, { order: d.id ?? null, repo: repo.slice(0, 120), plan, notified });
       return NextResponse.json({ ok: true, action: "manual-follow-up" });
     }
     try {
-      const { action, vaultKey } = await provision(repo, plan, email);
+      const { action, vaultKey } = await provision(log, repo, plan, email);
       const consoleUrl = `https://warpchart.dev/r/${repo}`;
       const vaultUrl = vaultKey ? `${consoleUrl}?vault=${vaultKey}` : null;
       const exportUrl = vaultKey
@@ -213,8 +224,9 @@ export async function POST(req: NextRequest) {
             apex: { r: route.repos[0].r, s: route.repos[0].s },
           });
         }
-      } catch {
-        /* best-effort: a snapshot failure must never fail a paid order */
+      } catch (err) {
+        // best-effort: a snapshot failure must never fail a paid order
+        log.warn("first-light.failed", { repo, err: err instanceof Error ? err.message.slice(0, 200) : String(err) });
       }
       // transactional welcome email to the BUYER (best-effort; the tenant is
       // already provisioned). It carries the owner-only vault link. A missing or
@@ -224,24 +236,27 @@ export async function POST(req: NextRequest) {
         ? await sendWelcomeEmail(email, repo, plan, consoleUrl, vaultUrl, exportUrl)
         : false;
       const vaultLine = vaultUrl ? ` Vault: ${vaultUrl} (owner-only).` : "";
-      await notify(
+      const notified = await notify(
         `💸 NEW ${plan.toUpperCase()} MISSION: ${repo} · ${email} · ${action}. ` +
           `Console: ${consoleUrl} · welcome email ${emailed ? "SENT automatically ✅" : "NOT sent, send manually (docs/email/welcome-hosted) ⚠️"}.` +
           vaultLine +
           (plan === "fleet" ? " FLEET: ask for their remaining repos." : ""),
       );
+      log.info("order.paid", { order: d.id ?? null, repo, plan, action, emailed, notified });
       return NextResponse.json({ ok: true, action, emailed });
     } catch (err) {
-      await notify(
+      const notified = await notify(
         `⚠️ PROVISIONING FAILED for ${repo} (${email}): ${err instanceof Error ? err.message : err}. Provision manually.`,
       );
+      log.error("order.paid.provision-failed", err, { order: d.id ?? null, repo, plan, notified });
       return NextResponse.json({ ok: false }, { status: 500 });
     }
   }
 
   if (event.type === "subscription.revoked") {
     if (!/^[\w.-]+\/[\w.-]+$/.test(repo)) {
-      await notify(`🔕 REVOKED but no repo on the event (${email}). Remove from the private tenants.json manually.`);
+      const notified = await notify(`🔕 REVOKED but no repo on the event (${email}). Remove from the private tenants.json manually.`);
+      log.error("revoked.no-repo", undefined, { subscription: d.id ?? null, notified });
       return NextResponse.json({ ok: true, action: "manual-follow-up" });
     }
     // De-provision: remove the tenant from the PRIVATE registry. The per-tenant
@@ -258,16 +273,19 @@ export async function POST(req: NextRequest) {
         removed = true;
       }
     } catch (err) {
-      await notify(
+      const notified = await notify(
         `⚠️ REVOKE de-provision FAILED for ${repo} (${email}): ${err instanceof Error ? err.message : err}. Remove from the private tenants.json manually.`,
       );
+      log.error("revoked.deprovision-failed", err, { subscription: d.id ?? null, repo, notified });
       return NextResponse.json({ ok: false }, { status: 500 });
     }
-    await notify(
+    const notified = await notify(
       `🔕 REVOKED: ${repo} (${email}, sub ${d.id ?? "?"}). ${removed ? "De-provisioned: removed from the registry; the vault and export links are now dead. If this repo has another active subscription, re-provision it." : "Not in the registry (already gone)."} History files remain until the collector prunes them.`,
     );
+    log.info("revoked", { subscription: d.id ?? null, repo, removed, notified });
     return NextResponse.json({ ok: true, removed });
   }
 
+  log.info("event.ignored", { type: event.type });
   return NextResponse.json({ ok: true });
 }

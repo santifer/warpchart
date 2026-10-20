@@ -2,14 +2,14 @@
 // budget); the client treats failures as transient and keeps polling.
 // Auth comes from the token pool (GitHub App budget + PAT failover) and
 // every response feeds the pool's rate-limit accounting.
-import { reqLog, serializeError } from "@/lib/log";
+import { scopeLog, serializeError } from "@/lib/log";
 import { pickAuth, noteRateLimit, lowFuel } from "@/lib/ghauth";
 import { softwareDownloads } from "@/lib/release-assets";
 
 export { lowFuel };
 
 const API = "https://api.github.com";
-const ghlog = reqLog("github");
+const ghlog = scopeLog("github");
 
 // GitHub returns transient 502s now and then; retry briefly (the budget is
 // fine: these routes are ISR/edge-cached, not user-blocking). Every attempt
