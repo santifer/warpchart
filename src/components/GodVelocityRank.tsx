@@ -10,9 +10,9 @@
 // the trailing 7-day median (the trend under the noise). A gap is a day we did
 // not measure, never drawn as a bad day.
 import { useEffect, useMemo, useState } from "react";
-import { ComposedChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
-import { usePalette } from "@/lib/usePalette";
-import { fillCalendar, rankTicks, trailingMedian, weekOverWeek } from "@/lib/velocity-rank-view";
+import { ComposedChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceArea, ReferenceLine } from "recharts";
+import { usePalette, useThemeMode } from "@/lib/usePalette";
+import { fillCalendar, monthStarts, rankTicks, tierOf, TIERS, type TierKey, trailingMedian, weekOverWeek } from "@/lib/velocity-rank-view";
 import { StepsSilhouette } from "./PanelSilhouettes";
 
 type Pt = { day: string; rank: number | null; gain: number | null; n: number; hours: number | null; inTop?: boolean; why?: string };
@@ -23,6 +23,15 @@ type State =
   | { kind: "data"; top: number; pts: Pt[] };
 
 const H = 260;
+
+// RPG rarity colours for the background zones, one set per theme: saturated
+// enough to name the zone at a glance, faint enough (fill opacity) that the
+// marks on top keep the contrast. Common gets no fill: the default zone.
+const TIER_COLOR: Record<"dark" | "light", Record<TierKey, string>> = {
+  dark: { legendary: "#ff8c1a", epic: "#b06cff", rare: "#4c8dff", uncommon: "#34c26b", common: "#8a94a6" },
+  light: { legendary: "#e07000", epic: "#9333ea", rare: "#2563eb", uncommon: "#15924a", common: "#6b7280" },
+};
+const TIER_FILL: Record<"dark" | "light", number> = { dark: 0.11, light: 0.09 };
 const dayLabel = (d: string) => new Date(`${d}T12:00:00Z`).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
 
 function LockedTeaser({ repo }: { repo: string }) {
@@ -43,6 +52,8 @@ function LockedTeaser({ repo }: { repo: string }) {
 
 export default function GodVelocityRank({ repo }: { repo: string }) {
   const C = usePalette();
+  const { resolved } = useThemeMode();
+  const TC = TIER_COLOR[resolved];
   const [state, setState] = useState<State>({ kind: "locked" });
 
   useEffect(() => {
@@ -77,7 +88,13 @@ export default function GodVelocityRank({ repo }: { repo: string }) {
     const data = full.map((p, i) => ({ ...p, t: Date.parse(`${p.day}T12:00:00Z`), med: med[i] }));
     const worst = Math.max(...state.pts.map((p) => p.rank ?? 0));
     const yMax = Math.min(state.top, Math.ceil((worst * 1.05) / 10) * 10);
-    return { data, wow: weekOverWeek(state.pts), yMax, ticks: rankTicks(yMax) };
+    // round ticks plus the zone edges, so a tick always marks where a zone starts
+    const ticks = [...new Set([...rankTicks(yMax), ...TIERS.map((t) => t.to).filter((v) => v <= yMax)])].sort((a, b) => a - b);
+    const months = monthStarts(state.pts[0].day, state.pts[state.pts.length - 1].day).map((d) => ({
+      t: Date.parse(`${d}T00:00:00Z`),
+      label: new Date(`${d}T12:00:00Z`).toLocaleDateString("en-US", { month: "short", timeZone: "UTC" }).toUpperCase(),
+    }));
+    return { data, wow: weekOverWeek(state.pts), yMax, ticks, months };
   }, [state]);
 
   if (state.kind === "locked") return <LockedTeaser repo={repo} />;
@@ -93,7 +110,8 @@ export default function GodVelocityRank({ repo }: { repo: string }) {
     );
   }
 
-  const { data, wow, yMax, ticks } = view!;
+  const { data, wow, yMax, ticks, months } = view!;
+  const medTier = wow.thisWeek != null ? tierOf(wow.thisWeek) : null;
   const top = state.top.toLocaleString("en-US");
   const since = dayLabel(state.pts[0].day);
   const better = wow.thisWeek != null && wow.prevWeek != null ? wow.prevWeek - wow.thisWeek : null;
@@ -109,6 +127,12 @@ export default function GodVelocityRank({ repo }: { repo: string }) {
           <span className="numeral text-label text-ink">
             <span className="text-micro tracking-[0.2em] text-faint">7-DAY MEDIAN </span>
             {wow.thisWeek != null ? `#${wow.thisWeek}` : "n/a"}
+            {medTier && (
+              <span className="text-micro tracking-[0.2em] text-faint">
+                {" "}
+                <span style={{ color: TC[medTier.key] }} aria-hidden>◆</span> {medTier.key.toUpperCase()}
+              </span>
+            )}
             {better != null && (
               <span className="text-micro text-faint">
                 {" "}
@@ -128,7 +152,29 @@ export default function GodVelocityRank({ repo }: { repo: string }) {
       <div style={{ height: H }}>
         <ResponsiveContainer width="100%" height="100%">
           <ComposedChart data={data} margin={{ top: 10, right: 18, left: -14, bottom: 0 }}>
+            {TIERS.filter((t) => t.from <= yMax && t.key !== "common").map((t) => (
+              <ReferenceArea
+                key={t.key}
+                y1={t.from}
+                y2={Math.min(t.to, yMax)}
+                fill={TC[t.key]}
+                // orange over navy reads brown at the shared opacity: legendary gets a little more
+                fillOpacity={TIER_FILL[resolved] * (t.key === "legendary" && resolved === "dark" ? 1.7 : 1)}
+                stroke="none"
+                ifOverflow="hidden"
+              />
+            ))}
             <CartesianGrid stroke={C.grid} strokeDasharray="2 6" vertical={false} />
+            {months.map((m) => (
+              <ReferenceLine
+                key={m.t}
+                x={m.t}
+                stroke={C.dim}
+                strokeOpacity={0.45}
+                strokeDasharray="3 4"
+                label={{ value: m.label, position: "insideTopLeft", fill: C.faint, fontSize: 8, letterSpacing: "0.2em" }}
+              />
+            ))}
             <XAxis
               dataKey="t"
               type="number"
@@ -140,8 +186,12 @@ export default function GodVelocityRank({ repo }: { repo: string }) {
               axisLine={{ stroke: C.grid }}
               minTickGap={56}
             />
+            {/* square-root scale: the top zones (10, 40, 50 places wide) get
+                room to read, and the long tail of common days is compressed.
+                Distances near #1 are worth more than distances near #200. */}
             <YAxis
               reversed
+              scale="sqrt"
               domain={[1, yMax]}
               ticks={ticks}
               allowDecimals={false}
@@ -164,7 +214,7 @@ export default function GodVelocityRank({ repo }: { repo: string }) {
                 const net = `${g >= 0 ? "+" : "−"}${Math.abs(g).toLocaleString("en-US")} net ★${w}`;
                 // outside the top 1,000 the rank is where it WOULD have placed
                 const place = p.inTop === false ? `would place #${p.rank}` : `#${p.rank} of ${(p.n ?? 0).toLocaleString("en-US")}`;
-                return [`${place} · ${net}`, "by new stars"];
+                return [`${place} · ${tierOf(p.rank).key} · ${net}`, "by new stars"];
               }}
             />
             <Line
@@ -191,8 +241,16 @@ export default function GodVelocityRank({ repo }: { repo: string }) {
           </ComposedChart>
         </ResponsiveContainer>
       </div>
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 px-1">
+        {TIERS.filter((t) => t.from <= yMax).map((t) => (
+          <span key={t.key} className="numeral text-micro tracking-[0.18em] text-faint">
+            <span style={{ color: TC[t.key] }} aria-hidden>◆</span> {t.label}
+            {t.key === "common" ? " · 251+" : ""}
+          </span>
+        ))}
+      </div>
       <span className="numeral px-1 text-micro text-faint">
-        {state.pts.some((p) => p.inTop === false) ? `where it placed (or would have) among the worldwide top ${top}` : `place among the worldwide top ${top}`} by net new stars that day · lower is better · line = 7-day median · gaps = day not measured · recorded since {since}
+        {state.pts.some((p) => p.inTop === false) ? `where it placed (or would have) among the worldwide top ${top}` : `place among the worldwide top ${top}`} by net new stars that day · lower is better · line = 7-day median · gaps = day not measured · √ scale · recorded since {since}
       </span>
     </div>
   );

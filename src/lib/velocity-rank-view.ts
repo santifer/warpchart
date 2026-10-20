@@ -78,3 +78,33 @@ export function rankTicks(max: number): number[] {
   for (let v = step; v <= max; v += step) ticks.push(v);
   return ticks;
 }
+
+// Rarity tiers over the rank axis, RPG-style (orange legendary down to grey
+// common), so a glance at the chart says which zone a day landed in. Round
+// cut-offs on purpose: they are read as "top 10 / top 50 / top 100 / top 250".
+export const TIERS = [
+  { key: "legendary", label: "LEGENDARY · TOP 10", from: 1, to: 10 },
+  { key: "epic", label: "EPIC · TOP 50", from: 11, to: 50 },
+  { key: "rare", label: "RARE · TOP 100", from: 51, to: 100 },
+  { key: "uncommon", label: "UNCOMMON · TOP 250", from: 101, to: 250 },
+  { key: "common", label: "COMMON", from: 251, to: 1000 },
+] as const;
+export type TierKey = (typeof TIERS)[number]["key"];
+
+export function tierOf(rank: number): (typeof TIERS)[number] {
+  return TIERS.find((t) => rank <= t.to) ?? TIERS[TIERS.length - 1];
+}
+
+// The first day of every month strictly after the first point and up to the
+// last: where a month-boundary line goes. ISO days.
+export function monthStarts(firstDay: string, lastDay: string): string[] {
+  const out: string[] = [];
+  const [y0, m0] = firstDay.split("-").map(Number);
+  for (let y = y0, m = m0 + 1; ; m++) {
+    if (m > 12) { m = 1; y++; }
+    const d = `${y}-${String(m).padStart(2, "0")}-01`;
+    if (d > lastDay) break;
+    out.push(d);
+  }
+  return out;
+}
