@@ -41,10 +41,10 @@ function shardOf(repo: string): number {
 
 // null = nothing recorded in this shard yet. A failed read throws, so the
 // hour-long cache below never stores an empty shard in front of a full one.
-async function readShard(i: number): Promise<Shard | null> {
+async function readShard(i: number, useCache = true): Promise<Shard | null> {
   const token = process.env.BLOB_READ_WRITE_TOKEN;
   if (!token) return null;
-  const parsed = await readPrivateJson<Shard>(`route-history/shard-${i}.json`, token);
+  const parsed = await readPrivateJson<Shard>(`route-history/shard-${i}.json`, token, { useCache });
   return parsed?.series ? parsed : null;
 }
 
@@ -103,6 +103,23 @@ export async function repoRankTrajectory(
   repo: string,
   opts?: { includeArchive?: boolean },
 ): Promise<RankHistoryPoint[]> {
+  const series = await repoRankSeries(repo, opts);
+  if (!series.length) return [];
+  // noon-stamped days, clamped so today's point is never in the future
+  return toTrajectory(series);
+}
+
+// The same record as raw [isoDay, worldRank, stars] points, oldest first and
+// merged across every name the repo carried: what the daily velocity rank
+// (src/lib/velocity-rank.ts) diffs day against day.
+// fresh: read the hot shards from origin, past the 1-hour cache. The velocity
+// rank table can be newer than a cached shard, and its last day then read as
+// "not measured" for up to an hour (god-key surface only: low traffic).
+// Rejects when a shard could not be read, like repoRankTrajectory.
+export async function repoRankSeries(
+  repo: string,
+  opts?: { includeArchive?: boolean; fresh?: boolean },
+): Promise<[string, number, number][]> {
   // A renamed/transferred repo's points live under EVERY name it ever carried,
   // and different names hash to DIFFERENT shards (santifer/career-ops -> 27,
   // career-ops-hq/career-ops -> 0 after the 2026-08-31 transfer). Read the
@@ -112,7 +129,7 @@ export async function repoRankTrajectory(
   const shards = [...new Set(names.map((n) => shardOf(n)))];
   const reads = await Promise.all(
     shards.map(async (i) => ({
-      hot: await cachedShard(i),
+      hot: await (opts?.fresh ? readShard(i, false) : cachedShard(i)),
       archive: opts?.includeArchive ? await readArchiveShard(i) : null,
     })),
   );
@@ -126,7 +143,5 @@ export async function repoRankTrajectory(
   for (const name of names) {
     for (const r of reads) for (const p of pullSeries(r.hot?.series, name)) byDay.set(p[0], p);
   }
-  if (!byDay.size) return [];
-  // noon-stamped days, clamped so today's point is never in the future
-  return toTrajectory(byDay.values());
+  return [...byDay.values()].sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0));
 }
