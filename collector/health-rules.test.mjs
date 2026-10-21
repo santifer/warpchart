@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { COLLECTOR_STALE_H as APP_STALE_H } from "../src/lib/staleness.ts";
-import { ARTIFACTS, COLLECTOR_STALE_H, cancelledVerdict, cronLag, etaIncoherences, maxAgeFromEnv, newestRunMs, pickFreshestRuns, pipelineRunsGate, RUNS_LIST_TOL_H, runsListStale, openPartials, presenceEval, presenceLost, presenceMap, prflowFreshness, npmUsageFreshness, contributorsDrift, contributorCurve, buildersWallFreshness, buildersLangMismatch, velocityRankFreshness, velocityRankReconstructed, curveEndsOnTotal, staleArtifacts, watchdogStale, v7StampLags, v7WindowFreshness } from "./health-rules.mjs";
+import { ARTIFACTS, COLLECTOR_STALE_H, npmLagExplains, cancelledVerdict, cronLag, etaIncoherences, maxAgeFromEnv, newestRunMs, pickFreshestRuns, pipelineRunsGate, RUNS_LIST_TOL_H, runsListStale, openPartials, presenceEval, presenceLost, presenceMap, prflowFreshness, npmUsageFreshness, contributorsDrift, contributorCurve, buildersWallFreshness, buildersLangMismatch, velocityRankFreshness, velocityRankReconstructed, curveEndsOnTotal, staleArtifacts, watchdogStale, v7StampLags, v7WindowFreshness } from "./health-rules.mjs";
 
 describe("prflowFreshness", () => {
   // 26-sep: the first run after 00:00Z was cancelled and 25-sep never closed.
@@ -640,5 +640,35 @@ describe("velocityRankReconstructed", () => {
     expect(velocityRankReconstructed({ days: Array(74).fill("d"), repos: { a: {} } }).severity).toBe("warn");
     const repos = Object.fromEntries(Array.from({ length: 2000 }, (_, i) => [`r/${i}`, {}]));
     expect(velocityRankReconstructed({ from: "2026-04-01", to: "2026-06-13", days: Array(74).fill("d"), repos }).severity).toBeNull();
+  });
+});
+
+describe("npmLagExplains: a family stale because npm stopped publishing is not our outage", () => {
+  // the health run of 2026-10-21T14:06Z: npm-versions/ 86 h old, react's
+  // point/last-week ended on 2026-10-18 (npm 3 days behind for every package)
+  const now = Date.parse("2026-10-21T14:06:34Z");
+  const npmFam = { ...ARTIFACTS.find((a) => a.prefix === "npm-versions/"), ageH: 86 };
+
+  it("explains the real case: npm 3 days behind and we kept up until it stalled", () => {
+    expect(npmLagExplains(npmFam, "2026-10-18", now)).toEqual({ lagDays: 3, npmEnd: "2026-10-18" });
+  });
+  it("npm current (ends yesterday): our staleness is ours, stays critical", () => {
+    expect(npmLagExplains(npmFam, "2026-10-20", now)).toBeNull();
+  });
+  it("the first day of a stall is covered too: 2 days behind", () => {
+    expect(npmLagExplains({ ...npmFam, ageH: 40 }, "2026-10-19", now)).toEqual({ lagDays: 2, npmEnd: "2026-10-19" });
+  });
+  it("staleArtifacts keeps the upstream tag the rule reads (the wiring health.mjs relies on)", () => {
+    const newest = new Map([["npm-versions/", now - 86 * 3600e3]]);
+    const npmStale = staleArtifacts(newest, now).stale.find((x) => x.prefix === "npm-versions/");
+    expect(npmStale.upstream).toBe("npm");
+    expect(npmLagExplains(npmStale, "2026-10-18", now)).toEqual({ lagDays: 3, npmEnd: "2026-10-18" });
+  });
+  it("we stopped long before npm did: not explained", () => {
+    expect(npmLagExplains({ ...npmFam, ageH: 300 }, "2026-10-18", now)).toBeNull();
+  });
+  it("npm unreachable or a non-npm family: never explained", () => {
+    expect(npmLagExplains(npmFam, null, now)).toBeNull();
+    expect(npmLagExplains({ ...ARTIFACTS.find((a) => a.prefix === "traffic/"), ageH: 86 }, "2026-10-18", now)).toBeNull();
   });
 });

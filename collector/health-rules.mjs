@@ -223,7 +223,10 @@ export const ARTIFACTS = [
   { prefix: "contributors/", kind: "periodic", maxAgeH: 12, what: "the contributor census (cohorts source)" },
   { prefix: "traffic/", kind: "periodic", maxAgeH: 12, what: "the Traffic Vault" },
   { prefix: "prflow/", kind: "periodic", maxAgeH: 12, what: "the PR flow panel" },
-  { prefix: "npm-versions/", kind: "periodic", maxAgeH: 36, what: "npm downloads by version (daily snapshot)" },
+  // upstream: npm. Its stats can stall for days for EVERY package (21-oct: react's
+  // last-week still ended on 18-oct), and then the collector rightly writes
+  // nothing (a versions reading it cannot date). npmLagExplains tells that apart.
+  { prefix: "npm-versions/", kind: "periodic", maxAgeH: 36, what: "npm downloads by version (daily snapshot)", upstream: "npm" },
   // health/ is rewritten earlier in the same run (contracts, presence), so it
   // is always fresh here; the real "is the watchdog alive" sensor is
   // collector/watchdog-alive.mjs. The limit only keeps the declaration honest.
@@ -264,6 +267,24 @@ export function staleArtifacts(newest, now = Date.now(), artifacts = ARTIFACTS) 
     if (!(ageH <= a.maxAgeH)) stale.push({ ...a, ageH });
   }
   return { stale, missing };
+}
+
+// An npm-fed family that went stale because npm stopped publishing, not because
+// our step broke. Explained only when BOTH hold: npm's newest day for OUR
+// package (point/last-week `end`) is >= NPM_LAG_DAYS behind today (a current
+// npm ends yesterday, 1 day behind), and our newest upload is no older than 2
+// days before that npm day (we kept up until npm stalled). While npm lags, its
+// versions reading covers a window its point total does not, so the collector
+// cannot date it and rightly writes nothing. npmEnd null explains nothing.
+export const NPM_LAG_DAYS = 2;
+export function npmLagExplains(stale, npmEnd, now = Date.now()) {
+  if (stale?.upstream !== "npm" || typeof npmEnd !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(npmEnd)) return null;
+  const endMs = Date.parse(`${npmEnd}T00:00:00Z`);
+  const today = Date.parse(new Date(now).toISOString().slice(0, 10) + "T00:00:00Z");
+  const lagDays = Math.round((today - endMs) / 864e5);
+  const newestMs = now - stale.ageH * HOUR;
+  if (lagDays < NPM_LAG_DAYS || newestMs < endMs - 2 * 864e5) return null;
+  return { lagDays, npmEnd };
 }
 
 // pipeline.*: the Actions API can hand one token of the pool a STALE runs list.

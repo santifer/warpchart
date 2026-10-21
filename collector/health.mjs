@@ -33,7 +33,8 @@
 //   --base=X   probe another origin (a preview deployment, say)
 // Exit code 1 when a critical finding is open, so CI turns red by itself.
 import { writeFileSync } from "node:fs";
-import { ARTIFACTS, COLLECTOR_STALE_H, cancelledVerdict, cronLag, etaIncoherences, openPartials, pipelineRunsGate, presenceEval, presenceMap, prflowFreshness, staleArtifacts, npmUsageFreshness, contributorsDrift, contributorCurve, curveEndsOnTotal, buildersWallFreshness, buildersLangMismatch, velocityRankFreshness, velocityRankReconstructed, v7StampLags, v7WindowFreshness, V7_WINDOW_MAX_H } from "./health-rules.mjs";
+import { candidatePackages } from "./npm-versions.mjs";
+import { ARTIFACTS, COLLECTOR_STALE_H, npmLagExplains, cancelledVerdict, cronLag, etaIncoherences, openPartials, pipelineRunsGate, presenceEval, presenceMap, prflowFreshness, staleArtifacts, npmUsageFreshness, contributorsDrift, contributorCurve, curveEndsOnTotal, buildersWallFreshness, buildersLangMismatch, velocityRankFreshness, velocityRankReconstructed, v7StampLags, v7WindowFreshness, V7_WINDOW_MAX_H } from "./health-rules.mjs";
 
 const args = process.argv.slice(2);
 const JSON_OUT = args.includes("--json");
@@ -906,7 +907,26 @@ async function checkInventory() {
       if (!bag.has(key) || bag.get(key) < t) bag.set(key, t);
     }
 
-    const { stale, missing } = staleArtifacts(newest);
+    const { stale: staleAll, missing } = staleArtifacts(newest);
+    // a family fed by npm that stalled because npm did: reported, not critical.
+    // npm's newest day for OUR package (the first of its names npm knows)
+    let npmEnd = null;
+    let npmPkg = null;
+    if (staleAll.some((s) => s.upstream === "npm")) {
+      for (const pkg of candidatePackages(TENANT)) {
+        const r = await fetch(`https://api.npmjs.org/downloads/point/last-week/${encodeURIComponent(pkg)}`, { signal: AbortSignal.timeout(10_000) }).catch(() => null);
+        const end = r?.ok ? (await r.json().catch(() => null))?.end ?? null : null;
+        if (end) { npmEnd = end; npmPkg = pkg; break; }
+      }
+    }
+    const upstream = staleAll.map((s) => ({ s, why: npmLagExplains(s, npmEnd) })).filter((x) => x.why);
+    const stale = staleAll.filter((s) => !upstream.some((u) => u.s === s));
+    if (upstream.length) {
+      fail("inventory.upstream-lag", "INVENTORY", "warn",
+        upstream.map(({ s, why }) => `${s.prefix} ${(s.ageH / 24).toFixed(1)}d old because npm is behind: ${npmPkg}'s point/last-week ends on ${why.npmEnd} (${why.lagDays} days ago) and its versions reading does not match that week, so it cannot be dated`).join(" · "),
+        "Nothing to fix on our side: the collector writes nothing while it cannot date npm's versions reading. When npm catches up the family refreshes by itself; if npm is current and this family is still old, inventory.coverage goes critical again.",
+        upstream.map(({ s, why }) => ({ prefix: s.prefix, ageHours: Math.round(s.ageH), npmEnd: why.npmEnd, lagDays: why.lagDays })));
+    } else pass("inventory.upstream-lag", "INVENTORY", "no family held back by an upstream");
 
     if (stale.length) {
       stale.sort((x, y) => y.ageH / y.maxAgeH - x.ageH / x.maxAgeH);
@@ -920,7 +940,8 @@ async function checkInventory() {
         `declared but absent: ${missing.map((m) => m.prefix).join(", ")}`,
         "Either the producer never ran, or the artifact was renamed and this declaration is stale. Both are worth a minute.");
     } else {
-      pass("inventory.coverage", "INVENTORY", `${ARTIFACTS.filter((a) => a.kind === "periodic").length} periodic families current`);
+      const held = upstream.length ? ` (${upstream.map(({ s }) => s.prefix).join(", ")} held back by npm: see inventory.upstream-lag)` : "";
+      pass("inventory.coverage", "INVENTORY", `${ARTIFACTS.filter((a) => a.kind === "periodic").length - upstream.length} periodic families current${held}`);
     }
 
     // The point of the whole area: something exists that nobody declared.
