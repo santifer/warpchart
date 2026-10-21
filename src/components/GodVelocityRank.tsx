@@ -8,9 +8,12 @@
 //
 // Two marks: the day's rank (thin, gappy where a day was not measurable) and
 // the trailing 7-day median (the trend under the noise). A gap is a day we did
-// not measure, never drawn as a bad day.
+// not measure, never drawn as a bad day. Where the API knows the repo's GitHub
+// Trending days (src/lib/trending-marks.ts, career-ops only), a ▲ on the x-axis
+// marks each day it was seen there.
 import { useEffect, useMemo, useState } from "react";
-import { ComposedChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceArea, ReferenceLine } from "recharts";
+import { ComposedChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceArea, ReferenceLine, ReferenceDot } from "recharts";
+import type { TrendingMarks } from "@/lib/trending-marks";
 import { usePalette, useThemeMode } from "@/lib/usePalette";
 import { fillCalendar, lastDays, monthStarts, rankTicks, tierOf, TIERS, type TierKey, trailingMedian, weekOverWeek } from "@/lib/velocity-rank-view";
 import { StepsSilhouette } from "./PanelSilhouettes";
@@ -20,7 +23,7 @@ type State =
   | { kind: "locked" }
   | { kind: "unavailable" }
   | { kind: "empty" }
-  | { kind: "data"; top: number; pts: Pt[] };
+  | { kind: "data"; top: number; pts: Pt[]; trending: TrendingMarks | null };
 
 const H = 260;
 
@@ -72,7 +75,11 @@ export default function GodVelocityRank({ repo }: { repo: string }) {
         if (status === 503) return setState({ kind: "unavailable" });
         if (!body) return setState({ kind: "locked" });
         const pts = (body.points ?? []) as Pt[];
-        setState(pts.filter((p) => p.rank != null).length >= 2 ? { kind: "data", top: body.top ?? 1000, pts } : { kind: "empty" });
+        setState(
+          pts.filter((p) => p.rank != null).length >= 2
+            ? { kind: "data", top: body.top ?? 1000, pts, trending: (body.trending ?? null) as TrendingMarks | null }
+            : { kind: "empty" },
+        );
       })
       .catch(() => !stop && setState({ kind: "locked" }));
     return () => {
@@ -92,9 +99,12 @@ export default function GodVelocityRank({ repo }: { repo: string }) {
     const isRec = (p: { day: string; reconstructed?: boolean }) => !!p.reconstructed || (firstLive == null || p.day < firstLive);
     const medLive = trailingMedian(full.map((p) => (isRec(p) ? { ...p, rank: null } : p)));
     const medRecon = trailingMedian(full.map((p) => (isRec(p) ? p : { ...p, rank: null })));
+    // place on GitHub Trending that day, where the repo's Trending days are known
+    const trPos = new Map((state.trending?.marks ?? []).map((m) => [m.day, m.pos]));
     const data = lastDays(
       full.map((p, i) => ({
         ...p,
+        tr: trPos.get(p.day) ?? null,
         t: Date.parse(`${p.day}T12:00:00Z`),
         rec: isRec(p),
         med: isRec(p) ? null : medLive[i],
@@ -117,7 +127,7 @@ export default function GodVelocityRank({ repo }: { repo: string }) {
     const bestRec = best ? !!data.find((p) => p.day === best.day)?.rec : false;
     // where the live record starts, if both parts are in view
     const liveT = firstLive && data.some((p) => p.rec) && data.some((p) => !p.rec) ? Date.parse(`${firstLive}T00:00:00Z`) : null;
-    return { data, wow: { ...wow, best }, bestRec, yMax, ticks, months, liveT, firstLive };
+    return { data, wow: { ...wow, best }, bestRec, yMax, ticks, months, liveT, firstLive, trendDays: data.filter((p) => p.tr != null) };
   }, [state, range]);
 
   if (state.kind === "locked") return <LockedTeaser repo={repo} />;
@@ -133,7 +143,8 @@ export default function GodVelocityRank({ repo }: { repo: string }) {
     );
   }
 
-  const { data, wow, bestRec, yMax, ticks, months, liveT, firstLive } = view!;
+  const { data, wow, bestRec, yMax, ticks, months, liveT, firstLive, trendDays } = view!;
+  const trending = state.trending;
   const medTier = wow.thisWeek != null ? tierOf(wow.thisWeek) : null;
   const top = state.top.toLocaleString("en-US");
   // the live record's first day, never a reconstructed one (30D/90D views
@@ -213,7 +224,8 @@ export default function GodVelocityRank({ repo }: { repo: string }) {
                 x={liveT}
                 stroke={C.accent}
                 strokeOpacity={0.5}
-                label={{ value: "RECORDED LIVE ▸", position: "insideBottomRight", fill: C.faint, fontSize: 8, letterSpacing: "0.2em" }}
+                // right of the line (room on a phone) and lifted clear of the Trending ▲ marks
+                label={{ value: "RECORDED LIVE ▸", position: "insideBottomLeft", offset: 14, fill: C.faint, fontSize: 8, letterSpacing: "0.2em" }}
               />
             )}
             {months.map((m) => (
@@ -224,6 +236,18 @@ export default function GodVelocityRank({ repo }: { repo: string }) {
                 strokeOpacity={0.45}
                 strokeDasharray="3 4"
                 label={{ value: m.label, position: "insideTopLeft", fill: C.faint, fontSize: 8, letterSpacing: "0.2em" }}
+              />
+            ))}
+            {/* a ▲ standing on the x-axis for each day seen on GitHub Trending */}
+            {trendDays.map((p) => (
+              <ReferenceDot
+                key={`tr-${p.day}`}
+                x={p.t}
+                y={yMax}
+                ifOverflow="visible"
+                shape={(s: { cx?: number; cy?: number }) =>
+                  s.cx == null || s.cy == null ? <g /> : <path d={`M${s.cx - 3.5},${s.cy} L${s.cx + 3.5},${s.cy} L${s.cx},${s.cy - 6} Z`} fill={C.warn} />
+                }
               />
             ))}
             <XAxis
@@ -260,7 +284,8 @@ export default function GodVelocityRank({ repo }: { repo: string }) {
                 const p = (item as { payload?: (typeof data)[number] })?.payload;
                 if (name === "med") return [value != null ? `#${value}` : "n/a", "7-day median"];
                 if (name === "medRec") return [value != null ? `#${value}` : "n/a", "7-day median (reconstructed)"];
-                if (!p || p.rank == null) return [p?.why === "step" ? "star purge or restore: not ranked" : "not measured", "that day"];
+                const tr = p?.tr != null ? ` · ▲ Trending JS #${p.tr}` : "";
+                if (!p || p.rank == null) return [`${p?.why === "step" ? "star purge or restore: not ranked" : "not measured"}${tr}`, "that day"];
                 const w = p.hours != null ? ` in ${p.hours} h` : "";
                 const g = p.gain ?? 0;
                 // reconstructed: GitHub's star history counts current stargazers per UTC day, not a net
@@ -269,7 +294,7 @@ export default function GodVelocityRank({ repo }: { repo: string }) {
                   : `${g >= 0 ? "+" : "−"}${Math.abs(g).toLocaleString("en-US")} net ★${w}`;
                 // outside the top 1,000 the rank is where it WOULD have placed
                 const place = p.inTop === false ? `would place #${p.rank}` : `#${p.rank} of ${(p.n ?? 0).toLocaleString("en-US")}`;
-                return [`${place} · ${tierOf(p.rank).key} · ${net}`, "by new stars"];
+                return [`${place} · ${tierOf(p.rank).key} · ${net}${tr}`, "by new stars"];
               }}
             />
             <Line
@@ -324,12 +349,19 @@ export default function GodVelocityRank({ repo }: { repo: string }) {
             {t.key === "common" ? " · 251+" : ""}
           </span>
         ))}
+        {trending && (
+          <span className="numeral text-micro tracking-[0.18em] text-faint">
+            <span style={{ color: C.warn }} aria-hidden>▲</span> IN GITHUB TRENDING
+          </span>
+        )}
       </div>
       <span className="numeral px-1 text-micro text-faint">
         {state.pts.some((p) => p.inTop === false) ? `where it placed (or would have) among the worldwide top ${top}` : `place among the worldwide top ${top}`} by net new stars that day · lower is better · line = 7-day median · gaps = day not measured · √ scale ·{" "}
         {data.some((p) => p.rec)
           ? `hollow dots + dashed line = reconstructed from GitHub's star history (current stargazers per Pacific-time day; ~10% of the rank off the live record on a median day, closer at the top)${firstLive ? ` · recorded live since ${dayLabel(firstLive)}` : ""}`
           : since ? `recorded since ${since}` : ""}
+        {trending &&
+          ` · ▲ = seen on GitHub Trending (${trending.marks[0]?.list ?? "javascript"} list) in the daily ~${trending.snapshotUtc} UTC snapshot of the ${trending.source} archive, checked through ${dayLabel(trending.checkedThrough)}; one snapshot a day, so no ▲ does not mean it was not trending`}
       </span>
     </div>
   );

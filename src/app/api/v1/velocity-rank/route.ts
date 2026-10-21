@@ -5,6 +5,7 @@
 // localStorage by the owner's god mode, so the public pages keep their ISR
 // cache. Cache-only: the Blob, never GitHub.
 import { repoVelocityRank } from "@/lib/velocity-rank";
+import { trendingMarksFor } from "@/lib/trending-marks";
 
 export const dynamic = "force-dynamic";
 const VALID = /^[\w.-]+\/[\w.-]+$/;
@@ -26,5 +27,6 @@ export async function GET(request: Request) {
     // the day table is missing or unreadable: an honest 503, never an empty record
     return Response.json({ error: "velocity rank unavailable" }, { status: 503, headers: { "Cache-Control": "no-store" } });
   }
-  return Response.json({ repo, ...r }, { headers: { "Cache-Control": "private, no-store" } });
+  // days seen on GitHub Trending, for the x-axis marks (null = not tracked)
+  return Response.json({ repo, ...r, trending: trendingMarksFor(repo) }, { headers: { "Cache-Control": "private, no-store" } });
 }
