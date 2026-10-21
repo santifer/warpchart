@@ -369,7 +369,7 @@ export default function GodVelocityRank({ repo }: { repo: string }) {
         {trending &&
           ` · ▲ = seen on GitHub Trending (JS = the javascript list, otherwise the general one)${
             trending.archive
-              ? `: the daily ~${trending.archive.snapshotUtc} UTC snapshot of the ${trending.archive.source} archive (javascript list) through ${dayLabel(trending.archive.through)}`
+              ? `: ${trending.archive.sources.map((s) => `the ${s.name} archive (${s.list === "all" ? "general" : s.list} list, ${s.cadence})`).join(" and ")} through ${dayLabel(trending.archive.through)}`
               : ""
           }${
             trending.live
