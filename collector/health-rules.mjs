@@ -212,6 +212,10 @@ export const ARTIFACTS = [
   { prefix: "route-history/", kind: "periodic", maxAgeH: 36, what: "the daily rank moat" },
   // rebuilt once per recorded rank-history day (collector/velocity-rank.mjs)
   { prefix: "velocity-rank/", kind: "periodic", maxAgeH: 36, what: "the daily velocity-rank table" },
+  // every collect run (collector/trending-marks.mjs), but NOT written when both
+  // trending pages fail: a single bad run must not read as "stopped" (the
+  // partial marker 'trending-marks' says that one), so a day and a half
+  { prefix: "trending/", kind: "periodic", maxAgeH: 36, what: "the house repo's GitHub Trending days" },
   // builders.yml every 6 h; it skips while the people are the same and the
   // wall is under 20 h old, so a healthy wall is at most ~26 h old
   { prefix: "builders/", kind: "periodic", maxAgeH: 30, what: "the README builders wall" },

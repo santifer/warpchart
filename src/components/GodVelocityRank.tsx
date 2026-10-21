@@ -9,7 +9,8 @@
 // Two marks: the day's rank (thin, gappy where a day was not measurable) and
 // the trailing 7-day median (the trend under the noise). A gap is a day we did
 // not measure, never drawn as a bad day. Where the API knows the repo's GitHub
-// Trending days (src/lib/trending-marks.ts, career-ops only), a ▲ on the x-axis
+// Trending days (src/lib/trending-marks.ts: a fixed archive + the collector's
+// live record, career-ops only), a ▲ on the x-axis
 // marks each day it was seen there.
 import { useEffect, useMemo, useState } from "react";
 import { ComposedChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceArea, ReferenceLine, ReferenceDot } from "recharts";
@@ -100,7 +101,12 @@ export default function GodVelocityRank({ repo }: { repo: string }) {
     const medLive = trailingMedian(full.map((p) => (isRec(p) ? { ...p, rank: null } : p)));
     const medRecon = trailingMedian(full.map((p) => (isRec(p) ? p : { ...p, rank: null })));
     // place on GitHub Trending that day, where the repo's Trending days are known
-    const trPos = new Map((state.trending?.marks ?? []).map((m) => [m.day, m.pos]));
+    // one label per day, every list it was seen in: "#4 · JS #2"
+    const trPos = new Map<string, string>();
+    for (const m of state.trending?.marks ?? []) {
+      const l = `${m.list === "all" ? "" : "JS "}#${m.pos}`;
+      trPos.set(m.day, trPos.has(m.day) ? `${trPos.get(m.day)} · ${l}` : l);
+    }
     const data = lastDays(
       full.map((p, i) => ({
         ...p,
@@ -284,7 +290,7 @@ export default function GodVelocityRank({ repo }: { repo: string }) {
                 const p = (item as { payload?: (typeof data)[number] })?.payload;
                 if (name === "med") return [value != null ? `#${value}` : "n/a", "7-day median"];
                 if (name === "medRec") return [value != null ? `#${value}` : "n/a", "7-day median (reconstructed)"];
-                const tr = p?.tr != null ? ` · ▲ Trending JS #${p.tr}` : "";
+                const tr = p?.tr != null ? ` · ▲ Trending ${p.tr}` : "";
                 if (!p || p.rank == null) return [`${p?.why === "step" ? "star purge or restore: not ranked" : "not measured"}${tr}`, "that day"];
                 const w = p.hours != null ? ` in ${p.hours} h` : "";
                 const g = p.gain ?? 0;
@@ -361,7 +367,15 @@ export default function GodVelocityRank({ repo }: { repo: string }) {
           ? `hollow dots + dashed line = reconstructed from GitHub's star history (current stargazers per Pacific-time day; ~10% of the rank off the live record on a median day, closer at the top)${firstLive ? ` · recorded live since ${dayLabel(firstLive)}` : ""}`
           : since ? `recorded since ${since}` : ""}
         {trending &&
-          ` · ▲ = seen on GitHub Trending (${trending.marks[0]?.list ?? "javascript"} list) in the daily ~${trending.snapshotUtc} UTC snapshot of the ${trending.source} archive, checked through ${dayLabel(trending.checkedThrough)}; one snapshot a day, so no ▲ does not mean it was not trending`}
+          ` · ▲ = seen on GitHub Trending (JS = the javascript list, otherwise the general one)${
+            trending.archive
+              ? `: the daily ~${trending.archive.snapshotUtc} UTC snapshot of the ${trending.archive.source} archive (javascript list) through ${dayLabel(trending.archive.through)}`
+              : ""
+          }${
+            trending.live
+              ? `${trending.archive ? ", and" : ":"} warpchart's own check of the general and javascript lists every few hours since ${dayLabel(trending.live.since.slice(0, 10))} (last ${trending.live.lastCheck.slice(11, 16)} UTC ${dayLabel(trending.live.lastCheck.slice(0, 10))})`
+              : ""
+          }; snapshots, so no ▲ does not mean it was not trending`}
       </span>
     </div>
   );

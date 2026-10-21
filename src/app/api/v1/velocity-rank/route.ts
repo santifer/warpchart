@@ -6,6 +6,7 @@
 // cache. Cache-only: the Blob, never GitHub.
 import { repoVelocityRank } from "@/lib/velocity-rank";
 import { trendingMarksFor } from "@/lib/trending-marks";
+import { readTrendingLive } from "@/lib/trending-live";
 
 export const dynamic = "force-dynamic";
 const VALID = /^[\w.-]+\/[\w.-]+$/;
@@ -22,11 +23,12 @@ export async function GET(request: Request) {
   if (!VALID.test(repo)) {
     return Response.json({ error: "repo must be 'owner/name'" }, { status: 400 });
   }
-  const r = await repoVelocityRank(repo);
+  const [r, live] = await Promise.all([repoVelocityRank(repo), readTrendingLive()]);
   if (!r) {
     // the day table is missing or unreadable: an honest 503, never an empty record
     return Response.json({ error: "velocity rank unavailable" }, { status: 503, headers: { "Cache-Control": "no-store" } });
   }
-  // days seen on GitHub Trending, for the x-axis marks (null = not tracked)
-  return Response.json({ repo, ...r, trending: trendingMarksFor(repo) }, { headers: { "Cache-Control": "private, no-store" } });
+  // days seen on GitHub Trending (fixed archive + the collector's live record),
+  // for the x-axis marks (null = not tracked)
+  return Response.json({ repo, ...r, trending: trendingMarksFor(repo, live) }, { headers: { "Cache-Control": "private, no-store" } });
 }
