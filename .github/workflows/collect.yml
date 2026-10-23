@@ -308,6 +308,19 @@ jobs:
             git push
           }
 
+      # 5b. GitHub Trending marks: is the house repo on github.com/trending
+      #     (general + javascript) right now? Its days go to trending/marks.json
+      #     (private Blob), the ▲ marks of the velocity-rank panel. Two page
+      #     reads; refuses to write on a failed Blob read or a lost day; never
+      #     fails the run. AFTER the deploy on purpose: the app reads this key
+      #     live, so a slow GitHub here can never delay or cancel the deploy.
+      - name: GitHub Trending marks
+        run: node collector/trending-marks.mjs
+        continue-on-error: true
+        timeout-minutes: 3
+        env:
+          BLOB_READ_WRITE_TOKEN: ${{ secrets.BLOB_READ_WRITE_TOKEN }}
+
       # 6. Mutual attestation. health.yml checks production; this checks that
       #    health.yml is still running at all - otherwise a stopped watchdog is
       #    indistinguishable from a healthy system, since both are silent.

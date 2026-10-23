@@ -211,6 +211,10 @@ export const ARTIFACTS = [
   { prefix: "route-history/", kind: "periodic", maxAgeH: 36, what: "the daily rank moat" },
   // rebuilt once per recorded rank-history day (collector/velocity-rank.mjs)
   { prefix: "velocity-rank/", kind: "periodic", maxAgeH: 36, what: "the daily velocity-rank table" },
+  // every collect run (collector/trending-marks.mjs), but NOT written when both
+  // trending pages fail: a single bad run must not read as "stopped" (the
+  // partial marker 'trending-marks' says that one), so a day and a half
+  { prefix: "trending/", kind: "periodic", maxAgeH: 36, what: "the house repo's GitHub Trending days" },
   // builders.yml every 6 h; it skips while the people are the same and the
   // wall is under 20 h old, so a healthy wall is at most ~26 h old
   { prefix: "builders/", kind: "periodic", maxAgeH: 30, what: "the README builders wall" },
@@ -218,7 +222,10 @@ export const ARTIFACTS = [
   { prefix: "contributors/", kind: "periodic", maxAgeH: 12, what: "the contributor census (cohorts source)" },
   { prefix: "traffic/", kind: "periodic", maxAgeH: 12, what: "the Traffic Vault" },
   { prefix: "prflow/", kind: "periodic", maxAgeH: 12, what: "the PR flow panel" },
-  { prefix: "npm-versions/", kind: "periodic", maxAgeH: 36, what: "npm downloads by version (daily snapshot)" },
+  // upstream: npm. Its stats can stall for days for EVERY package (21-oct: react's
+  // last-week still ended on 18-oct), and then the collector rightly writes
+  // nothing (a versions reading it cannot date). npmLagExplains tells that apart.
+  { prefix: "npm-versions/", kind: "periodic", maxAgeH: 36, what: "npm downloads by version (daily snapshot)", upstream: "npm" },
   // health/ is rewritten earlier in the same run (contracts, presence), so it
   // is always fresh here; the real "is the watchdog alive" sensor is
   // collector/watchdog-alive.mjs. The limit only keeps the declaration honest.
@@ -281,6 +288,24 @@ export function staleArtifacts(newest, now = Date.now(), artifacts = ARTIFACTS) 
     if (!(ageH <= a.maxAgeH)) stale.push({ ...a, ageH });
   }
   return { stale, missing };
+}
+
+// An npm-fed family that went stale because npm stopped publishing, not because
+// our step broke. Explained only when BOTH hold: npm's newest day for OUR
+// package (point/last-week `end`) is >= NPM_LAG_DAYS behind today (a current
+// npm ends yesterday, 1 day behind), and our newest upload is no older than 2
+// days before that npm day (we kept up until npm stalled). While npm lags, its
+// versions reading covers a window its point total does not, so the collector
+// cannot date it and rightly writes nothing. npmEnd null explains nothing.
+export const NPM_LAG_DAYS = 2;
+export function npmLagExplains(stale, npmEnd, now = Date.now()) {
+  if (stale?.upstream !== "npm" || typeof npmEnd !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(npmEnd)) return null;
+  const endMs = Date.parse(`${npmEnd}T00:00:00Z`);
+  const today = Date.parse(new Date(now).toISOString().slice(0, 10) + "T00:00:00Z");
+  const lagDays = Math.round((today - endMs) / 864e5);
+  const newestMs = now - stale.ageH * HOUR;
+  if (lagDays < NPM_LAG_DAYS || newestMs < endMs - 2 * 864e5) return null;
+  return { lagDays, npmEnd };
 }
 
 // pipeline.*: the Actions API can hand one token of the pool a STALE runs list.
@@ -400,15 +425,33 @@ export function velocityRankFreshness(meta, rhLast, rhAt, now = Date.now(), grac
   return { severity: "warn", note: `velocity-rank table stops at ${meta.lastTo}, rank-history has ${rhLast} (${sinceH.toFixed(0)} h ago)` };
 }
 
-// The reconstructed days before the live record (velocity-rank/reconstructed.json,
-// written once by hand by collector/velocity-rank-backfill.mjs). Nothing
-// rewrites it, so the only failure is that it is gone or truncated: then the
-// chart silently starts on 14 Jun instead of in April.
-export function velocityRankReconstructed(rec) {
+// The reconstructed days (velocity-rank/reconstructed.json, written by hand by
+// collector/velocity-rank-backfill.mjs): before the live record, and the gaps
+// cut-short sweeps left in it. Nothing rewrites it, so it fails two ways:
+//   - gone or truncated: the chart silently starts on 14 Jun, not in April;
+//   - outrun: a NEW gap in the table after rec.to stays a silent hole
+//     (tableDays = the table's days; null = not read this run, not compared).
+export function velocityRankReconstructed(rec, tableDays = null) {
   if (!rec) return { severity: "warn", note: "velocity-rank/reconstructed.json missing: the chart starts at the live record" };
   const repos = Object.keys(rec.repos ?? {}).length;
   if (!(rec.days?.length >= 60) || repos < 1900) return { severity: "warn", note: `reconstructed table truncated: ${rec.days?.length ?? 0} days, ${repos} repos` };
+  const gaps = tableDays ? gapsAfter(tableDays, rec.to) : [];
+  if (gaps.length)
+    return { severity: "warn", note: `${gaps.length} velocity-rank day(s) unmeasured after the reconstruction ends (${rec.to}): ${gaps.slice(0, 5).join(", ")}; re-run collector/velocity-rank-backfill.mjs with a later TO` };
   return { severity: null, note: `reconstructed ${rec.from} .. ${rec.to}, ${repos} repos` };
+}
+
+// calendar days after `after` and before the table's last day that the table lacks
+export function gapsAfter(tableDays, after) {
+  const have = new Set(tableDays);
+  const last = [...tableDays].sort().at(-1);
+  const out = [];
+  if (!last) return out;
+  for (let t = Date.parse(`${after}T00:00:00Z`) + 864e5; t < Date.parse(`${last}T00:00:00Z`); t += 864e5) {
+    const d = new Date(t).toISOString().slice(0, 10);
+    if (!have.has(d)) out.push(d);
+  }
+  return out;
 }
 
 // Each published language must be SERVED in that language: on 17-oct-2026

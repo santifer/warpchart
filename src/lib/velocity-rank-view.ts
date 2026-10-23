@@ -117,3 +117,25 @@ export function lastDays<T extends { day: string }>(points: T[], days: number): 
   const cut = ms(points[points.length - 1].day) - (days - 1) * DAY;
   return points.filter((p) => ms(p.day) >= cut);
 }
+
+// Which points are the live record and which are reconstructed, for the chart.
+// Reconstructed rows come in two kinds (src/lib/velocity-rank.ts):
+//   - "pre": before the first live day, a stretch of their own with their
+//     own dashed median;
+//   - fills: inside the live record, on days a cut-short sweep left
+//     unmeasured. Drawn hollow, kept out of the live median and the headline
+//     (last day, week over week), which stay about the live record.
+// With no live day at all (firstLive null) every point is "pre", and the
+// headline still runs on them rather than going blank.
+export function liveSplit<T extends RankPoint & { reconstructed?: boolean }>(points: T[]) {
+  const firstLive = points.find((p) => p.rank != null && !p.reconstructed)?.day ?? null;
+  const isPre = (day: string) => firstLive == null || day < firstLive;
+  const isFill = (p: { day: string; reconstructed?: boolean }) => !!p.reconstructed && !isPre(p.day);
+  return {
+    firstLive,
+    isPre,
+    isFill,
+    isRec: (p: { day: string; reconstructed?: boolean }) => !!p.reconstructed || isPre(p.day),
+    headline: points.filter((p) => !isFill(p)),
+  };
+}

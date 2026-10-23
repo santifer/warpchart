@@ -33,7 +33,8 @@
 //   --base=X   probe another origin (a preview deployment, say)
 // Exit code 1 when a critical finding is open, so CI turns red by itself.
 import { writeFileSync } from "node:fs";
-import { ARTIFACTS, COLLECTOR_STALE_H, cancelledVerdict, cronLag, etaIncoherences, openPartials, pipelineRunsGate, presenceEval, presenceMap, prflowFreshness, staleArtifacts, npmUsageFreshness, contributorsDrift, contributorCurve, curveEndsOnTotal, buildersWallFreshness, buildersLangMismatch, velocityRankFreshness, velocityRankReconstructed, v7StampLags, v7WindowFreshness, V7_WINDOW_MAX_H } from "./health-rules.mjs";
+import { candidatePackages } from "./npm-versions.mjs";
+import { ARTIFACTS, COLLECTOR_STALE_H, npmLagExplains, cancelledVerdict, cronLag, etaIncoherences, openPartials, pipelineRunsGate, presenceEval, presenceMap, prflowFreshness, staleArtifacts, npmUsageFreshness, contributorsDrift, contributorCurve, curveEndsOnTotal, buildersWallFreshness, buildersLangMismatch, velocityRankFreshness, velocityRankReconstructed, v7StampLags, v7WindowFreshness, V7_WINDOW_MAX_H } from "./health-rules.mjs";
 import { newestByFamily } from "./health-rules.mjs";
 
 const args = process.argv.slice(2);
@@ -900,7 +901,26 @@ async function checkInventory() {
     } while (cursor);
 
     const { newest, undeclared } = newestByFamily(blobs);
-    const { stale, missing } = staleArtifacts(newest);
+    const { stale: staleAll, missing } = staleArtifacts(newest);
+    // a family fed by npm that stalled because npm did: reported, not critical.
+    // npm's newest day for OUR package (the first of its names npm knows)
+    let npmEnd = null;
+    let npmPkg = null;
+    if (staleAll.some((s) => s.upstream === "npm")) {
+      for (const pkg of candidatePackages(TENANT)) {
+        const r = await fetch(`https://api.npmjs.org/downloads/point/last-week/${encodeURIComponent(pkg)}`, { signal: AbortSignal.timeout(10_000) }).catch(() => null);
+        const end = r?.ok ? (await r.json().catch(() => null))?.end ?? null : null;
+        if (end) { npmEnd = end; npmPkg = pkg; break; }
+      }
+    }
+    const upstream = staleAll.map((s) => ({ s, why: npmLagExplains(s, npmEnd) })).filter((x) => x.why);
+    const stale = staleAll.filter((s) => !upstream.some((u) => u.s === s));
+    if (upstream.length) {
+      fail("inventory.upstream-lag", "INVENTORY", "warn",
+        upstream.map(({ s, why }) => `${s.prefix} ${(s.ageH / 24).toFixed(1)}d old because npm is behind: ${npmPkg}'s point/last-week ends on ${why.npmEnd} (${why.lagDays} days ago) and its versions reading does not match that week, so it cannot be dated`).join(" · "),
+        "Nothing to fix on our side: the collector writes nothing while it cannot date npm's versions reading. When npm catches up the family refreshes by itself; if npm is current and this family is still old, inventory.coverage goes critical again.",
+        upstream.map(({ s, why }) => ({ prefix: s.prefix, ageHours: Math.round(s.ageH), npmEnd: why.npmEnd, lagDays: why.lagDays })));
+    } else pass("inventory.upstream-lag", "INVENTORY", "no family held back by an upstream");
 
     if (stale.length) {
       stale.sort((x, y) => y.ageH / y.maxAgeH - x.ageH / x.maxAgeH);
@@ -914,7 +934,8 @@ async function checkInventory() {
         `declared but absent: ${missing.map((m) => m.prefix).join(", ")}`,
         "Either the producer never ran, or the artifact was renamed and this declaration is stale. Both are worth a minute.");
     } else {
-      pass("inventory.coverage", "INVENTORY", `${ARTIFACTS.filter((a) => a.kind === "periodic").length} periodic families current`);
+      const held = upstream.length ? ` (${upstream.map(({ s }) => s.prefix).join(", ")} held back by npm: see inventory.upstream-lag)` : "";
+      pass("inventory.coverage", "INVENTORY", `${ARTIFACTS.filter((a) => a.kind === "periodic").length - upstream.length} periodic families current${held}`);
     }
 
     // The point of the whole area: something exists that nobody declared.
@@ -1153,13 +1174,17 @@ async function checkPresence() {
     if (!r.severity && rh != null) {
       const rec = await blobJson("velocity-rank/reconstructed.json").catch(() => undefined);
       if (rec !== undefined) {
-        const rr = velocityRankReconstructed(rec);
+        // the table's days after the reconstruction ends: a new gap there is a silent hole
+        const months = rec?.to ? (meta?.months ?? []).filter((m) => m >= rec.to.slice(0, 7)) : [];
+        const got = await Promise.all(months.map((m) => blobJson(`velocity-rank/${m}.json`).catch(() => undefined)));
+        const tableDays = got.every((g) => g?.days) ? got.flatMap((g) => g.days.map((d) => d.day)) : null;
+        const rr = velocityRankReconstructed(rec, tableDays);
         if (rr.severity) r = rr;
         else r = { severity: null, note: `${r.note}; ${rr.note}` };
       }
     }
     if (r.severity) fail("presence.velocity-rank", "PRESENCE", r.severity, r.note,
-      "collector/velocity-rank.mjs runs in collect.yml right after route-history and rebuilds velocity-rank/{YYYY-MM}.json from the 64 rank-history shards; it refuses (partial marker 'velocity-rank') on any unreadable shard or when the table would lose days. The reconstructed part (before 14 Jun) is velocity-rank/reconstructed.json, made once by hand with collector/velocity-rank-backfill.mjs (bump the cache key in src/lib/velocity-rank.ts when re-uploading). Look at its log line in the last collect run. If it refused because the table would lose days and that is real, rebuild once by hand: BLOB_READ_WRITE_TOKEN=... node collector/velocity-rank.mjs --force.");
+      "collector/velocity-rank.mjs runs in collect.yml right after route-history and rebuilds velocity-rank/{YYYY-MM}.json from the 64 rank-history shards; it refuses (partial marker 'velocity-rank') on any unreadable shard or when the table would lose days. The reconstructed part (before 14 Jun, plus the days cut-short sweeps left out after it) is velocity-rank/reconstructed.json, made by hand with collector/velocity-rank-backfill.mjs: a new gap after its TO needs a re-run with a later TO (and page 2 of /stargazers/history once page 1 no longer reaches FROM). Bump the cache key in src/lib/velocity-rank.ts when re-uploading. Look at its log line in the last collect run. If it refused because the table would lose days and that is real, rebuild once by hand: BLOB_READ_WRITE_TOKEN=... node collector/velocity-rank.mjs --force.");
     else pass("presence.velocity-rank", "PRESENCE", r.note);
   });
 
