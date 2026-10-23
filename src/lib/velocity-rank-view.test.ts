@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { fillCalendar, lastDays, monthStarts, rankTicks, tierOf, trailingMedian, weekOverWeek } from "./velocity-rank-view";
+import { fillCalendar, lastDays, liveSplit, monthStarts, rankTicks, tierOf, trailingMedian, weekOverWeek } from "./velocity-rank-view";
 
 // career-ops, 6-19 Oct 2026 (collector/velocity-rank.mjs on the real moat),
 // (the gap cases below use their own series)
@@ -74,5 +74,42 @@ describe("lastDays", () => {
     expect(lastDays(f, 30).map((p) => p.day)[0]).toBe("2026-09-20");
     expect(lastDays(f, 30)).toHaveLength(30);
     expect(lastDays(f, 0)).toHaveLength(f.length);
+  });
+});
+
+describe("liveSplit (reconstructed stretch, live record, fills)", () => {
+  // career-ops: a reconstructed 12-13 Jun, live from 14 Jun; around the 3 Sep
+  // truncated sweep the live record has 1 and 4-5 Sep, filled 2-3 Sep (real ranks)
+  const pts = [
+    { day: "2026-06-12", rank: 9, reconstructed: true },
+    { day: "2026-06-13", rank: 12, reconstructed: true },
+    { day: "2026-06-14", rank: 15 },
+    { day: "2026-09-01", rank: 84 },
+    { day: "2026-09-02", rank: 75, reconstructed: true },
+    { day: "2026-09-03", rank: 97, reconstructed: true },
+    { day: "2026-09-04", rank: 101 },
+    { day: "2026-09-05", rank: 96 },
+  ];
+
+  it("a fill inside the live record is reconstructed but not 'pre'", () => {
+    const s = liveSplit(pts);
+    expect(s.firstLive).toBe("2026-06-14");
+    expect(pts.filter((p) => s.isPre(p.day)).map((p) => p.day)).toEqual(["2026-06-12", "2026-06-13"]);
+    expect(pts.filter(s.isFill).map((p) => p.day)).toEqual(["2026-09-02", "2026-09-03"]);
+    expect(pts.filter(s.isRec).length).toBe(4);
+  });
+
+  it("the headline (last day, week over week) leaves the fills out", () => {
+    const s = liveSplit(pts);
+    expect(s.headline.map((p) => p.day)).not.toContain("2026-09-02");
+    expect(s.headline).toHaveLength(6);
+  });
+
+  it("with no live day, everything is 'pre' and the headline is not blank", () => {
+    const only = pts.filter((p) => p.reconstructed);
+    const s = liveSplit(only);
+    expect(s.firstLive).toBeNull();
+    expect(s.headline).toHaveLength(4);
+    expect(weekOverWeek(s.headline).lastDay).toBe("2026-09-03");
   });
 });

@@ -16,7 +16,7 @@ import { useEffect, useMemo, useState } from "react";
 import { ComposedChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceArea, ReferenceLine, ReferenceDot } from "recharts";
 import type { TrendingMarks } from "@/lib/trending-marks";
 import { usePalette, useThemeMode } from "@/lib/usePalette";
-import { fillCalendar, lastDays, monthStarts, rankTicks, tierOf, TIERS, type TierKey, trailingMedian, weekOverWeek } from "@/lib/velocity-rank-view";
+import { fillCalendar, lastDays, liveSplit, monthStarts, rankTicks, tierOf, TIERS, type TierKey, trailingMedian, weekOverWeek } from "@/lib/velocity-rank-view";
 import { StepsSilhouette } from "./PanelSilhouettes";
 
 type Pt = { day: string; rank: number | null; gain: number | null; n: number; hours: number | null; inTop?: boolean; reconstructed?: boolean; why?: string };
@@ -95,11 +95,12 @@ export default function GodVelocityRank({ repo }: { repo: string }) {
     // slices it, so a 30-day view opens on a real 7-day median
     const full = fillCalendar(state.pts) as (Partial<Pt> & { day: string; rank: number | null })[];
     // the reconstructed stretch (before the live record) and the live record
-    // each get their OWN 7-day median: one never borrows the other's days
-    const firstLive = full.find((p) => p.rank != null && !p.reconstructed)?.day ?? null;
-    const isRec = (p: { day: string; reconstructed?: boolean }) => !!p.reconstructed || (firstLive == null || p.day < firstLive);
+    // each get their OWN 7-day median: one never borrows the other's days. A
+    // reconstructed day INSIDE the live record (a truncated sweep's gap) is a
+    // hollow dot, but the live median neither uses it nor breaks on it
+    const { firstLive, isPre, isFill, isRec, headline } = liveSplit(state.pts);
     const medLive = trailingMedian(full.map((p) => (isRec(p) ? { ...p, rank: null } : p)));
-    const medRecon = trailingMedian(full.map((p) => (isRec(p) ? p : { ...p, rank: null })));
+    const medRecon = trailingMedian(full.map((p) => (isPre(p.day) ? p : { ...p, rank: null })));
     // place on GitHub Trending that day, where the repo's Trending days are known
     // one label per day, every list it was seen in: "#4 · JS #2"
     const trPos = new Map<string, string>();
@@ -113,8 +114,9 @@ export default function GodVelocityRank({ repo }: { repo: string }) {
         tr: trPos.get(p.day) ?? null,
         t: Date.parse(`${p.day}T12:00:00Z`),
         rec: isRec(p),
-        med: isRec(p) ? null : medLive[i],
-        medRec: isRec(p) ? medRecon[i] : null,
+        pre: isPre(p.day),
+        med: isPre(p.day) ? null : medLive[i],
+        medRec: isPre(p.day) ? medRecon[i] : null,
       })),
       range,
     );
@@ -128,12 +130,13 @@ export default function GodVelocityRank({ repo }: { repo: string }) {
       label: new Date(`${d}T12:00:00Z`).toLocaleDateString("en-US", { month: "short", timeZone: "UTC" }).toUpperCase(),
     }));
     // last day and the week-over-week are about NOW whatever the range; BEST is the range's
-    const wow = weekOverWeek(state.pts);
+    const wow = weekOverWeek(headline);
     const best = weekOverWeek(data.filter((p) => p.rank != null) as { day: string; rank: number }[]).best;
     const bestRec = best ? !!data.find((p) => p.day === best.day)?.rec : false;
     // where the live record starts, if both parts are in view
     const liveT = firstLive && data.some((p) => p.rec) && data.some((p) => !p.rec) ? Date.parse(`${firstLive}T00:00:00Z`) : null;
-    return { data, wow: { ...wow, best }, bestRec, yMax, ticks, months, liveT, firstLive, trendDays: data.filter((p) => p.tr != null) };
+    const filled = data.filter((p) => isFill(p) && p.rank != null).length;
+    return { data, wow: { ...wow, best }, bestRec, yMax, ticks, months, liveT, firstLive, filled, trendDays: data.filter((p) => p.tr != null) };
   }, [state, range]);
 
   if (state.kind === "locked") return <LockedTeaser repo={repo} />;
@@ -149,7 +152,7 @@ export default function GodVelocityRank({ repo }: { repo: string }) {
     );
   }
 
-  const { data, wow, bestRec, yMax, ticks, months, liveT, firstLive, trendDays } = view!;
+  const { data, wow, bestRec, yMax, ticks, months, liveT, firstLive, filled, trendDays } = view!;
   const trending = state.trending;
   const medTier = wow.thisWeek != null ? tierOf(wow.thisWeek) : null;
   const top = state.top.toLocaleString("en-US");
@@ -364,7 +367,7 @@ export default function GodVelocityRank({ repo }: { repo: string }) {
       <span className="numeral px-1 text-micro text-faint">
         {state.pts.some((p) => p.inTop === false) ? `where it placed (or would have) among the worldwide top ${top}` : `place among the worldwide top ${top}`} by net new stars that day · lower is better · line = 7-day median · gaps = day not measured · √ scale ·{" "}
         {data.some((p) => p.rec)
-          ? `hollow dots + dashed line = reconstructed from GitHub's star history (current stargazers per Pacific-time day; ~10% of the rank off the live record on a median day, closer at the top)${firstLive ? ` · recorded live since ${dayLabel(firstLive)}` : ""}`
+          ? `hollow dots${data.some((p) => p.pre && p.rank != null) ? " + dashed line" : ""} = reconstructed from GitHub's star history (current stargazers per Pacific-time day; ~10% of the rank off the live record on a median day, closer at the top)${firstLive ? ` · recorded live since ${dayLabel(firstLive)}` : ""}${filled ? `; ${filled} hollow ${filled === 1 ? "dot" : "dots"} inside the live record ${filled === 1 ? "fills a day" : "fill days"} a cut-short daily sweep left unmeasured, kept out of the median` : ""}`
           : since ? `recorded since ${since}` : ""}
         {trending &&
           ` · ▲ = seen on GitHub Trending (JS = the javascript list, otherwise the general one)${

@@ -1180,13 +1180,17 @@ async function checkPresence() {
     if (!r.severity && rh != null) {
       const rec = await blobJson("velocity-rank/reconstructed.json").catch(() => undefined);
       if (rec !== undefined) {
-        const rr = velocityRankReconstructed(rec);
+        // the table's days after the reconstruction ends: a new gap there is a silent hole
+        const months = rec?.to ? (meta?.months ?? []).filter((m) => m >= rec.to.slice(0, 7)) : [];
+        const got = await Promise.all(months.map((m) => blobJson(`velocity-rank/${m}.json`).catch(() => undefined)));
+        const tableDays = got.every((g) => g?.days) ? got.flatMap((g) => g.days.map((d) => d.day)) : null;
+        const rr = velocityRankReconstructed(rec, tableDays);
         if (rr.severity) r = rr;
         else r = { severity: null, note: `${r.note}; ${rr.note}` };
       }
     }
     if (r.severity) fail("presence.velocity-rank", "PRESENCE", r.severity, r.note,
-      "collector/velocity-rank.mjs runs in collect.yml right after route-history and rebuilds velocity-rank/{YYYY-MM}.json from the 64 rank-history shards; it refuses (partial marker 'velocity-rank') on any unreadable shard or when the table would lose days. The reconstructed part (before 14 Jun) is velocity-rank/reconstructed.json, made once by hand with collector/velocity-rank-backfill.mjs (bump the cache key in src/lib/velocity-rank.ts when re-uploading). Look at its log line in the last collect run. If it refused because the table would lose days and that is real, rebuild once by hand: BLOB_READ_WRITE_TOKEN=... node collector/velocity-rank.mjs --force.");
+      "collector/velocity-rank.mjs runs in collect.yml right after route-history and rebuilds velocity-rank/{YYYY-MM}.json from the 64 rank-history shards; it refuses (partial marker 'velocity-rank') on any unreadable shard or when the table would lose days. The reconstructed part (before 14 Jun, plus the days cut-short sweeps left out after it) is velocity-rank/reconstructed.json, made by hand with collector/velocity-rank-backfill.mjs: a new gap after its TO needs a re-run with a later TO (and page 2 of /stargazers/history once page 1 no longer reaches FROM). Bump the cache key in src/lib/velocity-rank.ts when re-uploading. Look at its log line in the last collect run. If it refused because the table would lose days and that is real, rebuild once by hand: BLOB_READ_WRITE_TOKEN=... node collector/velocity-rank.mjs --force.");
     else pass("presence.velocity-rank", "PRESENCE", r.note);
   });
 

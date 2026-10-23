@@ -404,15 +404,33 @@ export function velocityRankFreshness(meta, rhLast, rhAt, now = Date.now(), grac
   return { severity: "warn", note: `velocity-rank table stops at ${meta.lastTo}, rank-history has ${rhLast} (${sinceH.toFixed(0)} h ago)` };
 }
 
-// The reconstructed days before the live record (velocity-rank/reconstructed.json,
-// written once by hand by collector/velocity-rank-backfill.mjs). Nothing
-// rewrites it, so the only failure is that it is gone or truncated: then the
-// chart silently starts on 14 Jun instead of in April.
-export function velocityRankReconstructed(rec) {
+// The reconstructed days (velocity-rank/reconstructed.json, written by hand by
+// collector/velocity-rank-backfill.mjs): before the live record, and the gaps
+// cut-short sweeps left in it. Nothing rewrites it, so it fails two ways:
+//   - gone or truncated: the chart silently starts on 14 Jun, not in April;
+//   - outrun: a NEW gap in the table after rec.to stays a silent hole
+//     (tableDays = the table's days; null = not read this run, not compared).
+export function velocityRankReconstructed(rec, tableDays = null) {
   if (!rec) return { severity: "warn", note: "velocity-rank/reconstructed.json missing: the chart starts at the live record" };
   const repos = Object.keys(rec.repos ?? {}).length;
   if (!(rec.days?.length >= 60) || repos < 1900) return { severity: "warn", note: `reconstructed table truncated: ${rec.days?.length ?? 0} days, ${repos} repos` };
+  const gaps = tableDays ? gapsAfter(tableDays, rec.to) : [];
+  if (gaps.length)
+    return { severity: "warn", note: `${gaps.length} velocity-rank day(s) unmeasured after the reconstruction ends (${rec.to}): ${gaps.slice(0, 5).join(", ")}; re-run collector/velocity-rank-backfill.mjs with a later TO` };
   return { severity: null, note: `reconstructed ${rec.from} .. ${rec.to}, ${repos} repos` };
+}
+
+// calendar days after `after` and before the table's last day that the table lacks
+export function gapsAfter(tableDays, after) {
+  const have = new Set(tableDays);
+  const last = [...tableDays].sort().at(-1);
+  const out = [];
+  if (!last) return out;
+  for (let t = Date.parse(`${after}T00:00:00Z`) + 864e5; t < Date.parse(`${last}T00:00:00Z`); t += 864e5) {
+    const d = new Date(t).toISOString().slice(0, 10);
+    if (!have.has(d)) out.push(d);
+  }
+  return out;
 }
 
 // Each published language must be SERVED in that language: on 17-oct-2026

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildDays, dailyDeltas, rankAmong, reconstructDays, repoDailyRanks, repoReconstructedRanks } from "./velocity-rank-core.mjs";
+import { buildDays, dailyDeltas, historyCovers, mergeReconstructed, rankAmong, reconstructDays, repoDailyRanks, repoReconstructedRanks } from "./velocity-rank-core.mjs";
 
 // A tiny universe: minUniverse is lowered so a handful of repos stand in for
 // the 10k sweep; the rules are the same.
@@ -146,5 +146,78 @@ describe("reconstructDays (before the moat, from /stargazers/history)", () => {
     const r2 = reconstructDays(days, { ...repos, "new/born": { end: 900, g: [0, 0, 900] } }, { top: 5 });
     expect(r2[0].inTopOf.has("new/born")).toBe(false);
     expect(r2[2].inTopOf.has("new/born")).toBe(true);
+  });
+});
+
+describe("mergeReconstructed (recorded table + reconstructed fill)", () => {
+  // career-ops around the 3 Sep truncated sweep (4,039 of 10k): the table has
+  // 1 Sep and 4 Sep, never 2-3 Sep. Ranks/gains are the real ones.
+  const rec = (day, rank, gain) => ({ day, rank, gain, n: 1000, inTop: true });
+  const rb = (day, rank, gain) => ({ day, rank, gain, n: 1000, inTop: true, reconstructed: true });
+  const recorded = [rec("2026-09-01", 84, 140), rec("2026-09-04", 101, 109), rec("2026-09-05", 96, 112)];
+  const rebuilt = [
+    rb("2026-08-30", 0, 0), // stands in for the pre-moat stretch
+    rb("2026-09-01", 80, 150),
+    rb("2026-09-02", 75, 164),
+    rb("2026-09-03", 97, 132),
+    rb("2026-09-04", 102, 90),
+    rb("2026-09-06", 90, 120), // past the table's last day
+  ];
+
+  it("fills the days the table lacks, and a recorded day always wins", () => {
+    const m = mergeReconstructed(recorded, rebuilt);
+    expect(m.map((p) => `${p.day.slice(5)}${p.reconstructed ? "r" : ""}#${p.rank}`)).toEqual([
+      "08-30r#0", "09-01#84", "09-02r#75", "09-03r#97", "09-04#101", "09-05#96",
+    ]);
+  });
+
+  it("never adds a day past the table's last one, and drops unborn rows", () => {
+    const m = mergeReconstructed(recorded, [...rebuilt, { day: "2026-08-29", rank: null, gain: null, n: 1000, why: "unborn", reconstructed: true }]);
+    expect(m.some((p) => p.day === "2026-09-06" || p.day === "2026-08-29")).toBe(false);
+  });
+
+  it("a repo that joined the top 10k later gets no lone fills before its first ranked day", () => {
+    const late = [
+      { day: "2026-09-01", rank: null, gain: null, n: 1000, why: "unrecorded" },
+      { day: "2026-09-04", rank: 300, gain: 40, n: 1000, inTop: false },
+      { day: "2026-09-05", rank: 280, gain: 45, n: 1000, inTop: false },
+    ];
+    const m = mergeReconstructed(late, [rb("2026-08-30", 900, 3), rb("2026-09-02", 700, 5), rb("2026-09-03", 600, 8)]);
+    // 30 Aug is before the table (kept); 2-3 Sep sit before its first ranked day (dropped)
+    expect(m.map((p) => p.day)).toEqual(["2026-08-30", "2026-09-01", "2026-09-04", "2026-09-05"]);
+  });
+
+  it("with no reconstruction, it is the recorded table as it was", () => {
+    expect(mergeReconstructed(recorded, [])).toEqual(recorded);
+  });
+});
+
+describe("historyCovers (one page of /stargazers/history)", () => {
+  // xai-org/grok-build, created 14 Jul 2026: 15 weeks from Sun 12 Jul, no
+  // next page, adding up to its 27,507 stars (real, 23 Oct)
+  const born = Array.from({ length: 15 }, (_, i) => ({ week: 1783814400 + i * 7 * 86400, days: [0, 0, 0, 0, 0, 0, 0], total: 0 }));
+  born[1].days = [27507, 0, 0, 0, 0, 0, 0];
+  const from = "2026-04-01";
+
+  it("a repo born inside the window is its whole history: covered", () => {
+    expect(historyCovers(born, { more: false, from, stars: 27049 }).ok).toBe(true);
+  });
+
+  it("an empty 200 is never 'no stars' (Math.min() of nothing is Infinity)", () => {
+    expect(historyCovers([], { more: false, from, stars: 50000 })).toEqual({ ok: false, why: "empty history" });
+  });
+
+  it("a cut-short answer without a next page does not add up: refused", () => {
+    const cut = born.slice(5); // the 27,507 week is gone
+    expect(historyCovers(cut, { more: false, from, stars: 27049 }).ok).toBe(false);
+  });
+
+  it("page 1 of an older repo that no longer reaches FROM: refused", () => {
+    expect(historyCovers(born, { more: true, from, stars: 27049 }).ok).toBe(false);
+  });
+
+  it("a page that reaches FROM is covered", () => {
+    const old = [{ week: Date.parse("2026-03-29T00:00:00Z") / 1000, days: [1, 1, 1, 1, 1, 1, 1], total: 7 }];
+    expect(historyCovers(old, { more: true, from, stars: 99999 }).ok).toBe(true);
   });
 });

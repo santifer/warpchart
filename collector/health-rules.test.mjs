@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { COLLECTOR_STALE_H as APP_STALE_H } from "../src/lib/staleness.ts";
-import { ARTIFACTS, COLLECTOR_STALE_H, npmLagExplains, cancelledVerdict, cronLag, etaIncoherences, maxAgeFromEnv, newestRunMs, pickFreshestRuns, pipelineRunsGate, RUNS_LIST_TOL_H, runsListStale, openPartials, presenceEval, presenceLost, presenceMap, prflowFreshness, npmUsageFreshness, contributorsDrift, contributorCurve, buildersWallFreshness, buildersLangMismatch, velocityRankFreshness, velocityRankReconstructed, curveEndsOnTotal, staleArtifacts, watchdogStale, v7StampLags, v7WindowFreshness } from "./health-rules.mjs";
+import { ARTIFACTS, COLLECTOR_STALE_H, npmLagExplains, cancelledVerdict, cronLag, etaIncoherences, maxAgeFromEnv, newestRunMs, pickFreshestRuns, pipelineRunsGate, RUNS_LIST_TOL_H, runsListStale, openPartials, presenceEval, presenceLost, presenceMap, prflowFreshness, npmUsageFreshness, contributorsDrift, contributorCurve, buildersWallFreshness, buildersLangMismatch, velocityRankFreshness, velocityRankReconstructed, gapsAfter, curveEndsOnTotal, staleArtifacts, watchdogStale, v7StampLags, v7WindowFreshness } from "./health-rules.mjs";
 
 describe("prflowFreshness", () => {
   // 26-sep: the first run after 00:00Z was cancelled and 25-sep never closed.
@@ -670,5 +670,28 @@ describe("npmLagExplains: a family stale because npm stopped publishing is not o
   it("npm unreachable or a non-npm family: never explained", () => {
     expect(npmLagExplains(npmFam, null, now)).toBeNull();
     expect(npmLagExplains({ ...ARTIFACTS.find((a) => a.prefix === "traffic/"), ageH: 86 }, "2026-10-18", now)).toBeNull();
+  });
+});
+
+describe("velocityRankReconstructed: a new gap after the reconstruction", () => {
+  const repos = Object.fromEntries(Array.from({ length: 2000 }, (_, i) => [`r/${i}`, {}]));
+  const rec = { from: "2026-04-01", to: "2026-09-30", days: Array(183).fill("d"), repos };
+  // the real table around the end: complete through 22 Oct, but say 9 Oct is cut short
+  const table = ["2026-09-29", "2026-09-30", "2026-10-01", "2026-10-02", "2026-10-03", "2026-10-04", "2026-10-05", "2026-10-06", "2026-10-07", "2026-10-08", "2026-10-10"];
+
+  it("a table day missing after rec.to is a warn naming it", () => {
+    const r = velocityRankReconstructed(rec, table);
+    expect(r.severity).toBe("warn");
+    expect(r.note).toContain("2026-10-09");
+  });
+
+  it("no gap after rec.to, or the table not read: no warn", () => {
+    expect(velocityRankReconstructed(rec, [...table, "2026-10-09"]).severity).toBeNull();
+    expect(velocityRankReconstructed(rec, null).severity).toBeNull();
+  });
+
+  it("gapsAfter ignores the days up to rec.to and the open end", () => {
+    expect(gapsAfter(["2026-09-02", "2026-09-05"], "2026-09-02")).toEqual(["2026-09-03", "2026-09-04"]);
+    expect(gapsAfter([], "2026-09-30")).toEqual([]);
   });
 });

@@ -197,3 +197,47 @@ export function repoReconstructedRanks(rdays, repos, names) {
     return { day: d.day, rank: rankAmong(d.gains, gain), gain, n: d.n, inTop: d.inTopOf.has(key), reconstructed: true };
   });
 }
+
+// A repo's full row list: every row of the recorded table, plus a
+// reconstructed row only on a day the table does NOT have. Those are the days
+// before the moat (before 14 Jun) and the days a truncated sweep left out
+// after it (27 through 27 Sep). Rules:
+//   - a recorded day always wins, so the two never overlap;
+//   - nothing past the table's last day: the reconstruction ends weeks ago,
+//     and a newer gap is left as a gap;
+//   - "unborn" rows are dropped.
+// recorded = repoDailyRanks(...) (one row per table day), rebuilt =
+// repoReconstructedRanks(...). Oldest first.
+//   - inside the table, nothing before the repo's own first ranked day: a
+//     repo that joined the top 10k later would get lone hollow dots on the
+//     world's gap days amid its own unrecorded ones.
+export function mergeReconstructed(recorded, rebuilt) {
+  const have = new Set(recorded.map((p) => p.day));
+  const days = recorded.map((p) => p.day).sort();
+  const first = days[0] ?? "9999";
+  const last = days.at(-1) ?? "9999";
+  const firstRanked = recorded.filter((p) => p.rank != null).map((p) => p.day).sort()[0] ?? "9999";
+  const fill = rebuilt.filter(
+    (p) => !have.has(p.day) && p.why !== "unborn" && p.day < last && (p.day < first || p.day > firstRanked),
+  );
+  return [...fill, ...recorded].sort((a, b) => (a.day < b.day ? -1 : a.day > b.day ? 1 : 0));
+}
+
+// Does one page-1 answer of /stargazers/history cover the window from `from`?
+// weeks = [{ week: epoch s (Sunday 00:00Z), days: [7 counts], total }].
+// It covers when its oldest week reaches `from`, or when it is the repo's
+// WHOLE history (no next page: a repo born inside the window) AND that history
+// adds up to the repo's star count. The second test catches an empty or
+// cut-short answer without a Link header, which would otherwise read as days
+// of 0 stars. `stars` comes from a capture hours older than the call, so the
+// sum runs a little above it: tolerance 5% or 1,000.
+export function historyCovers(weeks, { more, from, stars }) {
+  if (!Array.isArray(weeks) || !weeks.length) return { ok: false, why: "empty history" };
+  const oldest = Math.min(...weeks.map((w) => w.week)) * 1000;
+  if (oldest <= Date.parse(`${from}T00:00:00Z`)) return { ok: true };
+  if (more) return { ok: false, why: `page 1 starts after ${from}` };
+  const total = weeks.reduce((a, w) => a + (w.days ?? []).reduce((x, y) => x + y, 0), 0);
+  if (!(Math.abs(total - stars) <= Math.max(1000, stars * 0.05)))
+    return { ok: false, why: `history from ${new Date(oldest).toISOString().slice(0, 10)} adds up to ${total}, the repo has ${stars}` };
+  return { ok: true };
+}
