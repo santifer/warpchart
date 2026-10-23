@@ -191,3 +191,30 @@ describe("ghFetch: a GitHub call that never answers", () => {
     }
   });
 });
+
+describe("orderRegistry: rank is the position, so the registry is sorted by its own counts", () => {
+  // positions 680-683 of data/route.json, 2026-10-21T07:30Z, as search returned them
+  const page7 = [
+    { r: "Alamofire/Alamofire", s: 42394 },
+    { r: "duckdb/duckdb", s: 42328 },
+    { r: "luongnv89/claude-howto", s: 42329 },
+    { r: "fastlane/fastlane", s: 42274 },
+  ];
+
+  it("sorts the search answer by stargazers_count, not by search's lagging index", async () => {
+    const { orderRegistry } = await import("./lib.mjs");
+    expect(orderRegistry(page7).map((p) => p.r)).toEqual([
+      "Alamofire/Alamofire",
+      "luongnv89/claude-howto",
+      "duckdb/duckdb",
+      "fastlane/fastlane",
+    ]);
+  });
+
+  it("a repo seen on two pages is kept once, with its higher count", async () => {
+    const { orderRegistry } = await import("./lib.mjs");
+    const out = orderRegistry([...page7, { r: "LUONGNV89/claude-howto", s: 42331 }]);
+    expect(out).toHaveLength(4);
+    expect(out[1]).toEqual({ r: "LUONGNV89/claude-howto", s: 42331 });
+  });
+});

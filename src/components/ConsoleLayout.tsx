@@ -27,6 +27,7 @@ export default function ConsoleLayout({
   ladder,
   heatmap,
   rank,
+  velocityRank,
   traffic,
   log,
   firstIndex = 2,
@@ -39,6 +40,9 @@ export default function ConsoleLayout({
   ladder: ConsoleSlot;
   heatmap: ConsoleSlot;
   rank: ConsoleSlot;
+  // daily place among the top 1,000 by new stars (locked); optional so a
+  // surface without it keeps its numbering
+  velocityRank?: ConsoleSlot;
   traffic: ConsoleSlot;
   log: ConsoleSlot;
   // Panels are numbered in page order. Vital Signs (01) always sits above the
@@ -48,6 +52,7 @@ export default function ConsoleLayout({
   firstIndex?: number;
 }) {
   const n = (k: number) => String(firstIndex + k).padStart(2, "0");
+  const after = velocityRank ? 1 : 0; // panels below it move down one number
   return (
     <>
       <Panel index={n(0)} title="Star chart" meta={starChart.meta} delay={80}>
@@ -98,11 +103,17 @@ export default function ConsoleLayout({
         {rank.node}
       </Panel>
 
-      <Panel index={n(9)} title="Traffic vault" meta={traffic.meta} delay={480}>
+      {velocityRank && (
+        <Panel index={n(9)} title="Daily velocity rank, top 1,000" meta={velocityRank.meta} delay={460}>
+          {velocityRank.node}
+        </Panel>
+      )}
+
+      <Panel index={n(9 + after)} title="Traffic vault" meta={traffic.meta} delay={480}>
         {traffic.node}
       </Panel>
 
-      <Panel index={n(10)} title="Mission log" meta={log.meta} delay={520}>
+      <Panel index={n(10 + after)} title="Mission log" meta={log.meta} delay={520}>
         {log.node}
       </Panel>
     </>
