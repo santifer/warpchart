@@ -146,6 +146,20 @@ jobs:
           BLOB_READ_WRITE_TOKEN: ${{ secrets.BLOB_READ_WRITE_TOKEN }}
           V7_FORCE: ${{ inputs.force_v7 && '1' || '' }}
 
+      # 3b-ter. Daily velocity rank: each recorded day's new-star gains of the
+      #     top 1,000 (velocity-rank/{YYYY-MM}.json), so a repo page can show
+      #     where it placed day by day (locked, /api/v1/velocity-rank). Built
+      #     from the rank-history moat, so it MUST run after route-history.
+      #     Idempotent on the newest recorded day (the 64 shard reads happen
+      #     once a day); refuses to write on any unreadable shard; never fails
+      #     the run.
+      - name: Daily velocity rank (top 1,000)
+        run: node collector/velocity-rank.mjs
+        continue-on-error: true
+        timeout-minutes: 5
+        env:
+          BLOB_READ_WRITE_TOKEN: ${{ secrets.BLOB_READ_WRITE_TOKEN }}
+
       # 3b-bis. Imminent overtakes. MUST run after velocity7: it used to run
       #     inside collect.mjs, before `v7` existed, so every crossing was scored
       #     with the noisy 1-day rate and /api/v1/overtakes publicly contradicted
@@ -291,6 +305,19 @@ jobs:
             git pull --rebase
             git push
           }
+
+      # 5b. GitHub Trending marks: is the house repo on github.com/trending
+      #     (general + javascript) right now? Its days go to trending/marks.json
+      #     (private Blob), the ▲ marks of the velocity-rank panel. Two page
+      #     reads; refuses to write on a failed Blob read or a lost day; never
+      #     fails the run. AFTER the deploy on purpose: the app reads this key
+      #     live, so a slow GitHub here can never delay or cancel the deploy.
+      - name: GitHub Trending marks
+        run: node collector/trending-marks.mjs
+        continue-on-error: true
+        timeout-minutes: 3
+        env:
+          BLOB_READ_WRITE_TOKEN: ${{ secrets.BLOB_READ_WRITE_TOKEN }}
 
       # 6. Mutual attestation. health.yml checks production; this checks that
       #    health.yml is still running at all - otherwise a stopped watchdog is

@@ -337,21 +337,20 @@ function registryEntry(item) {
   };
 }
 
-// The ten search pages are fetched one after another while stars keep moving,
-// so a repo can slide across a page boundary and arrive twice. route.json's
-// index IS the rank, so one duplicate pushes every repo below it down a place.
-// Dedup by name (GitHub names are case-insensitive) and order by stars before
-// anyone reads an index; equal counts keep the search order.
-export function toRegistry(items) {
-  const seen = new Set();
-  const out = [];
-  for (const item of items) {
-    const key = item?.full_name?.toLowerCase();
-    if (!key || seen.has(key)) continue;
-    seen.add(key);
-    out.push(registryEntry(item));
+// Rank IS the position in route.json, so the registry must be sorted by the
+// star count it shows. Search sorts by its own index, which lags the
+// stargazers_count it returns: on 2026-10-21 page 7 came back with
+// claude-howto (42,329) after duckdb (42,328), and data.ordering went critical.
+// A repo that moves between pages during the walk can also come back twice:
+// keep its highest (freshest) count. Stable for ties.
+export function orderRegistry(items) {
+  const best = new Map();
+  for (const it of items) {
+    const k = it.r.toLowerCase();
+    const cur = best.get(k);
+    if (!cur || it.s > cur.s) best.set(k, it);
   }
-  return out.sort((a, b) => b.s - a.s);
+  return [...best.values()].sort((a, b) => b.s - a.s);
 }
 
 // The worldwide top 1000 (search enumeration cap), used as route landmarks
@@ -359,14 +358,14 @@ export function toRegistry(items) {
 // caller decides whether a short result may be published (acceptUniverse).
 export const ROUTE_SIZE = 1000;
 export async function topRepos() {
-  const items = [];
+  const out = [];
   for (let page = 1; page <= ROUTE_SIZE / 100; page++) {
     const r = await search({
       q: "stars:>10000", sort: "stars", order: "desc", per_page: "100", page: String(page),
     });
-    items.push(...(r.items ?? []));
+    for (const item of r.items ?? []) out.push(registryEntry(item));
   }
-  return toRegistry(items);
+  return orderRegistry(out);
 }
 
 // The worldwide top N (default 10,000) for the rank-distribution moat. Search
@@ -519,8 +518,9 @@ export async function thresholdForRank(rank, ownStars) {
     const page = Math.ceil(rank / 100);
     const idx = (rank - 1) % 100;
     const r = await search({ q: "stars:>10000", sort: "stars", order: "desc", per_page: "100", page: String(page) });
-    const item = r.items?.[idx];
-    if (item) return item.stargazers_count;
+    // the page's own counts, sorted: search orders by a lagging index (see orderRegistry)
+    const counts = (r.items ?? []).map((i) => i.stargazers_count).sort((a, b) => b - a);
+    if (counts[idx] != null) return counts[idx];
   }
   let lo = 1;
   let hi = Math.max(ownStars * 2, 2000);
