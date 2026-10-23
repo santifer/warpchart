@@ -25,6 +25,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { loadTrafficVault } from "@/lib/traffic";
 import { findTenant } from "@/lib/history";
+import { authorizeGuestVault } from "@/lib/guest-keys";
 
 export const dynamic = "force-dynamic";
 const NO_STORE = { "Cache-Control": "no-store, private" };
@@ -53,7 +54,9 @@ export async function GET(req: NextRequest) {
   const tenant = findTenant(repo);
   const authorized =
     (master && safeEqual(key, master)) ||
-    (tenant?.vaultKey ? safeEqual(key, tenant.vaultKey) : false);
+    (tenant?.vaultKey ? safeEqual(key, tenant.vaultKey) : false) ||
+    // a guest key scoped to this repo and its vault (src/lib/guest-keys.ts)
+    (await authorizeGuestVault(key, repo));
   if (!authorized) {
     return NextResponse.json({ error: "forbidden" }, { status: 403, headers: NO_STORE });
   }

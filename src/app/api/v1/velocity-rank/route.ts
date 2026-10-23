@@ -5,28 +5,34 @@
 // localStorage by the owner's god mode, so the public pages keep their ISR
 // cache. Cache-only: the Blob, never GitHub.
 import { repoVelocityRank } from "@/lib/velocity-rank";
+import { trendingMarksFor } from "@/lib/trending-marks";
+import { readTrendingLive } from "@/lib/trending-live";
+
+import { authorizeGod } from "@/lib/guest-keys";
 
 export const dynamic = "force-dynamic";
 const VALID = /^[\w.-]+\/[\w.-]+$/;
 
 export async function GET(request: Request) {
   const sp = new URL(request.url).searchParams;
-  const key = process.env.WARPCHART_GOD_KEY;
   const k = sp.get("k") ?? "";
+  const repo = (sp.get("repo") || "").trim();
   // no separate "missing key" branch: without the right token this reveals nothing
-  if (!key || k !== key) {
+  // the master key, or a guest key scoped to this repo (src/lib/guest-keys.ts)
+  if (!(await authorizeGod(k, repo))) {
     return Response.json({ error: "forbidden" }, { status: 403 });
   }
-  const repo = (sp.get("repo") || "").trim();
   if (!VALID.test(repo)) {
     return Response.json({ error: "repo must be 'owner/name'" }, { status: 400 });
   }
   // a rank-history shard the store could not serve rejects (never an empty
   // series that would read as "not measured" every day): same 503
-  const r = await repoVelocityRank(repo).catch(() => null);
+  const [r, live] = await Promise.all([repoVelocityRank(repo).catch(() => null), readTrendingLive()]);
   if (!r) {
     // the day table is missing or unreadable: an honest 503, never an empty record
     return Response.json({ error: "velocity rank unavailable" }, { status: 503, headers: { "Cache-Control": "no-store" } });
   }
-  return Response.json({ repo, ...r }, { headers: { "Cache-Control": "private, no-store" } });
+  // days seen on GitHub Trending (fixed archive + the collector's live record),
+  // for the x-axis marks (null = not tracked)
+  return Response.json({ repo, ...r, trending: trendingMarksFor(repo, live) }, { headers: { "Cache-Control": "private, no-store" } });
 }
