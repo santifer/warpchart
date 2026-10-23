@@ -216,6 +216,7 @@ export const ARTIFACTS = [
   // trending pages fail: a single bad run must not read as "stopped" (the
   // partial marker 'trending-marks' says that one), so a day and a half
   { prefix: "trending/", kind: "periodic", maxAgeH: 36, what: "the house repo's GitHub Trending days" },
+  { prefix: "ci-checkouts/", kind: "periodic", maxAgeH: 36, what: "the house repo's CI checkout jobs per day (Traffic Vault CI band)" },
   // builders.yml every 6 h; it skips while the people are the same and the
   // wall is under 20 h old, so a healthy wall is at most ~26 h old
   { prefix: "builders/", kind: "periodic", maxAgeH: 30, what: "the README builders wall" },
@@ -418,6 +419,23 @@ export function velocityRankReconstructed(rec, tableDays = null) {
   if (gaps.length)
     return { severity: "warn", note: `${gaps.length} velocity-rank day(s) unmeasured after the reconstruction ends (${rec.to}): ${gaps.slice(0, 5).join(", ")}; re-run collector/velocity-rank-backfill.mjs with a later TO` };
   return { severity: null, note: `reconstructed ${rec.from} .. ${rec.to}, ${repos} repos` };
+}
+
+// The Traffic Vault's CI band (collector/ci-checkouts-core.mjs) rests on one
+// claim: our own CI makes AT LEAST checkouts x low clones. A day where that is
+// more than the clones GitHub counted means the count is wrong (ghost runs
+// counted, a ratio misread), and the band hides it by capping at the total.
+// ciDays = { D: { checkouts } }, clones = { D: { c } }; only days both have.
+// The vault's newest day is skipped: GitHub may still be closing it, and its
+// count grows over the next runs.
+export function ciBandViolations(ciDays, clones, low = 1) {
+  const newest = Object.keys(clones ?? {}).sort().at(-1);
+  const bad = Object.entries(ciDays ?? {})
+    .filter(([d, e]) => d !== newest && Number.isFinite(clones?.[d]?.c) && Number.isFinite(e?.checkouts) && e.checkouts * low > clones[d].c)
+    .map(([d, e]) => `${d} (${e.checkouts} checkouts x ${low} > ${clones[d].c} clones)`);
+  return bad.length
+    ? { severity: "warn", note: `CI band impossible on ${bad.length} day(s): ${bad.slice(0, 3).join(", ")}` }
+    : { severity: null, note: `CI band consistent on ${Object.keys(ciDays ?? {}).filter((d) => clones?.[d]).length} day(s)` };
 }
 
 // calendar days after `after` and before the table's last day that the table lacks
