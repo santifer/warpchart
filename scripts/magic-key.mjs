@@ -9,3 +9,6 @@ export const magicKey = (token) => `${MAGIC_PREFIX}${createHash("sha256").update
 // a second file that only ONE redeemer can create (put with allowOverwrite:false)
 export const claimKey = (token) => magicKey(token).replace(/\.json$/, ".used");
 export const MAX_TTL_MIN = 120;
+// guest keys (src/lib/guest-keys.ts): stored by the SHA-256 of the key only
+export const GUEST_PREFIX = "god/guests/";
+export const guestKeyPath = (hash) => `${GUEST_PREFIX}${hash}.json`;

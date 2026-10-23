@@ -8,18 +8,20 @@ import { repoVelocityRank } from "@/lib/velocity-rank";
 import { trendingMarksFor } from "@/lib/trending-marks";
 import { readTrendingLive } from "@/lib/trending-live";
 
+import { authorizeGod } from "@/lib/guest-keys";
+
 export const dynamic = "force-dynamic";
 const VALID = /^[\w.-]+\/[\w.-]+$/;
 
 export async function GET(request: Request) {
   const sp = new URL(request.url).searchParams;
-  const key = process.env.WARPCHART_GOD_KEY;
   const k = sp.get("k") ?? "";
+  const repo = (sp.get("repo") || "").trim();
   // no separate "missing key" branch: without the right token this reveals nothing
-  if (!key || k !== key) {
+  // the master key, or a guest key scoped to this repo (src/lib/guest-keys.ts)
+  if (!(await authorizeGod(k, repo))) {
     return Response.json({ error: "forbidden" }, { status: 403 });
   }
-  const repo = (sp.get("repo") || "").trim();
   if (!VALID.test(repo)) {
     return Response.json({ error: "repo must be 'owner/name'" }, { status: 400 });
   }

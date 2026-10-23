@@ -45,11 +45,25 @@ describe("redeemMagic", () => {
     expect(got.filter(Boolean)).toHaveLength(1);
   });
 
-  it("a second tap after the first finds nothing, and the Blob is left clean", async () => {
+  it("a second tap after the first finds nothing; only the claim tombstone is left", async () => {
     const m = mint();
     expect(await redeemMagic(m)).not.toBeNull();
     expect(await redeemMagic(m)).toBeNull();
-    expect(store.size).toBe(0);
+    expect([...store.keys()]).toEqual([magicKey(m).replace(/\.json$/, ".used")]);
+  });
+
+  it("a tap whose read answers LATE, after the first tap finished, still gets nothing (reproduced: two grants)", async () => {
+    const m = mint();
+    // tap B reads the grant now, but its answer arrives after tap A is done
+    const grant = store.get(magicKey(m))!;
+    const slowB = (async () => {
+      await new Promise((r) => setTimeout(r, 30));
+      store.set(magicKey(m), grant); // what B's late get still sees
+      return redeemMagic(m);
+    })();
+    const a = await redeemMagic(m);
+    const b = await slowB;
+    expect([a, b].filter(Boolean)).toHaveLength(1);
   });
 
   it("an expired link gives nothing, and is burned too", async () => {
