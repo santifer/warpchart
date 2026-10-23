@@ -46,7 +46,8 @@ export const SHAPE_VERSION = {
   // month of days, and the reconstructed days before the live record
   velocityRankMeta: 2,
   velocityRankMonth: 2,
-  velocityRankReconstructed: 2,
+  // v3: the window runs to 30 Sep (gap fill)
+  velocityRankReconstructed: 3,
 } as const;
 
 export type ShapeType = keyof typeof SHAPE_VERSION;

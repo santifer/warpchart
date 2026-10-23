@@ -8,7 +8,7 @@
 import { get } from "@vercel/blob";
 import { unstable_cache } from "next/cache";
 import { repoRankSeries } from "./rank-history";
-import { reconstructDays, repoDailyRanks, repoReconstructedRanks } from "../../collector/velocity-rank-core.mjs";
+import { mergeReconstructed, reconstructDays, repoDailyRanks, repoReconstructedRanks } from "../../collector/velocity-rank-core.mjs";
 import { allNamesOf } from "./aliases";
 import { cacheKey } from "./shape-versions";
 
@@ -27,8 +27,9 @@ export interface VelocityRankPoint {
   n: number;
   hours: number | null;
   inTop?: boolean; // false = outside the top 1,000 that day: rank is where it WOULD have placed
-  // true = before the live record began: rebuilt from GitHub's star history
-  // (current stargazers only, UTC days), see collector/velocity-rank-backfill.mjs
+  // true = rebuilt from GitHub's star history (current stargazers only,
+  // Pacific-time days), see collector/velocity-rank-backfill.mjs: the days
+  // before the live record began, and the days a truncated sweep left out of it
   reconstructed?: boolean;
   why?: "unrecorded" | "step" | "unborn";
 }
@@ -130,17 +131,18 @@ export async function repoVelocityRank(repo: string): Promise<{
     ...p,
     hours: hours.get(p.day) ?? null,
   }));
-  // the days before the live record, rebuilt; only those strictly before the
-  // first recorded day, so the two never overlap. A missing file just means
-  // no reconstructed part, never an error.
+  // rebuilt days fill only the days the table lacks (before it, and the gaps
+  // truncated sweeps left in it); a recorded day always wins
+  // (mergeReconstructed). A missing file just means no reconstructed part,
+  // never an error.
   const rec = await readReconstructed();
-  const firstRecorded = table.days[0]?.day ?? "9999";
   const rebuilt: VelocityRankPoint[] = rec?.days?.length
-    ? (repoReconstructedRanks(reconstructedDays(rec), rec.repos, allNamesOf(repo)) as Omit<VelocityRankPoint, "hours">[])
-        .filter((p) => p.day < firstRecorded && p.why !== "unborn")
-        .map((p) => ({ ...p, hours: null }))
+    ? (repoReconstructedRanks(reconstructedDays(rec), rec.repos, allNamesOf(repo)) as Omit<VelocityRankPoint, "hours">[]).map((p) => ({
+        ...p,
+        hours: null,
+      }))
     : [];
-  const points: VelocityRankPoint[] = [...rebuilt, ...recorded];
+  const points = mergeReconstructed(recorded, rebuilt) as VelocityRankPoint[];
   // the record starts on the repo's first measured day, not on the moat's
   const first = points.findIndex((p) => p.rank != null);
   return { top: table.meta.top, builtAt: table.meta.builtAt, points: first < 0 ? [] : points.slice(first) };
