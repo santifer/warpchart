@@ -30,8 +30,9 @@ export const SHAPE_VERSION = {
   // v10: census.githubDaily.
   vitals: 10,
   // TrafficVault (src/lib/traffic.ts). v2: newestDay. v3: alias-merged reads,
-  // cached under the canonical name.
-  trafficVault: 3,
+  // cached under the canonical name. v4: ciBand per day + ci (the CI band of
+  // the clone series).
+  trafficVault: 4,
   // PrFlow (src/lib/prflow.ts)
   prFlow: 1,
   // Curve (src/lib/curve.ts). v2: seam-anchored archive normalization. v3:

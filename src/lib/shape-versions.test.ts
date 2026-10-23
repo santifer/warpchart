@@ -27,7 +27,7 @@ describe("derived cache keys", () => {
   it("keys with nothing embedded keep the strings they had, so those caches stay warm", () => {
     expect(cacheKey("dossier")).toBe("dossier-v17");
     expect(cacheKey("vitals")).toBe("vitals-v10");
-    expect(cacheKey("trafficVault")).toBe("traffic-vault-v3");
+    expect(cacheKey("trafficVault")).toBe("traffic-vault-v4");
     expect(cacheKey("prFlow")).toBe("prflow-v1");
     expect(cacheKey("curve")).toBe("embed-chart-curve-v6");
     expect(cacheKey("archiveMonthly")).toBe("archive-monthly-v1");
