@@ -23,7 +23,7 @@
 // tenant buys the key to unlock.
 import { useEffect, useState } from "react";
 import {
-  ComposedChart, Bar, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
+  ComposedChart, Area, Bar, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
 } from "recharts";
 import { usePalette } from "@/lib/usePalette";
 import { fmt, fmtCompact } from "@/lib/format";
@@ -38,6 +38,12 @@ const WINDOW = 60; // most recent ~2 months on screen
 const SEARCH = /^(google|bing|yahoo|duckduckgo|ecosia|baidu|yandex|search\.brave\.com|github\.com)$/i;
 
 const TOKEN = "wc_vault";
+// the band's opacity baked into the colour, so its legend swatches show the
+// same three shades as the chart (the legend ignores fillOpacity)
+const tint = (hex: string, a: number) => {
+  const m = /^#?([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(hex);
+  return m ? `rgba(${parseInt(m[1], 16)}, ${parseInt(m[2], 16)}, ${parseInt(m[3], 16)}, ${a})` : hex;
+};
 const GUEST_KEY = /^[A-Za-z0-9_-]{22}\.[A-Za-z0-9_-]{22}$/; // same shape as GUEST_KEY_RE in src/lib/guest-keys.ts
 
 const read = (): string | null => {
@@ -175,11 +181,23 @@ export default function TrafficPanel({ repo }: { repo: string }) {
   }
 
   const view = vault.days.slice(-WINDOW);
-  const rows = view.map((d) => ({
-    label: d.d.slice(5).replace("-", "/"),
-    views: people ? d.viewsU : d.views,
-    clones: people ? d.clonesU : d.clones,
-  }));
+  // TOTAL clones as a band over the repo's own counted CI checkout jobs
+  // (src/lib/traffic.ts): CI at least, CI or not, NOT its CI at least. A band
+  // because clones per checkout is not a constant (1.6-4.7 by month). UNIQUE
+  // is never split: cloners dedupe by IP and runners share IP pools. A day
+  // without a count keeps the plain line (null areas), never a zero-CI split.
+  const rows = view.map((d) => {
+    const b = !people ? d.ciBand : null;
+    return {
+      label: d.d.slice(5).replace("-", "/"),
+      views: people ? d.viewsU : d.views,
+      clones: people ? d.clonesU : d.clones,
+      ciMin: b?.ciMin ?? null,
+      unsure: b?.unsure ?? null,
+      notCiMin: b?.notCiMin ?? null,
+    };
+  });
+  const split = rows.some((r) => r.ciMin != null);
   const u14 = vault.uniq14;
   const vLabel = people ? "unique visitors" : "views";
   const cLabel = people ? "unique cloners" : "clones";
@@ -277,7 +295,8 @@ export default function TrafficPanel({ repo }: { repo: string }) {
         ) : null}
       </div>
 
-      <div className="h-[160px] w-full">
+      {/* taller with the band: its 3 legend entries would otherwise eat the plot */}
+      <div className={`${split ? "h-[210px]" : "h-[160px]"} w-full`}>
         <ResponsiveContainer width="100%" height="100%">
           {/* left margin + YAxis width are paired: a busy repo puts 5 digits on
               the axis, and the old -16/40 clipped them to their last 3 ("18377"
@@ -299,14 +318,40 @@ export default function TrafficPanel({ repo }: { repo: string }) {
               cursor={{ fill: C.accentSoft }}
               contentStyle={{ background: C.hull, border: `1px solid ${C.grid}`, borderRadius: 0, fontSize: 11, fontFamily: "var(--font-jbmono)" }}
               labelStyle={{ color: C.dim }}
-              formatter={(value, name) => [`${value}`, String(name)]}
+              formatter={(value, name) => [value == null ? "not counted" : fmt(Number(value)), String(name)]}
             />
-            <Legend wrapperStyle={{ fontSize: 10, fontFamily: "var(--font-jbmono)", color: C.dim }} />
+            {/* in stack order, not recharts' alphabetical default */}
+            <Legend
+              wrapperStyle={{ fontSize: 10, fontFamily: "var(--font-jbmono)", color: C.dim }}
+              itemSorter={(i) => ["views", "ciMin", "unsure", "notCiMin", "clones"].indexOf(String(i.dataKey))}
+              // the label in a readable colour: recharts paints it in the
+              // series colour, and the band's tints are too faint for text
+              formatter={(v) => <span style={{ color: C.dim }}>{v}</span>}
+            />
+            {/* the band sits BEHIND the view bars and the clone line */}
+            {split ? (
+              <Area legendType="square" dataKey="ciMin" name="our ci · at least" stackId="clones" stroke="none" fill={tint(C.dim, 0.45)} type="monotone" isAnimationActive={false} />
+            ) : null}
+            {split ? (
+              <Area legendType="square" dataKey="unsure" name="ci or not" stackId="clones" stroke="none" fill={tint(C.dim, 0.16)} type="monotone" isAnimationActive={false} />
+            ) : null}
+            {split ? (
+              <Area legendType="square" dataKey="notCiMin" name="not our ci · at least" stackId="clones" stroke="none" fill={tint(C.ink, 0.24)} type="monotone" isAnimationActive={false} />
+            ) : null}
             <Bar dataKey="views" name={vLabel} fill={C.accent} fillOpacity={0.5} maxBarSize={14} isAnimationActive={false} />
             <Line dataKey="clones" name={cLabel} stroke={C.ink} strokeWidth={1.4} dot={false} type="monotone" isAnimationActive={false} />
           </ComposedChart>
         </ResponsiveContainer>
       </div>
+
+      {split && vault.ci ? (
+        <span className="numeral text-micro leading-relaxed text-faint">
+          our ci = this repo&apos;s own GitHub Actions checkout jobs, counted per day. A checkout is at least one clone,
+          and no month here has run above ~4.7 clones per checkout, so the split is a band: checkouts ×{vault.ci.low} is
+          surely ci, past ×{vault.ci.high} is not ci on any month seen, in between it could be either · not our ci = installs (npx … init clones the repo),
+          contributors and their agents, and the odd few actors cloning in a loop · counted {vault.ci.from} → {vault.ci.to}
+        </span>
+      ) : null}
 
       {vault.referrers.length ? (
         (() => {

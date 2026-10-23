@@ -7,6 +7,7 @@
 import { unstable_cache } from "next/cache";
 import { allNamesOf, canonicalRepo } from "./aliases";
 import { readPrivateJson } from "./blob-read";
+import { ciSplit, CI_CLONES_PER_CHECKOUT } from "../../collector/ci-checkouts-core.mjs";
 
 interface RawVault {
   repo: string;
@@ -24,6 +25,17 @@ export interface TrafficDay {
   viewsU: number;
   clones: number;
   clonesU: number;
+  // `clones` as a band (collector/ci-checkouts-core.mjs): the repo's own CI
+  // at least, CI-or-not, and NOT its CI at least, adding up to `clones`.
+  // null = not counted that day (no CI record, or a day the collector has not
+  // reached): never read as 0 CI.
+  ciBand: { ciMin: number; unsure: number; notCiMin: number } | null;
+}
+
+// raw ci-checkouts/{owner}--{name}.json (collector/ci-checkouts.mjs)
+interface RawCi {
+  range?: { low: number; high: number };
+  days?: Record<string, { runs: number; checkouts: number }>;
 }
 
 export interface TrafficVault {
@@ -57,10 +69,22 @@ export interface TrafficVault {
   // null when the vault predates collection of these fields: render nothing
   // rather than falling back to a sum.
   uniq14: { cloners: number | null; visitors: number | null; at: string } | null;
+  // what the CI split rests on, for the chart's note; null = no CI record
+  ci: { low: number; high: number; from: string; to: string } | null;
 }
 
 function blobKey(repo: string): string {
   return `traffic/${repo.toLowerCase().replace("/", "--")}.json`;
+}
+
+const ciKey = (repo: string) => `ci-checkouts/${repo.toLowerCase().replace("/", "--")}.json`;
+
+// null on any failure, missing or unreadable: the chart then draws the plain
+// clone line. The band is optional on purpose, so this is the one read here
+// that does not throw; it still times out (readPrivateJson).
+async function readOneCi(key: string, token: string): Promise<RawCi | null> {
+  const raw = await readPrivateJson<RawCi>(key, token).catch(() => undefined);
+  return raw?.days ? raw : null;
 }
 
 // null = no vault under this name. A failed read throws (readPrivateJson).
@@ -92,16 +116,27 @@ async function readVault(repo: string): Promise<TrafficVault | null> {
       raw.uniq14 = v.uniq14;
     }
   }
+  // the CI record, under every name the repo carried (as the vault)
+  const cis = (await Promise.all(allNamesOf(repo).map((n) => readOneCi(ciKey(n), token)))).filter(
+    (c): c is RawCi => c !== null,
+  );
+  const ciDays: NonNullable<RawCi["days"]> = Object.assign({}, ...cis.map((c) => c.days));
+  const range = cis.at(-1)?.range ?? CI_CLONES_PER_CHECKOUT;
   const dates = new Set([...Object.keys(raw.views ?? {}), ...Object.keys(raw.clones ?? {})]);
   const days: TrafficDay[] = [...dates]
     .sort()
-    .map((d) => ({
-      d,
-      views: raw.views?.[d]?.c ?? 0,
-      viewsU: raw.views?.[d]?.u ?? 0,
-      clones: raw.clones?.[d]?.c ?? 0,
-      clonesU: raw.clones?.[d]?.u ?? 0,
-    }));
+    .map((d) => {
+      const clones = raw.clones?.[d]?.c;
+      return {
+        d,
+        views: raw.views?.[d]?.c ?? 0,
+        viewsU: raw.views?.[d]?.u ?? 0,
+        clones: clones ?? 0,
+        clonesU: raw.clones?.[d]?.u ?? 0,
+        ciBand: ciSplit(clones, ciDays[d]?.checkouts, range),
+      };
+    });
+  const ciCounted = days.filter((d) => d.ciBand != null).map((d) => d.d);
   if (!days.length) return null;
   return {
     days,
@@ -112,6 +147,7 @@ async function readVault(repo: string): Promise<TrafficVault | null> {
     updatedAt: raw.updatedAt ?? null,
     newestDay: days[days.length - 1]?.d ?? null,
     uniq14: raw.uniq14 ?? null,
+    ci: ciCounted.length ? { ...range, from: ciCounted[0], to: ciCounted[ciCounted.length - 1] } : null,
   };
 }
 
@@ -120,8 +156,9 @@ export function loadTrafficVault(repo: string): Promise<TrafficVault | null> {
   // deploy: without a new key the old shape keeps being served by the very
   // deploy that added the field, and the new one reads as "missing data".
   // v2 = added newestDay. v3 = alias-merged reads (rename survival), cached
-  // under the canonical name so old/new query names share one entry.
-  return unstable_cache(() => readVault(repo), ["traffic-vault-v3", canonicalRepo(repo).toLowerCase()], {
+  // under the canonical name so old/new query names share one entry. v4 =
+  // ciBand per day + ci (the CI band of the clone series).
+  return unstable_cache(() => readVault(repo), ["traffic-vault-v4", canonicalRepo(repo).toLowerCase()], {
     revalidate: 300,
   })();
 }
