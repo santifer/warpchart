@@ -321,6 +321,23 @@ jobs:
         env:
           BLOB_READ_WRITE_TOKEN: ${{ secrets.BLOB_READ_WRITE_TOKEN }}
 
+      # 5c. CI checkouts: count the house repo's own Actions checkout jobs per
+      #     final UTC day (private Blob ci-checkouts/), so the Traffic Vault can
+      #     show its clone count as a band over our own CI. At most 150 calls a run
+      #     on GITHUB_TOKEN (Actions runs of a public repo are readable with
+      #     it), yesterday first, then backfill; refuses on a failed Blob read
+      #     or a lost day; never fails the run. After the deploy: the app reads
+      #     this key live.
+      - name: CI checkouts
+        run: node collector/ci-checkouts.mjs
+        continue-on-error: true
+        timeout-minutes: 4
+        env:
+          BLOB_READ_WRITE_TOKEN: ${{ secrets.BLOB_READ_WRITE_TOKEN }}
+          # GITHUB_TOKEN first (its own 1,000/h); the owner token only if it is refused
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN_FALLBACKS: ${{ secrets.TRAFFIC_TOKEN }}
+
       # 6. Mutual attestation. health.yml checks production; this checks that
       #    health.yml is still running at all - otherwise a stopped watchdog is
       #    indistinguishable from a healthy system, since both are silent.
