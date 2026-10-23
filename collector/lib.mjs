@@ -315,6 +315,22 @@ export async function apexRepo() {
 
 // The worldwide top 1000 (search enumeration cap), used as route landmarks
 // and as the population for fork-ratio percentiles. 10 search calls.
+// Rank IS the position in route.json, so the registry must be sorted by the
+// star count it shows. Search sorts by its own index, which lags the
+// stargazers_count it returns: on 2026-10-21 page 7 came back with
+// claude-howto (42,329) after duckdb (42,328), and data.ordering went critical.
+// A repo that moves between pages during the walk can also come back twice:
+// keep its highest (freshest) count. Stable for ties.
+export function orderRegistry(items) {
+  const best = new Map();
+  for (const it of items) {
+    const k = it.r.toLowerCase();
+    const cur = best.get(k);
+    if (!cur || it.s > cur.s) best.set(k, it);
+  }
+  return [...best.values()].sort((a, b) => b.s - a.s);
+}
+
 export async function topRepos() {
   const out = [];
   for (let page = 1; page <= 10; page++) {
@@ -333,7 +349,7 @@ export async function topRepos() {
       });
     }
   }
-  return out;
+  return orderRegistry(out);
 }
 
 // The worldwide top N (default 10,000) for the rank-distribution moat. Search
@@ -494,8 +510,9 @@ export async function thresholdForRank(rank, ownStars) {
     const page = Math.ceil(rank / 100);
     const idx = (rank - 1) % 100;
     const r = await search({ q: "stars:>10000", sort: "stars", order: "desc", per_page: "100", page: String(page) });
-    const item = r.items?.[idx];
-    if (item) return item.stargazers_count;
+    // the page's own counts, sorted: search orders by a lagging index (see orderRegistry)
+    const counts = (r.items ?? []).map((i) => i.stargazers_count).sort((a, b) => b - a);
+    if (counts[idx] != null) return counts[idx];
   }
   let lo = 1;
   let hi = Math.max(ownStars * 2, 2000);

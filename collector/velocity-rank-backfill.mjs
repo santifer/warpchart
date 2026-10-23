@@ -1,15 +1,23 @@
-// ONE-OFF: reconstruct the daily velocity rank for the days BEFORE the moat
-// existed (route-history starts on 2026-06-13, so the recorded table starts
-// on 2026-06-14). Writes velocity-rank/reconstructed.json in the private Blob:
+// BY HAND: reconstruct the daily velocity rank for the days the recorded table
+// does not have: the days BEFORE the moat existed (route-history starts on
+// 2026-06-13, so the recorded table starts on 2026-06-14), and the days a
+// truncated sweep left out after it (27 of them through 27 Sep: a capture
+// with half the top 10k kills the day ending in it and the day starting from
+// it). One contiguous window, FROM..TO; src/lib/velocity-rank.ts only uses a
+// reconstructed day where the recorded table has none, so the two never
+// overlap. Writes velocity-rank/reconstructed.json in the private Blob:
 //   { from, to, builtAt, top, universe, source, days: [iso], repos: { name: { end, g: [..] } } }
-// read by src/lib/velocity-rank.ts and drawn as RECONSTRUCTED (hollow dots,
-// dashed median), never mixed with the recorded record. The rebuild math is
+// read by src/lib/velocity-rank.ts and drawn as RECONSTRUCTED (hollow dots;
+// a dashed median before the live record, none inside it), never on a day the
+// recorded table has. The rebuild math is
 // reconstructDays() in velocity-rank-core.mjs; its limits are written there.
 //
 // Universe: today's top 2,000 from the newest route-history day. A repo in a
 // past day's top 1,000 is in today's top 2,000 unless it lost stars or was
 // deleted (the second is a known gap). One call per repo: page 1 of
-// /stargazers/history holds the last 30 weeks, which covers the window.
+// /stargazers/history holds the last 30 weeks, which must reach back to FROM
+// (checked per repo, historyCovers: from Sun 25 Oct 2026 page 1 starts on
+// 5 Apr, so a re-run from 1 Apr fails loudly and needs page 2).
 //
 // VALIDATE BEFORE WRITING: under 99% of the universe fetched, or the house
 // repo missing, writes nothing.
@@ -17,10 +25,13 @@
 // Usage (by hand, once): BLOB_READ_WRITE_TOKEN=... GH_TOKEN=... node collector/velocity-rank-backfill.mjs [--out file]
 import { writeFileSync } from "node:fs";
 import { readConfig } from "./lib.mjs";
+import { historyCovers } from "./velocity-rank-core.mjs";
 
 const SHARDS = 32;
 const FROM = "2026-04-01";
-const TO = process.env.VR_TO ?? "2026-06-13"; // the day before the recorded table's first day (VR_TO: validation runs only)
+// through the last gap of the recorded table (27 Sep), plus a margin; a later
+// gap needs a re-run with a later TO (VR_TO: validation runs only)
+const TO = process.env.VR_TO ?? "2026-09-30";
 const UNIVERSE = 2000;
 const args = process.argv.slice(2);
 const OUT = args.includes("--out") ? args[args.indexOf("--out") + 1] : null;
@@ -55,8 +66,9 @@ const isoDays = (a, b) => {
   return out;
 };
 
-// { iso: count } for every UTC day of the last 30 weeks; null on failure
-async function history(repo) {
+// { iso: count } for every day of the last 30 weeks; null on failure.
+// stars = the repo's count in the newest route-history capture
+async function history(repo, stars) {
   for (let attempt = 0; attempt < 4; attempt++) {
     try {
       const res = await fetch(`https://api.github.com/repos/${repo}/stargazers/history`, {
@@ -67,10 +79,12 @@ async function history(repo) {
       if (res.status === 202 || res.status >= 500) throw new Error(`HTTP ${res.status}`);
       if (!res.ok) return null;
       const weeks = await res.json();
-      // page 1 holds the last 30 weeks; once FROM falls out of it, a missing
-      // day must not read as 0 (every repo would rank #1 that day)
-      const oldest = Math.min(...weeks.map((w) => w.week)) * 1000;
-      if (!(oldest <= Date.parse(`${FROM}T00:00:00Z`))) throw new Error(`window starts after ${FROM}`);
+      // a missing day must not read as 0 (every repo would rank #1 that day):
+      // the page must reach FROM, or be the repo's WHOLE history (born inside
+      // the window), which historyCovers checks against its star count
+      const more = /rel="next"/.test(res.headers.get("link") ?? "");
+      const cover = historyCovers(weeks, { more, from: FROM, stars });
+      if (!cover.ok) throw new Error(cover.why);
       const byDay = {};
       for (const w of weeks) {
         w.days.forEach((n, i) => {
@@ -106,7 +120,7 @@ async function main() {
   let done = 0;
   await Promise.all(Array.from({ length: 8 }, async () => {
     for (let x = queue.shift(); x; x = queue.shift()) {
-      const h = await history(x.repo);
+      const h = await history(x.repo, x.stars);
       if (!h) { failed.push(x.repo); continue; }
       // stars after the window = everything recorded after TO; the newest
       // route-history capture (x.stars) minus that = stars at the end of TO.
