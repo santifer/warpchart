@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { COLLECTOR_STALE_H as APP_STALE_H } from "../src/lib/staleness.ts";
-import { ARTIFACTS, COLLECTOR_STALE_H, npmLagExplains, cancelledVerdict, cronLag, etaIncoherences, maxAgeFromEnv, newestRunMs, pickFreshestRuns, pipelineRunsGate, RUNS_LIST_TOL_H, runsListStale, openPartials, presenceEval, presenceLost, presenceMap, prflowFreshness, npmUsageFreshness, contributorsDrift, contributorCurve, buildersWallFreshness, buildersLangMismatch, velocityRankFreshness, velocityRankReconstructed, gapsAfter, curveEndsOnTotal, staleArtifacts, watchdogStale, v7StampLags, v7WindowFreshness } from "./health-rules.mjs";
+import { ARTIFACTS, COLLECTOR_STALE_H, npmLagExplains, cancelledVerdict, cronLag, etaIncoherences, maxAgeFromEnv, newestRunMs, pickFreshestRuns, pipelineRunsGate, RUNS_LIST_TOL_H, runsListStale, openPartials, presenceEval, presenceLost, presenceMap, prflowFreshness, npmUsageFreshness, contributorsDrift, contributorCurve, buildersWallFreshness, buildersLangMismatch, velocityRankFreshness, velocityRankReconstructed, gapsAfter, ciBandViolations, curveEndsOnTotal, staleArtifacts, watchdogStale, v7StampLags, v7WindowFreshness } from "./health-rules.mjs";
 
 describe("prflowFreshness", () => {
   // 26-sep: the first run after 00:00Z was cancelled and 25-sep never closed.
@@ -693,5 +693,23 @@ describe("velocityRankReconstructed: a new gap after the reconstruction", () => 
   it("gapsAfter ignores the days up to rec.to and the open end", () => {
     expect(gapsAfter(["2026-09-02", "2026-09-05"], "2026-09-02")).toEqual(["2026-09-03", "2026-09-04"]);
     expect(gapsAfter([], "2026-09-30")).toEqual([]);
+  });
+});
+
+describe("ciBandViolations", () => {
+  const vault = { "2026-08-25": { c: 5174 }, "2026-10-21": { c: 8391 }, "2026-10-22": { c: 100 } };
+  it("21 Oct is consistent (1,361 checkouts x 1 <= 8,391 clones)", () => {
+    expect(ciBandViolations({ "2026-10-21": { checkouts: 1361 } }, vault).severity).toBeNull();
+  });
+  it("a day counting more CI than clones is a warn naming it", () => {
+    const r = ciBandViolations({ "2026-08-25": { checkouts: 6000 } }, vault);
+    expect(r.severity).toBe("warn");
+    expect(r.note).toContain("2026-08-25");
+  });
+  it("the vault's newest day is skipped: GitHub may still be closing it", () => {
+    expect(ciBandViolations({ "2026-10-22": { checkouts: 900 } }, vault).severity).toBeNull();
+  });
+  it("days only one side has are not compared", () => {
+    expect(ciBandViolations({ "2026-10-22": { checkouts: 9999 } }, { "2026-10-21": { c: 10 } }).severity).toBeNull();
   });
 });

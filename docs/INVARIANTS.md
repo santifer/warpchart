@@ -83,6 +83,7 @@ a different question. It never throws, never logs, and the panel stays green.
 | `builders/*` | `collector/builders.mjs` (workflow `builders.yml`) | SVGs per language first, `.json` meta last (the commit point); refuses when the census shrinks or >5% of avatars fail |
 | `traffic/*` | `collector/traffic.mjs` | merges, never drops days |
 | `trending/marks.json` | `collector/trending-marks.mjs` | accumulates; a 404 is confirmed with head() before starting fresh, refuses a write that loses a day |
+| `ci-checkouts/{owner}--{name}.json` | `collector/ci-checkouts.mjs` | accumulates final days only, never rewrites one; a time slice must list exactly its total_count; a day with an unknown workflow ratio is not counted; 404 confirmed with head(); refuses a write that loses a day |
 | `health/*` | `collector/health.mjs` | |
 | `live/*` | `collector/live.mjs` **and** `src/lib/live-blob.ts` (webhook seed) | two writers: the seed only writes a first point |
 | `embeds/seen.json` | `src/app/api/embeds/route.ts` **and** `src/lib/embed-track.ts` | two writers |
