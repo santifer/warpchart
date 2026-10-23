@@ -37,6 +37,7 @@ const WINDOW = 60; // most recent ~2 months on screen
 const SEARCH = /^(google|bing|yahoo|duckduckgo|ecosia|baidu|yandex|search\.brave\.com|github\.com)$/i;
 
 const TOKEN = "wc_vault";
+const GUEST_KEY = /^[A-Za-z0-9_-]{22}\.[A-Za-z0-9_-]{22}$/; // same shape as GUEST_KEY_RE in src/lib/guest-keys.ts
 
 const read = (): string | null => {
   try {
@@ -86,7 +87,11 @@ export default function TrafficPanel({ repo }: { repo: string }) {
         if (!j?.vault?.days?.length) return setFailed("empty");
         setVault(j.vault as TrafficVault);
       })
-      .catch(() => !cancelled && setFailed("denied"));
+      // a GUEST key ({r}.{sig}, src/lib/guest-keys.ts) is scoped to its own
+      // repos: refused anywhere else is the normal state, not a broken key, so
+      // it gets the teaser like any visitor, never "rejected" and its one-click
+      // FORGET (which would also cost it the repo it does open)
+      .catch(() => !cancelled && (GUEST_KEY.test(key) ? setHeld(false) : setFailed("denied")));
     return () => {
       cancelled = true;
     };

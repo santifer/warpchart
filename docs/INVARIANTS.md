@@ -40,6 +40,9 @@ a different question. It never throws, never logs, and the panel stays green.
   | `embed-chart-curve-v${CURVE_VERSION}` | `src/lib/curve.ts` | 6 h |
   | `archive-monthly-vN` | `src/lib/curve.ts` | 30 days |
   | `builders-wall-vN` | `src/app/api/builders/route.ts` | 30 min |
+  | `velocity-rank-meta-vN` | `src/lib/velocity-rank.ts` | 1 h |
+  | `velocity-rank-month-vN` | `src/lib/velocity-rank.ts` | 1 h |
+  | `velocity-rank-reconstructed-vN` | `src/lib/velocity-rank.ts` | 24 h |
   | `route-history-shard` | `src/lib/rank-history.ts` | 1 h |
   | `live-snapshot` | `src/lib/live-blob.ts` | 1 min |
   | `earned-badges` | `src/lib/earned.ts` | 1 h |
@@ -91,14 +94,16 @@ a different question. It never throws, never logs, and the panel stays green.
 
 The inventory of stored families, with the cadence each must keep, is `ARTIFACTS` in `collector/health-rules.mjs`. The watchdog raises `inventory.coverage` when a periodic family stops updating, and `inventory.undeclared` for a key nobody declared. A new family is declared there, not here.
 
-Most families have one writer: the collector script with the family's name (`route-history/*` is `collector/route-history.mjs`, `vitals/*` is `collector/vitals.mjs`, and so on). Families that refuse a short sweep (route-history, catalog, vitals' `_dist`, contributors, builders) follow §4's "Validate before publishing". Builders writes its SVGs first and its `.json` meta last, which is the commit point. Traffic merges into the stored vault and never drops a day.
+Most families have one writer: the collector script with the family's name (`route-history/*` is `collector/route-history.mjs`, `vitals/*` is `collector/vitals.mjs`, and so on). Families that refuse a short sweep (route-history, catalog, vitals' `_dist`, contributors, builders, velocity-rank, trending) follow §4's "Validate before publishing". Builders writes its SVGs first and its `.json` meta last, which is the commit point. Traffic merges into the stored vault and never drops a day. `trending/marks.json` (`collector/trending-marks.mjs`) accumulates too: a 404 is confirmed with `head()` before it starts fresh, and a write that would lose a day is refused.
 
 These keys have a second writer, or a writer you would not guess:
 
 - **`data/**`**: `scripts/sync-to-blob.mjs` mirrors the collector's local `data/` up on every run, everything except `data/tenants.json`.
 - **`data/catalog.json`, `data/attribution.json`, `data/enrichment.json`**: written straight to the Blob by `collector/catalog.mjs`, `collector/attribute.mjs` and `collector/enrich.mjs`, **and** re-uploaded by the mirror from the copy hydrated at the start of the run. In `collect.yml` the mirror runs before catalog and attribute, so it rewrites the previous version. Its upload time is the one `inventory.coverage` reads. **Known gap:** a producer of one of these three that stops still looks fresh to the watchdog.
 - **`data/tenants.json`**: the Polar webhook (`src/lib/tenants-store.ts`) only. It is kept out of the mirror, because a mirrored copy would clobber a tenant who paid mid-run. Reads use `useCache: false` and throw on anything but a 404.
-- **`health/partial/*`**: `markPartial` / `markComplete` in `collector/blob.mjs`, called by route-history, catalog, prflow and builders. `collector/health.mjs` reads them, and writes the rest of `health/*`.
+- **`health/partial/*`**: `markPartial` / `markComplete` in `collector/blob.mjs`, called by route-history, catalog, prflow, builders, velocity-rank and trending-marks. `collector/health.mjs` reads them, and writes the rest of `health/*`.
+- **`velocity-rank/*`**: `collector/velocity-rank.mjs` writes the month files and `meta.json`; `collector/velocity-rank-backfill.mjs` writes `reconstructed.json`.
+- **`god/*`**: written by the owner's scripts and by the app. `scripts/god-magic-link.mjs` writes a magic-link grant (`god/magic/{hash}.json`), and `src/lib/magic-link.ts` deletes it on redemption, leaving a `.used` claim as a tombstone. `src/lib/guest-keys.ts` writes a guest grant (`god/guests/{hash}.json`) when a guest link is redeemed, and `scripts/god-guests.mjs` deletes it to revoke. Only hashes are stored.
 - **`live/*`**: `collector/live.mjs` **and** `src/lib/live-blob.ts`. The webhook seeds one first point at provisioning.
 - **`embeds/seen.json`**: `src/lib/embed-track.ts` (a first sighting) **and** `src/app/api/embeds/route.ts` (`?forget=`). Both read, modify and write the whole map without a lock.
 - **Written by the app, not the collector:** `alerts/sent.json` (`/api/cron/alerts`), `badges-earned.json` (`/api/cron/badges`) and `codex/*` (`src/lib/codex.ts`, on a repo's first visit).
