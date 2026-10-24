@@ -47,10 +47,23 @@ export interface VitalsDeploy {
   tier: "Elite" | "High" | "Medium" | "Low";
 }
 
+// From the Traffic Vault's last 7 complete UTC days (collector/vitals-core.mjs
+// adoptionFromVault). clonesWeek counts clone EVENTS (sum of `c`). There is no
+// people count here: a week of per-day uniques summed is not one, and shipped
+// as `uniqueClonersWeek` until it was dropped (vitals-v11).
 export interface VitalsAdoption {
   cloneConvPct: number | null;
-  uniqueClonersWeek: number | null;
-  clonesPerCloner: number | null;
+  clonesWeek: number | null;
+}
+
+// A vitals Blob written before the collector's fix still carries the summed
+// per-day uniques. Pick the fields by name so they can never ride along to
+// /api/v1/dossier, whatever the Blob holds.
+export function pickAdoption(raw: unknown): VitalsAdoption | null {
+  if (!raw || typeof raw !== "object") return null;
+  const r = raw as Record<string, unknown>;
+  const num = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : null);
+  return { cloneConvPct: num(r.cloneConvPct), clonesWeek: num(r.clonesWeek) };
 }
 
 export interface VitalsCommunity {
@@ -211,7 +224,8 @@ async function readVitals(owner: string, name: string): Promise<Vitals | null> {
       // 15-min unstable_cache below is the real dedup; each refresh reads fresh.
       const res = await get(blobKey(rn), { access: "private", token, useCache: false });
       if (res?.statusCode === 200 && res.stream) {
-        return JSON.parse(await new Response(res.stream).text()) as Vitals;
+        const v = JSON.parse(await new Response(res.stream).text()) as Vitals;
+        return { ...v, adoption: pickAdoption(v.adoption) };
       }
     } catch {
       /* missing (locked) or transient: try the next historical name */
@@ -230,7 +244,7 @@ export const loadVitals = (owner: string, name: string): Promise<Vitals | null> 
     // the old reading, so a deploy that fixes a number ships looking like it
     // did nothing. v7 was itself a bump for the same reason (sample counts
     // passing for totals) and the lesson still cost 15 minutes today.
-    ["vitals-v10", // v10: census.githubDaily (GitHub's count over time); v9: contributors = GitHub's sidebar
+    ["vitals-v11", // v11: adoption.clonesWeek (sum of c) replaces the summed per-day uniques; v10: census.githubDaily (GitHub's count over time); v9: contributors = GitHub's sidebar
     `${owner}/${name}`.toLowerCase()],
     { revalidate: 900 },
   )();
