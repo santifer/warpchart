@@ -28,6 +28,7 @@ import { get, put } from "@vercel/blob";
 import { DATA_DIR, graphql, ghFetch, sleep, token, readConfig, allNamesOf } from "./lib.mjs";
 import { isBot, derivePrAnalysis, gfiQueries, gfiFromCounts, parseSidebarContributors } from "./vitals-core.mjs";
 import { calibrateToLive } from "./contributors-core.mjs";
+import { canonicalVelocity } from "./rules.mjs";
 
 token(); // GitHub token: fail fast
 const blobToken = process.env.BLOB_READ_WRITE_TOKEN;
@@ -619,7 +620,7 @@ async function main() {
   // 7-day star velocity per repo comes free from route.json (velocity7 keystone)
   const v7Of = (repo) => {
     const e = byNameEntry.get(repo.toLowerCase());
-    return e?.v7 ?? e?.v ?? 0;
+    return canonicalVelocity(e) ?? 0;
   };
   const byNameEntry = new Map(entries.map((p) => [p.r.toLowerCase(), p]));
 

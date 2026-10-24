@@ -9,6 +9,8 @@
 // page promises does not exist ("the headline velocity is a trailing 7-day rate").
 //
 // Pure, dependency-free: safe to import from server data prep AND client charts.
+// The collector's twin is canonicalVelocity() in collector/rules.mjs
+// (src/lib/parity.test.ts).
 export interface HasVelocity {
   v?: number | null;
   v7?: number | null;

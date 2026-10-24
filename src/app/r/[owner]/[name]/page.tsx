@@ -17,6 +17,8 @@ import {
   StepsSilhouette,
 } from "@/components/PanelSilhouettes";
 import { repoRankTrajectory } from "@/lib/rank-history";
+import { rankByStars } from "@/lib/rank";
+import { canonicalVelocity } from "@/lib/velocity";
 import GodRank from "@/components/GodRank";
 import GodVelocityRank from "@/components/GodVelocityRank";
 import JsonLd, { repoGraph } from "@/components/JsonLd";
@@ -101,11 +103,11 @@ export async function generateMetadata({
   let description = `Worldwide star rank, velocity and the repos closing in on ${repo}. Live and free.`;
   if (idx >= 0 && route) {
     const p = route.repos[idx];
-    const vel = Math.round(p.v7 ?? p.v ?? 0);
+    const vel = Math.round(canonicalVelocity(p) ?? 0);
     // count above, not array index: the registry reorders once a day while the
     // star counts inside it refresh every 2 hours, so the index is last night's
     // position wearing this morning's stars (see the same fix in /api/og)
-    const rank = route.repos.reduce((n, q) => (q.s > p.s ? n + 1 : n), 1);
+    const rank = rankByStars(route.repos, p.s);
     description =
       `${repo} ranks #${fmt(rank)} of every public GitHub repository — ${fmtCompact(p.s)} stars` +
       `${vel ? `, climbing ${fmt(vel)}/day` : ""}. Live worldwide rank, velocity and the repos closing in.`;

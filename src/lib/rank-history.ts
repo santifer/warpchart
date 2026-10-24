@@ -9,13 +9,14 @@
 // The index is SHARDED (32 files, written by collector/route-history.mjs)
 // because Next's data cache caps a cached item at 2MB and the full index is
 // ~22MB. A repo query reads exactly one shard (~0.7MB), cached at most once per
-// hour. The shard hash MUST stay identical to shardOf() in route-history.mjs.
+// hour. The shard hash MUST stay identical to the collector's, shardOf() in
+// collector/rules.mjs (src/lib/parity.test.ts imports both).
 import { get } from "@vercel/blob";
 import { unstable_cache } from "next/cache";
 import { allNamesOf } from "./aliases";
 import { toTrajectory } from "./trajectory";
 
-const SHARDS = 32; // MUST match collector/route-history.mjs
+export const SHARDS = 32; // twin of collector/rules.mjs
 
 interface Shard {
   dates: string[];
@@ -28,8 +29,8 @@ export interface RankHistoryPoint {
   stars: number;
 }
 
-// deterministic fnv-1a, identical to shardOf() in collector/route-history.mjs
-function shardOf(repo: string): number {
+// deterministic fnv-1a, twin of shardOf() in collector/rules.mjs
+export function shardOf(repo: string): number {
   let h = 2166136261;
   const s = repo.toLowerCase();
   for (let i = 0; i < s.length; i++) {
