@@ -20,12 +20,14 @@
 // work happens HERE, page views only read the Blob.
 //
 // Usage: GITHUB_TOKEN=... BLOB_READ_WRITE_TOKEN=... node collector/vitals.mjs
-//   env knobs: VITALS_UNIVERSE (default 1000) · VITALS_DIST_MAX (per-run cap on
-//   distribution refreshes, default 1000) · VITALS_PACE_MS (gap between calls)
+//   env knobs: VITALS_UNIVERSE (default 1000) · VITALS_DEADLINE_MS (per-run
+//   budget for the distribution sweep) · VITALS_PACE_MS (gap between calls)
 import { readFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import { get, put } from "@vercel/blob";
 import { DATA_DIR, graphql, ghFetch, sleep, token, readConfig, allNamesOf } from "./lib.mjs";
+import { acceptDistribution } from "./guards.mjs";
+import { markPartial, markComplete } from "./blob.mjs";
 import { isBot, derivePrAnalysis, gfiQueries, gfiFromCounts, parseSidebarContributors } from "./vitals-core.mjs";
 import { calibrateToLive } from "./contributors-core.mjs";
 
@@ -37,7 +39,6 @@ if (!blobToken) {
 }
 
 const UNIVERSE = Math.max(50, Number(process.env.VITALS_UNIVERSE || 1000));
-const DIST_MAX = Math.max(1, Number(process.env.VITALS_DIST_MAX || 1000));
 // Time budget for the resumable distribution sweep. Must leave room inside the
 // STEP timeout for Phase B, which is the part that actually refreshes the
 // panel; Phase A only rebuilds the reference population, once a week.
@@ -687,7 +688,6 @@ async function main() {
     let i = prog.idx;
     for (; i < target.length; i++) {
       if (Date.now() - started > DEADLINE_MS) break;
-      if (done - prog.raw.length >= DIST_MAX) break;
       try {
         raw.push(dims(await lightActivity(target[i]), target[i]));
         done++;
@@ -706,7 +706,8 @@ async function main() {
     // Only publish a distribution built from the WHOLE universe: a rank of
     // "#24 of 30" read as "#24 of 999" would be a lie, and a rank is the one
     // number on this panel that cannot be approximated.
-    if (complete && done >= 30) {
+    const verdict = acceptDistribution(done, { complete, targets: target.length, prev: dist?.universe ?? null });
+    if (verdict.ok) {
       const metrics = {};
       for (const k of M) metrics[k] = raw.map((a) => a[k] ?? 0).sort((x, y) => x - y);
       // composite distribution: activity is heavily skewed (most repos near 0),
@@ -735,9 +736,14 @@ async function main() {
       await writeBlob("vitals/_dist.json", dist);
       // progress consumed: the next weekly refresh starts a clean sweep
       await writeBlob("vitals/_dist-progress.json", { startedDay: today, universe: UNIVERSE, repos: 0, idx: 0, raw: [] });
+      await markComplete("vitals-dist", { got: done });
       console.log(`[vitals] distribution refreshed: ${done} repos (full sweep complete)`);
     } else if (complete) {
-      console.log(`[vitals] distribution refresh too thin (${done}); keeping previous`);
+      // keep the previous distribution, and start the next sweep clean: resuming
+      // this one would re-measure only its tail and refuse again, forever
+      await writeBlob("vitals/_dist-progress.json", { startedDay: today, universe: UNIVERSE, repos: 0, idx: 0, raw: [] });
+      await markPartial("vitals-dist", { day: today, got: done, want: target.length, reason: verdict.reason });
+      console.log(`[vitals] NOT publishing the distribution: ${verdict.reason}. Keeping the previous one.`);
     }
   } else {
     console.log(`[vitals] distribution already fresh for ${today} (${dist.universe} repos)`);
