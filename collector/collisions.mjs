@@ -276,7 +276,7 @@ export async function runCollisionScan({ enrich = true, force = false } = {}) {
       const q = encodeURIComponent(r);
       for (const path of [`/r/${r}`, `/api/curve?repo=${q}`, `/api/chart?repo=${q}`]) {
         try {
-          await fetch(`${base}${path}`);
+          await fetch(`${base}${path}`, { signal: AbortSignal.timeout(30_000) });
         } catch { /* best effort */ }
         await sleep(1500);
       }
