@@ -202,9 +202,10 @@ export function buildBundle(
   const lifeHours = Math.min(Math.ceil((nowMs - firstMs) / HOUR) + 1, 24 * 400);
   const hourlyAll = hourlyBuckets(timestamps, lifeHours, nowMs);
   const dailyAll = daily;
-  const spikes = loadForensics()?.spikes ?? [];
-  // Hourly surge attribution is house-only (attribution.json never exists for a
-  // tenant's data), so it merges only into the house Mission Log.
+  // Spike forensics (forensics.json) and hourly surge attribution
+  // (attribution.json) describe the HOUSE repo only, so a tenant's Mission Log
+  // and DailyLadder never borrow them.
+  const spikes = src ? [] : (loadForensics()?.spikes ?? []);
   const surges = src ? [] : (loadAttribution()?.surges ?? []);
   const events = detectEvents(history, dailyAll, spikes, surgeEvents(surges));
   const captain = captainsLog(dailyAll, latest?.rank ?? null);
