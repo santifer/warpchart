@@ -190,9 +190,11 @@ async function dossierView(repo, args, asJson) {
   const a = d.activity30d;
   if (a) {
     rule("LAST 30 DAYS");
-    kv("commits", fmt(a.commits ?? 0));
-    kv("PRs merged", fmt(a.prsMerged ?? 0));
-    kv("issues", `${fmt(a.issuesClosed ?? 0)} closed`, `${fmt(a.issuesOpened ?? 0)} opened · ${fmt(a.openIssues ?? 0)} open`);
+    // null = GitHub did not answer that count: unmeasured, never 0
+    const n = (v) => (v == null ? "—" : fmt(v));
+    kv("commits", n(a.commits));
+    kv("PRs merged", n(a.prsMerged));
+    kv("issues", `${n(a.issuesClosed)} closed`, `${n(a.issuesOpened)} opened · ${n(a.openIssues)} open`);
     if (a.releases?.length) kv("latest release", bold(a.releases[0].tag), day(a.releases[0].at));
   }
 
