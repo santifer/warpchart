@@ -6,6 +6,7 @@ import { loadTimestamps, loadMeta, lastSnapshot } from "@/lib/history";
 import { repoBasic, stargazerPageFirst, lowFuel } from "@/lib/github";
 import { repoRankTrajectory } from "@/lib/rank-history";
 import { reqLog } from "@/lib/log";
+import { cacheKey } from "@/lib/shape-versions";
 
 export interface Curve {
   repo: string;
@@ -90,7 +91,7 @@ async function fetchArchiveMonthlyRaw(repoId: number): Promise<{ t: number; tota
 // and an OSS Insight outage stops mattering for already-seen repos.
 async function fetchArchiveMonthly(repoId: number): Promise<{ t: number; total: number }[] | null> {
   try {
-    return await unstable_cache(fetchArchiveMonthlyRaw, ["archive-monthly-v1"], {
+    return await unstable_cache(fetchArchiveMonthlyRaw, [cacheKey("archiveMonthly")], {
       revalidate: 30 * 86_400,
       tags: [`archive:${repoId}`],
     })(repoId);
@@ -236,15 +237,10 @@ async function sampleCurve(owner: string, name: string): Promise<Curve> {
   return { repo: basic.r, total: basic.s, pts, dashedFrom, archiveFrom, exactFrom, degraded };
 }
 
-// Version of the curve reconstruction. Bump on ANY change to the data shape
-// (sampling, normalization, stitching): the bump purges every cached curve
-// on its next request, so pre-fix curves never linger out their TTL.
-// v2: seam-anchored archive normalization. v3: per-repo tags + live total.
-// v4: exact daily recent tail spliced from the rank-history moat.
-// v5: cascade that never 502s (REST stargazer listing closed for foreign repos).
-// v6: daily points clamped to now, so a curve built in the morning no longer
-// carries today's noon-stamped point as a future timestamp.
-const CURVE_VERSION = 6;
+// Version of the curve reconstruction: SHAPE_VERSION.curve
+// (src/lib/shape-versions.ts, with its history). Bump it on ANY change to the
+// data shape (sampling, normalization, stitching): the bump purges every cached
+// curve on its next request, so pre-fix curves never linger out their TTL.
 
 export function curveTag(owner: string, name: string): string {
   return `curve:${owner.toLowerCase()}/${name.toLowerCase()}`;
@@ -256,7 +252,7 @@ export function curveTag(owner: string, name: string): string {
 // improving the shape. The rank collector adds repos to the moat daily, and the
 // version bump purges everything when the reconstruction itself changes.
 export function cachedSampleCurve(owner: string, name: string): Promise<Curve> {
-  return unstable_cache(sampleCurve, [`embed-chart-curve-v${CURVE_VERSION}`], {
+  return unstable_cache(sampleCurve, [cacheKey("curve")], {
     revalidate: 21_600,
     tags: [curveTag(owner, name)],
   })(owner, name);

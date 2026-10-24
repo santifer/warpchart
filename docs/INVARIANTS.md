@@ -28,7 +28,20 @@ a different question. It never throws, never logs, and the panel stays green.
 ## 2. Caches and deploys
 
 - **`git push` does not deploy the data.** The collector's `.deploy-stamp` commit triggers the Vercel build; a code push builds too, but a data fix without a new run shows nothing.
-- **`unstable_cache` (the Data Cache) survives a deploy.** When the SHAPE or the meaning of a cached value changes, bump its key in the same commit: `dossier-vN`, `vitals-vN`, `prflow-v1`, `CURVE_VERSION`. Otherwise production serves the old reading for up to 15 minutes and the fix "does not work".
+- **`unstable_cache` (the Data Cache) survives a deploy.** When the SHAPE or the meaning of a cached value changes, bump that type's number in `SHAPE_VERSION` (`src/lib/shape-versions.ts`) in the same commit. Keys are derived with `cacheKey()`, so a key that embeds the type moves too (`explorer-data` carries the Dossier version). Otherwise production serves the old reading for the entry's TTL and the fix "does not work". Sensor: `src/lib/shape-versions.test.ts` (no hand-written versioned key outside it).
+
+  | Type | Key | TTL |
+  |---|---|---|
+  | Dossier | `dossier-vN` | 15 min |
+  | ExplorerData (+ Dossier) | `explorer-data-vN.dossierM` | 15 min |
+  | Vitals | `vitals-vN` | 15 min |
+  | PrFlow | `prflow-vN` | 15 min |
+  | TrafficVault | `traffic-vault-vN` | 5 min |
+  | Curve | `embed-chart-curve-vN` | 6 h |
+  | OSS Insight monthly archive | `archive-monthly-vN` | 30 days |
+  | Builders wall | `builders-wall-vN` | 30 min |
+  | Velocity rank: meta, month | `velocity-rank-{meta,month}-vN` | 1 h |
+  | Velocity rank: reconstructed days | `velocity-rank-reconstructed-vN` | 1 day |
 - **`@vercel/blob` `get()` caches on the CDN by default** (weeks). Any read-modify-write, freshness check or watchdog read uses `useCache: false`.
 - A `?query` in a page URL breaks the ISR/edge cache key (each variant renders from scratch). UI state between pages goes in the `#hash`.
 - An explicit `cache: "no-store"` in shared fetch code turns an ISR page dynamic.

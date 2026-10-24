@@ -10,10 +10,12 @@
 import { get } from "@vercel/blob";
 import { unstable_cache } from "next/cache";
 import { allNamesOf } from "./aliases";
+import { cacheKey } from "./shape-versions";
 
 // [day, opened, merged, closedUnmerged, openAtClose, medianAgeDaysOfOpen]
 export type PrFlowDay = [string, number, number, number, number, number | null];
 
+// SHAPE: bump SHAPE_VERSION.prFlow (src/lib/shape-versions.ts) when this changes.
 export interface PrFlow {
   repo: string;
   generatedAt: string;
@@ -47,9 +49,8 @@ async function readPrFlow(owner: string, name: string): Promise<PrFlow | null> {
   return null;
 }
 
-// BUMP THE KEY WHENEVER THE SHAPE CHANGES: an entry cached under the old shape
-// does not fail, it serves the old reading.
+// The key is derived from SHAPE_VERSION.prFlow: bump it when the shape changes.
 export const loadPrFlow = (owner: string, name: string): Promise<PrFlow | null> =>
-  unstable_cache(() => readPrFlow(owner, name), ["prflow-v1", `${owner}/${name}`.toLowerCase()], {
+  unstable_cache(() => readPrFlow(owner, name), [cacheKey("prFlow"), `${owner}/${name}`.toLowerCase()], {
     revalidate: 900,
   })();
