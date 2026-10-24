@@ -18,7 +18,7 @@ import type { Palette } from "@/lib/theme";
 import { usePalette } from "@/lib/usePalette";
 import { dopplerTilt } from "@/lib/doppler";
 import { fmt, fmtCompact, fmtEtaDays, fmtUtcStamp, etaDate, shortName } from "@/lib/format";
-import { neighborEtas, neighborRank, unsteadyLabel, etaText, ceilEta, type NeighborEta } from "@/lib/projections";
+import { neighborEtas, neighborRank, unsteadyLabel, etaText, ceilEta, milestoneEta, type NeighborEta } from "@/lib/projections";
 import { velocityQuality } from "@/lib/velocity";
 import { sound } from "@/lib/sound";
 import { ghAvatar } from "@/lib/avatar";
@@ -1179,12 +1179,11 @@ export default function GalacticChart({
               </g>
             ) : null}
             {visGates.map((m) => {
-              // gate ETA, same model as the StatusBar headline: gap to the
-              // threshold over our v7d minus the threshold's drift. Anchored on
-              // the gate so the milestone time reads as a point on the route.
-              const gGap = Math.max(0, m.threshold - stars);
-              const net = vOwn - (m.drift ?? 0);
-              const gEta = gGap === 0 ? "crossed" : net > 0 ? ` · in ${fmtEtaDays(gGap / net)}` : "";
+              // gate ETA, the same milestoneEta as the StatusBar headline.
+              // Anchored on the gate so the milestone time reads as a point on
+              // the route.
+              const e = milestoneEta(m.rank, m.threshold, stars, vOwn, m.drift);
+              const gEta = e.gap === 0 ? "crossed" : e.etaDays !== null ? ` · in ${fmtEtaDays(e.etaDays)}` : "";
               return (
                 <g key={m.rank}>
                   <line
