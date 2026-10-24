@@ -11,6 +11,7 @@ import Panel from "./Panel";
 import ContributorChart from "./ContributorChart";
 import { fmtCompact } from "@/lib/format";
 import type { Vitals } from "@/lib/vitals";
+import type { VitalsReading } from "@/lib/vitals-reading";
 import { ghAvatar } from "@/lib/avatar";
 
 // see lib/avatar.ts for why this never goes through github.com/{login}.png
@@ -136,16 +137,37 @@ function Chip({ children }: { children: ReactNode }) {
 export default function VitalSignsPanel({
   repo,
   name,
-  vitals,
+  reading,
   index = "01",
 }: {
   repo: string;
   name: string;
-  vitals: Vitals | null;
+  reading: VitalsReading;
   index?: string;
 }) {
+  // ---- UNAVAILABLE / PENDING: entitled or unknown, never the upsell ---------
+  // A failed read must not read as "locked": on a paid repo that is an upsell
+  // for what the reader already bought.
+  if (reading.state === "failed" || reading.state === "pending") {
+    const failed = reading.state === "failed";
+    return (
+      <Panel index={index} title="Vital signs" meta={failed ? "engineering health · unavailable" : "engineering health · pending"}>
+        <div className="flex min-h-[120px] flex-col items-center justify-center gap-2 py-1 text-center">
+          <span className={`numeral text-label tracking-[0.2em] ${failed ? "text-warn" : "text-accent"}`}>
+            ◈ VITAL SIGNS · {name.toUpperCase()} · {failed ? "UNAVAILABLE" : "PENDING"}
+          </span>
+          <span className="numeral max-w-md text-micro text-dim">
+            {failed
+              ? "The latest reading could not be loaded just now. Nothing is wrong with the repo, and the next view retries."
+              : "Tracked, but the first reading has not landed yet. Vital signs are computed once a day."}
+          </span>
+        </div>
+      </Panel>
+    );
+  }
+
   // ---- LOCKED: the real dashboard, blurred, behind the upsell ---------------
-  if (!vitals) {
+  if (reading.state === "locked") {
     return (
       <Panel index={index} title="Vital signs" meta="engineering health · locked">
         <div className="relative min-h-[240px] py-1">
@@ -189,6 +211,7 @@ export default function VitalSignsPanel({
     );
   }
 
+  const vitals: Vitals = reading.value;
   const a = vitals.activity;
   const lt = vitals.leadTime;
   const dep = vitals.deploy;

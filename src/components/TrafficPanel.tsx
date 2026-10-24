@@ -28,6 +28,7 @@ import {
 import { usePalette } from "@/lib/usePalette";
 import { fmt, fmtCompact } from "@/lib/format";
 import type { TrafficVault } from "@/lib/traffic";
+import { vaultFailure } from "@/lib/vault-status";
 
 const WINDOW = 60; // most recent ~2 months on screen
 
@@ -58,8 +59,10 @@ export default function TrafficPanel({ repo }: { repo: string }) {
   const [vault, setVault] = useState<TrafficVault | null>(null);
   // a key this browser holds that the server refused, or that returned nothing.
   // Falling back to the teaser here would be an absence that lies: it reads as
-  // "no data for this repo" when the truth is "your key did not work".
-  const [failed, setFailed] = useState<null | "denied" | "empty">(null);
+  // "no data for this repo" when the truth is "your key did not work". And a
+  // store that did not answer (5xx, network) is neither: the key is fine, so
+  // it must never be offered up for forgetting.
+  const [failed, setFailed] = useState<null | "denied" | "empty" | "unavailable">(null);
   const [held, setHeld] = useState(false);
   const [arming, setArming] = useState(false);
   const [people, setPeople] = useState(false);
@@ -87,17 +90,23 @@ export default function TrafficPanel({ repo }: { repo: string }) {
     fetch(`/api/traffic?repo=${encodeURIComponent(repo)}&key=${encodeURIComponent(key)}`, {
       cache: "no-store",
     })
-      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
-      .then((j) => {
+      .then(async (r) => {
+        if (cancelled) return;
+        // only the server saying no is a rejected key; anything else is a
+        // failed read (vaultFailure)
+        const f = vaultFailure(r.status);
+        // a GUEST key ({r}.{sig}, src/lib/guest-keys.ts) is scoped to its own
+        // repos: refused anywhere else is the normal state, not a broken key, so
+        // it gets the teaser like any visitor, never "rejected" and its one-click
+        // FORGET (which would also cost it the repo it does open)
+        if (f === "denied" && GUEST_KEY.test(key)) return setHeld(false);
+        if (f) return setFailed(f);
+        const j = await r.json();
         if (cancelled) return;
         if (!j?.vault?.days?.length) return setFailed("empty");
         setVault(j.vault as TrafficVault);
       })
-      // a GUEST key ({r}.{sig}, src/lib/guest-keys.ts) is scoped to its own
-      // repos: refused anywhere else is the normal state, not a broken key, so
-      // it gets the teaser like any visitor, never "rejected" and its one-click
-      // FORGET (which would also cost it the repo it does open)
-      .catch(() => !cancelled && (GUEST_KEY.test(key) ? setHeld(false) : setFailed("denied")));
+      .catch(() => !cancelled && setFailed("unavailable"));
     return () => {
       cancelled = true;
     };
@@ -120,6 +129,21 @@ export default function TrafficPanel({ repo }: { repo: string }) {
     const t = setTimeout(() => setArming(false), 4000);
     return () => clearTimeout(t);
   }, [arming]);
+
+  // the store did not answer: say so, keep the key, offer a retry
+  if (failed === "unavailable") {
+    return (
+      <div className="flex h-[230px] flex-col items-center justify-center gap-2 text-center">
+        <span className="font-display text-label tracking-[0.3em] text-warn">◈ VAULT UNREACHABLE</span>
+        <span className="numeral max-w-[46ch] text-label leading-relaxed text-faint">
+          The vault could not be read just now. Your key is fine and stays in this browser.
+        </span>
+        <button onClick={() => location.reload()} className="numeral text-micro tracking-[0.24em] text-dim hover:text-accent">
+          RETRY
+        </button>
+      </div>
+    );
+  }
 
   // a key that does not work is worth saying out loud, with the way out
   if (failed) {

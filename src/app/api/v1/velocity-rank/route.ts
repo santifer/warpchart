@@ -25,7 +25,9 @@ export async function GET(request: Request) {
   if (!VALID.test(repo)) {
     return Response.json({ error: "repo must be 'owner/name'" }, { status: 400 });
   }
-  const [r, live] = await Promise.all([repoVelocityRank(repo), readTrendingLive()]);
+  // a rank-history shard the store could not serve rejects (never an empty
+  // series that would read as "not measured" every day): same 503
+  const [r, live] = await Promise.all([repoVelocityRank(repo).catch(() => null), readTrendingLive()]);
   if (!r) {
     // the day table is missing or unreadable: an honest 503, never an empty record
     return Response.json({ error: "velocity rank unavailable" }, { status: 503, headers: { "Cache-Control": "no-store" } });
