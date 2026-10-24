@@ -4,9 +4,9 @@
 // runs dry. Creating a GitHub App is free; in the paid phase each tenant
 // installs it and brings their own quota.
 import { createSign } from "node:crypto";
-import { reqLog } from "@/lib/log";
+import { scopeLog } from "@/lib/log";
 
-const log = reqLog("ghauth");
+const log = scopeLog("ghauth");
 
 interface Budget {
   remaining: number;
