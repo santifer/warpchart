@@ -1,27 +1,51 @@
 // Build-time / server-side loaders for the data/ directory.
-import { readFileSync, existsSync } from "node:fs";
+import { readFileSync, existsSync, statSync } from "node:fs";
 import path from "node:path";
 import { allNamesOf, canonicalRepo } from "./aliases";
 import type { Snapshot, RepoMetaFile, MilestonesFile, RouteFile, ForensicsFile, AttributionFile, CollisionsFile, CatalogFile, EnrichmentEntry, EnrichmentFile } from "./types";
 
 const DATA = path.join(process.cwd(), "data");
 
-export function loadTimestamps(): string[] {
-  const p = path.join(DATA, "stargazer_timestamps.txt");
-  if (!existsSync(p)) return [];
-  return readFileSync(p, "utf8").trimEnd().split("\n").filter(Boolean);
+// data/ is written once per deploy (scripts/sync-from-blob.mjs at prebuild) and
+// only read at runtime, yet every loader re-read and re-parsed its file on every
+// call: one /r/ render parsed route.json four times. Each file is parsed once
+// per instance, keyed by its path and checked against mtime + size, so `next
+// dev` still sees a collector run that rewrites data/ underneath it.
+//
+// The parsed value is SHARED by every caller from then on, so it is frozen: a
+// caller that sorts or patches it in place would silently change the number
+// every later request reads. Frozen, that caller throws instead.
+const memo = new Map<string, { mtimeMs: number; size: number; value: unknown }>();
+
+function deepFreeze<T>(v: T): T {
+  if (v && typeof v === "object" && !Object.isFrozen(v)) {
+    Object.freeze(v);
+    for (const k of Object.keys(v)) deepFreeze((v as Record<string, unknown>)[k]);
+  }
+  return v;
 }
 
-export function lastTimestamp(): string | null {
-  const ts = loadTimestamps();
-  return ts.length ? ts[ts.length - 1] : null;
+// A missing file is `missing`, never memoized (it can appear later in dev). A
+// parse that throws is not memoized either: the next call retries and throws
+// again, exactly as before.
+function readParsed<T>(p: string, parse: (raw: string) => T, missing: T): T {
+  const st = statSync(p, { throwIfNoEntry: false });
+  if (!st) {
+    memo.delete(p);
+    return missing;
+  }
+  const hit = memo.get(p);
+  if (hit && hit.mtimeMs === st.mtimeMs && hit.size === st.size) return hit.value as T;
+  const value = deepFreeze(parse(readFileSync(p, "utf8")));
+  memo.set(p, { mtimeMs: st.mtimeMs, size: st.size, value });
+  return value;
 }
 
-export function loadHistory(): Snapshot[] {
-  const p = path.join(DATA, "history.jsonl");
-  if (!existsSync(p)) return [];
+const parseLines = (raw: string): string[] => raw.trimEnd().split("\n").filter(Boolean);
+
+function parseJsonl(raw: string): Snapshot[] {
   const out: Snapshot[] = [];
-  for (const line of readFileSync(p, "utf8").trimEnd().split("\n")) {
+  for (const line of raw.trimEnd().split("\n")) {
     if (!line.trim()) continue;
     try {
       out.push(JSON.parse(line) as Snapshot);
@@ -30,6 +54,32 @@ export function loadHistory(): Snapshot[] {
     }
   }
   return out;
+}
+
+const parseJson = <T>(raw: string): T => JSON.parse(raw) as T;
+
+// For the loaders that already swallowed a corrupt file into null.
+const parseJsonOrNull =
+  <T>() =>
+  (raw: string): T | null => {
+    try {
+      return JSON.parse(raw) as T;
+    } catch {
+      return null;
+    }
+  };
+
+export function loadTimestamps(): string[] {
+  return readParsed(path.join(DATA, "stargazer_timestamps.txt"), parseLines, []);
+}
+
+export function lastTimestamp(): string | null {
+  const ts = loadTimestamps();
+  return ts.length ? ts[ts.length - 1] : null;
+}
+
+export function loadHistory(): Snapshot[] {
+  return readParsed(path.join(DATA, "history.jsonl"), parseJsonl, []);
 }
 
 export function lastSnapshot(): Snapshot | null {
@@ -50,9 +100,7 @@ export function lastNeighborsSnapshot(): Snapshot | null {
 }
 
 export function loadMeta(): RepoMetaFile | null {
-  const p = path.join(DATA, "meta.json");
-  if (!existsSync(p)) return null;
-  return JSON.parse(readFileSync(p, "utf8")) as RepoMetaFile;
+  return readParsed(path.join(DATA, "meta.json"), parseJson<RepoMetaFile>, null);
 }
 
 // True when the app is running on the bundled synthetic sample — i.e. a fork
@@ -81,13 +129,7 @@ export interface TenantEntry {
 }
 
 export function loadTenants(): TenantEntry[] {
-  const p = path.join(DATA, "tenants.json");
-  if (!existsSync(p)) return [];
-  try {
-    return JSON.parse(readFileSync(p, "utf8")) as TenantEntry[];
-  } catch {
-    return [];
-  }
+  return readParsed(path.join(DATA, "tenants.json"), (raw) => parseJsonOrNull<TenantEntry[]>()(raw) ?? [], []);
 }
 
 // Rename-tolerant: a tenant registered under its old name must keep matching
@@ -116,78 +158,43 @@ function tenantDir(repo: string): string {
 }
 
 export function loadTenantTimestamps(repo: string): string[] {
-  const p = path.join(tenantDir(repo), "stargazer_timestamps.txt");
-  if (!existsSync(p)) return [];
-  return readFileSync(p, "utf8").trimEnd().split("\n").filter(Boolean);
+  return readParsed(path.join(tenantDir(repo), "stargazer_timestamps.txt"), parseLines, []);
 }
 
 export function loadTenantHistory(repo: string): Snapshot[] {
-  const p = path.join(tenantDir(repo), "history.jsonl");
-  if (!existsSync(p)) return [];
-  const out: Snapshot[] = [];
-  for (const line of readFileSync(p, "utf8").trimEnd().split("\n")) {
-    if (!line.trim()) continue;
-    try {
-      out.push(JSON.parse(line) as Snapshot);
-    } catch {
-      /* skip torn line */
-    }
-  }
-  return out;
+  return readParsed(path.join(tenantDir(repo), "history.jsonl"), parseJsonl, []);
 }
 
 export function loadMilestones(): MilestonesFile | null {
-  const p = path.join(DATA, "milestones.json");
-  if (!existsSync(p)) return null;
-  return JSON.parse(readFileSync(p, "utf8")) as MilestonesFile;
+  return readParsed(path.join(DATA, "milestones.json"), parseJson<MilestonesFile>, null);
 }
 
 export function loadRoute(): RouteFile | null {
-  const p = path.join(DATA, "route.json");
-  if (!existsSync(p)) return null;
-  return JSON.parse(readFileSync(p, "utf8")) as RouteFile;
+  return readParsed(path.join(DATA, "route.json"), parseJson<RouteFile>, null);
 }
 
 export function loadCatalog(): CatalogFile | null {
-  const p = path.join(DATA, "catalog.json");
-  if (!existsSync(p)) return null;
-  try {
-    return JSON.parse(readFileSync(p, "utf8")) as CatalogFile;
-  } catch {
-    return null;
-  }
+  return readParsed(path.join(DATA, "catalog.json"), parseJsonOrNull<CatalogFile>(), null);
 }
 
 export function loadEnrichment(): Record<string, EnrichmentEntry> | null {
-  const p = path.join(DATA, "enrichment.json");
-  if (!existsSync(p)) return null;
-  try {
-    return (JSON.parse(readFileSync(p, "utf8")) as EnrichmentFile).entries ?? null;
-  } catch {
-    return null;
-  }
+  return readParsed(
+    path.join(DATA, "enrichment.json"),
+    (raw) => parseJsonOrNull<EnrichmentFile>()(raw)?.entries ?? null,
+    null,
+  );
 }
 
 export function loadForensics(): ForensicsFile | null {
-  const p = path.join(DATA, "forensics.json");
-  if (!existsSync(p)) return null;
-  return JSON.parse(readFileSync(p, "utf8")) as ForensicsFile;
+  return readParsed(path.join(DATA, "forensics.json"), parseJson<ForensicsFile>, null);
 }
 
 // Hourly star surges attributed to their traffic source (collector/attribute.mjs).
 // House repo only; never present on tenant data.
 export function loadAttribution(): AttributionFile | null {
-  const p = path.join(DATA, "attribution.json");
-  if (!existsSync(p)) return null;
-  try {
-    return JSON.parse(readFileSync(p, "utf8")) as AttributionFile;
-  } catch {
-    return null;
-  }
+  return readParsed(path.join(DATA, "attribution.json"), parseJsonOrNull<AttributionFile>(), null);
 }
 
 export function loadCollisions(): CollisionsFile | null {
-  const p = path.join(DATA, "collisions.json");
-  if (!existsSync(p)) return null;
-  return JSON.parse(readFileSync(p, "utf8")) as CollisionsFile;
+  return readParsed(path.join(DATA, "collisions.json"), parseJson<CollisionsFile>, null);
 }

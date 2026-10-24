@@ -8,6 +8,7 @@ import ConsoleLayout from "@/components/ConsoleLayout";
 import { RaceProvider, RaceToggle } from "@/components/RaceContext";
 import GalacticChart from "@/components/GalacticChart";
 import VerticalChart from "@/components/VerticalChart";
+import ChartSwitch from "@/components/ChartSwitch";
 import LockedRankPreview from "@/components/LockedRankPreview";
 import {
   VelocitySilhouette,
@@ -24,8 +25,10 @@ import Dashboard from "@/components/Dashboard";
 import Badges from "@/components/Badges";
 import CompareLab from "@/components/CompareLab";
 import Masthead from "@/components/Masthead";
-import { buildBundle } from "@/lib/bundle";
-import { loadMeta, isHostedRepo, loadTenantHistory, loadTenantTimestamps, loadRoute } from "@/lib/history";
+import { buildBundle, chartedAmong, type DashboardBundle } from "@/lib/bundle";
+import {
+  loadMeta, isHostedRepo, loadTenantHistory, loadTenantTimestamps, loadRoute, lastSnapshot, lastNeighborsSnapshot,
+} from "@/lib/history";
 import { fetchLiveSnapshot } from "@/lib/live-blob";
 import { isOwnedBy } from "@/lib/config";
 import CodexModal from "@/components/CodexModal";
@@ -140,7 +143,17 @@ export default async function ExplorerPage({
 
   // charted frontier for the chart dots (solid = charted, hollow = uncharted),
   // shared by the unlocked dashboard branches and the public explorer below.
-  const chartedRepos = (await listCodexes().catch(() => [])).map((c) => c.repo);
+  // Every branch narrows it to the ships its charts can draw (chartedAmong):
+  // the full listing is every codex ever generated and is serialized into the
+  // page payload.
+  const allCharted = (await listCodexes().catch(() => [])).map((c) => c.repo);
+  const bundleCharted = (b: DashboardBundle, extra: string[] = []) =>
+    chartedAmong(allCharted, [
+      ...(b.meta?.repo ? [b.meta.repo] : []),
+      ...b.neighbors.map((n) => n.r),
+      ...b.routeAll.map((p) => p.r),
+      ...extra,
+    ]);
 
   // The tracked (unlocked) repo gets the FULL mission console on its own
   // /r/ route: same template as everyone, nothing locked. With paid
@@ -150,6 +163,9 @@ export default async function ExplorerPage({
   if (tenant && `${owner}/${name}`.toLowerCase() === tenant.repo.toLowerCase()) {
     const live = await fetchLiveSnapshot(tenant.repo);
     const tBundle = buildBundle(undefined, live);
+    // the house polls /api/live/neighbors, which swaps in the band of the last
+    // committed snapshot: those ships are drawable too
+    const polledBand = (lastSnapshot()?.neighbors ?? lastNeighborsSnapshot()?.neighbors ?? []).map((n) => n.r);
     return (
       <>
         <JsonLd data={repoGraph(tenant.repo, { stars: tBundle.netStars, rank: tBundle.rank })} />
@@ -158,7 +174,7 @@ export default async function ExplorerPage({
           dossier={await getCachedDossier(owner, name)}
           vitals={await loadVitals(owner, name)}
           prFlow={await loadPrFlow(owner, name)}
-          charted={chartedRepos}
+          charted={bundleCharted(tBundle, polledBand)}
         />
       </>
     );
@@ -197,7 +213,7 @@ export default async function ExplorerPage({
             dossier={await getCachedDossier(owner, name)}
             vitals={await loadVitals(owner, name)}
             prFlow={await loadPrFlow(owner, name)}
-            charted={chartedRepos}
+            charted={bundleCharted(hBundle)}
           />
         </>
       );
@@ -212,6 +228,11 @@ export default async function ExplorerPage({
   if (!data) notFound();
 
   const { inputs } = data;
+  const chartedRepos = chartedAmong(allCharted, [
+    inputs.repo,
+    ...inputs.neighbors.map((n) => n.r),
+    ...inputs.routeAll.map((p) => p.r),
+  ]);
   const next = inputs.milestones[0] ?? null;
   const repoLabel = `${owner}/${name}`;
   // loaded once: the panel renders from it and the console numbering starts after it
@@ -393,12 +414,10 @@ export default async function ExplorerPage({
                     ⛶ COMMAND DECK · ◈ LOCKED — SEE IT ON THE DEMO →
                   </a>
                 </div>
-                <div className="hidden landscape:block lg:block">
-                  <GalacticChart inputs={inputs} liveLocals charted={chartedRepos} />
-                </div>
-                <div className="landscape:hidden lg:hidden">
-                  <VerticalChart inputs={inputs} charted={chartedRepos} />
-                </div>
+                <ChartSwitch
+                  wide={<GalacticChart inputs={inputs} liveLocals charted={chartedRepos} />}
+                  narrow={<VerticalChart inputs={inputs} charted={chartedRepos} />}
+                />
               </>
             ),
           }}

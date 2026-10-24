@@ -77,6 +77,23 @@ function Pill({
   );
 }
 
+// Dedicated 1s clock: the shared live tick is 30s, too coarse for a deck. It
+// owns its own state so each tick re-renders this one span, not the deck: in
+// the deck's state it re-rendered the star map and all eight chart cards every
+// second.
+function DeckClock() {
+  const [clockMs, setClockMs] = useState(() => Date.now());
+  useEffect(() => {
+    const t = setInterval(() => setClockMs(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, []);
+  return (
+    <span className="numeral text-sm text-dim" suppressHydrationWarning>
+      {new Date(clockMs).toISOString().slice(11, 19)} UTC
+    </span>
+  );
+}
+
 export default function CommandDeck({
   bundle,
   dossier,
@@ -111,13 +128,6 @@ export default function CommandDeck({
     }),
     [bundle, live.stars, live.rank, live.neighbors, live.nowMs]
   );
-
-  // Dedicated 1s clock: the shared live tick is 30s, too coarse for a deck.
-  const [clockMs, setClockMs] = useState(() => Date.now());
-  useEffect(() => {
-    const t = setInterval(() => setClockMs(Date.now()), 1000);
-    return () => clearInterval(t);
-  }, []);
 
   // Measure the hero hole so the chart canvas matches its aspect: wide cells
   // get MORE MAP, not scaled-up pixels.
@@ -276,9 +286,7 @@ export default function CommandDeck({
           ) : null}
         </div>
         <div className="flex items-center gap-4">
-          <span className="numeral text-sm text-dim" suppressHydrationWarning>
-            {new Date(clockMs).toISOString().slice(11, 19)} UTC
-          </span>
+          <DeckClock />
           <button
             onClick={exit}
             className="numeral border border-grid px-2.5 py-1 text-micro tracking-[0.2em] text-dim transition-colors hover:border-accent/50 hover:text-accent"
