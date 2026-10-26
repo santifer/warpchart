@@ -1368,9 +1368,9 @@ body.gx-warping .ghx-lore {
 /* ── COMMAND DECK: the real console cards relocated into a fullscreen layout ──
    The star race is a full-bleed hero whose BOX matches the chart's aspect
    (~2600/740), so the chart fills the full width with no side bands and its
-   labels stay UI-size. The eight telemetry cards keep their native readable
+   labels stay UI-size. The seven telemetry cards keep their native readable
    height in the grid below (no stretching). The body scrolls when hero + cards
-   exceed the viewport (tall hero + eight real cards do not fit no-scroll on a
+   exceed the viewport (tall hero + seven real cards do not fit no-scroll on a
    laptop; readable beats cramped). */
 .deck-body {
   display: flex;
@@ -1395,12 +1395,14 @@ body.gx-warping .ghx-lore {
 }
 @media (min-width: 640px) {
   .deck-grid {
-    grid-template-columns: repeat(2, 1fr);
+    /* minmax(0, …): a bare 1fr floors at the card's min-content, so wide
+       charts pushed the grid past the viewport and cut the last column */
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 @media (min-width: 1024px) {
   .deck-grid {
-    grid-template-columns: repeat(4, 1fr);
+    grid-template-columns: repeat(4, minmax(0, 1fr));
   }
 }
 

@@ -426,6 +426,28 @@ export function velocityRankFreshness(meta, rhLast, rhAt, now = Date.now(), grac
   return { severity: "warn", note: `velocity-rank table stops at ${meta.lastTo}, rank-history has ${rhLast} (${sinceH.toFixed(0)} h ago)` };
 }
 
+// DAILY LADDER ZONES (src/lib/ladder-bands.ts, served by velocity-rank.ts
+// ladderBands): the house console must carry its monthly rank zones, and the
+// newest must be THIS month. A new month borrows the last 30 days, and refuses
+// to when the table stopped, so a stalled table reaches this check as a
+// missing month instead of old cut-offs repainted as current. The 1st of a
+// month is let through: the page and the zones are cached for up to an hour
+// each. Zones are a reference drawn behind the bars, not a published figure,
+// so their absence is a warning, never critical.
+export function ladderBandsPresence(html, todayISO) {
+  const n = /data-ladder-bands="(\d+)"/.exec(html ?? "");
+  if (!n) return { severity: "warn", note: "no daily ladder on the house console (data-ladder-bands attribute missing)" };
+  if (Number(n[1]) === 0) return { severity: "warn", note: "the daily ladder carries no rank zones (ladderBands answered null)" };
+  const last = /data-ladder-bands-last="(\d{4}-\d{2})"/.exec(html)?.[1] ?? null;
+  const month = todayISO.slice(0, 7);
+  const [y, m] = month.split("-").map(Number);
+  const prev = new Date(Date.UTC(y, m - 2, 1)).toISOString().slice(0, 7);
+  if (last === month || (todayISO.slice(8, 10) === "01" && last === prev)) {
+    return { severity: null, note: `${n[1]} monthly zones, newest ${last}` };
+  }
+  return { severity: "warn", note: `the newest ladder zone is ${last ?? "unreadable"}, not ${month}` };
+}
+
 // The reconstructed days (velocity-rank/reconstructed.json, written by hand by
 // collector/velocity-rank-backfill.mjs): before the live record, and the gaps
 // cut-short sweeps left in it. Nothing rewrites it, so it fails two ways:
