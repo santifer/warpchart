@@ -206,23 +206,6 @@ function CurveSilhouette({ h = 280 }: { h?: number }) {
   );
 }
 
-function HeatmapSilhouette() {
-  const cells = useMemo(() => {
-    const rand = seeded(7);
-    return Array.from({ length: 24 * 7 }, () => rand());
-  }, []);
-  return (
-    <div className="relative">
-      <div className="grid h-[220px] grid-cols-[repeat(24,1fr)] gap-[3px] blur-[1px]" aria-hidden>
-        {cells.map((v, i) => (
-          <div key={i} className="animate-pulse" style={{ background: `rgba(83, 214, 232, ${0.04 + v * 0.14})` }} />
-        ))}
-      </div>
-      <Seal />
-    </div>
-  );
-}
-
 function StepsSilhouette({ h = 220 }: { h?: number }) {
   return (
     <div className="relative">
@@ -388,20 +371,15 @@ export default function ExplorerLoading() {
         </PanelSkeleton>
       </div>
 
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <PanelSkeleton index="08" title="Daily ladder" meta="unlocks with tracking" delay={360}>
-          <LadderSilhouette />
-        </PanelSkeleton>
-        <PanelSkeleton index="09" title="Activity heatmap" meta="unlocks with tracking" delay={400}>
-          <HeatmapSilhouette />
-        </PanelSkeleton>
-      </div>
+      <PanelSkeleton index="08" title="Daily ladder" meta="unlocks with tracking" delay={360}>
+        <LadderSilhouette />
+      </PanelSkeleton>
 
-      <PanelSkeleton index="10" title="World rank over time" meta="unlocks with tracking" delay={440}>
+      <PanelSkeleton index="09" title="World rank over time" meta="unlocks with tracking" delay={440}>
         <StepsSilhouette />
       </PanelSkeleton>
 
-      <PanelSkeleton index="12" title="Mission log" meta="unlocks with tracking" delay={480}>
+      <PanelSkeleton index="11" title="Mission log" meta="unlocks with tracking" delay={480}>
         <LogSilhouette />
       </PanelSkeleton>
     </main>
