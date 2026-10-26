@@ -210,11 +210,24 @@ export const ARTIFACTS = [
   { prefix: "data/attribution.json", kind: "periodic", maxAgeH: 72, what: "spike attribution" },
   { prefix: "data/indexnow-stamp.txt", kind: "periodic", maxAgeH: 48, what: "the IndexNow ping stamp" },
   { prefix: "route-history/", kind: "periodic", maxAgeH: 36, what: "the daily rank moat" },
+  // rebuilt once per recorded rank-history day (collector/velocity-rank.mjs)
+  { prefix: "velocity-rank/", kind: "periodic", maxAgeH: 36, what: "the daily velocity-rank table" },
+  // every collect run (collector/trending-marks.mjs), but NOT written when both
+  // trending pages fail: a single bad run must not read as "stopped" (the
+  // partial marker 'trending-marks' says that one), so a day and a half
+  { prefix: "trending/", kind: "periodic", maxAgeH: 36, what: "the house repo's GitHub Trending days" },
+  { prefix: "ci-checkouts/", kind: "periodic", maxAgeH: 36, what: "the house repo's CI checkout jobs per day (Traffic Vault CI band)" },
+  // builders.yml every 6 h; it skips while the people are the same and the
+  // wall is under 20 h old, so a healthy wall is at most ~26 h old
+  { prefix: "builders/", kind: "periodic", maxAgeH: 30, what: "the README builders wall" },
   { prefix: "vitals/", kind: "periodic", maxAgeH: 72, what: "the Vital Signs panel" },
   { prefix: "contributors/", kind: "periodic", maxAgeH: 12, what: "the contributor census (cohorts source)" },
   { prefix: "traffic/", kind: "periodic", maxAgeH: 12, what: "the Traffic Vault" },
   { prefix: "prflow/", kind: "periodic", maxAgeH: 12, what: "the PR flow panel" },
-  { prefix: "npm-versions/", kind: "periodic", maxAgeH: 36, what: "npm downloads by version (daily snapshot)" },
+  // upstream: npm. Its stats can stall for days for EVERY package (21-oct: react's
+  // last-week still ended on 18-oct), and then the collector rightly writes
+  // nothing (a versions reading it cannot date). npmLagExplains tells that apart.
+  { prefix: "npm-versions/", kind: "periodic", maxAgeH: 36, what: "npm downloads by version (daily snapshot)", upstream: "npm" },
   // health/ is rewritten earlier in the same run (contracts, presence), so it
   // is always fresh here; the real "is the watchdog alive" sensor is
   // collector/watchdog-alive.mjs. The limit only keeps the declaration honest.
@@ -255,6 +268,24 @@ export function staleArtifacts(newest, now = Date.now(), artifacts = ARTIFACTS) 
     if (!(ageH <= a.maxAgeH)) stale.push({ ...a, ageH });
   }
   return { stale, missing };
+}
+
+// An npm-fed family that went stale because npm stopped publishing, not because
+// our step broke. Explained only when BOTH hold: npm's newest day for OUR
+// package (point/last-week `end`) is >= NPM_LAG_DAYS behind today (a current
+// npm ends yesterday, 1 day behind), and our newest upload is no older than 2
+// days before that npm day (we kept up until npm stalled). While npm lags, its
+// versions reading covers a window its point total does not, so the collector
+// cannot date it and rightly writes nothing. npmEnd null explains nothing.
+export const NPM_LAG_DAYS = 2;
+export function npmLagExplains(stale, npmEnd, now = Date.now()) {
+  if (stale?.upstream !== "npm" || typeof npmEnd !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(npmEnd)) return null;
+  const endMs = Date.parse(`${npmEnd}T00:00:00Z`);
+  const today = Date.parse(new Date(now).toISOString().slice(0, 10) + "T00:00:00Z");
+  const lagDays = Math.round((today - endMs) / 864e5);
+  const newestMs = now - stale.ageH * HOUR;
+  if (lagDays < NPM_LAG_DAYS || newestMs < endMs - 2 * 864e5) return null;
+  return { lagDays, npmEnd };
 }
 
 // pipeline.*: the Actions API can hand one token of the pool a STALE runs list.
@@ -352,6 +383,72 @@ export function buildersWallFreshness(meta, now = Date.now(), maxH = 30) {
   // over 2 MB; the collector refuses at 1.8 MB, so this only fires if that guard went
   if (meta.bytes > 1.8 * 1024 * 1024) return { severity: "warn", note: `builders wall is ${(meta.bytes / 1048576).toFixed(2)} MB (cache limit 2 MB)` };
   return { severity: null, note: `${meta.people} people, ${meta.week} this week, ${meta.langs.length} languages, ${ageH.toFixed(1)} h old` };
+}
+
+// DAILY VELOCITY RANK (collector/velocity-rank.mjs -> velocity-rank/*.json):
+// the locked "place among the top 1,000 by new stars" chart. It is rebuilt in
+// the same collect run that records a rank-history day, so a table that does
+// not reach the newest recorded day more than `graceH` after its capture has
+// stopped (or keeps refusing: see its partial marker 'velocity-rank').
+// rhLast = newest route-history day, rhAt = its capture ISO (or null).
+// graceH is above the collect cadence on purpose: runs have come 8 h apart
+// (19-oct, 04:40 -> 12:58Z), and a threshold under the real cadence is how
+// the 30-sep false alarms happened. lastN < minN = the newest day ranked a
+// top 1,000 with holes in it (the 2026-06-29 shape): every rank reads better.
+export function velocityRankFreshness(meta, rhLast, rhAt, now = Date.now(), graceH = 10, minN = 990) {
+  if (!meta?.lastTo) return { severity: "warn", note: "no velocity-rank table published (velocity-rank/meta.json missing)" };
+  if (meta.lastN != null && meta.lastN < minN) return { severity: "warn", note: `newest velocity-rank day (${meta.last}) ranked only ${meta.lastN} of the top 1,000` };
+  if (!rhLast) return { severity: null, note: "rank-history unreadable this run; not compared" };
+  if (meta.lastTo >= rhLast) return { severity: null, note: `${meta.days} days (${meta.first} .. ${meta.last}), built through ${meta.lastTo}` };
+  const sinceH = (now - Date.parse(rhAt ?? `${rhLast}T00:00:00Z`)) / 3600e3;
+  if (!(sinceH > graceH)) return { severity: null, note: `rank-history recorded ${rhLast} ${sinceH.toFixed(1)} h ago; table still on ${meta.lastTo}` };
+  return { severity: "warn", note: `velocity-rank table stops at ${meta.lastTo}, rank-history has ${rhLast} (${sinceH.toFixed(0)} h ago)` };
+}
+
+// The reconstructed days (velocity-rank/reconstructed.json, written by hand by
+// collector/velocity-rank-backfill.mjs): before the live record, and the gaps
+// cut-short sweeps left in it. Nothing rewrites it, so it fails two ways:
+//   - gone or truncated: the chart silently starts on 14 Jun, not in April;
+//   - outrun: a NEW gap in the table after rec.to stays a silent hole
+//     (tableDays = the table's days; null = not read this run, not compared).
+export function velocityRankReconstructed(rec, tableDays = null) {
+  if (!rec) return { severity: "warn", note: "velocity-rank/reconstructed.json missing: the chart starts at the live record" };
+  const repos = Object.keys(rec.repos ?? {}).length;
+  if (!(rec.days?.length >= 60) || repos < 1900) return { severity: "warn", note: `reconstructed table truncated: ${rec.days?.length ?? 0} days, ${repos} repos` };
+  const gaps = tableDays ? gapsAfter(tableDays, rec.to) : [];
+  if (gaps.length)
+    return { severity: "warn", note: `${gaps.length} velocity-rank day(s) unmeasured after the reconstruction ends (${rec.to}): ${gaps.slice(0, 5).join(", ")}; re-run collector/velocity-rank-backfill.mjs with a later TO` };
+  return { severity: null, note: `reconstructed ${rec.from} .. ${rec.to}, ${repos} repos` };
+}
+
+// The Traffic Vault's CI band (collector/ci-checkouts-core.mjs) rests on one
+// claim: our own CI makes AT LEAST checkouts x low clones. A day where that is
+// more than the clones GitHub counted means the count is wrong (ghost runs
+// counted, a ratio misread), and the band hides it by capping at the total.
+// ciDays = { D: { checkouts } }, clones = { D: { c } }; only days both have.
+// The vault's newest day is skipped: GitHub may still be closing it, and its
+// count grows over the next runs.
+export function ciBandViolations(ciDays, clones, low = 1) {
+  const newest = Object.keys(clones ?? {}).sort().at(-1);
+  const bad = Object.entries(ciDays ?? {})
+    .filter(([d, e]) => d !== newest && Number.isFinite(clones?.[d]?.c) && Number.isFinite(e?.checkouts) && e.checkouts * low > clones[d].c)
+    .map(([d, e]) => `${d} (${e.checkouts} checkouts x ${low} > ${clones[d].c} clones)`);
+  return bad.length
+    ? { severity: "warn", note: `CI band impossible on ${bad.length} day(s): ${bad.slice(0, 3).join(", ")}` }
+    : { severity: null, note: `CI band consistent on ${Object.keys(ciDays ?? {}).filter((d) => clones?.[d]).length} day(s)` };
+}
+
+// calendar days after `after` and before the table's last day that the table lacks
+export function gapsAfter(tableDays, after) {
+  const have = new Set(tableDays);
+  const last = [...tableDays].sort().at(-1);
+  const out = [];
+  if (!last) return out;
+  for (let t = Date.parse(`${after}T00:00:00Z`) + 864e5; t < Date.parse(`${last}T00:00:00Z`); t += 864e5) {
+    const d = new Date(t).toISOString().slice(0, 10);
+    if (!have.has(d)) out.push(d);
+  }
+  return out;
 }
 
 // Each published language must be SERVED in that language: on 17-oct-2026

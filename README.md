@@ -20,7 +20,7 @@ Warpchart turns the public GitHub API into a live flight console:
 - **Star chart**: a two-band space map. The local system is a pannable zoom window (lateral scroll to pan, pinch to zoom) showing your ranking neighbors with overtake ETAs. The route to the core maps every milestone between you and the worldwide #1 repo, where every dot is a real top 1000 repository. A viewport bracket links both bands.
 - **Scan cards**: hover any repo on the chart for a game-style temporal card with its avatar, description, velocity, gap and overtake date. Click to pin it as chase target with a persistent HUD.
 - **Sound**: a fully synthesized Web Audio soundscape, zero audio files. Each new star is a sonar ping, ambient pad brightness follows velocity, milestone crossings play a quiet fanfare. Off by default, one click to enable. Leave the tab open and hear your repo grow.
-- **Velocity, daily ladder, cumulative, heatmap, rank over time**: the full instrument panel, including the night-floor line that tells compounding growth apart from a decaying spike.
+- **Velocity, daily ladder, cumulative, rank over time**: the full instrument panel, including the night-floor line that tells compounding growth apart from a decaying spike.
 - **Replay**: re-draw the whole journey from day zero in 36 seconds, scrubber included. With sound on, ping density follows each moment's velocity.
 - **Spike forensics**: every star spike is correlated with Hacker News posts, Reddit posts and your own releases, then annotated on the daily chart and in the log. The dashboard does not just show the spike, it tells you what likely caused it.
 - **Mission log**: auto-detected events from telemetry. Milestone gates, neighbor overtakes, daily records, spike causes, plus a daily captain's line.

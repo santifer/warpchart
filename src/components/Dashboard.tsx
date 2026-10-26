@@ -16,8 +16,8 @@ import VelocityChart from "./VelocityChart";
 import DailyLadder from "./DailyLadder";
 import CompareLab from "./CompareLab";
 import Projections from "./Projections";
-import Heatmap from "./Heatmap";
 import RankChart from "./RankChart";
+import GodVelocityRank from "./GodVelocityRank";
 import MissionLog from "./MissionLog";
 import TrafficPanel from "./TrafficPanel";
 import VitalSignsPanel from "./VitalSignsPanel";
@@ -178,9 +178,9 @@ export default function Dashboard({
             meta: `own v7d ${fmt(Math.round(bundle.v7d))}/day`,
             node: <Projections bundle={bundle} />,
           }}
-          ladder={{ meta: "full history · drag to pan · night floor 00-05 UTC", node: <DailyLadder bundle={bundle} /> }}
-          heatmap={{ meta: `${fmt(bundle.totalStars)} star events`, node: <Heatmap bundle={bundle} /> }}
+          ladder={{ meta: "full history · drag to pan · night floor 00-05 UTC", node: <DailyLadder bundle={bundle} wide /> }}
           rank={{ meta: "hourly snapshots", node: <RankChart bundle={bundle} /> }}
+          velocityRank={{ meta: "by new stars each day · locked", node: <GodVelocityRank repo={repo ?? ""} /> }}
           traffic={{
             meta: "private · kept past GitHub's 14-day window",
             node: <TrafficPanel repo={repo ?? ""} />,

@@ -59,7 +59,7 @@ export const API_ENDPOINTS: Endpoint[] = [
 
 // Routes under /api/v1 that are deliberately NOT public: key-gated, so never
 // listed. The test treats them as accounted for.
-export const API_PRIVATE = ["rank-history"];
+export const API_PRIVATE = ["rank-history", "velocity-rank"];
 
 export interface Tool {
   name: string;

@@ -11,13 +11,13 @@ import VerticalChart from "@/components/VerticalChart";
 import LockedRankPreview from "@/components/LockedRankPreview";
 import {
   VelocitySilhouette,
-  HeatmapSilhouette,
   LadderSilhouette,
   LogSilhouette,
   StepsSilhouette,
 } from "@/components/PanelSilhouettes";
 import { repoRankTrajectory } from "@/lib/rank-history";
 import GodRank from "@/components/GodRank";
+import GodVelocityRank from "@/components/GodVelocityRank";
 import JsonLd, { repoGraph } from "@/components/JsonLd";
 import Dashboard from "@/components/Dashboard";
 import Badges from "@/components/Badges";
@@ -446,14 +446,6 @@ export default async function ExplorerPage({
               </Locked>
             ),
           }}
-          heatmap={{
-            meta: "unlocks with tracking",
-            node: (
-              <Locked unlockFor={repoLabel}>
-                <HeatmapSilhouette />
-              </Locked>
-            ),
-          }}
           rank={{
             meta: "unlocks with tracking",
             // owner-only god mode: with the private token in localStorage this
@@ -476,6 +468,10 @@ export default async function ExplorerPage({
                 }
               />
             ),
+          }}
+          velocityRank={{
+            meta: "by new stars each day · unlocks with tracking",
+            node: <GodVelocityRank repo={repoLabel} />,
           }}
           traffic={{
             meta: "private · unlocks with tracking",
