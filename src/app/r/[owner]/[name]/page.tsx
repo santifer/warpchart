@@ -11,7 +11,6 @@ import VerticalChart from "@/components/VerticalChart";
 import LockedRankPreview from "@/components/LockedRankPreview";
 import {
   VelocitySilhouette,
-  HeatmapSilhouette,
   LadderSilhouette,
   LogSilhouette,
   StepsSilhouette,
@@ -444,14 +443,6 @@ export default async function ExplorerPage({
             node: (
               <Locked unlockFor={repoLabel}>
                 <LadderSilhouette />
-              </Locked>
-            ),
-          }}
-          heatmap={{
-            meta: "unlocks with tracking",
-            node: (
-              <Locked unlockFor={repoLabel}>
-                <HeatmapSilhouette />
               </Locked>
             ),
           }}
