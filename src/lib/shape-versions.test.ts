@@ -36,6 +36,7 @@ describe("derived cache keys", () => {
     expect(cacheKey("velocityRankMeta")).toBe("velocity-rank-meta-v2");
     expect(cacheKey("velocityRankMonth")).toBe("velocity-rank-month-v2");
     expect(cacheKey("velocityRankReconstructed")).toBe("velocity-rank-reconstructed-v3");
+    expect(cacheKey("ladderBands")).toBe("ladder-bands-v1");
   });
 });
 

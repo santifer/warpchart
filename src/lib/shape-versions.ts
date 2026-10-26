@@ -49,6 +49,8 @@ export const SHAPE_VERSION = {
   velocityRankMonth: 2,
   // v3: the window runs to 30 Sep (gap fill)
   velocityRankReconstructed: 3,
+  // the daily ladder's monthly rank zones (ladderBands, src/lib/velocity-rank.ts)
+  ladderBands: 1,
 } as const;
 
 export type ShapeType = keyof typeof SHAPE_VERSION;
@@ -67,6 +69,7 @@ const CACHED: Record<ShapeType, { prefix: string; embeds: ShapeType[] }> = {
   velocityRankMeta: { prefix: "velocity-rank-meta", embeds: [] },
   velocityRankMonth: { prefix: "velocity-rank-month", embeds: [] },
   velocityRankReconstructed: { prefix: "velocity-rank-reconstructed", embeds: [] },
+  ladderBands: { prefix: "ladder-bands", embeds: [] },
 };
 
 // Every type reachable from `type` through what it embeds, excluding itself.

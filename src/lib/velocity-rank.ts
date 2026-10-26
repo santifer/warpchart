@@ -11,6 +11,7 @@ import { repoRankSeries } from "./rank-history";
 import { mergeReconstructed, reconstructDays, repoDailyRanks, repoReconstructedRanks } from "../../collector/velocity-rank-core.mjs";
 import { allNamesOf } from "./aliases";
 import { cacheKey } from "./shape-versions";
+import { monthlyTierBands, type LadderBand } from "./ladder-bands";
 
 export interface VelocityRankDay {
   day: string; // UTC day the stars came in (the capture of `day` -> the capture of the next day)
@@ -147,3 +148,31 @@ export async function repoVelocityRank(repo: string): Promise<{
   const first = points.findIndex((p) => p.rank != null);
   return { top: table.meta.top, builtAt: table.meta.builtAt, points: first < 0 ? [] : points.slice(first) };
 }
+
+// The daily ladder's background zones (src/lib/ladder-bands.ts): per month,
+// the stars a day needed to enter the top 10/50/100/250 by new stars. Monthly
+// medians only, never which repo held which place, so they ride on the PUBLIC
+// page (the per-day table stays behind the god key). Computed once an hour
+// with `through` = that hour's UTC day, so the current month has its zone from
+// its first day. Only a found result is cached (a miss throws past
+// unstable_cache): a Blob blip is one render without zones, not an hour.
+const ladderBandsCached = unstable_cache(
+  async (): Promise<LadderBand[]> => {
+    const table = await velocityRankTable();
+    if (!table) throw new Error("velocity-rank table missing");
+    const bands = monthlyTierBands(table.days, { top: table.meta.top, through: new Date().toISOString().slice(0, 10) });
+    if (!bands.length) throw new Error("no ladder bands");
+    return bands;
+  },
+  [cacheKey("ladderBands")],
+  { revalidate: 3600 },
+);
+// null = no zones this render (the ladder draws plain bars, the watchdog's
+// presence.ladder-bands reports it). The console's render now waits on this
+// Blob read, and the Blob client has no timeout of its own: past 3 s the page
+// goes without zones rather than hanging up to maxDuration.
+export const ladderBands = (): Promise<LadderBand[] | null> =>
+  Promise.race([
+    ladderBandsCached().catch(() => null),
+    new Promise<null>((resolve) => setTimeout(() => resolve(null), 3000)),
+  ]);
