@@ -11,12 +11,12 @@ import VerticalChart from "@/components/VerticalChart";
 import LockedRankPreview from "@/components/LockedRankPreview";
 import {
   VelocitySilhouette,
-  HeatmapSilhouette,
   LadderSilhouette,
   LogSilhouette,
   StepsSilhouette,
 } from "@/components/PanelSilhouettes";
 import { repoRankTrajectory } from "@/lib/rank-history";
+import { ladderBands } from "@/lib/velocity-rank";
 import GodRank from "@/components/GodRank";
 import GodVelocityRank from "@/components/GodVelocityRank";
 import JsonLd, { repoGraph } from "@/components/JsonLd";
@@ -162,12 +162,18 @@ export default async function ExplorerPage({
   // this route" instead of "is it the tenant".
   const tenant = loadMeta();
   if (tenant && `${owner}/${name}`.toLowerCase() === tenant.repo.toLowerCase()) {
-    const [live, reads] = await Promise.all([fetchLiveSnapshot(tenant.repo), consoleReads(owner, name)]);
+    // the ladder's zones read the Blob too: all of it in parallel (ladderBands
+    // never rejects and gives up after 3 s)
+    const [live, reads, bands] = await Promise.all([
+      fetchLiveSnapshot(tenant.repo),
+      consoleReads(owner, name),
+      ladderBands(),
+    ]);
     const tBundle = buildBundle(undefined, live);
     return (
       <>
         <JsonLd data={repoGraph(tenant.repo, { stars: tBundle.netStars, rank: tBundle.rank })} />
-        <Dashboard bundle={tBundle} {...reads} charted={chartedRepos} />
+        <Dashboard bundle={tBundle} {...reads} charted={chartedRepos} ladderBands={bands} />
       </>
     );
   }
@@ -183,7 +189,11 @@ export default async function ExplorerPage({
     const tHistory = loadTenantHistory(hostedLabel);
     const tTimestamps = loadTenantTimestamps(hostedLabel);
     if (tHistory.length) {
-      const [tLive, reads] = await Promise.all([fetchLiveSnapshot(hostedLabel), consoleReads(owner, name)]);
+      const [tLive, reads, bands] = await Promise.all([
+        fetchLiveSnapshot(hostedLabel),
+        consoleReads(owner, name),
+        ladderBands(),
+      ]);
       const tMeta = {
         repo: hostedLabel,
         owner,
@@ -199,7 +209,7 @@ export default async function ExplorerPage({
       return (
         <>
           <JsonLd data={repoGraph(hostedLabel, { stars: hBundle.netStars, rank: hBundle.rank })} />
-          <Dashboard bundle={hBundle} polling={false} {...reads} charted={chartedRepos} />
+          <Dashboard bundle={hBundle} polling={false} {...reads} charted={chartedRepos} ladderBands={bands} />
         </>
       );
     }
@@ -453,14 +463,6 @@ export default async function ExplorerPage({
             node: (
               <Locked unlockFor={repoLabel}>
                 <LadderSilhouette />
-              </Locked>
-            ),
-          }}
-          heatmap={{
-            meta: "unlocks with tracking",
-            node: (
-              <Locked unlockFor={repoLabel}>
-                <HeatmapSilhouette />
               </Locked>
             ),
           }}
