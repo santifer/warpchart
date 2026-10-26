@@ -30,6 +30,7 @@ import SoundController from "./SoundController";
 import StarFall from "./StarFall";
 import CapabilitiesBand from "./CapabilitiesBand";
 import type { DashboardBundle } from "@/lib/bundle";
+import type { LadderBand } from "@/lib/ladder-bands";
 import type { ChartInputs } from "@/lib/types";
 import { fmt } from "@/lib/format";
 
@@ -86,6 +87,7 @@ export default function Dashboard({
   vitals = null,
   prFlow = null,
   charted,
+  ladderBands = null,
 }: {
   bundle: DashboardBundle;
   polling?: boolean;
@@ -93,6 +95,8 @@ export default function Dashboard({
   vitals?: Vitals | null;
   prFlow?: PrFlow | null;
   charted?: string[];
+  // the daily ladder's monthly rank zones (velocity-rank.ts ladderBands)
+  ladderBands?: LadderBand[] | null;
 }) {
   const repo = bundle.meta?.repo;
   const next = bundle.milestones[0] ?? null;
@@ -143,6 +147,7 @@ export default function Dashboard({
             target={target}
             onPinTarget={pinTarget}
             onExit={() => setDeck(false)}
+            ladderBands={ladderBands}
           />
         ) : null}
 
@@ -178,7 +183,7 @@ export default function Dashboard({
             meta: `own v7d ${fmt(Math.round(bundle.v7d))}/day`,
             node: <Projections bundle={bundle} />,
           }}
-          ladder={{ meta: "full history · drag to pan · night floor 00-05 UTC", node: <DailyLadder bundle={bundle} wide /> }}
+          ladder={{ meta: "full history · drag to pan · night floor 00-05 UTC", node: <DailyLadder bundle={bundle} wide bands={ladderBands} /> }}
           rank={{ meta: "hourly snapshots", node: <RankChart bundle={bundle} /> }}
           velocityRank={{ meta: "by new stars each day · locked", node: <GodVelocityRank repo={repo ?? ""} /> }}
           traffic={{

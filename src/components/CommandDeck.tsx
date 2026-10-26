@@ -23,6 +23,7 @@ import Projections from "./Projections";
 import { PulsePanel, UsagePanel } from "./DossierPanels";
 import { useLive } from "./LiveProvider";
 import type { DashboardBundle } from "@/lib/bundle";
+import type { LadderBand } from "@/lib/ladder-bands";
 import type { Dossier } from "@/lib/explorer";
 import type { ChartInputs } from "@/lib/types";
 import { fmt, fmtCompact, fmtEtaDays, fmtEtaRange, shortName } from "@/lib/format";
@@ -83,12 +84,14 @@ export default function CommandDeck({
   target,
   onPinTarget,
   onExit,
+  ladderBands = null,
 }: {
   bundle: DashboardBundle;
   dossier: Dossier | null;
   target: string | null;
   onPinTarget: (r: string | null) => void;
   onExit: () => void;
+  ladderBands?: LadderBand[] | null;
 }) {
   const live = useLive();
   const hostRef = useRef<HTMLDivElement | null>(null);
@@ -323,7 +326,7 @@ export default function CommandDeck({
           <PulsePanel dossier={dossier} index="03" />
           <UsagePanel dossier={dossier} index="04" />
           <Panel index="07" title="Daily ladder" meta="full history · night floor 00-05 UTC" className="lg:col-span-2">
-            <DailyLadder bundle={bundle} fill />
+            <DailyLadder bundle={bundle} fill bands={ladderBands} />
           </Panel>
           <Panel index="06" title="Milestone projections" meta={`own v7d ${fmt(Math.round(vOwn))}/day`}>
             <Projections bundle={bundle} compact />
