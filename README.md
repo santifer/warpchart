@@ -20,7 +20,7 @@ Warpchart turns the public GitHub API into a live flight console:
 - **Star chart**: a two-band space map. The local system is a pannable zoom window (lateral scroll to pan, pinch to zoom) showing your ranking neighbors with overtake ETAs. The route to the core maps every milestone between you and the worldwide #1 repo, where every dot is a real top 1000 repository. A viewport bracket links both bands.
 - **Scan cards**: hover any repo on the chart for a game-style temporal card with its avatar, description, velocity, gap and overtake date. Click to pin it as chase target with a persistent HUD.
 - **Sound**: a fully synthesized Web Audio soundscape, zero audio files. Each new star is a sonar ping, ambient pad brightness follows velocity, milestone crossings play a quiet fanfare. Off by default, one click to enable. Leave the tab open and hear your repo grow.
-- **Velocity, daily ladder, cumulative, heatmap, rank over time**: the full instrument panel, including the night-floor line that tells compounding growth apart from a decaying spike.
+- **Velocity, daily ladder, cumulative, rank over time**: the full instrument panel, including the night-floor line that tells compounding growth apart from a decaying spike.
 - **Replay**: re-draw the whole journey from day zero in 36 seconds, scrubber included. With sound on, ping density follows each moment's velocity.
 - **Spike forensics**: every star spike is correlated with Hacker News posts, Reddit posts and your own releases, then annotated on the daily chart and in the log. The dashboard does not just show the spike, it tells you what likely caused it.
 - **Mission log**: auto-detected events from telemetry. Milestone gates, neighbor overtakes, daily records, spike causes, plus a daily captain's line.
@@ -187,7 +187,7 @@ Warpchart convierte la API pública de GitHub en una consola de vuelo:
 - **Carta estelar** de dos bandas: sistema local paneable (rueda lateral para moverte, pinch para zoom) con tus vecinos de ranking y sus ETAs de adelantamiento, y la ruta al núcleo donde cada puntito es un repo real del top 1000 mundial. Un corchete-viewport conecta ambas bandas.
 - **Scan cards**: hover sobre cualquier repo para una ventanita temporal estilo videojuego con avatar, descripción, velocidad y fecha de adelantamiento. Click para fijarlo como objetivo de caza con HUD persistente.
 - **Sonido** 100% sintetizado con Web Audio, cero ficheros: cada star nueva es un ping de sónar, el pad ambiental sigue la velocidad y cruzar un hito suena a fanfarria serena. Apagado por defecto. Deja la pestaña abierta y escucha crecer tu repo.
-- **Velocidad, escalera diaria, acumulada, heatmap, rank en el tiempo**: el panel de instrumentos completo, incluido el suelo nocturno que distingue crecimiento compuesto de pico que se apaga.
+- **Velocidad, escalera diaria, acumulada, rank en el tiempo**: el panel de instrumentos completo, incluido el suelo nocturno que distingue crecimiento compuesto de pico que se apaga.
 - **Replay**: el viaje entero desde el día cero en 36 segundos, con scrubber. Con sonido, la densidad de pings sigue la velocidad de cada momento.
 - **Mission log**: eventos auto-detectados (hitos, adelantamientos, récords diarios) más una línea diaria de bitácora.
 - **Briefing diario**: vuelve tras 18 horas y te resume los deltas desde tu última visita. Todo en el cliente, sin cuentas.

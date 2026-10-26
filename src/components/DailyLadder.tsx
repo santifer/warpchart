@@ -1,12 +1,12 @@
 "use client";
 
-// Stars per day (~2 months): bars + 7-day moving average, plus the night-floor
+// Stars per day: bars + 7-day moving average, plus the night-floor
 // line (avg stars/hour between 00:00 and 04:59 UTC). A floor that keeps rising
 // means compounding growth, not a spike decaying. Spike days carry an amber
 // forensics marker with the identified cause. The view shows ~1 month at a
-// time; scroll/drag left to walk back through the two months. The Y scale is
-// fixed across the whole window, so bars don't jump as you pan.
-import { useMemo, useRef, useState } from "react";
+// time (~2 on a wide desktop panel); scroll/drag left to walk back through the
+// full history. The Y scale re-fits to the visible window.
+import { useMemo, useRef, useState, useSyncExternalStore } from "react";
 import {
   ComposedChart, Bar, Line, Scatter, XAxis, YAxis, CartesianGrid, Tooltip,
   Legend, ResponsiveContainer,
@@ -27,13 +27,36 @@ interface Row {
 }
 
 // The compact panel shows ~1 month and pans back over the repo's FULL history;
-// the full-screen deck (fill) shows ~3 months at once.
+// the full-screen deck (fill) shows ~3 months at once. A `wide` panel spans the
+// whole console row on desktop (it used to share it with the heatmap), so it
+// shows TWICE the days at the same bar width; below lg it is one column, as
+// wide as before, and keeps the month.
 const VISIBLE_COMPACT = 31;
+const VISIBLE_WIDE = 62;
 const VISIBLE_FILL = 93;
 
-export default function DailyLadder({ bundle, fill }: { bundle: DashboardBundle; fill?: boolean }) {
+const LG = "(min-width: 1024px)";
+function subscribeLg(cb: () => void) {
+  const mq = window.matchMedia(LG);
+  mq.addEventListener("change", cb);
+  return () => mq.removeEventListener("change", cb);
+}
+// server snapshot = false: SSR and the first client render agree on a month
+const isLg = () => window.matchMedia(LG).matches;
+const notLg = () => false;
+
+export default function DailyLadder({
+  bundle,
+  fill,
+  wide,
+}: {
+  bundle: DashboardBundle;
+  fill?: boolean;
+  wide?: boolean;
+}) {
   const live = useLive();
   const C = usePalette();
+  const lg = useSyncExternalStore(subscribeLg, isLg, notLg);
 
   const all = useMemo<Row[]>(() => {
     const floorByDay = new Map(bundle.floor.map((f) => [f.d, f.perHour]));
@@ -59,7 +82,8 @@ export default function DailyLadder({ bundle, fill }: { bundle: DashboardBundle;
     });
   }, [bundle.daily, bundle.ma7, bundle.floor, bundle.spikes, live.todayCount, live.windowMs]);
 
-  const visible = Math.min(fill ? VISIBLE_FILL : VISIBLE_COMPACT, all.length);
+  const span = fill ? VISIBLE_FILL : wide && lg ? VISIBLE_WIDE : VISIBLE_COMPACT;
+  const visible = Math.min(span, all.length);
   const latestOff = Math.max(0, all.length - visible);
   const [offset, setOffset] = useState<number | null>(null); // null = latest
   const offRef = useRef<number | null>(null);

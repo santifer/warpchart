@@ -2,9 +2,10 @@
 
 // COMMAND DECK: the whole mission promoted to a fullscreen flight console.
 // It does NOT reinvent any card: it REUSES the exact panels from the console
-// (CurveChart, VelocityChart, DailyLadder, Heatmap, RankChart,
-// Projections, PulsePanel, UsagePanel) and only relocates them, with the star
-// race as a big hero on top and the eight telemetry cards in a grid below. A
+// (CurveChart, VelocityChart, DailyLadder, RankChart, Projections,
+// PulsePanel, UsagePanel) and only relocates them, with the star race as a
+// big hero on top and the seven telemetry cards in a grid below (the ladder
+// spans two cells). A
 // live KPI strip rides on top. The recharts cards take a `fill` prop so they
 // grow to the cell; on desktop the deck fills the viewport with no scroll,
 // below lg it stacks (hero first) and scrolls. Uses the Fullscreen API when
@@ -17,7 +18,6 @@ import Panel from "./Panel";
 import CurveChart from "./CurveChart";
 import VelocityChart from "./VelocityChart";
 import DailyLadder from "./DailyLadder";
-import Heatmap from "./Heatmap";
 import RankChart from "./RankChart";
 import Projections from "./Projections";
 import { PulsePanel, UsagePanel } from "./DossierPanels";
@@ -290,7 +290,7 @@ export default function CommandDeck({
 
       {/* body: the REAL console cards, relocated. the star race is a full-bleed
           hero whose box matches the chart aspect (so it fills the width with no
-          side bands), and the eight telemetry cards keep their native readable
+          side bands), and the seven telemetry cards keep their native readable
           size in the grid below. */}
       <div className="deck-body relative">
         <div className="deck-hero-wrap">
@@ -320,12 +320,9 @@ export default function CommandDeck({
           <Panel index="09" title="World rank over time" meta="hourly snapshots">
             <RankChart bundle={bundle} />
           </Panel>
-          <Panel index="08" title="Activity heatmap" meta={`${fmt(bundle.totalStars)} star events`}>
-            <Heatmap bundle={bundle} />
-          </Panel>
           <PulsePanel dossier={dossier} index="03" />
           <UsagePanel dossier={dossier} index="04" />
-          <Panel index="07" title="Daily ladder" meta="full history · night floor 00-05 UTC">
+          <Panel index="07" title="Daily ladder" meta="full history · night floor 00-05 UTC" className="lg:col-span-2">
             <DailyLadder bundle={bundle} fill />
           </Panel>
           <Panel index="06" title="Milestone projections" meta={`own v7d ${fmt(Math.round(vOwn))}/day`}>
