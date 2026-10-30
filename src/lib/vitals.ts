@@ -93,6 +93,7 @@ export interface VitalsCensus {
   // 500-email cap excluded) and calibrated to end on the figure GitHub shows.
   // Absent when there is no live figure or the rebuild is >5% off.
   githubDaily?: [string, number][];
+  githubBasis?: "capped" | "uncapped" | "bracket";
   github?: number; // = community.contributors, the live figure
   githubRebuilt?: number; // the rebuild before calibration
   githubResidual?: number; // github - githubRebuilt (a few people GitHub counts its own way)
@@ -196,7 +197,8 @@ export interface Vitals {
   createdAt?: string | null;
 }
 
-const blobKey = (repo: string) => `vitals/${repo.toLowerCase().replace("/", "--")}.json`;
+const blobKey = (repo: string) =>
+  `vitals/${repo.toLowerCase().replace("/", "--")}.json`;
 
 async function readVitals(owner: string, name: string): Promise<Vitals | null> {
   const token = process.env.BLOB_READ_WRITE_TOKEN;
@@ -209,7 +211,11 @@ async function readVitals(owner: string, name: string): Promise<Vitals | null> {
       // useCache:false — @vercel/blob get() caches at the CDN (~1mo TTL) by
       // default, which would freeze the daily-rewritten vitals for weeks. The
       // 15-min unstable_cache below is the real dedup; each refresh reads fresh.
-      const res = await get(blobKey(rn), { access: "private", token, useCache: false });
+      const res = await get(blobKey(rn), {
+        access: "private",
+        token,
+        useCache: false,
+      });
       if (res?.statusCode === 200 && res.stream) {
         return JSON.parse(await new Response(res.stream).text()) as Vitals;
       }
@@ -222,7 +228,10 @@ async function readVitals(owner: string, name: string): Promise<Vitals | null> {
 
 // One Blob read per repo per 15 min, shared across every consumer. Returns null
 // for a locked repo — that null IS the gate.
-export const loadVitals = (owner: string, name: string): Promise<Vitals | null> =>
+export const loadVitals = (
+  owner: string,
+  name: string,
+): Promise<Vitals | null> =>
   unstable_cache(
     () => readVitals(owner, name),
     // v8: onboarding carries goodFirstIssuesFree. BUMP THIS WHENEVER THE SHAPE
@@ -230,7 +239,9 @@ export const loadVitals = (owner: string, name: string): Promise<Vitals | null> 
     // the old reading, so a deploy that fixes a number ships looking like it
     // did nothing. v7 was itself a bump for the same reason (sample counts
     // passing for totals) and the lesson still cost 15 minutes today.
-    ["vitals-v10", // v10: census.githubDaily (GitHub's count over time); v9: contributors = GitHub's sidebar
-    `${owner}/${name}`.toLowerCase()],
+    [
+      "vitals-v10", // v10: census.githubDaily (GitHub's count over time); v9: contributors = GitHub's sidebar
+      `${owner}/${name}`.toLowerCase(),
+    ],
     { revalidate: 900 },
   )();

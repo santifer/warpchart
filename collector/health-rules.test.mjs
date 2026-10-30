@@ -509,7 +509,7 @@ describe("contributorCurve", () => {
   it("warns when the curve and the number disagree", () => {
     expect(contributorCurve({ total: 614, series: { github: win(row("2026-10-11", 616)) } }).severity).toBe("warn");
   });
-  it("warns when the chart fell back to the census toggle", () => {
+  it("flags a missing GitHub-count curve (chart not drawn)", () => {
     // the dossier of 2026-10-11 before this change: no github series at all
     expect(contributorCurve({ total: 611, series: { github: null, authors: win(row("2026-10-11", 480)), credited: win() } }).severity).toBe("critical");
   });

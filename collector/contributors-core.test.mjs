@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { calibrateToLive, creditCommitAuthors, creditGithub, githubSeries } from "./contributors-core.mjs";
+import { calibrateToLive, creditCommitAuthors, creditGithub, githubCurve, githubSeries } from "./contributors-core.mjs";
 
 // Shapes taken from career-ops on 2026-10-11 (logins are public, as on GitHub).
 describe("githubSeries: GitHub's own contributor rule", () => {
@@ -144,5 +144,63 @@ describe("calibrateToLive brackets the 500-email cap's blind spot", () => {
   });
   it("without an uncapped figure the old 2% rule stands", () => {
     expect(calibrateToLive(daily, 634)).toBeNull();
+  });
+});
+
+// career-ops 2026-10-30 (real store, collect run 19:15Z): capped rebuild 647,
+// no-cap rebuild 749, GitHub's sidebar 749. The bracket (15.8%) passed
+// MAX_CAP_BRACKET_PCT, calibration refused, and the panel fell back to
+// "AUTHORS 578 / + CO-AUTHORED 792". Santiago saw it on his phone.
+describe("githubCurve: GitHub's count, never another one", () => {
+  const series = {
+    githubDaily: [["2026-04-04", 1], ["2026-07-01", 300], ["2026-10-30", 647]],
+    githubUncappedDaily: [["2026-04-04", 1], ["2026-07-01", 330], ["2026-10-30", 749]],
+    githubCapApplied: true,
+    githubUncapped: 749,
+  };
+  it("draws the uncapped rebuild when it lands on GitHub's figure", () => {
+    const c = githubCurve(series, 749);
+    expect(c).not.toBeNull();
+    expect(c.basis).toBe("uncapped");
+    expect(c.daily.at(-1)).toEqual(["2026-10-30", 749]);
+    expect(c.residual).toBe(0);
+  });
+  it("prefers the capped rebuild while it calibrates", () => {
+    const c = githubCurve({ ...series, githubUncapped: 672, githubDaily: [["2026-10-16", 620]] }, 634);
+    expect(c.basis).toBe("capped");
+  });
+  it("refuses when neither rebuild matches the live figure", () => {
+    expect(githubCurve(series, 900)).toBeNull();
+    expect(githubCurve(series, null)).toBeNull();
+  });
+  it("githubSeries returns the no-cap curve ending on the no-cap total", () => {
+    const gh = { a: { first: "2026-04-01T00:00:00Z", co: false }, b: { first: "2026-05-01T00:00:00Z", co: false } };
+    const s = githubSeries(gh, ["a"]);
+    expect(s.total).toBe(1);
+    expect(s.uncappedDaily.at(-1)).toEqual(["2026-05-01", 2]);
+  });
+});
+
+describe("githubCurve edges (review 2026-10-30)", () => {
+  const base = {
+    githubDaily: [["2026-04-04", 1], ["2026-07-01", 300], ["2026-10-30", 647]],
+    githubUncappedDaily: [["2026-04-04", 1], ["2026-07-01", 330], ["2026-10-30", 749]],
+    githubCapApplied: true,
+    githubUncapped: 749,
+  };
+  it("draws the nearer rebuild when GitHub sits inside an outgrown bracket", () => {
+    const c = githubCurve(base, 700);
+    expect(c.basis).toBe("bracket");
+    expect(c.daily.at(-1)).toEqual(["2026-10-30", 700]);
+    const d = githubCurve(base, 660);
+    expect(d.basis).toBe("bracket");
+    expect(d.rebuilt).toBe(647);
+  });
+  it("never falls back without the cap list (githubDaily is already uncapped)", () => {
+    expect(githubCurve({ ...base, githubCapApplied: false, githubDaily: [["2026-10-30", 600]] }, 749)).toBeNull();
+  });
+  it("refuses outside the bracket", () => {
+    expect(githubCurve(base, 620)).toBeNull(); // 4% under the capped rebuild
+    expect(githubCurve(base, 800)).toBeNull();
   });
 });
