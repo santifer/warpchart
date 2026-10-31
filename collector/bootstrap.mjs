@@ -26,7 +26,15 @@ const repoOverride = repoFlag >= 0 ? args[repoFlag + 1] : null;
 
 let config = readConfig();
 if (repoOverride) {
+  // owned_by names the accounts whose whole portfolio this instance tracks. A
+  // fork re-pointed at its own repo must not inherit the template's (it would
+  // unlock and collect someone else's repos), so it goes with the old owner.
+  const sameOwner = config.repo.split("/")[0].toLowerCase() === repoOverride.split("/")[0].toLowerCase();
   config = { ...config, repo: repoOverride };
+  if (config.owned_by && !sameOwner) {
+    console.log(`[bootstrap] dropping owned_by (${config.owned_by.join(", ")}): it belonged to the previous owner`);
+    delete config.owned_by;
+  }
   if (!dryRun) {
     writeFileSync(join(ROOT, "mission.config.json"), JSON.stringify(config, null, 2) + "\n");
   }
