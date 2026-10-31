@@ -27,8 +27,8 @@
 // Usage: BLOB_READ_WRITE_TOKEN=... GH_TOKEN=... node collector/followers.mjs
 //        FOLLOWERS_LOCATION=spain  (optional: also record the rank within one
 //                                   GitHub `location:` filter)
-import { put, get } from "@vercel/blob";
 import { ghFetch, readConfig, sleep } from "./lib.mjs";
+import { updateJson, RefusedWrite, markPartial, markComplete } from "./blob.mjs";
 
 const KEY = "private/followers.json";
 const COMPACT_AFTER_DAYS = 90; // full resolution inside this window, daily before it
@@ -38,18 +38,6 @@ const token = process.env.BLOB_READ_WRITE_TOKEN;
 if (!token) {
   console.log("[followers] no BLOB_READ_WRITE_TOKEN, skipping");
   process.exit(0);
-}
-
-async function readJson(key) {
-  try {
-    const res = await get(key, { access: "private", token });
-    if (res?.statusCode === 200 && res.stream) {
-      return JSON.parse(await new Response(res.stream).text());
-    }
-  } catch {
-    /* first run, or transient */
-  }
-  return null;
 }
 
 // How many USERS have strictly more followers than `n`. Rank = that + 1.
@@ -121,10 +109,6 @@ async function main() {
     console.log(`[followers] rank lookup failed (recording null): ${err.message}`);
   }
 
-  const store = (await readJson(KEY)) ?? { user, points: [] };
-  const seeded = store.points.length === 0 && user === "santifer";
-  if (seeded) store.points = [...SEED];
-
   const now = new Date();
   const point = {
     t: now.toISOString().replace(/\.\d{3}Z$/, "Z"),
@@ -134,22 +118,39 @@ async function main() {
     ...(location ? { lr: locRank, loc: location } : {}),
   };
 
-  // Same-run reruns (a manual dispatch minutes after the cron) would otherwise
-  // stack near-identical points; replace anything from the same minute.
-  const minute = point.t.slice(0, 16);
-  store.points = store.points.filter((p) => p.t.slice(0, 16) !== minute);
-  store.points.push(point);
-  store.points = compact(store.points, now.getTime());
-  store.user = user;
-  store.updated_at = point.t;
+  // A store we cannot read is not an empty one: it used to be read that way,
+  // and the run then re-seeded the manual history and wrote it OVER the real
+  // series. updateJson throws on anything but a 404, so nothing is written.
+  let seeded = false;
+  let store;
+  try {
+    ({ value: store } = await updateJson(KEY, (stored) => {
+      const store = structuredClone(stored ?? { user, points: [] });
+      seeded = store.points.length === 0 && user === "santifer";
+      if (seeded) store.points = [...SEED];
 
-  await put(KEY, JSON.stringify(store), {
-    access: "private",
-    addRandomSuffix: false,
-    allowOverwrite: true,
-    contentType: "application/json",
-    token,
-  });
+      // Same-run reruns (a manual dispatch minutes after the cron) would otherwise
+      // stack near-identical points; replace anything from the same minute.
+      const minute = point.t.slice(0, 16);
+      store.points = store.points.filter((p) => p.t.slice(0, 16) !== minute);
+      store.points.push(point);
+      store.points = compact(store.points, now.getTime());
+      store.user = user;
+      store.updated_at = point.t;
+
+      // compact() thins old points to one per day, so the point count may fall;
+      // the number of days covered may not.
+      const days = (pts) => new Set((pts ?? []).map((p) => p.t.slice(0, 10))).size;
+      if (days(store.points) < days(stored?.points)) {
+        throw new RefusedWrite(`days covered would shrink from ${days(stored?.points)} to ${days(store.points)}`);
+      }
+      return store;
+    }));
+  } catch (err) {
+    await markPartial("followers", { reason: err.message });
+    throw err;
+  }
+  await markComplete("followers");
 
   // A rate needs two points and a span; with one point it is unknown, not zero.
   const pts = store.points;
