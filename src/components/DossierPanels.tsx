@@ -44,9 +44,16 @@ export function PulsePanel({
   delay?: number;
 }) {
   const d = dossier;
-  const net = d ? d.issuesOpened30 - d.issuesClosed30 : 0;
-  const flowTotal = d ? d.issuesOpened30 + d.issuesClosed30 : 0;
-  const closedShare = flowTotal > 0 ? (d!.issuesClosed30 / flowTotal) * 100 : 50;
+  // Each count is null when GitHub did not answer it: shown as "—", and the
+  // flow bar and backlog drift need both sides, so they hide instead of
+  // reading an unmeasured side as 0.
+  const opened = d?.issuesOpened30 ?? null;
+  const closed = d?.issuesClosed30 ?? null;
+  const flowKnown = opened !== null && closed !== null;
+  const net = flowKnown ? opened - closed : 0;
+  const flowTotal = flowKnown ? opened + closed : 0;
+  const closedShare = flowKnown && flowTotal > 0 ? (closed / flowTotal) * 100 : 50;
+  const count = (n: number | null) => (n !== null ? fmtCompact(n) : "—");
   const lastRelease = d?.releases[0] ?? null;
   const releaseDays = lastRelease ? (Date.now() - new Date(lastRelease.at).getTime()) / 864e5 : null;
   return (
@@ -68,10 +75,10 @@ export function PulsePanel({
               />
               <Metric
                 label="ISSUE FLOW"
-                value={`${fmtCompact(d.issuesOpened30)} in`}
-                hint={`${fmtCompact(d.issuesClosed30)} resolved`}
+                value={opened !== null ? `${fmtCompact(opened)} in` : "—"}
+                hint={`${count(closed)} resolved`}
               />
-              <Metric label="PRS MERGED" value={fmtCompact(d.prsMerged30)} hint="pull requests" />
+              <Metric label="PRS MERGED" value={count(d.prsMerged30)} hint="pull requests" />
               <Metric
                 label="LAST RELEASE"
                 value={lastRelease ? ago(lastRelease.at) : "—"}
@@ -82,16 +89,22 @@ export function PulsePanel({
             {/* issue flow balance: resolved share vs incoming, with the net
                 drift of the backlog called out */}
             <div className="flex flex-col gap-1.5">
-              <div className="h-1.5 w-full overflow-hidden bg-grid/60">
-                <div className="h-full bg-accent/70" style={{ width: `${closedShare.toFixed(1)}%` }} />
-              </div>
+              {flowKnown ? (
+                <div className="h-1.5 w-full overflow-hidden bg-grid/60">
+                  <div className="h-full bg-accent/70" style={{ width: `${closedShare.toFixed(1)}%` }} />
+                </div>
+              ) : null}
               <div className="numeral flex justify-between text-micro text-faint">
-                <span>
-                  backlog {net > 0 ? "+" : ""}
-                  {fmtCompact(net)} this month{" "}
-                  <span className={net > 0 ? "text-warn" : "text-accent"}>{net > 0 ? "▲" : "▼"}</span>
-                </span>
-                <span>{fmtCompact(d.openIssues)} open issues total</span>
+                {flowKnown ? (
+                  <span>
+                    backlog {net > 0 ? "+" : ""}
+                    {fmtCompact(net)} this month{" "}
+                    <span className={net > 0 ? "text-warn" : "text-accent"}>{net > 0 ? "▲" : "▼"}</span>
+                  </span>
+                ) : (
+                  <span>issue flow unmeasured this refresh</span>
+                )}
+                <span>{count(d.openIssues)} open issues total</span>
               </div>
             </div>
           </>
