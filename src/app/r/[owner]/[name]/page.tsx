@@ -382,7 +382,7 @@ export default async function ExplorerPage({
       <RaceProvider repo={repoLabel}>
         <ConsoleLayout
           firstIndex={prFlow ? 3 : 2}
-          dossier={data.dossier}
+          dossier={await getCachedDossier(owner, name)}
           starChart={{
             meta: inputs.apex
               ? `destination: ${inputs.apex.r} · ${fmt(inputs.apex.s)} stars`

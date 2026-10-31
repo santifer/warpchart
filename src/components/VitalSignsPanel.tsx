@@ -227,7 +227,10 @@ export default function VitalSignsPanel({
     { label: "commits", pct: a.commitsPct },
   ].sort((x, y) => y.pct - x.pct);
 
-  const gate = cm && (cm.maintainers ?? []).length > 0 ? cm.maintainers : [vitals.creator.login];
+  // the merge gate, only when the PR sweep measured it: a failed sweep must not
+  // fall back to the creator's face over "sole maintainer"
+  const gateKnown = cm?.mergedByDistinct != null;
+  const gate = !gateKnown ? [] : (cm.maintainers ?? []).length > 0 ? cm.maintainers : [vitals.creator.login];
 
   return (
     <Panel
@@ -333,7 +336,11 @@ export default function VitalSignsPanel({
               {fmtCompact(cm.mergedTotal ?? cm.prsSampled)} pull requests merged.{" "}
               {cm.mergedTotal && cm.prsSampled < cm.mergedTotal ? `The last ${fmtCompact(cm.prsSampled)}` : "All of them"} went through{" "}
               <span className="text-dim">
-                {cm.mergedByDistinct === 1 ? "a single maintainer" : `${cm.mergedByDistinct} maintainers`}
+                {cm.mergedByDistinct == null
+                  ? "an unmeasured number of maintainers"
+                  : cm.mergedByDistinct === 1
+                    ? "a single maintainer"
+                    : `${cm.mergedByDistinct} maintainers`}
               </span>
               {lt ? (
                 <>
@@ -443,7 +450,7 @@ export default function VitalSignsPanel({
                 ))}
               </div>
               <span className="numeral text-label leading-tight text-ink">
-                {cm && cm.mergedByDistinct === 1 ? "sole maintainer" : `${cm?.mergedByDistinct ?? 1} maintainers`}
+                {!gateKnown ? "maintainers —" : cm.mergedByDistinct === 1 ? "sole maintainer" : `${cm.mergedByDistinct} maintainers`}
                 <br />
                 <span className="text-micro text-dim">{fmtCompact(cm?.prsSampled ?? a.prs30)} PRs gated</span>
               </span>

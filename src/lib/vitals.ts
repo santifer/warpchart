@@ -61,7 +61,7 @@ export interface VitalsCommunity {
   contributorsSampled?: number; // unique human PR authors inside the sampled window
   mergedTotal?: number | null; // every merged PR ever
   prsSampled: number; // size of the window the lead time and merge gate come from
-  mergedByDistinct: number; // 1 = single maintainer gate
+  mergedByDistinct: number | null; // 1 = single maintainer gate; null = the sweep could not read who merged
   maintainers: string[]; // logins of the actual merge-gate keepers (bot-excluded)
   topContributors: { login: string }[]; // bot-excluded, most PRs first
   cohorts: { month: string; new: number; returning: number }[];
