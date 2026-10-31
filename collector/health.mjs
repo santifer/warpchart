@@ -1114,7 +1114,7 @@ async function checkPresence() {
     // the curve and the number are one figure (contributorCurve)
     const curve = contributorCurve(body?.contributors ?? null);
     if (curve.severity) fail("presence.contributor-curve", "PRESENCE", curve.severity, curve.note,
-      "collector/contributors.mjs rebuilds GitHub's count from commits (contributors-core.mjs) and vitals.mjs calibrates it to the sidebar figure. A missing curve: check the [contributors] log line (\"GitHub's count rebuilt N\") and whether the rebuild drifted >5% from the sidebar.");
+      "collector/contributors.mjs rebuilds GitHub's count from commits (contributors-core.mjs) and vitals.mjs calibrates it to the sidebar figure. A missing curve: check the [contributors] log line (\"GitHub's count rebuilt N\") and whether both rebuilds (capped and uncapped, githubCurve in contributors-core.mjs) drifted >2% from the sidebar.");
     else pass("presence.contributor-curve", "PRESENCE", curve.note);
     const sb = await fetch(`https://github.com/${TENANT}/_sidebar`, { headers: { Accept: "application/json" }, signal: AbortSignal.timeout(20_000) })
       .then((r) => (r.ok ? r.json() : null)).catch(() => null);
