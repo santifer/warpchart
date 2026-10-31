@@ -10,6 +10,7 @@ import { unstable_cache } from "next/cache";
 import { repoRankSeries } from "./rank-history";
 import { mergeReconstructed, reconstructDays, repoDailyRanks, repoReconstructedRanks } from "../../collector/velocity-rank-core.mjs";
 import { allNamesOf } from "./aliases";
+import { cacheKey } from "./shape-versions";
 import { monthlyTierBands, type LadderBand } from "./ladder-bands";
 
 export interface VelocityRankDay {
@@ -66,14 +67,14 @@ const found = <T,>(what: string) => (v: T | null): T => {
 };
 const readMetaCached = unstable_cache(
   async () => found<Meta>("velocity-rank/meta.json")(await readBlob<Meta>("velocity-rank/meta.json")),
-  ["velocity-rank-meta-v2"],
+  [cacheKey("velocityRankMeta")],
   { revalidate: 3600 },
 );
 const readMeta = () => readMetaCached().catch(() => null);
 const readMonth = (m: string) =>
   unstable_cache(
     async () => found<{ days: VelocityRankDay[] }>(m)(await readBlob<{ days: VelocityRankDay[] }>(`velocity-rank/${m}.json`)),
-    ["velocity-rank-month-v2", m],
+    [cacheKey("velocityRankMonth"), m],
     { revalidate: 3600 },
   )().catch(() => null);
 
@@ -93,7 +94,7 @@ const readReconstructedCached = unstable_cache(
     if (!r?.days?.length) throw new Error("velocity-rank/reconstructed.json missing");
     return r;
   },
-  ["velocity-rank-reconstructed-v3"], // v3: the window runs to 30 Sep (gap fill)
+  [cacheKey("velocityRankReconstructed")],
   { revalidate: 86_400 },
 );
 // re-uploading the file needs a NEW key above, or the old one is served a day
@@ -163,7 +164,7 @@ const ladderBandsCached = unstable_cache(
     if (!bands.length) throw new Error("no ladder bands");
     return bands;
   },
-  ["ladder-bands-v1"],
+  [cacheKey("ladderBands")],
   { revalidate: 3600 },
 );
 // null = no zones this render (the ladder draws plain bars, the watchdog's

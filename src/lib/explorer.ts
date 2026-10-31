@@ -26,7 +26,9 @@ import { nextMilestones } from "./milestones";
 import { canonicalVelocity, velocityQuality } from "./velocity";
 import { buildRouteLayers, forkRatioPercentile } from "./bundle";
 import type { ChartInputs, Neighbor, RouteRepo } from "./types";
+import { cacheKey } from "./shape-versions";
 
+// SHAPE: bump SHAPE_VERSION.dossier (src/lib/shape-versions.ts) when this changes.
 export interface Dossier extends DossierRaw {
   npmLast30: number | null;
   // days of npmLast30's window that npm never recorded (holes it serves as 0).
@@ -233,24 +235,14 @@ export const getCachedDossier = async (owner: string, name: string): Promise<Dos
 const cachedDossier = (owner: string, name: string) =>
   unstable_cache(
     () => fetchDossier(owner, name),
-    // v8: invalidate entries cached by the short-lived npm total-cap that stored
-    // a null npm (unstable_cache is not deploy-scoped, so the bad entry survived
-    // the fix). Bumping the key forces a fresh resolve on next view.
-    // v9: entries stored while both channels were truncated to the slowest one
-    // hold clone days that were already discarded at write time - a redeploy
-    // alone cannot recover them, only a new key can.
-    // v10: the 30-day-total shape (uniqueCloners30, no clonesHistory) was live
-    // for about an hour. Restoring the series without bumping this served that
-    // shape from cache, so the panel came back with NO clone metric at all -
-    // worse than either state. Third time this exact miss has cost a deploy:
-    // CHANGE THE SHAPE, CHANGE THE KEY, IN THE SAME COMMIT.
-    // v11: adds uniqueCloners14d. CHANGE THE SHAPE, CHANGE THE KEY, SAME COMMIT.
-    // v15: adds npmLast30MissingDays/npmLast30Estimate; npm holes dropped from npmHistory.
-    // v16: vitals contributors = GitHub's sidebar count, may be null.
-    ["dossier-v17", `${owner}/${name}`.toLowerCase()],
+    // CHANGE THE SHAPE, BUMP SHAPE_VERSION.dossier, SAME COMMIT: the key (and
+    // explorer-data's, which embeds a Dossier) is derived from it.
+    [cacheKey("dossier"), `${owner}/${name}`.toLowerCase()],
     { revalidate: 900 },
   )();
 
+// SHAPE: bump SHAPE_VERSION.explorerData (src/lib/shape-versions.ts) when this,
+// ChartInputs or Neighbor changes.
 export interface ExplorerData {
   inputs: ChartInputs;
   desc: string | null;
@@ -467,10 +459,9 @@ const getCachedExplorerData = unstable_cache(
     if (data?.degraded) throw new DegradedResult(data);
     return data;
   },
-  // v4: neighbors gained trend/v7_to and inputs vTrend/vAsOf (v7 window fix);
-  // v3: the dossier inside gained npmLatest (same commit as dossier-v17);
-  // v2: npmLast30MissingDays/npmLast30Estimate, npm's holes out (dossier-v15)
-  ["explorer-data-v4"],
+  // derived: ExplorerData's own version AND the Dossier it carries
+  // (SHAPE_VERSION.explorerData / .dossier), so a dossier bump moves it too
+  [cacheKey("explorerData")],
   { revalidate: 900 },
 );
 
