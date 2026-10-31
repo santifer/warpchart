@@ -10,7 +10,9 @@
 // GATING IS INHERITED, NEVER REIMPLEMENTED. Each section comes from the same
 // loader the page uses, so it carries that loader's rules:
 //   registry  - public, always
-//   vitals    - loadVitals() returns null for locked repos (owned + paid only)
+//   vitals    - loadVitals() + vitalsEntitled(): data, locked (not owned or
+//               paid), pending (entitled, first reading not landed) or
+//               unavailable (the store could not be read; never "locked")
 //   traffic   - fetchDossier() only fills clonesHistory for the HOUSE repo;
 //               every other repo's traffic stays behind /api/traffic + key
 //   npm       - public registry data, always
@@ -25,7 +27,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { repoStats, repoOvertakes, SITE } from "@/lib/api-v1";
 import { getCachedDossier } from "@/lib/explorer";
-import { loadVitals } from "@/lib/vitals";
+import { loadVitals, vitalsEntitled } from "@/lib/vitals";
+import { vitalsReading } from "@/lib/vitals-reading";
+import { settle, valueOf } from "@/lib/blob-read";
 import { loadMeta } from "@/lib/history";
 
 export const revalidate = 900;
@@ -100,10 +104,12 @@ export async function GET(req: NextRequest) {
   const stats = repoStats(repo);
   if (!stats) return BAD(`${repo} is not in the worldwide top-1000 registry`, 404);
 
-  const [dossier, vitals] = await Promise.all([
+  const [dossier, vitalsRead] = await Promise.all([
     getCachedDossier(owner, name).catch(() => null),
-    loadVitals(owner, name).catch(() => null),
+    settle(loadVitals(owner, name), "vitals"),
   ]);
+  const vitals = valueOf(vitalsRead);
+  const vitalsState = vitalsReading(vitalsRead, vitalsEntitled(owner, name)).state;
 
   // the window anchors on the newest day any series has, so ?range works even
   // when a feed is a few days behind
@@ -178,7 +184,11 @@ export async function GET(req: NextRequest) {
             agentReadiness: vitals.agentReadiness ?? null,
             computedAt: vitals.computedAt,
           }
-        : { locked: true, reason: "vital signs are computed for owned and paid repos" },
+        : vitalsState === "failed"
+          ? { unavailable: true, reason: "the vital signs store could not be read; retry shortly" }
+          : vitalsState === "pending"
+            ? { pending: true, reason: "tracked; the first daily reading has not landed yet" }
+            : { locked: true, reason: "vital signs are computed for owned and paid repos" },
 
       // ── who builds it ─────────────────────────────────────────────────────
       contributors: vitals?.community
@@ -268,6 +278,7 @@ export async function GET(req: NextRequest) {
 
       overtakes: repoOvertakes(repo),
     },
-    { headers: { "Cache-Control": "public, s-maxage=900, stale-while-revalidate=3600" } },
+    // a failed read must not sit at the edge for 15 min either
+    { headers: { "Cache-Control": vitalsState === "failed" ? "no-store" : "public, s-maxage=900, stale-while-revalidate=3600" } },
   );
 }

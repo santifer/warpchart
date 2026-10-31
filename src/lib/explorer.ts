@@ -159,7 +159,8 @@ export async function fetchDossier(owner: string, name: string): Promise<Dossier
     let uniqueCloners14d: number | null = null;
     let uniqueCloners14dAt: string | null = null;
     if (house && repo.toLowerCase() === house.toLowerCase()) {
-      const vault = await loadTrafficVault(repo);
+      // unreadable store: the clone series reads as unmeasured, as before
+      const vault = await loadTrafficVault(repo).catch(() => null);
       clonesHistory = vault?.days.map((dd) => ({ day: dd.d, u: dd.clonesU, c: dd.clones })) ?? null;
       uniqueCloners14d = vault?.uniq14?.cloners ?? null;
       uniqueCloners14dAt = vault?.uniq14?.at ?? null;

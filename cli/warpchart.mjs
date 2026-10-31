@@ -120,8 +120,9 @@ async function dossierView(repo, args, asJson) {
 
   const v = d.vitals;
   rule("ENGINEERING HEALTH");
-  if (v?.locked) {
-    console.log("  " + dim(v.reason));
+  // locked, pending (first reading not landed) or unavailable (store unreadable)
+  if (v?.locked || v?.pending || v?.unavailable) {
+    console.log("  " + (v.unavailable ? warn(v.reason) : dim(v.reason)));
   } else if (v) {
     kv("activity rank", accent("#" + fmt(v.activityRank)) + dim(" of " + fmt(v.universe)), "top " + Math.max(1, Math.ceil((v.activityRank / v.universe) * 100)) + "%");
     kv("verdict", v.verdict === "ALIVE" ? accent("● ALIVE") : warn("○ MONUMENT"));
@@ -204,7 +205,11 @@ async function contributorsView(repo, args, asJson) {
   const c = d.contributors;
   if (asJson) { process.stdout.write(JSON.stringify(c ?? { locked: true }, null, 2) + "\n"); return; }
   banner(bold(d.repo) + dim(" · who builds it"));
-  if (!c) { console.log("\n  " + dim("the contributor census is computed for owned and paid repos") + "\n"); return; }
+  if (!c) {
+    const why = d.vitals?.unavailable || d.vitals?.pending ? d.vitals.reason : "the contributor census is computed for owned and paid repos";
+    console.log("\n  " + dim(why) + "\n");
+    return;
+  }
   console.log();
   // one headline: GitHub's own count, the figure on the repo page
   kv("contributors", c.total != null ? bold(fmt(c.total)) : dim("unknown"), c.total != null ? "as GitHub counts them" : "");

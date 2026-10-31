@@ -28,7 +28,11 @@ export async function GET(request: Request) {
     return Response.json({ error: "repo must be 'owner/name'" }, { status: 400 });
   }
   // authorized (god-key) surface: serve the FULL record, hot window + cold archive
-  const points = await repoRankTrajectory(repo, { includeArchive: true });
+  // a shard the store could not serve is an outage, not an empty record
+  const points = await repoRankTrajectory(repo, { includeArchive: true }).catch(() => null);
+  if (!points) {
+    return Response.json({ error: "rank history temporarily unavailable" }, { status: 503, headers: { "Cache-Control": "no-store" } });
+  }
   return Response.json(
     { repo, points },
     { headers: { "Cache-Control": "private, no-store" } },

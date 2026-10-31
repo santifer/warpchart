@@ -6,13 +6,17 @@
 //
 // Cache-only (like the Traffic Vault): a page view NEVER hits GitHub. The heavy
 // work runs in collector/vitals.mjs and lands in the PRIVATE Blob at
-// vitals/{owner}--{name}.json with every percentile baked in. Gating = presence:
-// the collector only writes a file for OWNED repos (free) and PAID tenants, so a
-// null here IS the lock — the UI shows the upsell. A paid repo lights up with no
-// redeploy (runtime Blob read).
-import { get } from "@vercel/blob";
+// vitals/{owner}--{name}.json with every percentile baked in. The collector
+// only writes a file for the house repo, OWNED repos (free) and PAID tenants,
+// and a stored file always renders, so a paid repo lights up with no redeploy
+// (runtime Blob read). But presence is not the gate: a failed read is not
+// "locked", and an entitled repo with no file yet is "pending", not an upsell.
+// Entitlement is vitalsEntitled().
 import { unstable_cache } from "next/cache";
 import { allNamesOf } from "./aliases";
+import { readPrivateJson } from "./blob-read";
+import { isOwnedBy } from "./config";
+import { isHostedRepo, loadMeta } from "./history";
 
 export interface VitalsActivity {
   commits30: number;
@@ -206,32 +210,24 @@ async function readVitals(owner: string, name: string): Promise<Vitals | null> {
   // Vitals are rewritten daily (not accumulated), so no merge is needed for a
   // renamed repo: newest name first, older names only as fallback until the
   // collector's first post-rename run writes the canonical key.
+  // Only a 404 moves on to the next name. A failed read throws, so it is never
+  // cached as "locked" (readPrivateJson).
   for (const rn of [...allNamesOf(`${owner}/${name}`)].reverse()) {
-    try {
-      // useCache:false — @vercel/blob get() caches at the CDN (~1mo TTL) by
-      // default, which would freeze the daily-rewritten vitals for weeks. The
-      // 15-min unstable_cache below is the real dedup; each refresh reads fresh.
-      const res = await get(blobKey(rn), {
-        access: "private",
-        token,
-        useCache: false,
-      });
-      if (res?.statusCode === 200 && res.stream) {
-        return JSON.parse(await new Response(res.stream).text()) as Vitals;
-      }
-    } catch {
-      /* missing (locked) or transient: try the next historical name */
-    }
+    // useCache:false — @vercel/blob get() caches at the CDN (~1mo TTL) by
+    // default, which would freeze the daily-rewritten vitals for weeks. The
+    // 15-min unstable_cache below is the real dedup; each refresh reads fresh.
+    const v = await readPrivateJson<Vitals>(blobKey(rn), token, { useCache: false });
+    if (v) return v;
   }
   return null;
 }
 
-// One Blob read per repo per 15 min, shared across every consumer. Returns null
-// for a locked repo — that null IS the gate.
-export const loadVitals = (
-  owner: string,
-  name: string,
-): Promise<Vitals | null> =>
+// One Blob read per repo per 15 min, shared across every consumer. null means
+// nothing is stored for this repo, and it rejects when the store could not be
+// read. Neither one says whether the repo is ENTITLED to vitals: that is
+// vitalsEntitled(), and a surface needs both to choose between the data, a
+// "first reading pending", an "unavailable, retrying" and the upsell.
+export const loadVitals = (owner: string, name: string): Promise<Vitals | null> =>
   unstable_cache(
     () => readVitals(owner, name),
     // v8: onboarding carries goodFirstIssuesFree. BUMP THIS WHENEVER THE SHAPE
@@ -245,3 +241,12 @@ export const loadVitals = (
     ],
     { revalidate: 900 },
   )();
+
+// Whether this repo gets Vital Signs at all, from the same sets the collector
+// computes them for (collector/vitals.mjs phase B): the house repo, every repo
+// of an owner we track, and the paying tenants.
+export function vitalsEntitled(owner: string, name: string): boolean {
+  const repo = `${owner}/${name}`;
+  const house = loadMeta()?.repo;
+  return (!!house && house.toLowerCase() === repo.toLowerCase()) || isHostedRepo(repo) || isOwnedBy(owner);
+}
