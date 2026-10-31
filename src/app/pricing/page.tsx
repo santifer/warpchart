@@ -18,6 +18,7 @@ import { loadMeta } from "@/lib/history";
 import { repoRankTrajectory } from "@/lib/rank-history";
 import { loadExplorerData, type ExplorerData } from "@/lib/explorer";
 import { fmt, fmtEtaDays } from "@/lib/format";
+import { milestoneEta } from "@/lib/projections";
 import SpaceBackdrop from "@/components/SpaceBackdrop";
 import JsonLd, { pricingGraph } from "@/components/JsonLd";
 import LockedRankPreview from "@/components/LockedRankPreview";
@@ -433,8 +434,11 @@ export default async function Pricing({
     vDay = Math.round(data.inputs.v7d);
     weekly = Math.round(data.inputs.v7d * 7);
     next = data.inputs.milestones[0] ?? null;
-    gap = next ? Math.max(0, next.threshold - data.inputs.stars) : null;
-    eta = next && gap && gap > 0 && data.inputs.v7d > 0 ? fmtEtaDays(gap / data.inputs.v7d) : null;
+    // the same gate eta /r/ shows (milestoneEta): this one used to divide by
+    // our rate alone, as if the gate never moved
+    const e = next ? milestoneEta(next.rank, next.threshold, data.inputs.stars, data.inputs.v7d, next.drift) : null;
+    gap = e ? e.gap : null;
+    eta = e && e.gap > 0 && e.etaDays !== null ? fmtEtaDays(e.etaDays) : null;
     charted = (await repoRankTrajectory(repoLabel).catch(() => [])).length >= 2;
   }
 
