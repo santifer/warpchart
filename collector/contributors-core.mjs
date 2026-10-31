@@ -43,22 +43,35 @@ export function creditCommitAuthors(gh, nodes, at) {
 export function githubSeries(gh, listed) {
   const L = listed ? new Set(listed) : null;
   const firsts = [];
+  const all = [];
   let capped = 0;
   for (const [login, p] of Object.entries(gh)) {
+    all.push(p.first);
     if (L && !p.co && !L.has(login)) {
       capped++;
       continue;
     }
     firsts.push(p.first);
   }
-  const perDay = new Map();
-  for (const d of firsts) {
-    const day = d.slice(0, 10);
-    perDay.set(day, (perDay.get(day) ?? 0) + 1);
-  }
-  let cum = 0;
-  const daily = [...perDay.keys()].sort().map((day) => [day, (cum += perDay.get(day))]);
-  return { daily, total: firsts.length, capped, capApplied: !!L, uncapped: firsts.length + capped };
+  const cumulative = (dates) => {
+    const perDay = new Map();
+    for (const d of dates) {
+      const day = d.slice(0, 10);
+      perDay.set(day, (perDay.get(day) ?? 0) + 1);
+    }
+    let cum = 0;
+    return [...perDay.keys()].sort().map((day) => [day, (cum += perDay.get(day))]);
+  };
+  return {
+    daily: cumulative(firsts),
+    total: firsts.length,
+    capped,
+    capApplied: !!L,
+    uncapped: firsts.length + capped,
+    // the same rebuild with no cap, as a curve: GitHub's sidebar has drifted
+    // onto it (career-ops 2026-10-30: capped 647, uncapped 749, GitHub 749)
+    uncappedDaily: cumulative(all),
+  };
 }
 
 // Make the rebuilt curve end on the live figure GitHub shows. Scales every
@@ -102,3 +115,40 @@ export function calibrateToLive(daily, live, tolPct = 2, { uncapped = null, brac
   out[out.length - 1][1] = live;
   return { daily: out, rebuilt: total, residual: live - total };
 }
+
+// The curve the chart draws: the capped rebuild calibrated to the live figure
+// (bracketed by the uncapped one), or, when that refuses, the UNCAPPED rebuild
+// if it lands within tolPct of the live figure on its own. The cap's blind
+// spot grows with the repo (career-ops: 30 authors past it on 10-11, 52 on
+// 10-16, 102 on 10-30) and on 2026-10-30 pushed the bracket past
+// MAX_CAP_BRACKET_PCT (15.8%) while GitHub showed exactly the uncapped 749:
+// the panel fell back to the authors/co-authored toggle. Matching the live
+// figure within 2% is the census check the bracket bound stood in for.
+// `series` = contributors.mjs store.series. null when neither curve matches.
+export function githubCurve(series, live, tolPct = 2) {
+  if (!series) return null;
+  const capped =
+    series.githubDaily?.length && series.githubCapApplied
+      ? calibrateToLive(series.githubDaily, live, tolPct, { uncapped: series.githubUncapped ?? null })
+      : null;
+  if (capped) return { ...capped, basis: "capped" };
+  // the uncapped fallback only for a store that COULD apply the cap: without
+  // GitHub's /contributors list, githubDaily already is the uncapped rebuild
+  // and the refusal above stands
+  if (!series.githubCapApplied || !series.githubUncappedDaily?.length) return null;
+  const un = calibrateToLive(series.githubUncappedDaily, live, tolPct);
+  if (un) return { ...un, basis: "uncapped" };
+  // the live figure INSIDE the cap's bracket but more than tolPct from both
+  // rebuilds (the bracket outgrew MAX_CAP_BRACKET_PCT): draw the nearer
+  // rebuild, calibrated. Both ends are this repo's own census, so a wrong store
+  // would not land between them; capped at MAX_GROWN_BRACKET_PCT all the same.
+  const lo = series.githubDaily?.at(-1)?.[1] ?? null;
+  const hi = series.githubUncappedDaily.at(-1)?.[1] ?? null;
+  if (!Number.isInteger(live) || lo == null || hi == null || live < lo || live > hi) return null;
+  if (((hi - lo) / lo) * 100 > MAX_GROWN_BRACKET_PCT) return null;
+  const near = live - lo <= hi - live ? series.githubDaily : series.githubUncappedDaily;
+  const gap = Math.ceil((Math.min(live - lo, hi - live) / Math.min(lo, hi)) * 100) + 1;
+  const b = calibrateToLive(near, live, gap);
+  return b ? { ...b, basis: "bracket" } : null;
+}
+export const MAX_GROWN_BRACKET_PCT = 40;

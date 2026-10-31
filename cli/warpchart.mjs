@@ -141,7 +141,7 @@ async function dossierView(repo, args, asJson) {
   const c = d.contributors;
   if (c) {
     rule("WHO BUILDS IT");
-    kv("contributors", c.total != null ? bold(fmt(c.total)) : dim("unknown"), [c.total != null ? "as GitHub counts them" : "", c.authors != null ? `${c.authors} commit authors (warpchart census)` : ""].filter(Boolean).join(" · "));
+    kv("contributors", c.total != null ? bold(fmt(c.total)) : dim("unknown"), c.total != null ? "as GitHub counts them" : "");
     if (c.aiCoCredits) kv("AI co-credits", fmt(c.aiCoCredits), "counted, never people");
     kv("merged PRs", fmt(c.mergedTotal ?? 0), c.mergedByDistinct === 1 ? "a single maintainer gate" : c.mergedByDistinct + " maintainers");
     if (c.busFactor) kv("bus factor", `${Math.round(c.busFactor.top1Share * 100)}% / ${Math.round(c.busFactor.top5Share * 100)}%`, "top 1 / top 5 of all commits");
@@ -213,7 +213,6 @@ async function contributorsView(repo, args, asJson) {
   console.log();
   // one headline: GitHub's own count, the figure on the repo page
   kv("contributors", c.total != null ? bold(fmt(c.total)) : dim("unknown"), c.total != null ? "as GitHub counts them" : "");
-  if (c.authors != null) kv("commit authors", fmt(c.authors), "warpchart census, bots excluded");
   if (c.aiCoCredits) kv("AI co-credits", fmt(c.aiCoCredits), "counted, never people");
   if (c.busFactor) kv("bus factor", `${Math.round(c.busFactor.top1Share * 100)}% / ${Math.round(c.busFactor.top5Share * 100)}%`, "top 1 / top 5 of all commits");
   const s = c.series?.github ?? c.series?.authors;

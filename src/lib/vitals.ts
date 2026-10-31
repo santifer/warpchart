@@ -97,6 +97,7 @@ export interface VitalsCensus {
   // 500-email cap excluded) and calibrated to end on the figure GitHub shows.
   // Absent when there is no live figure or the rebuild is >5% off.
   githubDaily?: [string, number][];
+  githubBasis?: "capped" | "uncapped" | "bracket";
   github?: number; // = community.contributors, the live figure
   githubRebuilt?: number; // the rebuild before calibration
   githubResidual?: number; // github - githubRebuilt (a few people GitHub counts its own way)
@@ -200,7 +201,8 @@ export interface Vitals {
   createdAt?: string | null;
 }
 
-const blobKey = (repo: string) => `vitals/${repo.toLowerCase().replace("/", "--")}.json`;
+const blobKey = (repo: string) =>
+  `vitals/${repo.toLowerCase().replace("/", "--")}.json`;
 
 async function readVitals(owner: string, name: string): Promise<Vitals | null> {
   const token = process.env.BLOB_READ_WRITE_TOKEN;
@@ -233,8 +235,10 @@ export const loadVitals = (owner: string, name: string): Promise<Vitals | null> 
     // the old reading, so a deploy that fixes a number ships looking like it
     // did nothing. v7 was itself a bump for the same reason (sample counts
     // passing for totals) and the lesson still cost 15 minutes today.
-    ["vitals-v10", // v10: census.githubDaily (GitHub's count over time); v9: contributors = GitHub's sidebar
-    `${owner}/${name}`.toLowerCase()],
+    [
+      "vitals-v10", // v10: census.githubDaily (GitHub's count over time); v9: contributors = GitHub's sidebar
+      `${owner}/${name}`.toLowerCase(),
+    ],
     { revalidate: 900 },
   )();
 
