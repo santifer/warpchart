@@ -30,6 +30,9 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v5
+        with:
+          # this job never pushes: leave no token in .git/config
+          persist-credentials: false
       - uses: actions/setup-node@v5
         with:
           node-version: 22
