@@ -205,7 +205,6 @@ export const ARTIFACTS = [
   { prefix: "data/collisions.json", kind: "periodic", maxAgeH: 36, what: "the overtake scan" },
   { prefix: "data/catalog.json", kind: "periodic", maxAgeH: 36, what: "the rising catalog" },
   { prefix: "data/route-prev.json", kind: "periodic", maxAgeH: 72, what: "the previous registry (velocity baseline)" },
-  { prefix: "data/enrichment.json", kind: "periodic", maxAgeH: 72, what: "repo enrichment" },
   { prefix: "data/forensics.json", kind: "periodic", maxAgeH: 72, what: "spike forensics" },
   { prefix: "data/attribution.json", kind: "periodic", maxAgeH: 72, what: "spike attribution" },
   { prefix: "data/indexnow-stamp.txt", kind: "periodic", maxAgeH: 48, what: "the IndexNow ping stamp" },
@@ -252,7 +251,29 @@ export const ARTIFACTS = [
   { prefix: "private/installs.json", kind: "event", what: "detected install waves (private)" },
   // config: edited by a human, age means nothing
   { prefix: "data/tenants.json", kind: "config", what: "the paying-tenant list" },
+  // manual: produced by a script someone runs by hand, so age means nothing.
+  // collector/enrich.mjs calls the local Claude CLI, is in no workflow, and only
+  // writes when the catalog has repos it has not tagged yet. It was declared
+  // periodic (72 h) and only ever looked fresh because the mirror re-uploaded
+  // it every run.
+  { prefix: "data/enrichment.json", kind: "manual", what: "repo enrichment (collector/enrich.mjs, run by hand)" },
 ];
+
+// The newest upload per declared family, from a Blob listing ({ pathname,
+// uploadedAt }), so one live file proves the family runs. Keys no declaration
+// covers are grouped by their first path segment into `undeclared`.
+export function newestByFamily(blobs, artifacts = ARTIFACTS) {
+  const newest = new Map();
+  const undeclared = new Map();
+  for (const b of blobs) {
+    const t = new Date(b.uploadedAt).getTime();
+    const decl = artifacts.find((a) => b.pathname === a.prefix || (a.prefix.endsWith("/") && b.pathname.startsWith(a.prefix)));
+    const key = decl ? decl.prefix : (b.pathname.includes("/") ? b.pathname.split("/")[0] + "/" : b.pathname);
+    const bag = decl ? newest : undeclared;
+    if (!bag.has(key) || bag.get(key) < t) bag.set(key, t);
+  }
+  return { newest, undeclared };
+}
 
 // Which declared periodic families are older than they may be. `newest` maps a
 // family prefix to its newest upload (ms). A timestamp that is not a number reads
