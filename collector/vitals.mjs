@@ -26,7 +26,14 @@ import { readFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import { get, put } from "@vercel/blob";
 import { DATA_DIR, graphql, ghFetch, sleep, token, readConfig, allNamesOf } from "./lib.mjs";
-import { isBot, derivePrAnalysis, gfiQueries, gfiFromCounts, parseSidebarContributors } from "./vitals-core.mjs";
+import {
+  isBot,
+  derivePrAnalysis,
+  gfiQueries,
+  gfiFromCounts,
+  parseSidebarContributors,
+  adoptionFromVault,
+} from "./vitals-core.mjs";
 import { githubCurve } from "./contributors-core.mjs";
 
 token(); // GitHub token: fail fast
@@ -570,25 +577,10 @@ async function creatorInfo(owner, fallbackHumans = []) {
 
 // ---- clone-conversion from the Traffic Vault (last 7 complete days) ---------
 // The RAW vault Blob keys views/clones by day: { views:{[day]:{c,u}}, clones:{...} }.
+// The window and the sums live in adoptionFromVault (vitals-core.mjs).
 async function adoption(repo) {
   const vault = await readBlob(`traffic/${repo.toLowerCase().replace("/", "--")}.json`);
-  if (!vault?.views || !vault?.clones) return null;
-  const days = Object.keys(vault.views).filter((d) => d < today).sort();
-  const last7 = days.slice(-7);
-  if (!last7.length) return null;
-  let uV = 0,
-    uC = 0,
-    cC = 0;
-  for (const d of last7) {
-    uV += vault.views[d]?.u || 0;
-    uC += vault.clones[d]?.u || 0;
-    cC += vault.clones[d]?.c || 0;
-  }
-  return {
-    cloneConvPct: uV > 0 ? Math.round((uC / uV) * 100) : null,
-    uniqueClonersWeek: uC || null,
-    clonesPerCloner: uC > 0 ? Math.round((cC / uC) * 10) / 10 : null,
-  };
+  return adoptionFromVault(vault, today);
 }
 
 const pctRank = (sorted, v) => {
