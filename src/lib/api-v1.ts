@@ -8,6 +8,7 @@ import { loadRoute, loadCollisions } from "@/lib/history";
 import { canonicalRepo } from "@/lib/aliases";
 import { repoBadges } from "@/lib/badges";
 import { canonicalVelocity, canonicalVel0 } from "@/lib/velocity";
+import { rankedRegistry } from "@/lib/rank";
 
 export const SITE = "https://warpchart.dev";
 
@@ -58,32 +59,25 @@ export interface RepoStats {
 // Worldwide rank + neighbours for a repo IN the top-1000 registry. Returns null
 // for anything outside it (honest: we do not live-fetch deep space here).
 export function repoStats(repoInput: string, band = 5): RepoStats | null {
-  const r = loadRoute();
-  if (!r) return null;
-  // A renamed repo's old name resolves to its canonical name first, so cached
-  // third-party integrations (?repo=santifer/career-ops) keep working after a
-  // transfer instead of falling through to the name-part heuristic.
+  const route = loadRoute();
+  if (!route) return null;
+  // counted ranks in current star order (src/lib/rank.ts): the rank, the
+  // neighbors and the gate all agree with the stars they print
+  const repos = rankedRegistry(route.repos);
+  // A renamed repo's old name resolves to its canonical name. Nothing else
+  // does: the name-part fallback that lived here resolved "alice/react" to the
+  // registry's "*/react" and served another repo's record under her label.
   const lower = canonicalRepo(repoInput).toLowerCase();
-  let idx = r.repos.findIndex((p) => p.r.toLowerCase() === lower);
-  // Fallback for the REAL GitHub path when the registry stores a canonical/brand
-  // owner (e.g. a query for "facebook/react" must resolve to "react/react"):
-  // match by the name part and take the most prominent (highest-ranked) repo with
-  // that name. route.repos is rank-ordered, so the first match is the canonical
-  // one. The response's `repo` field returns that canonical name, so the
-  // resolution is transparent to the caller.
-  if (idx === -1) {
-    const name = lower.split("/")[1] ?? "";
-    if (name) idx = r.repos.findIndex((p) => p.r.toLowerCase().split("/")[1] === name);
-  }
+  const idx = repos.findIndex((p) => p.r.toLowerCase() === lower);
   if (idx === -1) return null;
-  const me = r.repos[idx];
-  const rank = idx + 1;
+  const me = repos[idx];
+  const rank = me.rank;
 
   const slice = (from: number, to: number): NeighborStat[] => {
     const start = Math.max(0, from);
-    return r.repos.slice(start, to).map((p, k) => ({
+    return repos.slice(start, to).map((p) => ({
       repo: p.r,
-      rank: start + k + 1,
+      rank: p.rank,
       stars: p.s,
       gap: p.s - me.s,
       velocityPerDay: rnd(canonicalVelocity(p)),
@@ -96,8 +90,8 @@ export function repoStats(repoInput: string, band = 5): RepoStats | null {
   // threshold = the stars of the repo currently holding that rank
   const gateRank = GATES.filter((g) => g < rank).pop() ?? null;
   let nextGate: RepoStats["nextGate"] = null;
-  if (gateRank && r.repos[gateRank - 1]) {
-    const threshold = r.repos[gateRank - 1].s;
+  if (gateRank && repos[gateRank - 1]) {
+    const threshold = repos[gateRank - 1].s;
     nextGate = { rank: gateRank, threshold, gap: Math.max(0, threshold - me.s) };
   }
 
@@ -136,15 +130,15 @@ export function velocityRanking(limit = 20, language?: string): VelocityEntry[] 
   const r = loadRoute();
   if (!r) return [];
   const lang = language?.trim().toLowerCase();
-  return r.repos
-    .map((p, i) => ({ repo: p.r, rank: i + 1, stars: p.s, velocityPerDay: Math.round(canonicalVel0(p)), language: p.l ?? null }))
+  return rankedRegistry(r.repos)
+    .map((p) => ({ repo: p.r, rank: p.rank, stars: p.s, velocityPerDay: Math.round(canonicalVel0(p)), language: p.l ?? null }))
     .filter((p) => p.velocityPerDay > 0 && (!lang || (p.language ?? "").toLowerCase() === lang))
     .sort((a, b) => b.velocityPerDay - a.velocityPerDay)
     .slice(0, clamp(limit));
 }
 
-// The worldwide leaderboard: biggest repos by stars, optionally by language.
-// The registry is already sorted by stars, so this just filters and slices.
+// The worldwide leaderboard: biggest repos by stars, optionally by language,
+// in current star order with counted ranks.
 // CSV serialization of a velocity/leaderboard table, for investor and builder
 // workflows (the GitDealFlow-style JSON-or-CSV feed promised on the Warp Index).
 export function velocityCsv(rows: VelocityEntry[]): string {
@@ -160,8 +154,8 @@ export function leaderboard(limit = 20, language?: string): VelocityEntry[] {
   const r = loadRoute();
   if (!r) return [];
   const lang = language?.trim().toLowerCase();
-  return r.repos
-    .map((p, i) => ({ repo: p.r, rank: i + 1, stars: p.s, velocityPerDay: Math.round(canonicalVel0(p)), language: p.l ?? null }))
+  return rankedRegistry(r.repos)
+    .map((p) => ({ repo: p.r, rank: p.rank, stars: p.s, velocityPerDay: Math.round(canonicalVel0(p)), language: p.l ?? null }))
     .filter((p) => !lang || (p.language ?? "").toLowerCase() === lang)
     .slice(0, clamp(limit));
 }

@@ -23,6 +23,7 @@ import { cleanNpmSeries, estimateHoles, holesInWindow } from "./npm-gaps";
 import { allNamesOf } from "./aliases";
 import { reqLog } from "./log";
 import { nextMilestones } from "./milestones";
+import { rankedRegistry } from "./rank";
 import { canonicalVelocity, velocityQuality } from "./velocity";
 import { buildRouteLayers, forkRatioPercentile } from "./bundle";
 import type { ChartInputs, Neighbor, RouteRepo } from "./types";
@@ -271,7 +272,9 @@ export async function getExplorerData(owner: string, name: string): Promise<Expl
   if (!/^[\w.-]+\/[\w.-]+$/.test(full)) return null;
 
   const route = loadRoute();
-  const ranked: RouteRepo[] = (route?.repos ?? []).map((p, i) => ({ ...p, rank: i + 1 }));
+  // counted ranks, in current star order (src/lib/rank.ts), so every rank
+  // and every gate below agrees with the stars printed next to it
+  const ranked: RouteRepo[] = rankedRegistry(route?.repos ?? []);
   if (!ranked.length) return null;
 
   const idx = ranked.findIndex((p) => p.r.toLowerCase() === full.toLowerCase());
@@ -368,7 +371,7 @@ export async function getExplorerData(owner: string, name: string): Promise<Expl
   // deep-space repo with no route entry keeps the live estimate, as the honest
   // fallback.
   const routeV7 = new Map<string, number | null>(
-    ranked.map((p) => [p.r.toLowerCase(), p.v7 ?? p.v ?? null]),
+    ranked.map((p) => [p.r.toLowerCase(), canonicalVelocity(p)]),
   );
   const routeByName = new Map(ranked.map((p) => [p.r.toLowerCase(), p] as const));
   const focalV7 = routeV7.get(repoName.toLowerCase());

@@ -15,6 +15,7 @@ import {
   nextMilestones, thresholdForRank, findNeighbors, reposVelocity, apexRepo, topRepos,
   buildForensics, token, warnIfRenamed,
 } from "./lib.mjs";
+import { canonicalVelocity } from "./rules.mjs";
 
 token(); // fail fast
 
@@ -85,7 +86,7 @@ try {
   let filled = 0;
   try {
     const routeNow = JSON.parse(readFileSync(join(DATA_DIR, "route.json"), "utf8"));
-    const canon = new Map((routeNow.repos ?? []).map((p) => [p.r.toLowerCase(), p.v7 ?? p.v ?? null]));
+    const canon = new Map((routeNow.repos ?? []).map((p) => [p.r.toLowerCase(), canonicalVelocity(p)]));
     neighbors = neighbors.map((n) => {
       if (n.v != null) return n;
       const c = canon.get(n.r.toLowerCase());
