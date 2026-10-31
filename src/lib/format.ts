@@ -9,10 +9,6 @@ export function fmtCompact(n: number): string {
   return String(n);
 }
 
-export function fmtSigned(n: number): string {
-  return (n >= 0 ? "+" : "") + fmt(Math.round(n));
-}
-
 // "16h" / "2.3d" / "42d" / "4mo" / "1y 8mo" / "8y"
 // Mixed units read at a glance: nobody converts "1.75y" in their head, and
 // "117950d" is noise. Months take over past 60 days, years past one year
