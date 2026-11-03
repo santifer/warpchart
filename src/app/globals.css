@@ -1760,6 +1760,31 @@ body.gx-warping .ghx-lore {
 .deck-audience > * {
   min-width: 0;
 }
+/* locked (no vault chart): each panel is one line, title and its locked
+   strip side by side, instead of a header band over a one-line body */
+@media (min-width: 1024px) {
+  .deck-audience:not(:has(.vault-chart)) .deck-audience-top > section {
+    flex-direction: row;
+    align-items: center;
+  }
+  .deck-audience:not(:has(.vault-chart)) .deck-audience-top > section > header {
+    flex: none;
+    border-bottom: 0;
+  }
+  .deck-audience:not(:has(.vault-chart)) .deck-audience-top > section > header > div:last-child {
+    display: none;
+  }
+  .deck-audience:not(:has(.vault-chart)) .deck-audience-top > section > div:last-child {
+    flex: 1;
+    min-width: 0;
+    padding-top: 0.5rem;
+    padding-bottom: 0.5rem;
+  }
+}
+/* Real usage figures at the KPI strip's size */
+.deck-usage-rows .usage-row > span:nth-child(2) {
+  font-size: 1.875rem;
+}
 /* a short screen with the owner's panels unlocked: both charts give up
    height (whichever cell is taller sets the row) so the mission log keeps a
    few rows instead of only its summary */
