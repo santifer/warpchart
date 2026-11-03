@@ -239,11 +239,11 @@ export default function VitalSignsPanel({
       meta="engineering health · live"
       action={
         <div className="flex items-center gap-4">
-          <span className="hidden sm:block">
+          <span className="vs-operated hidden whitespace-nowrap sm:block">
             <OperatedBy login={vitals.creator.login} />
           </span>
           <span
-            className={`numeral text-label tracking-[0.2em] ${alive ? "text-accent" : "text-warn"}`}
+            className={`numeral whitespace-nowrap text-label tracking-[0.2em] ${alive ? "text-accent" : "text-warn"}`}
           >
             {alive ? "● ALIVE" : "○ MONUMENT"}
           </span>

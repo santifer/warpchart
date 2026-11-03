@@ -1474,6 +1474,14 @@ body.gx-warping .ghx-lore {
     display: none;
   }
 }
+/* a half-width deck cell: the panel's meta and "operated by" yield to the
+   title and the ALIVE state */
+@container (max-width: 760px) {
+  .deck-view header .numeral.hidden.text-label,
+  .deck-view header .vs-operated {
+    display: none !important;
+  }
+}
 /* Next gates: each dense row measures ~43px; a size container query reads
    the content box (padding excluded), so N rows need N×43; the body (the panel's last child)
    is a size container, and rows that would be cut are not drawn at all */
@@ -1785,6 +1793,11 @@ body.gx-warping .ghx-lore {
 @media (min-width: 1280px) and (min-aspect-ratio: 2/1) {
   .deck-view {
     grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+  }
+}
+@media (min-width: 1280px) {
+  .deck-view.deck-view-half {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 

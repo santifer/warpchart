@@ -412,12 +412,12 @@ export default function CommandDeck({
             <button
               onClick={() => setRotate((r) => !r)}
               aria-pressed={rotate}
-              title="cycle the three views every 45 s"
+              title="show GROWTH, HEALTH and AUDIENCE in turn, 45 s each, for a screen left on; press a tab or 1/2/3 to stop"
               className={`numeral hidden border px-2 py-0.5 text-micro tracking-[0.2em] transition-colors sm:inline ${
                 rotate ? "border-accent/60 text-accent" : "border-grid text-dim hover:text-ink"
               }`}
             >
-              {rotate ? "◉" : "○"} ROTATE
+              {rotate ? "■ STOP CYCLE" : "▶ AUTO-CYCLE"}
             </button>
           </nav>
           <span className="numeral hidden text-sm text-dim sm:inline" suppressHydrationWarning>
@@ -514,7 +514,8 @@ export default function CommandDeck({
           .deck-body). Each cell is a fixed slot; charts take `fill` and grow
           to it, list panels scroll inside their own cell. */}
       {view === "health" ? (
-        <div className="deck-view relative">
+        // half and half: PR flow shares the width with Vital Signs
+        <div className="deck-view deck-view-half relative">
           <div className="deck-view-main">
             {/* on a short screen the panel scrolls inside itself; the frame never does */}
             <div className="deck-panel-scroll">
