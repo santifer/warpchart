@@ -906,6 +906,9 @@ export default function GalacticChart({
   // claim tiers first; whoever finds no free tier SHEDS its label and stays
   // as a bare dot (tier -1), with all its data still on hover.
   const tiers: number[] = new Array(items.length).fill(-1);
+  // labels that found no centered slot and hang to the RIGHT of their ship
+  // (text-anchor start) instead of shedding to a bare dot (short deck hero)
+  const startAnchored = new Set<number>();
   {
     // the deck's taller canvas buys two extra tiers per side
     // Tier spacing and the label's own line offsets scale with fs (fs is 1
@@ -949,6 +952,24 @@ export default function GalacticChart({
           break;
         }
         tier++;
+      }
+      if (!fits && twoLine && it.kind === "n" && rows === rowsAbove) {
+        // second chance: the label starts at its ship and runs right, into
+        // the free space past the stack (an unlabeled dot cannot be read on
+        // a wall screen nobody hovers)
+        const xs = ax(it.s) + 6;
+        const span = halfW * 2 - 20;
+        if (xs + span <= W - 8) {
+          for (let t = 0; t < rows.length; t++) {
+            if (xs - 10 >= rows[t] + 8) {
+              rows[t] = xs + span + 10;
+              tiers[i] = t;
+              startAnchored.add(i);
+              break;
+            }
+          }
+        }
+        continue;
       }
       if (!fits) continue; // sheds its label
       rows[tier] = Math.max(rows[tier], x + halfW);
@@ -1436,12 +1457,17 @@ export default function GalacticChart({
                 }
                 const hunts = !isAhead && n.catchDays !== null;
                 const labelAbove = isAhead || hunts;
+                // in the deck a passed ship's block sits a clear gap below the
+                // hero's own label, so it never reads as career-ops' subtitle
+                const belowBase = fitW && deckPx ? 78 : 64;
                 const tierY = labelAbove
                   ? BAND_A_Y - 44 * fs - tiers[i] * TIER_STEP * fs
-                  : BAND_A_Y + 64 * fs + tiers[i] * 34 * fs;
+                  : BAND_A_Y + belowBase * fs + tiers[i] * 34 * fs;
                 // the label block stays inside the canvas: near an edge it slides
                 // inward (the leader line still drops from the ship's own x)
-                const lx = labelX(x, trunc(shortName(n.r)));
+                const anchorStart = startAnchored.has(i);
+                const lx = anchorStart ? x + 6 : labelX(x, trunc(shortName(n.r)));
+                const anchor = anchorStart ? "start" : "middle";
                 const lineY1 = labelAbove ? tierY + 8 * fs : BAND_A_Y + 6;
                 const lineY2 = labelAbove ? BAND_A_Y - 5 : tierY - 24 * fs;
                 return (
@@ -1482,9 +1508,9 @@ export default function GalacticChart({
                       </>
                     ) : null}
                     <circle className="nbr-dot" cx={x} cy={BAND_A_Y} r={3.2} fill={color} opacity={isAhead ? 0.95 : 0.55} />
-                    {nodeSigil(n.r, lx, tierY - 13 * fs, trunc(shortName(n.r)))}
+                    {nodeSigil(n.r, anchorStart ? lx + (trunc(shortName(n.r)).length * 7.6 * fs) / 2 : lx, tierY - 13 * fs, trunc(shortName(n.r)))}
                     <text className="nbr-name" x={lx} y={tierY - 13 * fs} fill={labelAbove ? C.ink : C.faint} fontSize={12.5 * fs}
-                      textAnchor="middle">
+                      textAnchor={anchor}>
                       {trunc(shortName(n.r))}
                     </text>
                     {/* passed ships compress to two lines so the below band
@@ -1507,7 +1533,7 @@ export default function GalacticChart({
                           {/* passed ships compress to two lines so the below band
                               never outgrows its tier spacing or the clip; in a short
                               deck hero every label folds to two lines */}
-                          <text x={lx} y={tierY + 1 * fs} fill={C.dim} fontSize={11 * fs} textAnchor="middle">
+                          <text x={lx} y={tierY + 1 * fs} fill={C.dim} fontSize={11 * fs} textAnchor={anchor}>
                             {fmtSignedGap(n.gap)} · {Math.round(n.v)}/d
                             {!labelAbove ? " · passed" : ""}
                             {twoLine && labelAbove ? <tspan fill={thirdFill}> · {third}</tspan> : null}
