@@ -182,12 +182,13 @@ export function UsagePanel({
                       : null;
                 const missing = d!.npmLast30MissingDays ?? 0;
                 const Row = ({ label, sub, value, title }: { label: string; sub: string; value: string; title?: string }) => (
-                  <div className="usage-row grid grid-cols-[minmax(0,1fr)_auto] items-baseline gap-3 py-1 @[26rem]:grid-cols-[minmax(0,65%)_auto]" title={title}>
-                    <div className="flex min-w-0 flex-col gap-0.5">
-                      <span className="numeral truncate text-micro tracking-[0.15em] text-faint">{label}</span>
-                      <span className="numeral truncate text-micro text-dim">{sub}</span>
-                    </div>
+                  // two grid rows: label and value share the first, the subtitle
+                  // spans the whole cell below, so a long subtitle never pushes
+                  // the value away from its label
+                  <div className="usage-row grid grid-cols-[minmax(0,1fr)_auto] items-baseline gap-x-3 gap-y-0.5 py-1 @[26rem]:grid-cols-[minmax(0,65%)_auto]" title={title}>
+                    <span className="numeral min-w-0 truncate text-micro tracking-[0.15em] text-faint">{label}</span>
                     <span className="numeral shrink-0 text-xl leading-none text-ink">{value}</span>
+                    <span className="numeral col-span-2 truncate text-micro text-dim">{sub}</span>
                   </div>
                 );
                 return (
