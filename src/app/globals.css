@@ -1527,7 +1527,7 @@ body.gx-warping .ghx-lore {
     grid-template-columns: repeat(12, minmax(0, 1fr));
     /* the race leads but does not hog: one line of ships needs less height
        than the dense charts below (independent review 3-nov, passes 1 and 7) */
-    grid-template-rows: minmax(280px, 1.2fr) minmax(210px, 1fr) minmax(210px, 1fr);
+    grid-template-rows: minmax(280px, 1.2fr) minmax(210px, 1.15fr) minmax(210px, 0.85fr);
   }
   .deck-hero,
   .deck-body > section.hud:not(.deck-hero) {

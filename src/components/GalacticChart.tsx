@@ -645,6 +645,15 @@ export default function GalacticChart({
     }
     return 40 + (Math.log1p(d / KD) / bSpan) * (W - 80);
   };
+  // Neighbour label x: a ship inside the frame keeps its label block inside
+  // the canvas (slides inward at an edge); a ship outside the frame is left
+  // alone, so its label is clipped with it instead of being pulled in on top
+  // of a visible one. The tier collision below uses the same x.
+  const labelX = (x: number, name: string) => {
+    if (x < 40 || x > W - 40) return x;
+    const half = (Math.max(name.length, 12) * 7.6 * fs) / 2;
+    return Math.min(Math.max(x, 40 + half), W - 40 - half);
+  };
   // Route-band gate label lift: greedy left-to-right, a label within ~one
   // label width of the previous one on the same line moves up a line.
   const routeLift = (xs: { key: string; x: number }[]) => {
@@ -906,8 +915,8 @@ export default function GalacticChart({
       .sort((a, b) => prio(items[a]) - prio(items[b]) || ax(items[a].s) - ax(items[b].s));
     for (const i of order) {
       const it = items[i];
-      const x = ax(it.s);
       const name = trunc(shortName(it.kind === "n" ? it.n.r : it.p.r));
+      const x = it.kind === "n" ? labelX(ax(it.s), name) : ax(it.s);
       const halfW = (Math.max(name.length, 12) * 7.6 * fs) / 2 + 10;
       // hunters (behind us but closing) label ABOVE the line with the
       // chase: their catch eta is the most urgent number on the chart
@@ -1385,6 +1394,9 @@ export default function GalacticChart({
                 const tierY = labelAbove
                   ? BAND_A_Y - 44 * fs - tiers[i] * TIER_STEP * fs
                   : BAND_A_Y + 64 * fs + tiers[i] * 34 * fs;
+                // the label block stays inside the canvas: near an edge it slides
+                // inward (the leader line still drops from the ship's own x)
+                const lx = labelX(x, trunc(shortName(n.r)));
                 const lineY1 = labelAbove ? tierY + 8 * fs : BAND_A_Y + 6;
                 const lineY2 = labelAbove ? BAND_A_Y - 5 : tierY - 24 * fs;
                 return (
@@ -1424,19 +1436,19 @@ export default function GalacticChart({
                       </>
                     ) : null}
                     <circle className="nbr-dot" cx={x} cy={BAND_A_Y} r={3.2} fill={color} opacity={isAhead ? 0.95 : 0.55} />
-                    {nodeSigil(n.r, x, tierY - 13 * fs, trunc(shortName(n.r)))}
-                    <text className="nbr-name" x={x} y={tierY - 13 * fs} fill={labelAbove ? C.ink : C.faint} fontSize={12.5 * fs}
+                    {nodeSigil(n.r, lx, tierY - 13 * fs, trunc(shortName(n.r)))}
+                    <text className="nbr-name" x={lx} y={tierY - 13 * fs} fill={labelAbove ? C.ink : C.faint} fontSize={12.5 * fs}
                       textAnchor="middle">
                       {trunc(shortName(n.r))}
                     </text>
                     {/* passed ships compress to two lines so the below band
                         never outgrows its tier spacing or the clip */}
-                    <text x={x} y={tierY + 1 * fs} fill={C.dim} fontSize={11 * fs} textAnchor="middle">
+                    <text x={lx} y={tierY + 1 * fs} fill={C.dim} fontSize={11 * fs} textAnchor="middle">
                       {fmtSignedGap(n.gap)} · {Math.round(n.v)}/d
                       {!labelAbove ? " · passed" : ""}
                     </text>
                     {labelAbove ? (
-                      <text x={x} y={tierY + 14 * fs} fontSize={11 * fs} textAnchor="middle"
+                      <text x={lx} y={tierY + 14 * fs} fontSize={11 * fs} textAnchor="middle"
                         fill={hunts ? color : n.receding ? C.warn : C.accent}>
                         {hunts
                           ? unsteadyLabel(n.unsteady)
