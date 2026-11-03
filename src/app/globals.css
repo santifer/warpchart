@@ -1709,6 +1709,17 @@ body.gx-warping .ghx-lore {
 .deck-audience > * {
   min-width: 0;
 }
+/* a short screen with the owner's panels unlocked: both charts give up
+   height (whichever cell is taller sets the row) so the mission log keeps a
+   few rows instead of only its summary */
+@media (max-height: 950px) {
+  .deck-audience .vault-chart {
+    height: 150px !important;
+  }
+  .deck-audience .vrank-chart {
+    height: 175px !important;
+  }
+}
 .deck-audience-top {
   display: grid;
   gap: 0.5rem;

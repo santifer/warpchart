@@ -213,7 +213,7 @@ export default function GodVelocityRank({ repo, compact = false }: { repo: strin
           <span className="numeral text-micro tracking-[0.24em] text-accent/70">◈ GOD MODE</span>
         </div>
       </div>
-      <div style={{ height: H }}>
+      <div className="vrank-chart" style={{ height: H }}>
         <ResponsiveContainer width="100%" height="100%">
           <ComposedChart data={data} margin={{ top: 10, right: 18, left: -14, bottom: 0 }}>
             {TIERS.filter((t) => t.from <= yMax && t.key !== "common").map((t) => (
@@ -364,7 +364,8 @@ export default function GodVelocityRank({ repo, compact = false }: { repo: strin
           </span>
         )}
       </div>
-      <span className="numeral px-1 text-micro text-faint">
+      {/* method note: console only, the deck keeps chart, tiers and legend */}
+      <span className={`numeral px-1 text-micro text-faint ${compact ? "hidden" : ""}`}>
         {state.pts.some((p) => p.inTop === false) ? `where it placed (or would have) among the worldwide top ${top}` : `place among the worldwide top ${top}`} by net new stars that day · lower is better · line = 7-day median · gaps = day not measured · √ scale ·{" "}
         {data.some((p) => p.rec)
           ? `hollow dots${data.some((p) => p.pre && p.rank != null) ? " + dashed line" : ""} = reconstructed from GitHub's star history (current stargazers per Pacific-time day; ~10% of the rank off the live record on a median day, closer at the top)${firstLive ? ` · recorded live since ${dayLabel(firstLive)}` : ""}${filled ? `; ${filled} hollow ${filled === 1 ? "dot" : "dots"} inside the live record ${filled === 1 ? "fills a day" : "fill days"} a cut-short daily sweep left unmeasured, kept out of the median` : ""}`

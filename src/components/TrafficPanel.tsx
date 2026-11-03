@@ -281,7 +281,7 @@ export default function TrafficPanel({ repo, compact = false }: { repo: string; 
       </div>
 
       {/* taller with the band: its 3 legend entries would otherwise eat the plot */}
-      <div className={`${split ? "h-[210px]" : "h-[160px]"} w-full`}>
+      <div className={`vault-chart ${split ? "h-[210px]" : "h-[160px]"} w-full`}>
         <ResponsiveContainer width="100%" height="100%">
           {/* left margin + YAxis width are paired: a busy repo puts 5 digits on
               the axis, and the old -16/40 clipped them to their last 3 ("18377"
@@ -329,7 +329,9 @@ export default function TrafficPanel({ repo, compact = false }: { repo: string; 
         </ResponsiveContainer>
       </div>
 
-      {split && vault.ci ? (
+      {/* the method note is reading for the console; the deck (a wall
+          screen) keeps the chart, its legend and the referrers */}
+      {split && vault.ci && !compact ? (
         <span className="numeral text-micro leading-relaxed text-faint">
           our ci = this repo&apos;s own GitHub Actions checkout jobs, counted per day. A checkout is at least one clone,
           and no month here has run above ~4.7 clones per checkout, so the split is a band: checkouts ×{vault.ci.low} is
