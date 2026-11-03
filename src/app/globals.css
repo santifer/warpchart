@@ -1373,8 +1373,9 @@ body.gx-warping .ghx-lore {
    Every row keeps the same 3-6-3 rhythm, so the gutters line up top to
    bottom and the eye can run down a column. Row 1 gets the most height because the race is the story; rows 2-3 split
    the rest. Each row has a readable floor, so a short laptop screen scrolls
-   the body instead of crushing the charts. Below lg every card stacks with a
-   fixed height so the `fill` charts still have something to fill. */
+   the body instead of crushing the charts. Below 1280 wide or 820 tall it is
+   two columns that scroll; below 640 one. Off the 12-column grid every card has
+   a fixed height so the `fill` charts still have something to fill. */
 .deck-tiles {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1389,12 +1390,13 @@ body.gx-warping .ghx-lore {
     grid-template-columns: repeat(4, minmax(0, 1fr));
   }
 }
-@media (min-width: 1280px) {
+@media (min-width: 1440px) {
   .deck-tiles {
-    /* one row of eight only where eight fit whole (below xl: two rows of 4).
-       the two state numbers lead and get more room; the three named slots
-       carry repo names and an eta line, so they get more than the counters */
-    grid-template-columns: 1.15fr 1.05fr repeat(3, minmax(0, 0.9fr)) 1.1fr 1.2fr 1.2fr;
+    /* one row of eight only where eight fit whole (below 1440: two rows of 4).
+       widths follow content: TODAY carries a delta and "yesterday now",
+       V7D is the shortest number, the named slots carry repo names and an
+       eta line. Order: stars, rank, hour, today, v7d, gate, overtake, threat */
+    grid-template-columns: 1.05fr 1fr 0.9fr 1.1fr 0.8fr 1.1fr 1.15fr 1.1fr;
   }
 }
 .deck-body {
@@ -1440,12 +1442,29 @@ body.gx-warping .ghx-lore {
 .deck-scroll > div:last-child {
   overflow-y: auto;
 }
+/* tablet and small laptop (640-1279): the 3-6-3 grid would crush the charts,
+   so two columns at a readable height and a deliberate scroll; the wide
+   readers (race, ladder, pulse) take the full row */
 @media (min-width: 640px) {
+  .deck-body {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
   .deck-hero {
-    height: 340px;
+    grid-column: 1 / -1;
+    height: 320px;
+  }
+  .deck-ladder,
+  .deck-pulse,
+  .deck-usage {
+    grid-column: 1 / -1;
+  }
+  .deck-body > section.hud:not(.deck-hero) {
+    height: 290px;
   }
 }
-@media (min-width: 1024px) {
+/* the one-screen grid needs room in BOTH directions: a 1280x800 laptop gets
+   the two-column layout and scrolls rather than a crushed bottom row */
+@media (min-width: 1280px) and (min-height: 820px) {
   .deck-body {
     grid-template-columns: repeat(12, minmax(0, 1fr));
     grid-template-rows: minmax(300px, 1.55fr) minmax(210px, 1fr) minmax(210px, 1fr);

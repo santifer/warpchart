@@ -241,7 +241,7 @@ export default function CommandDeck({
         <Tile label="STARS" tone="accent" big sub={`since ${bundle.meta?.created_at?.slice(0, 10) ?? "launch"}`}>
           <LiveNumber value={live.stars} locales="en-US" />
         </Tile>
-        <Tile label="WORLD RANK" big sub="by total stars">
+        <Tile label="RANK" big sub="worldwide">
           {live.rank !== null ? (
             <>
               <span className="text-faint">#</span>
@@ -265,7 +265,7 @@ export default function CommandDeck({
             </span>
           ) : null}
         </Tile>
-        <Tile label="V7D" sub="per day, 7-day">
+        <Tile label="V7D" sub="stars/day, 7d">
           {fmt(live7)}
         </Tile>
         {nextGate ? (
