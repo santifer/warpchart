@@ -1573,6 +1573,38 @@ body.gx-warping .ghx-lore {
     grid-row: 3;
   }
 }
+/* GROWTH, ladder-led layout (under trial, toggled with L): the race is a
+   shorter band on top beside the gates, the daily ladder takes the large
+   cell beside cumulative and world rank, stars/hour runs along the bottom */
+@media (min-width: 1280px) and (min-height: 820px) {
+  .deck-body.deck-body--ladder {
+    grid-template-rows: minmax(250px, 1.5fr) minmax(140px, 1fr) minmax(140px, 1fr) minmax(140px, 0.75fr);
+  }
+  .deck-body--ladder .deck-hero {
+    grid-column: 1 / span 8;
+    grid-row: 1;
+  }
+  .deck-body--ladder .deck-proj {
+    grid-column: 9 / span 4;
+    grid-row: 1;
+  }
+  .deck-body--ladder .deck-ladder {
+    grid-column: 1 / span 8;
+    grid-row: 2 / span 2;
+  }
+  .deck-body--ladder .deck-cum {
+    grid-column: 9 / span 4;
+    grid-row: 2;
+  }
+  .deck-body--ladder .deck-rank {
+    grid-column: 9 / span 4;
+    grid-row: 3;
+  }
+  .deck-body--ladder .deck-vel {
+    grid-column: 1 / -1;
+    grid-row: 4;
+  }
+}
 /* ultrawide (21:9 and wider): wall-panel zoom fills the height; the spare
    width goes to the chart row instead of stretching every card */
 @media (min-width: 1280px) and (min-height: 820px) and (min-aspect-ratio: 2/1) {
@@ -1595,6 +1627,21 @@ body.gx-warping .ghx-lore {
   }
   .deck-rank {
     grid-column: 10 / span 3;
+  }
+  .deck-body.deck-body--ladder {
+    grid-template-rows: minmax(250px, 1.5fr) minmax(140px, 1fr) minmax(140px, 1fr) minmax(140px, 0.75fr);
+  }
+  .deck-body--ladder .deck-hero,
+  .deck-body--ladder .deck-ladder {
+    grid-column: 1 / span 7;
+  }
+  .deck-body--ladder .deck-proj,
+  .deck-body--ladder .deck-cum,
+  .deck-body--ladder .deck-rank {
+    grid-column: 8 / span 5;
+  }
+  .deck-body--ladder .deck-vel {
+    grid-column: 1 / -1;
   }
 }
 /* Real usage as a strip of three when its cell is wide */

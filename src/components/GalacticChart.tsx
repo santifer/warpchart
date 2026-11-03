@@ -142,7 +142,9 @@ export default function GalacticChart({
   const W = deck
     ? Math.min(Math.max(Math.round(deckW ?? 1680), 1200), 4800)
     : fitW
-      ? Math.min(Math.max(Math.round(fitW), 1200), 2400)
+      ? // up to 4000 for the Command Deck's short, wide race band (the
+        // console passes at most 2400)
+        Math.min(Math.max(Math.round(fitW), 1200), 4000)
       : BASE_W;
   const H = deck ? (noRoute ? DECK_LOCAL_H : 740) : BASE_H;
   // 310: the deck's scaled label tiers need the extra headroom above the band
@@ -170,7 +172,7 @@ export default function GalacticChart({
       ? // the Command Deck draws the console chart at its own size: the type
         // is scaled so a label renders at exactly the console's pixel size
         // (console: 1200-unit canvas in a ~1352 px panel on desktop, x1.127)
-        Math.min(1.8, CONSOLE_PX_PER_UNIT * (W / deckPx))
+        Math.min(4.2, CONSOLE_PX_PER_UNIT * (W / deckPx))
       : 1;
   // vertical step between label tiers; the deck's larger type needs a full
   // free line between two stacked labels so they never read as one block
@@ -1774,7 +1776,8 @@ export default function GalacticChart({
           ))}
 
           {inputs.routeLandmarks
-            .filter((p) => Math.abs(bx(p.s) - bx(stars)) > 150)
+            // clear of the "you are here" label, whose width grows with the type
+            .filter((p) => Math.abs(bx(p.s) - bx(stars)) > 150 * Math.max(1, fs))
             .map((p, i) => (
               <g key={p.r}>
                 <line x1={bx(p.s)} y1={BAND_B_Y + 6} x2={bx(p.s)} y2={BAND_B_Y + 26 + (i % 2) * 13 * fs}

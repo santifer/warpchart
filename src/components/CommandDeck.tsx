@@ -224,6 +224,26 @@ export default function CommandDeck({
   const VIEWS = ["growth", "health", "audience"] as const;
   const [view, setView] = useState<(typeof VIEWS)[number]>("growth");
   const [rotate, setRotate] = useState(false);
+  // GROWTH has two layouts under trial (Santiago, 3-nov: "quiero ambos modos,
+  // que se puedan conmutar"): "race" = the star race leads; "ladder" = the
+  // race is a shorter band on top and the daily ladder takes the large cell.
+  // L or the button switches; the choice is kept in this browser.
+  const [growthLayout, setGrowthLayout] = useState<"race" | "ladder">("race");
+  useEffect(() => {
+    try {
+      // read after mount: localStorage does not exist on the server render
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      if (localStorage.getItem("wc_deck_growth") === "ladder") setGrowthLayout("ladder");
+    } catch {}
+  }, []);
+  const toggleLayout = () =>
+    setGrowthLayout((l) => {
+      const next = l === "race" ? "ladder" : "race";
+      try {
+        localStorage.setItem("wc_deck_growth", next);
+      } catch {}
+      return next;
+    });
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const i = ["1", "2", "3"].indexOf(e.key);
@@ -231,6 +251,7 @@ export default function CommandDeck({
         setView(VIEWS[i]);
         setRotate(false);
       }
+      if (e.key === "l" || e.key === "L") toggleLayout();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -270,7 +291,13 @@ export default function CommandDeck({
     const measure = () => {
       const r = { width: el.clientWidth, height: el.clientHeight };
       if (r.height < 120 || r.width < 280) return;
-      const fitW = Math.min(Math.max(Math.round(r.width), 1200), 2400);
+      // ladder layout: the race is a wide, short band, so its canvas takes
+      // the band's own aspect (the 520-unit height stays) instead of being
+      // capped at 2400 and drawn narrow in the middle of the band
+      const fitW =
+        growthLayout === "ladder"
+          ? Math.min(Math.max(Math.round((r.width * 520) / r.height), 1200), 4000)
+          : Math.min(Math.max(Math.round(r.width), 1200), 2400);
       const maxPx = Math.floor(r.height * (fitW / 520));
       // the width the svg actually renders at (hole minus px-2, capped by maxPx)
       const px = Math.min(Math.round(r.width) - 16, maxPx);
@@ -281,7 +308,7 @@ export default function CommandDeck({
     const ro = new ResizeObserver(measure);
     ro.observe(el);
     return () => ro.disconnect();
-  }, []);
+  }, [growthLayout]);
 
   useEffect(() => {
     const el = hostRef.current;
@@ -426,6 +453,15 @@ export default function CommandDeck({
             >
               {rotate ? "■ STOP CYCLE" : "▶ AUTO-CYCLE"}
             </button>
+            {view === "growth" ? (
+              <button
+                onClick={toggleLayout}
+                title="GROWTH layout under trial: race-led or ladder-led (key L); kept in this browser"
+                className="numeral hidden py-0.5 pl-3 text-micro tracking-[0.2em] text-faint transition-colors hover:text-ink sm:inline"
+              >
+                <span className="text-faint">L</span> {growthLayout === "race" ? "RACE-LED" : "LADDER-LED"}
+              </button>
+            ) : null}
           </nav>
           <span className="numeral hidden text-sm text-dim sm:inline" suppressHydrationWarning>
             {new Date(clockMs).toISOString().slice(11, 19)} UTC
@@ -559,7 +595,10 @@ export default function CommandDeck({
       ) : null}
       {/* kept mounted (inline display, which beats the unlayered .deck-body
           rule) so the race keeps its measured canvas across view switches */}
-      <div className="deck-body relative" style={view === "growth" ? undefined : { display: "none" }}>
+      <div
+        className={`deck-body relative ${growthLayout === "ladder" ? "deck-body--ladder" : ""}`}
+        style={view === "growth" ? undefined : { display: "none" }}
+      >
         {/* the race gets the same header as every other card, so the most
             important cell is titled like one */}
         <section className="hud deck-hero relative flex flex-col overflow-hidden">
