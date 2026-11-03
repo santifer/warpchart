@@ -1407,6 +1407,11 @@ body.gx-warping .ghx-lore {
   .deck-body .module-index {
     display: none;
   }
+  /* a phone cannot read the race at all: OVERTAKE and Next gates carry what
+     it says, so the card is not drawn */
+  .deck-hero {
+    display: none;
+  }
 }
 @media (min-width: 1440px) {
   .deck-tiles {
@@ -1464,7 +1469,7 @@ body.gx-warping .ghx-lore {
     display: none;
   }
 }
-/* Next gates: each dense row is ~66px; the body (the panel's last child)
+/* Next gates: each dense row is ~54px; the body (the panel's last child)
    is a size container, and rows that would be cut are not drawn at all */
 .deck-proj > div:last-child {
   container-type: size;
@@ -1475,17 +1480,17 @@ body.gx-warping .ghx-lore {
   padding-top: 0.5rem;
   padding-bottom: 0.5rem;
 }
-@container (max-height: 318px) {
+@container (max-height: 292px) {
   .deck-gates > :nth-child(n + 5) {
     display: none;
   }
 }
-@container (max-height: 258px) {
+@container (max-height: 238px) {
   .deck-gates > :nth-child(n + 4) {
     display: none;
   }
 }
-@container (max-height: 196px) {
+@container (max-height: 184px) {
   .deck-gates > :nth-child(n + 3) {
     display: none;
   }

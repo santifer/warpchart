@@ -34,7 +34,7 @@ export default function Projections({
           const pct = Math.min(100, (live.stars / m.threshold) * 100);
           const date = e.etaDays !== null ? etaDate(e.etaDays, new Date(live.nowMs)) : null;
           return (
-            <div key={m.rank} className="border-b border-grid/60 py-1.5 last:border-b-0">
+            <div key={m.rank} className="border-b border-grid/60 py-1 last:border-b-0">
               <div className="flex items-baseline justify-between gap-3">
                 <span className="font-display text-sm tracking-[0.2em] text-ink">TOP {m.rank}</span>
                 <span className="truncate text-sm text-accent">
@@ -45,10 +45,10 @@ export default function Projections({
                   </span>
                 </span>
               </div>
-              <div className="mt-1.5 h-[2px] w-full bg-grid/60">
+              <div className="mt-1 h-[2px] w-full bg-grid/60">
                 <div className="h-full bg-accent/80" style={{ width: `${pct}%` }} />
               </div>
-              <div className="mt-1 flex justify-between gap-3 text-micro text-dim">
+              <div className="mt-0.5 flex justify-between gap-3 text-micro text-dim">
                 <span className="truncate">gap {fmt(e.gap)} · ≥{fmt(m.threshold)}</span>
                 <span className={`shrink-0 ${m.drift === null ? "text-warn/80" : ""}`}>
                   {m.drift === null ? "drift calibrating" : `+${fmt(Math.round(m.drift))}/d`}

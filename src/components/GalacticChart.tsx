@@ -554,6 +554,23 @@ export default function GalacticChart({
       const hl = log10(stars);
       azLo = hl - HERO_FRAC * span;
       azHi = azLo + span;
+      if (noRoute) {
+        // the deck has no route band to read beside it, so the frame fits the
+        // salient set itself: hero and neighbours spread across the full width
+        // with a ~6 % margin, instead of a fixed 33 % that left the left third
+        // of the main card permanently empty
+        const lo0 = log10(set[0]);
+        const range = log10(set[set.length - 1]) - lo0;
+        // the deck stacks labels in three tiers, so the pairwise label room
+        // the panel needs (spanLegible) is relaxed to a third
+        // floor 0.0004 (~0.1 % in stars), not the panel's 0.004: a tight
+        // cluster (five rivals within ~200 stars) otherwise sat in a third of
+        // the card at the floor's width
+        const fit = Math.max(spanLegible / 3, range * 1.15, 0.0004);
+        azLo = lo0 - (fit - range) / 2;
+        azHi = azLo + fit;
+        span = fit; // the bounds clamp below keeps this span, not the panel's
+      }
       if (azLo < bMin) { azLo = bMin; azHi = bMin + span; } // shifts hero right, never clips
       if (azHi > bMax) azHi = bMax;
     }
