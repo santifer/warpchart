@@ -126,6 +126,10 @@ function Tile({
   // a repo name longer than ~10 characters (code-server, awesome-python…)
   // does not fit a phone's half-width cell at the counters' size
   const long = typeof children === "string" && children.length > 10;
+  // a repo name too long for the tile at desktop size (Prompt-Engineering-
+  // Guide): the value steps down a size before it truncates, so the name
+  // that IS the tile's information stays whole
+  const veryLong = typeof children === "string" && children.length > 16;
   const color =
     tone === "accent" ? "text-accent" : tone === "warn" ? "text-warn" : tone === "dim" ? "text-faint" : "text-ink";
   return (
@@ -138,7 +142,7 @@ function Tile({
       <span className="flex h-8 items-end gap-5">
         <span
           className={`numeral leading-none ${spark ? "shrink-0" : "truncate"} ${
-            big ? "text-2xl sm:text-3xl" : long ? "text-lg sm:text-2xl" : "text-xl sm:text-2xl"
+            big ? "text-2xl sm:text-3xl" : veryLong ? "text-sm 2xl:text-base" : long ? "text-lg sm:text-2xl" : "text-xl sm:text-2xl"
           } ${color} ${
             big && tone === "accent" ? "glow-accent" : ""
           }`}

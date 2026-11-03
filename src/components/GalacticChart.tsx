@@ -174,7 +174,11 @@ export default function GalacticChart({
       : 1;
   // vertical step between label tiers; the deck's larger type needs a full
   // free line between two stacked labels so they never read as one block
-  const TIER_STEP = noRoute ? 50 : 40;
+  // the console chart inside the Command Deck with its type scaled up (a
+  // short hero): each label folds to two lines (name / gap · speed · eta)
+  // so the stack fits the canvas instead of running off its top
+  const twoLine = !deck && !!fitW && !!deckPx && fs > 1.15;
+  const TIER_STEP = noRoute ? 50 : twoLine ? 30 : 40;
   // The auto-zoom keeps its own, older scale: tying the zoom to the bigger
   // type widened the span and pushed the nearest rivals out of the window.
   // Bigger labels are resolved by the deck's extra tiers, not by zooming out.
@@ -909,7 +913,11 @@ export default function GalacticChart({
     // tiers whose text still lands below the LOCAL SYSTEM hint (y ≈ 56).
     const nTiers = deck
       ? Math.max(2, Math.min(5, Math.floor((BAND_A_Y - 69 * fs - 56) / (TIER_STEP * fs)) + 1))
-      : 3;
+      : twoLine
+        ? // only tiers whose name still lands inside the canvas; the rest shed
+          // to bare dots (data on hover), never a clipped half label
+          Math.max(1, Math.min(3, Math.floor((BAND_A_Y - 57 * fs - 8) / (TIER_STEP * fs)) + 1))
+        : 3;
     const rowsAbove: number[] = new Array(nTiers).fill(-1e9); // rightmost occupied edge per tier
     const rowsBelow: number[] = new Array(nTiers).fill(-1e9);
     // label priority: hunters first (the chart's most urgent object must
@@ -1481,26 +1489,37 @@ export default function GalacticChart({
                     </text>
                     {/* passed ships compress to two lines so the below band
                         never outgrows its tier spacing or the clip */}
-                    <text x={lx} y={tierY + 1 * fs} fill={C.dim} fontSize={11 * fs} textAnchor="middle">
-                      {fmtSignedGap(n.gap)} · {Math.round(n.v)}/d
-                      {!labelAbove ? " · passed" : ""}
-                    </text>
-                    {labelAbove ? (
-                      <text x={lx} y={tierY + 14 * fs} fontSize={11 * fs} textAnchor="middle"
-                        fill={hunts ? color : n.receding ? C.warn : C.accent}>
-                        {hunts
+                    {(() => {
+                      const third = hunts
+                        ? unsteadyLabel(n.unsteady)
+                          ? `closing in · ${unsteadyLabel(n.unsteady)}`
+                          : `catches you in ${etaText(n, n.catchDays)}`
+                        : n.receding
                           ? unsteadyLabel(n.unsteady)
-                            ? `closing in · ${unsteadyLabel(n.unsteady)}`
-                            : `catches you in ${etaText(n, n.catchDays)}`
-                          : n.receding
-                            ? unsteadyLabel(n.unsteady)
-                              ? `no firm eta · ${unsteadyLabel(n.unsteady)}`
-                              : "pulling away"
-                            : unsteadyLabel(n.unsteady)
-                              ? `no firm eta · ${unsteadyLabel(n.unsteady)}`
-                              : `eta ${etaText(n, n.etaDays)}`}
-                      </text>
-                    ) : null}
+                            ? `no firm eta · ${unsteadyLabel(n.unsteady)}`
+                            : "pulling away"
+                          : unsteadyLabel(n.unsteady)
+                            ? `no firm eta · ${unsteadyLabel(n.unsteady)}`
+                            : `eta ${etaText(n, n.etaDays)}`;
+                      const thirdFill = hunts ? color : n.receding ? C.warn : C.accent;
+                      return (
+                        <>
+                          {/* passed ships compress to two lines so the below band
+                              never outgrows its tier spacing or the clip; in a short
+                              deck hero every label folds to two lines */}
+                          <text x={lx} y={tierY + 1 * fs} fill={C.dim} fontSize={11 * fs} textAnchor="middle">
+                            {fmtSignedGap(n.gap)} · {Math.round(n.v)}/d
+                            {!labelAbove ? " · passed" : ""}
+                            {twoLine && labelAbove ? <tspan fill={thirdFill}> · {third}</tspan> : null}
+                          </text>
+                          {labelAbove && !twoLine ? (
+                            <text x={lx} y={tierY + 14 * fs} fontSize={11 * fs} textAnchor="middle" fill={thirdFill}>
+                              {third}
+                            </text>
+                          ) : null}
+                        </>
+                      );
+                    })()}
                   </g>
                 );
               }
@@ -1732,10 +1751,19 @@ export default function GalacticChart({
               <g key={p.r}>
                 <line x1={bx(p.s)} y1={BAND_B_Y + 6} x2={bx(p.s)} y2={BAND_B_Y + 26 + (i % 2) * 13 * fs}
                   stroke={C.grid} strokeWidth={1} />
-                <text x={bx(p.s)} y={BAND_B_Y + 38 + (i % 2) * 13 * fs} fill={C.dim} fontSize={11 * fs}
-                  textAnchor="middle">
-                  {shortName(p.r)} · {fmtCompact(p.s)}
-                </text>
+                {(() => {
+                  // near the right edge the label ends at the edge instead of
+                  // running past it ("public-apis · 49(" at 1440)
+                  const txt = `${shortName(p.r)} · ${fmtCompact(p.s)}`;
+                  const half = (txt.length * 6.7 * fs) / 2;
+                  const over = bx(p.s) + half > W - 8;
+                  return (
+                    <text x={over ? W - 8 : bx(p.s)} y={BAND_B_Y + 38 + (i % 2) * 13 * fs} fill={C.dim} fontSize={11 * fs}
+                      textAnchor={over ? "end" : "middle"}>
+                      {txt}
+                    </text>
+                  );
+                })()}
               </g>
             ))}
 
