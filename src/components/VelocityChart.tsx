@@ -58,7 +58,10 @@ export default function VelocityChart({ fill }: { fill?: boolean }) {
             tick={{ fill: C.faint, fontSize: 9 }}
             tickLine={false}
             axisLine={{ stroke: C.grid }}
-            interval={3}
+            // fixed every-4th ticks collide in a narrow deck cell; there the
+            // axis thins itself to whatever fits, keeping both ends
+            interval={fill ? "preserveStartEnd" : 3}
+            minTickGap={fill ? 18 : 5}
           />
           <YAxis
             tick={{ fill: C.faint, fontSize: 9 }}

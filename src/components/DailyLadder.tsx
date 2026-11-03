@@ -150,6 +150,11 @@ export default function DailyLadder({
   const areas = bands?.length ? bandAreas(view, bands, yTop) : [];
   const shown = BAND_TIERS.filter((t) => areas.some((a) => a.tier === t.key));
   const lastBand = bands?.length && view.length ? bandFor(view[view.length - 1].d, bands) : null;
+  const zoneCaption =
+    "zones = stars a day needed to rank top 10 / 50 / 100 / 250 by new stars among the 1,000 most-starred repos, monthly median" +
+    (god && lastBand
+      ? ` · figures for ${monthName(lastBand)}${lastBand.basis === "trailing30" ? ", on the last 30 days (fewer than 7 measured that month)" : ""} (${lastBand.days} days) · ◈ god mode`
+      : "");
 
   return (
     <div
@@ -185,7 +190,10 @@ export default function DailyLadder({
             tick={{ fill: C.faint, fontSize: 9 }}
             tickLine={false}
             axisLine={{ stroke: C.grid }}
-            interval={3}
+            // fixed every-4th ticks collide in a narrow deck cell; there the
+            // axis thins itself to whatever fits, keeping both ends
+            interval={fill ? "preserveStartEnd" : 3}
+            minTickGap={fill ? 18 : 5}
           />
           <YAxis
             yAxisId="day"
@@ -265,19 +273,17 @@ export default function DailyLadder({
       </ResponsiveContainer>
     </div>
       {shown.length > 0 && (
-        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 px-1">
+        // in the deck (fill) the cell is short: the zone definition moves to a
+        // tooltip on the legend so the bars keep the height
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 px-1" title={fill ? zoneCaption : undefined}>
           {shown.map(({ key }) => (
             <span key={key} className="numeral text-micro tracking-[0.18em] text-faint">
-              <span style={{ color: TC[key] }} aria-hidden>◆</span> {tierLabel(key)}
+              {/* the deck keeps the rank and drops the tier name (in the tooltip) */}
+              <span style={{ color: TC[key] }} aria-hidden>◆</span> {fill ? tierLabel(key).split(" · ").pop() : tierLabel(key)}
               {god && lastBand ? ` · ≥${fmt(lastBand.t[key])}/d` : ""}
             </span>
           ))}
-          <span className="numeral text-micro text-faint">
-            zones = stars a day needed to rank top 10 / 50 / 100 / 250 by new stars among the 1,000 most-starred repos, monthly median
-            {god && lastBand
-              ? ` · figures for ${monthName(lastBand)}${lastBand.basis === "trailing30" ? ", on the last 30 days (fewer than 7 measured that month)" : ""} (${lastBand.days} days) · ◈ god mode`
-              : ""}
-          </span>
+          <span className="numeral text-micro text-faint">{fill ? "ⓘ zones" : zoneCaption}</span>
         </div>
       )}
     </div>

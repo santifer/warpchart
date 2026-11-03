@@ -2,13 +2,18 @@
 
 // COMMAND DECK: the whole mission promoted to a fullscreen flight console.
 // It does NOT reinvent any card: it REUSES the exact panels from the console
-// (CumulativeChart, VelocityChart, DailyLadder, RankChart, Projections,
-// PulsePanel, UsagePanel) and only relocates them, with the star race as a
-// big hero on top and the seven telemetry cards in a grid below (the ladder
-// spans two cells). A
-// live KPI strip rides on top. The recharts cards take a `fill` prop so they
-// grow to the cell; on desktop the deck fills the viewport with no scroll,
-// below lg it stacks (hero first) and scrolls. Uses the Fullscreen API when
+// (GalacticChart, VelocityChart, DailyLadder, RankChart, Projections,
+// CurveChart, PulsePanel, UsagePanel) and only relocates them.
+//
+// Layout, read top-left to bottom-right as the questions a captain asks:
+//   bar    who and when (repo, live state, UTC clock, exit)
+//   tiles  the eight glanceable numbers, equal cells, never wrapping
+//   row 1  where am I and what is next: the star race + milestone rail
+//   row 2  how fast: stars per hour → per day → world rank over time
+//   row 3  the long run and whether it is real: cumulative, pulse, usage
+// On desktop it is a 12-column grid that fills the viewport with no page
+// scroll (rows shrink to a readable floor, then the body scrolls); below lg
+// it stacks hero first with fixed card heights. Uses the Fullscreen API when
 // available and falls back to a fixed overlay (iOS Safari has no element
 // fullscreen).
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
@@ -26,54 +31,44 @@ import type { DashboardBundle } from "@/lib/bundle";
 import type { LadderBand } from "@/lib/ladder-bands";
 import type { Dossier } from "@/lib/explorer";
 import type { ChartInputs } from "@/lib/types";
-import { fmt, fmtCompact, fmtEtaDays, fmtEtaRange, shortName } from "@/lib/format";
+import { fmt, fmtEtaRange, shortName } from "@/lib/format";
 import { neighborEtas, milestoneEta, unsteadyLabel, etaText } from "@/lib/projections";
 
-// Big glanceable number for the KPI strip.
-function Metric({
+// One cell of the KPI strip: label, big value, one line of context. Every
+// tile has the same three lines so the strip keeps one baseline and the
+// cells never reflow when a slot is empty.
+function Tile({
   label,
   children,
-  accent,
+  sub,
+  tone = "ink",
   big,
+  title,
 }: {
   label: string;
   children: ReactNode;
-  accent?: boolean;
+  sub?: ReactNode;
+  tone?: "ink" | "accent" | "warn" | "dim";
   big?: boolean;
+  title?: string;
 }) {
+  const color =
+    tone === "accent" ? "text-accent" : tone === "warn" ? "text-warn" : tone === "dim" ? "text-faint" : "text-ink";
   return (
-    <div className="flex flex-col gap-0.5">
-      <span className="module-title !text-micro">{label}</span>
-      <span
-        className={`numeral leading-none ${big ? "text-2xl" : "text-data"} ${
-          accent ? "glow-accent text-accent" : "text-ink"
-        }`}
-      >
-        {children}
+    <div className="deck-tile flex min-w-0 flex-col gap-1 px-3.5 py-2" title={title}>
+      <span className="module-title !text-micro truncate">{label}</span>
+      {/* fixed-height value line, bottom-aligned: big and normal values share
+          one baseline across the strip */}
+      <span className="flex h-8 items-end">
+        <span
+          className={`numeral truncate leading-none ${big ? "text-3xl" : "text-2xl"} ${color} ${
+            big && tone === "accent" ? "glow-accent" : ""
+          }`}
+        >
+          {children}
+        </span>
       </span>
-    </div>
-  );
-}
-
-// A named-by-repo urgent slot in the KPI strip (gate / overtake / threat).
-function Pill({
-  label,
-  name,
-  sub,
-  tone,
-}: {
-  label: string;
-  name: string;
-  sub: string;
-  tone: "accent" | "warn";
-}) {
-  return (
-    <div className="flex min-w-0 max-w-[170px] flex-col gap-0.5">
-      <span className="module-title !text-micro">{label}</span>
-      <span className={`numeral truncate text-data leading-none ${tone === "warn" ? "text-warn" : "text-accent"}`}>
-        {name}
-      </span>
-      <span className="numeral truncate text-micro text-faint">{sub}</span>
+      <span className="numeral truncate text-micro text-faint">{sub ?? "\u00a0"}</span>
     </div>
   );
 }
@@ -123,24 +118,25 @@ export default function CommandDeck({
   }, []);
 
   // Measure the hero hole so the chart canvas matches its aspect: wide cells
-  // get MORE MAP, not scaled-up pixels.
+  // get MORE MAP, not scaled-up pixels. The hole is a grid cell whose size
+  // depends on the viewport AND on the fullscreen transition, so it is
+  // watched with a ResizeObserver rather than guessed from window resizes.
   const heroHole = useRef<HTMLDivElement | null>(null);
   const [canvas, setCanvas] = useState<{ w: number; maxPx: number } | null>(null);
   useEffect(() => {
+    const el = heroHole.current;
+    if (!el) return;
     const measure = () => {
-      const r = heroHole.current?.getBoundingClientRect();
-      if (!r || r.height < 120 || r.width < 280) return;
+      const r = el.getBoundingClientRect();
+      if (r.height < 120 || r.width < 280) return;
       const w = Math.min(Math.max(Math.round((r.width / r.height) * 740), 1000), 2600);
-      setCanvas({ w, maxPx: Math.floor(r.height * (w / 740)) });
+      const next = { w, maxPx: Math.floor(r.height * (w / 740)) };
+      setCanvas((c) => (c && c.w === next.w && c.maxPx === next.maxPx ? c : next));
     };
     measure();
-    window.addEventListener("resize", measure);
-    // fullscreen resize lands a beat after mount; re-measure to catch it
-    const t = setTimeout(measure, 280);
-    return () => {
-      window.removeEventListener("resize", measure);
-      clearTimeout(t);
-    };
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
   }, []);
 
   useEffect(() => {
@@ -188,25 +184,28 @@ export default function CommandDeck({
       .filter((n) => n.gap <= 0 && n.catchDays !== null)
       .sort((a, b) => (a.catchDays ?? 1e9) - (b.catchDays ?? 1e9))[0] ?? null;
 
+  const live7 = Math.round(bundle.v7d);
+  const syncLabel = live.offline ? "SYNC LOST" : live.lastSync === null ? "SYNCING" : "LIVE";
+
   return (
     <div
       ref={hostRef}
-      className="fixed inset-0 z-50 flex flex-col gap-2.5 overflow-hidden bg-void px-3 py-2.5 sm:px-4 sm:py-3"
+      className="fixed inset-0 z-50 flex flex-col gap-2 overflow-hidden bg-void px-3 py-2.5 sm:px-4 sm:py-3"
     >
       <div className="space-backdrop" />
       <div className="space-grid" />
 
-      {/* KPI strip */}
-      <div className="hud relative flex shrink-0 flex-wrap items-center justify-between gap-x-6 gap-y-2 px-4 py-2.5">
+      {/* bar: identity and time, one thin line */}
+      <div className="relative flex shrink-0 items-center justify-between gap-4 px-1">
         <div className="flex min-w-0 items-center gap-3">
           {bundle.meta?.avatar_url ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img
               src={bundle.meta.avatar_url}
               alt=""
-              width={30}
-              height={30}
-              className="h-[30px] w-[30px] border border-grid"
+              width={24}
+              height={24}
+              className="h-6 w-6 shrink-0 border border-grid"
             />
           ) : null}
           <span className="font-display truncate text-sm uppercase tracking-[0.2em] text-star">{repo}</span>
@@ -220,66 +219,11 @@ export default function CommandDeck({
                     : "pulse-dot"
               }
             />
-            <span className="numeral text-micro tracking-[0.2em] text-dim">
-              {live.offline ? "SYNC LOST" : live.lastSync === null ? "SYNCING" : "LIVE"}
-            </span>
+            <span className="numeral text-micro tracking-[0.2em] text-dim">{syncLabel}</span>
           </span>
         </div>
-        <div className="flex flex-wrap items-center gap-x-7 gap-y-2">
-          <Metric label="STARS" accent big>
-            <LiveNumber value={live.stars} locales="en-US" />
-          </Metric>
-          <Metric label="WORLD RANK" big>
-            {live.rank !== null ? (
-              <>
-                <span className="text-faint">#</span>
-                <LiveNumber value={live.rank} locales="en-US" />
-              </>
-            ) : (
-              "n/a"
-            )}
-          </Metric>
-          <Metric label="LAST 60 MIN">
-            <LiveNumber value={live.starsLastHour} locales="en-US" />
-          </Metric>
-          <Metric label="TODAY UTC">
-            <LiveNumber value={live.todayCount} locales="en-US" />
-          </Metric>
-          <Metric label="V7D">{`${fmt(Math.round(bundle.v7d))}/d`}</Metric>
-          {nextGate ? (
-            <Pill
-              label="NEXT GATE"
-              tone="accent"
-              name={`TOP ${nextGate.rank}`}
-              sub={`${fmt(nextGate.gap)} to go · eta ${fmtEtaRange(nextGate.etaDays, nextGate.etaRange)}`}
-            />
-          ) : null}
-          {chase ? (
-            <Pill
-              label="CHASE TARGET"
-              tone="accent"
-              name={shortName(chase.r)}
-              sub={chase.gap <= 0 ? "passed" : `gap ${fmt(chase.gap)} · ${chase.etaDays === null ? "eta n/a" : unsteadyLabel(chase.unsteady) ? `no firm eta · ${unsteadyLabel(chase.unsteady)}` : `eta ${etaText(chase, chase.etaDays)}`}`}
-            />
-          ) : nextOvertake ? (
-            <Pill
-              label="NEXT OVERTAKE"
-              tone="accent"
-              name={shortName(nextOvertake.r)}
-              sub={`gap ${fmt(nextOvertake.gap)} · ${unsteadyLabel(nextOvertake.unsteady) ? `no firm eta · ${unsteadyLabel(nextOvertake.unsteady)}` : `eta ${etaText(nextOvertake, nextOvertake.etaDays)}`}`}
-            />
-          ) : null}
-          {threat ? (
-            <Pill
-              label="INBOUND THREAT"
-              tone="warn"
-              name={shortName(threat.r)}
-              sub={`${unsteadyLabel(threat.unsteady) ? `closing in · ${unsteadyLabel(threat.unsteady)}` : `catches you in ${etaText(threat, threat.catchDays)}`} · ${Math.round(threat.v)}/d`}
-            />
-          ) : null}
-        </div>
-        <div className="flex items-center gap-4">
-          <span className="numeral text-sm text-dim" suppressHydrationWarning>
+        <div className="flex shrink-0 items-center gap-4">
+          <span className="numeral hidden text-sm text-dim sm:inline" suppressHydrationWarning>
             {new Date(clockMs).toISOString().slice(11, 19)} UTC
           </span>
           <button
@@ -291,47 +235,122 @@ export default function CommandDeck({
         </div>
       </div>
 
-      {/* body: the REAL console cards, relocated. the star race is a full-bleed
-          hero whose box matches the chart aspect (so it fills the width with no
-          side bands), and the seven telemetry cards keep their native readable
-          size in the grid below. */}
-      <div className="deck-body relative">
-        <div className="deck-hero-wrap">
-          <section className="hud relative overflow-hidden">
-            <div ref={heroHole} className="absolute inset-0 flex items-center justify-center px-2">
-              {canvas ? (
-                <div className="w-full" style={{ maxWidth: canvas.maxPx }}>
-                  <GalacticChart inputs={inputs} target={target} onPinTarget={onPinTarget} deck deckW={canvas.w} />
-                </div>
-              ) : null}
-            </div>
-            {bundle.apex ? (
-              <span className="numeral pointer-events-none absolute right-3 top-2 z-10 text-micro text-faint">
-                → core {shortName(bundle.apex.r)} · {fmtCompact(bundle.apex.s)} stars
-              </span>
-            ) : null}
-          </section>
-        </div>
+      {/* tiles: the eight numbers worth a glance, in reading order
+          (state → pace → what comes next). Empty slots keep their cell. */}
+      <div className="hud deck-tiles relative shrink-0">
+        <Tile label="STARS" tone="accent" big sub={`since ${bundle.meta?.created_at?.slice(0, 10) ?? "launch"}`}>
+          <LiveNumber value={live.stars} locales="en-US" />
+        </Tile>
+        <Tile label="WORLD RANK" big sub="by total stars">
+          {live.rank !== null ? (
+            <>
+              <span className="text-faint">#</span>
+              <LiveNumber value={live.rank} locales="en-US" />
+            </>
+          ) : (
+            "n/a"
+          )}
+        </Tile>
+        <Tile label="LAST HOUR" sub="rolling 60 min">
+          <LiveNumber value={live.starsLastHour} locales="en-US" />
+        </Tile>
+        <Tile label="TODAY" sub="since 00:00 UTC">
+          <LiveNumber value={live.todayCount} locales="en-US" />
+        </Tile>
+        <Tile label="V7D" sub="per day, 7-day">
+          {fmt(live7)}
+        </Tile>
+        {nextGate ? (
+          <Tile
+            label="NEXT GATE"
+            tone="accent"
+            sub={`${fmt(nextGate.gap)} to go · eta ${fmtEtaRange(nextGate.etaDays, nextGate.etaRange)}`}
+            title={`${fmt(nextGate.gap)} to go · eta ${fmtEtaRange(nextGate.etaDays, nextGate.etaRange)}`}
+          >
+            TOP {nextGate.rank}
+          </Tile>
+        ) : (
+          <Tile label="NEXT GATE" tone="dim" sub="every gate passed">
+            —
+          </Tile>
+        )}
+        {(() => {
+          const n = chase ?? nextOvertake;
+          if (!n)
+            return (
+              <Tile label="OVERTAKE" tone="dim" sub="no neighbor in reach">
+                —
+              </Tile>
+            );
+          const sub =
+            n.gap <= 0
+              ? "passed"
+              : `gap ${fmt(n.gap)} · ${
+                  n.etaDays === null
+                    ? "eta n/a"
+                    : unsteadyLabel(n.unsteady)
+                      ? `no firm eta · ${unsteadyLabel(n.unsteady)}`
+                      : `eta ${etaText(n, n.etaDays)}`
+                }`;
+          return (
+            <Tile label={chase ? "CHASE" : "OVERTAKE"} tone="accent" sub={sub} title={`${n.r} · ${sub}`}>
+              {shortName(n.r)}
+            </Tile>
+          );
+        })()}
+        {threat ? (
+          (() => {
+            const sub = `${
+              unsteadyLabel(threat.unsteady)
+                ? `closing in · ${unsteadyLabel(threat.unsteady)}`
+                : `catches you in ${etaText(threat, threat.catchDays)}`
+            } · ${Math.round(threat.v)}/d`;
+            return (
+              <Tile label="THREAT" tone="warn" sub={sub} title={`${threat.r} · ${sub}`}>
+                {shortName(threat.r)}
+              </Tile>
+            );
+          })()
+        ) : (
+          <Tile label="THREAT" tone="dim" sub="no neighbor closing in">
+            clear
+          </Tile>
+        )}
+      </div>
 
-        <div className="deck-grid">
-          <Panel index="05" title="Velocity, stars per hour" meta="24h vs previous 24h">
-            <VelocityChart />
-          </Panel>
-          <Panel index="02" title="Cumulative stars" meta={`since ${bundle.meta?.created_at?.slice(0, 10) ?? "launch"}`}>
-            <CurveChart repo={repo} fill />
-          </Panel>
-          <Panel index="09" title="World rank over time" meta="hourly snapshots">
-            <RankChart bundle={bundle} />
-          </Panel>
-          <PulsePanel dossier={dossier} index="03" />
-          <UsagePanel dossier={dossier} index="04" />
-          <Panel index="07" title="Daily ladder" meta="full history · night floor 00-05 UTC" className="lg:col-span-2">
-            <DailyLadder bundle={bundle} fill bands={ladderBands} />
-          </Panel>
-          <Panel index="06" title="Milestone projections" meta={`own v7d ${fmt(Math.round(vOwn))}/day`}>
-            <Projections bundle={bundle} compact />
-          </Panel>
-        </div>
+      {/* body: the REAL console cards on a 12-column grid (globals.css
+          .deck-body). Each cell is a fixed slot; charts take `fill` and grow
+          to it, list panels scroll inside their own cell. */}
+      <div className="deck-body relative">
+        <section className="hud deck-hero relative overflow-hidden">
+          <div ref={heroHole} className="absolute inset-0 flex items-center justify-center px-2">
+            {canvas ? (
+              <div className="w-full" style={{ maxWidth: canvas.maxPx }}>
+                <GalacticChart inputs={inputs} target={target} onPinTarget={onPinTarget} deck deckW={canvas.w} />
+              </div>
+            ) : null}
+          </div>
+        </section>
+
+        <Panel index="06" title="Next gates" meta={`v7d ${fmt(live7)}/d`} className="deck-proj deck-scroll">
+          <Projections bundle={bundle} compact />
+        </Panel>
+
+        <Panel index="05" title="Stars / hour" meta="24h vs prev" className="deck-vel">
+          <VelocityChart fill />
+        </Panel>
+        <Panel index="07" title="Daily ladder" meta="night floor 00-05 UTC" className="deck-ladder">
+          <DailyLadder bundle={bundle} fill bands={ladderBands} />
+        </Panel>
+        <Panel index="09" title="World rank" meta="hourly" className="deck-rank">
+          <RankChart bundle={bundle} fill />
+        </Panel>
+
+        <Panel index="02" title="Cumulative" meta={`since ${bundle.meta?.created_at?.slice(0, 10) ?? "launch"}`} className="deck-cum">
+          <CurveChart repo={repo} fill />
+        </Panel>
+        <PulsePanel dossier={dossier} index="03" className="deck-pulse deck-scroll" />
+        <UsagePanel dossier={dossier} index="04" className="deck-usage deck-scroll" />
       </div>
     </div>
   );
