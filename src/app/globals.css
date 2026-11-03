@@ -1514,7 +1514,7 @@ body.gx-warping .ghx-lore {
   }
   .deck-hero {
     grid-column: 1 / -1;
-    height: 320px;
+    height: 440px;
   }
   .deck-ladder,
   .deck-pulse,
@@ -1528,96 +1528,67 @@ body.gx-warping .ghx-lore {
 /* the one-screen grid needs room in BOTH directions: a 1280x800 laptop gets
    the two-column layout and scrolls rather than a crushed bottom row */
 @media (min-width: 1280px) and (min-height: 820px) {
+  /* GROWTH: the console's star chart leads (8 of 12 columns, two rows, the
+     aspect its 520-unit canvas wants); gates and world rank beside it; the
+     three pace charts along the bottom. Pulse and usage live in HEALTH. */
   .deck-body {
     grid-template-columns: repeat(12, minmax(0, 1fr));
-    /* the race leads but does not hog: one line of ships needs less height
-       than the dense charts below (independent review 3-nov, passes 1 and 7) */
-    grid-template-rows: minmax(270px, 1.05fr) minmax(230px, 1.3fr) minmax(210px, 0.8fr);
+    grid-template-rows: minmax(220px, 1fr) minmax(220px, 1fr) minmax(230px, 1.05fr);
   }
   .deck-hero,
   .deck-body > section.hud:not(.deck-hero) {
     height: auto;
   }
   .deck-hero {
-    grid-column: 1 / span 9;
-    grid-row: 1;
+    grid-column: 1 / span 8;
+    grid-row: 1 / span 2;
   }
   .deck-proj {
-    grid-column: 10 / span 3;
+    grid-column: 9 / span 4;
     grid-row: 1;
+  }
+  .deck-rank {
+    grid-column: 9 / span 4;
+    grid-row: 2;
   }
   .deck-vel {
     grid-column: 1 / span 3;
+    grid-row: 3;
   }
   .deck-ladder {
     grid-column: 4 / span 6;
-  }
-  .deck-rank {
-    grid-column: 10 / span 3;
+    grid-row: 3;
   }
   .deck-cum {
-    grid-column: 1 / span 3;
-  }
-  .deck-pulse {
-    grid-column: 4 / span 6;
-  }
-  .deck-usage {
     grid-column: 10 / span 3;
+    grid-row: 3;
   }
 }
-/* a 900px-tall laptop: the list cells of row 3 need ~230px to show every
-   figure whole, so the race gives up a little height there */
-@media (min-width: 1280px) and (min-height: 820px) and (max-height: 1000px) {
-  .deck-body {
-    grid-template-rows: minmax(236px, 1fr) minmax(230px, 1.35fr) 232px;
-  }
-}
-
-/* ultrawide (21:9 and wider): the wall-panel zoom fills the height, and the
-   spare width becomes a fourth column instead of stretching every card.
-     row 1  star race (3)            · next gates (1)
-     row 2  stars/hour · daily ladder (2) · world rank · cumulative
-     row 3  maintenance pulse (2)    · real usage (2), both one-line strips
-   Charts read near to far, left to right: 24 h, 62 days, since launch. */
+/* ultrawide (21:9 and wider): wall-panel zoom fills the height; the spare
+   width goes to the chart row instead of stretching every card */
 @media (min-width: 1280px) and (min-height: 820px) and (min-aspect-ratio: 2/1) {
   .deck-body {
-    grid-template-columns: minmax(0, 1fr) minmax(0, 2fr) minmax(0, 1fr) minmax(0, 1fr);
-    grid-template-rows: minmax(250px, 1fr) minmax(260px, 1.55fr) auto;
+    grid-template-columns: repeat(12, minmax(0, 1fr));
+    grid-template-rows: minmax(220px, 1fr) minmax(220px, 1fr) minmax(250px, 1.1fr);
   }
   .deck-hero {
-    grid-column: 1 / span 3;
-    grid-row: 1;
+    grid-column: 1 / span 7;
   }
-  .deck-proj {
-    grid-column: 4;
-    grid-row: 1;
+  .deck-proj,
+  .deck-rank {
+    grid-column: 8 / span 5;
   }
   .deck-vel {
-    grid-column: 1;
-    grid-row: 2;
+    grid-column: 1 / span 3;
   }
   .deck-ladder {
-    grid-column: 2;
-    grid-row: 2;
-  }
-  .deck-rank {
-    grid-column: 3;
-    grid-row: 2;
+    grid-column: 4 / span 6;
   }
   .deck-cum {
-    grid-column: 4;
-    grid-row: 2;
-  }
-  .deck-pulse {
-    grid-column: 1 / span 2;
-    grid-row: 3;
-  }
-  .deck-usage {
-    grid-column: 3 / span 2;
-    grid-row: 3;
+    grid-column: 10 / span 3;
   }
 }
-/* Real usage as a strip of three when its cell is wide (ultrawide row 3) */
+/* Real usage as a strip of three when its cell is wide */
 @container (min-width: 720px) {
   .deck-usage-rows {
     display: grid;
@@ -1627,9 +1598,37 @@ body.gx-warping .ghx-lore {
   .deck-usage-rows > * {
     border-top-width: 0 !important;
   }
-  /* in the strip each column is narrow: label and value share it 1fr/auto */
   .deck-usage-rows .usage-row {
     grid-template-columns: minmax(0, 1fr) auto !important;
+  }
+}
+
+/* deck views 2 and 3: one main column of wide panels and a side column,
+   scrolling inside the frame when the panels are taller than the screen */
+.deck-view {
+  display: grid;
+  gap: 0.5rem;
+  grid-template-columns: minmax(0, 1fr);
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  align-content: start;
+}
+.deck-view-main,
+.deck-view-side {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  min-width: 0;
+}
+@media (min-width: 1280px) {
+  .deck-view {
+    grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+  }
+}
+@media (min-width: 1280px) and (min-aspect-ratio: 2/1) {
+  .deck-view {
+    grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
   }
 }
 
