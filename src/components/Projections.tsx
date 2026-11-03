@@ -39,7 +39,10 @@ export default function Projections({
                 <span className="font-display text-sm tracking-[0.2em] text-ink">TOP {m.rank}</span>
                 <span className="truncate text-sm text-accent">
                   {fmtEtaRange(e.etaDays, e.etaRange)}
-                  {date && e.gap > 0 && e.etaDays && e.etaDays <= 365 ? <span className="ml-1.5 text-dim">{date}</span> : null}
+                  {/* past a year the date is false precision: a dash keeps the column */}
+                  <span className="ml-1.5 inline-block min-w-[3.25rem] text-right text-dim">
+                    {date && e.gap > 0 && e.etaDays && e.etaDays <= 365 ? date : "—"}
+                  </span>
                 </span>
               </div>
               <div className="mt-1.5 h-[2px] w-full bg-grid/60">

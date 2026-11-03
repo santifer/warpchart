@@ -191,18 +191,18 @@ export function UsagePanel({
                         <Row label="NPM INSTALLS · 30D" sub={lastNpm ? `through ${lastNpm}` : d!.npmPkg ?? ""} value={est} title={d!.npmPkg ?? undefined} />
                         {missing > 0 && d!.npmLast30 !== null ? (
                           <span className="numeral block pb-1 text-micro leading-snug text-dim">
-                            {fmt(d!.npmLast30)} measured + {missing} days npm did not record, estimated
+                            {fmt(d!.npmLast30)} measured + {missing} unrecorded days, estimated
                           </span>
                         ) : null}
                       </div>
                     ) : null}
                     {ch && ch.length ? (
-                      <Row label={`CLONES · SINCE ${since}`} sub={`events, not people · through ${lastClone}`} value={fmtCompact(cloneTotal)} />
+                      <Row label={`CLONE EVENTS · SINCE ${since}`} sub={`not people · through ${lastClone}`} value={fmtCompact(cloneTotal)} />
                     ) : null}
                     {d!.uniqueCloners14d !== null ? (
                       <Row
                         label="UNIQUE CLONERS · 14D"
-                        sub={d!.uniqueCloners14dAt ? `deduplicated by GitHub · ${fmtDay(d!.uniqueCloners14dAt)}` : "deduplicated by GitHub"}
+                        sub={d!.uniqueCloners14dAt ? `GitHub's dedup · ${fmtDay(d!.uniqueCloners14dAt)}` : "GitHub's dedup"}
                         value={fmtCompact(d!.uniqueCloners14d)}
                       />
                     ) : null}

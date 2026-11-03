@@ -222,7 +222,7 @@ export default function CurveChart({ repo, fill }: { repo: string; fill?: boolea
       {/* the deck cell is short: the caption stays one line (full text on
           hover) and the button shrinks, so the curve keeps the height */}
       <div className={`flex items-center justify-between gap-2 ${fill ? "" : "flex-wrap"}`}>
-        <span className={`numeral text-micro text-faint ${fill ? "min-w-0 truncate" : ""}`}>
+        <span className={`numeral text-micro text-faint ${fill ? "line-clamp-2 min-w-0" : ""}`}>
           {exactWide
             ? "exact api timestamps + the recent window recorded EXACTLY, daily — our own record beyond GitHub's 40K cap"
             : seam !== null
@@ -235,8 +235,9 @@ export default function CurveChart({ repo, fill }: { repo: string; fill?: boolea
           onClick={() => setRun((r) => r + 1)}
           className={`numeral shrink-0 border border-grid text-micro tracking-[0.2em] text-dim transition-colors hover:border-accent/50 hover:text-accent ${fill ? "px-2 py-0.5" : "px-3 py-1.5"}`}
           title="replay the curve"
+          aria-label="replay the curve"
         >
-          ↻ REPLAY
+          {fill ? "↻" : "↻ REPLAY"}
         </button>
       </div>
     </div>

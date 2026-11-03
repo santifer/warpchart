@@ -409,7 +409,19 @@ export default function CommandDeck({
           .deck-body). Each cell is a fixed slot; charts take `fill` and grow
           to it, list panels scroll inside their own cell. */}
       <div className="deck-body relative">
-        <section className="hud deck-hero relative overflow-hidden">
+        {/* the race gets the same header as every other card, so the most
+            important cell is titled like one */}
+        <section className="hud deck-hero relative flex flex-col overflow-hidden">
+          <header className="flex shrink-0 items-center justify-between gap-3 border-b border-grid px-4 py-2 sm:px-5">
+            <div className="flex min-w-0 items-baseline gap-3">
+              <span className="module-index shrink-0">01 /</span>
+              <h2 className="module-title truncate">Star race</h2>
+            </div>
+            <span className="numeral hidden truncate text-label text-dim sm:block">
+              local system above · route to the #1 below
+            </span>
+          </header>
+          <div className="relative min-h-0 flex-1">
           <div ref={heroHole} className="absolute inset-0 flex items-center justify-center px-2">
             {canvas ? (
               <div className="w-full" style={{ maxWidth: canvas.maxPx }}>
@@ -417,27 +429,28 @@ export default function CommandDeck({
               </div>
             ) : null}
           </div>
+          </div>
         </section>
 
-        <Panel index="01" title="Next gates" meta={`v7d ${fmt(live7)}/d`} className="deck-proj deck-scroll">
+        <Panel index="02" title="Next gates" meta={`v7d ${fmt(live7)}/d`} className="deck-proj deck-scroll">
           <Projections bundle={bundle} compact dense />
         </Panel>
 
-        <Panel index="02" title="Stars / hour" meta="24h vs prev · UTC" className="deck-vel">
+        <Panel index="03" title="Stars / hour" meta="24h vs prev · UTC" className="deck-vel">
           <VelocityChart fill />
         </Panel>
-        <Panel index="03" title="Daily ladder" meta="night floor 00-05 UTC" className="deck-ladder">
+        <Panel index="04" title="Daily ladder" meta="night floor 00-05 UTC" className="deck-ladder">
           <DailyLadder bundle={bundle} fill bands={ladderBands} />
         </Panel>
-        <Panel index="04" title="World rank" meta="hourly" className="deck-rank">
+        <Panel index="05" title="World rank" meta="hourly" className="deck-rank">
           <RankChart bundle={bundle} fill />
         </Panel>
 
-        <Panel index="05" title="Cumulative" meta={`since ${bundle.meta?.created_at?.slice(0, 10) ?? "launch"}`} className="deck-cum">
+        <Panel index="06" title="Cumulative" meta={`since ${bundle.meta?.created_at?.slice(0, 10) ?? "launch"}`} className="deck-cum">
           <CurveChart repo={repo} fill />
         </Panel>
-        <PulsePanel dossier={dossier} index="06" className="deck-pulse deck-scroll" />
-        <UsagePanel dossier={dossier} index="07" className="deck-usage deck-scroll" compact />
+        <PulsePanel dossier={dossier} index="07" className="deck-pulse deck-scroll" />
+        <UsagePanel dossier={dossier} index="08" className="deck-usage deck-scroll" compact />
       </div>
     </div>
   );

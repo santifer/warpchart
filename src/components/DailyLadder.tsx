@@ -145,6 +145,9 @@ export default function DailyLadder({
   // every era legible — the axis re-fits as you pan back toward the viral start.
   const dayMax = Math.max(1, ...view.map((r) => Math.max(r.stars, r.ma7 ?? 0)));
   const floorMax = Math.max(1, ...view.map((r) => r.floor ?? 0));
+  // the deck has no right axis: the night-floor series is labelled directly
+  // with its latest value (rounded, it is a rate of whole stars)
+  const lastFloor = [...view].reverse().find((r) => r.floor !== null)?.floor ?? null;
   const canPan = all.length > visible;
   const yTop = Math.ceil(dayMax * 1.05);
 
@@ -285,7 +288,7 @@ export default function DailyLadder({
         // series key and the zones, and the zone definition moves to a tooltip
         // on it, so the bars keep the height
         <div
-          className={`flex flex-wrap items-center gap-x-4 gap-y-1 px-1 ${fill ? "justify-center" : ""}`}
+          className={`flex flex-wrap items-center gap-y-1 px-1 ${fill ? "justify-center gap-x-3" : "gap-x-4"}`}
           title={fill && shown.length ? zoneCaption : undefined}
         >
           {fill ? (
@@ -297,7 +300,8 @@ export default function DailyLadder({
                 <span style={{ color: C.ink }} aria-hidden>━</span> 7d avg
               </span>
               <span className="numeral text-micro text-faint">
-                <span style={{ color: C.warn }} aria-hidden>┅</span> night floor (/h)
+                <span style={{ color: C.warn }} aria-hidden>┅</span> night floor
+                {lastFloor !== null ? <span className="text-ink"> {Math.round(lastFloor)}/h</span> : null}
               </span>
             </>
           ) : null}
@@ -308,7 +312,7 @@ export default function DailyLadder({
               {god && lastBand ? ` · ≥${fmt(lastBand.t[key])}/d` : ""}
             </span>
           ))}
-          {shown.length ? <span className="numeral text-micro text-faint">{fill ? "ⓘ zones" : zoneCaption}</span> : null}
+          {shown.length ? <span className="numeral text-micro text-faint">{fill ? "ⓘ" : zoneCaption}</span> : null}
         </div>
       )}
     </div>

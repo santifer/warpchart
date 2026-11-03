@@ -1517,7 +1517,7 @@ body.gx-warping .ghx-lore {
     grid-template-columns: repeat(12, minmax(0, 1fr));
     /* the race leads but does not hog: its labels are sparse, and the rows
        below are the dense charts that need height (independent review 3-nov) */
-    grid-template-rows: minmax(280px, 1.35fr) minmax(215px, 1fr) minmax(215px, 1fr);
+    grid-template-rows: minmax(300px, 1.45fr) minmax(210px, 1fr) minmax(210px, 1fr);
   }
   .deck-hero,
   .deck-body > section.hud:not(.deck-hero) {
@@ -1548,6 +1548,13 @@ body.gx-warping .ghx-lore {
   }
   .deck-usage {
     grid-column: 10 / span 3;
+  }
+}
+/* a 900px-tall laptop: the list cells of row 3 need ~230px to show every
+   figure whole, so the race gives up a little height there */
+@media (min-width: 1280px) and (min-height: 820px) and (max-height: 940px) {
+  .deck-body {
+    grid-template-rows: minmax(270px, 1.25fr) minmax(200px, 1fr) minmax(232px, 1.12fr);
   }
 }
 
