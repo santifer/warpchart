@@ -194,7 +194,7 @@ export default function Dashboard({
           }}
           log={{
             meta: "auto-detected from telemetry",
-            node: <MissionLog events={bundle.events} captain={bundle.captain} />,
+            node: <MissionLog events={bundle.events.slice(-20)} captain={bundle.captain} />,
           }}
         />
         </RaceProvider>

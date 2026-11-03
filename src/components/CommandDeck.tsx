@@ -530,25 +530,22 @@ export default function CommandDeck({
         </div>
       ) : null}
       {view === "audience" ? (
-        <div className="deck-view relative">
-          {/* The race panel's single curve repeats GROWTH's cumulative, so the
-              deck gives its room to the mission log; locked panels fold to a
-              line, and the race stays a click away in the console. */}
-          <div className="deck-view-main">
+        // three full-width bands: locked panels folded to a line, adoption as
+        // one strip of figures, and the mission log filling the rest in
+        // columns (the race's single curve repeats GROWTH, so it is left out)
+        <div className="deck-audience relative">
+          <div className="deck-audience-top">
             <Panel index="01" title="Traffic vault" meta="private · kept past GitHub's 14-day window">
               <TrafficPanel repo={repo} compact />
             </Panel>
-            <Panel index="02" title="Mission log" meta="auto-detected from telemetry" className="deck-log">
-              <MissionLog events={bundle.events} captain={bundle.captain} />
-            </Panel>
-          </div>
-          <div className="deck-view-side">
-            <Panel index="03" title="Daily velocity rank" meta="by new stars each day">
+            <Panel index="02" title="Daily velocity rank" meta="by new stars each day">
               <GodVelocityRank repo={repo} compact />
             </Panel>
-            {/* adoption reads with audience, not with repo health */}
-            <UsagePanel dossier={dossier} index="04" compact />
           </div>
+          <UsagePanel dossier={dossier} index="03" compact className="deck-usage-wide" />
+          <Panel index="04" title="Mission log" meta="auto-detected from telemetry" className="deck-log deck-log-cols">
+            <MissionLog events={bundle.events} captain={bundle.captain} />
+          </Panel>
         </div>
       ) : null}
       {/* kept mounted (inline display, which beats the unlayered .deck-body

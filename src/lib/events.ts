@@ -17,7 +17,10 @@ export function detectEvents(
   history: Snapshot[],
   dailyAll: DayPoint[],
   spikes: Spike[] = [],
-  extra: MissionEvent[] = []
+  extra: MissionEvent[] = [],
+  // 20 for feeds and the alerts cron (unchanged); the dashboard bundle asks
+  // for more so the Command Deck's full-width log can show them
+  limit = 20,
 ): MissionEvent[] {
   const events: MissionEvent[] = [...extra];
   if (history.length) {
@@ -82,7 +85,7 @@ export function detectEvents(
   }
 
   events.sort((x, y) => (x.ts < y.ts ? -1 : 1));
-  return events.slice(-20);
+  return events.slice(-limit);
 }
 
 // One sober, data-driven line about the latest completed day.

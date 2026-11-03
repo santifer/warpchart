@@ -144,7 +144,7 @@ export function UsagePanel({
       className={className}
       delay={delay}
     >
-      <div className="flex min-h-[150px] flex-col gap-3 py-1">
+      <div className={`flex flex-col gap-3 py-1 ${compact ? "" : "min-h-[150px]"}`}>
         {hasUsage ? (
           <>
             {(() => {

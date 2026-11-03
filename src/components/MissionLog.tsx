@@ -33,7 +33,7 @@ export default function MissionLog({
         </p>
       ) : null}
       {reversed.length ? (
-        <ul className="flex flex-col gap-1.5">
+        <ul className="mission-log-list flex flex-col gap-1.5">
           {reversed.map((e, i) => (
             <li key={`${e.ts}-${i}`} className="numeral flex min-w-0 items-baseline gap-3 text-data">
               <span className={`shrink-0 ${GLYPH[e.kind].cls}`}>{GLYPH[e.kind].g}</span>

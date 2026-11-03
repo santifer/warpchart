@@ -1633,10 +1633,90 @@ body.gx-warping .ghx-lore {
 .deck-log > div:last-child {
   overflow-y: auto;
 }
-/* PR flow's chart takes a height that scales with the screen (recharts needs
-   a definite height, not a flex grow), so the panel fills its cell with data */
+/* PR flow's chart takes the height its cell has left: the deck wrapper is a
+   flex column down to the chart, and the chart grows (recharts reads the
+   resolved height of a flex item fine once every ancestor has min-height 0) */
+.deck-view-side > .deck-panel-scroll:last-child {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.deck-view-side > .deck-panel-scroll:last-child > section {
+  flex: 1;
+  min-height: 0;
+}
+.deck-view-side > .deck-panel-scroll:last-child > section > div:last-child {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+.deck-view-side > .deck-panel-scroll:last-child > section > div:last-child > * {
+  min-height: 0;
+}
 .deck-view .pr-flow-chart {
-  height: clamp(200px, calc(100vh - 640px), 520px);
+  flex: 1 1 0;
+  min-height: 150px;
+  height: auto;
+}
+.deck-view .pr-flow-body {
+  flex: 1;
+  min-height: 0;
+}
+.deck-view .pr-flow-queue {
+  flex: 1;
+  min-height: 0;
+}
+/* AUDIENCE: three bands, the last one flexible to the frame's bottom */
+.deck-audience {
+  display: grid;
+  gap: 0.5rem;
+  grid-template-rows: auto auto minmax(0, 1fr);
+  align-content: stretch;
+  flex: 1;
+  min-height: 0;
+}
+.deck-audience-top {
+  display: grid;
+  gap: 0.5rem;
+  grid-template-columns: minmax(0, 1fr);
+}
+@media (min-width: 1024px) {
+  .deck-audience-top {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+.deck-usage-wide {
+  container-type: inline-size;
+  height: auto !important;
+}
+.deck-log-cols {
+  min-height: 0;
+}
+.deck-log-cols > div:last-child {
+  overflow: hidden;
+  -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 24px), transparent);
+  mask-image: linear-gradient(to bottom, #000 calc(100% - 24px), transparent);
+}
+@media (min-width: 1024px) {
+  .deck-log-cols .mission-log-list {
+    display: block;
+    column-width: 26rem;
+    column-gap: 3rem;
+    column-fill: balance;
+  }
+  .deck-log-cols .mission-log-list > li {
+    break-inside: avoid;
+    margin-bottom: 0.375rem;
+  }
+  .deck-log-cols > div:last-child > div {
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+  }
+  .deck-log-cols > div:last-child > div > ul {
+    flex: 1;
+    min-height: 0;
+  }
 }
 /* a short laptop (<=950 px tall): Vital Signs drops its operations row in the
    deck (the console keeps it), so the view fits without scrolling */
@@ -1644,9 +1724,9 @@ body.gx-warping .ghx-lore {
   .deck-view .deck-short-hide {
     display: none;
   }
-  /* and PR flow's chart keeps a readable floor without pushing past the frame */
-  .deck-view .pr-flow-chart {
-    height: clamp(160px, calc(100vh - 690px), 260px);
+  /* PR flow's method note goes; its legend stays with the chart */
+  .deck-view .pr-flow-note {
+    display: none;
   }
 }
 .deck-panel-scroll {

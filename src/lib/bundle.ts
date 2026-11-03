@@ -205,7 +205,7 @@ export function buildBundle(
   // Hourly surge attribution is house-only (attribution.json never exists for a
   // tenant's data), so it merges only into the house Mission Log.
   const surges = src ? [] : (loadAttribution()?.surges ?? []);
-  const events = detectEvents(history, dailyAll, spikes, surgeEvents(surges));
+  const events = detectEvents(history, dailyAll, spikes, surgeEvents(surges), 60);
   const captain = captainsLog(dailyAll, latest?.rank ?? null);
 
   // engagement: fork/star ratio vs the top 1000 population
