@@ -153,14 +153,16 @@ export default function ContributorChart({
   // cell gives a tall chart and the type stays at a readable 11 px.
   const box = compact ? measured : null;
   const W = box ? Math.max(320, box.w) : 960;
-  const TH = box ? Math.max(110, box.h) : LBL_DEFAULT + 8;
+  const TH = box ? Math.max(140, box.h) : LBL_DEFAULT + 8;
   const fz = box ? 11 : 9;
   const X0 = 8,
     X1 = W - (box ? 60 : 52),
     CT = box ? 18 : 12,
     LBL = TH - (box ? 6 : 8),
     HB = LBL - (box ? 20 : 18),
-    HT = box ? HB - Math.max(44, Math.round((HB - CT) * 0.3)) : 116,
+    // short box: the bars yield first (24-70 units) so the curve keeps a
+    // readable slope instead of collapsing to a line
+    HT = box ? HB - Math.min(70, Math.max(24, Math.round((HB - CT) * 0.3))) : 116,
     CB = box ? HT - 22 : 102;
   const x = (t: number) => X0 + ((t - t0) / (endMs - t0)) * (X1 - X0);
   const yMax = Math.max(50, Math.ceil(N / 50) * 50);

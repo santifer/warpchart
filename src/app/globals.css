@@ -1794,7 +1794,10 @@ body.gx-warping .ghx-lore {
 @media (min-width: 1024px) and (max-width: 1700px) {
   .deck-audience:not(:has(.vault-chart)) .deck-audience-top .module-title,
   .deck-audience:not(:has(.vault-chart)) .deck-audience-top .locked-status {
-    letter-spacing: 0.08em;
+    letter-spacing: 0.04em;
+  }
+  .deck-audience:not(:has(.vault-chart)) .deck-audience-top .module-index {
+    display: none;
   }
   .deck-audience:not(:has(.vault-chart)) .deck-audience-top > section > div:last-child {
     padding-top: 0.5rem;
@@ -1916,7 +1919,7 @@ body.gx-warping .ghx-lore {
     display: none;
   }
   .deck-view .contrib-box {
-    min-height: 110px !important;
+    min-height: 140px !important;
   }
 }
 @media (max-height: 950px) {
@@ -1924,9 +1927,11 @@ body.gx-warping .ghx-lore {
   /* PR flow's method note (bots left out, today excluded) is a disclosure:
      it stays, on one line that truncates */
   .deck-view .pr-flow-note {
-    white-space: nowrap;
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
     overflow: hidden;
-    text-overflow: ellipsis;
+    line-height: 1.35;
   }
 }
 .deck-panel-scroll {
