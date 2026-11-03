@@ -1652,21 +1652,25 @@ body.gx-warping .ghx-lore {
 /* PR flow's chart takes the height its cell has left: the deck wrapper is a
    flex column down to the chart, and the chart grows (recharts reads the
    resolved height of a flex item fine once every ancestor has min-height 0) */
-.deck-view-side > .deck-panel-scroll:last-child {
+.deck-view-side > .deck-panel-scroll:last-child,
+.deck-view-main > .deck-panel-scroll:last-child {
   display: flex;
   flex-direction: column;
   overflow: hidden;
 }
-.deck-view-side > .deck-panel-scroll:last-child > section {
+.deck-view-side > .deck-panel-scroll:last-child > section,
+.deck-view-main > .deck-panel-scroll:last-child > section {
   flex: 1;
   min-height: 0;
 }
-.deck-view-side > .deck-panel-scroll:last-child > section > div:last-child {
+.deck-view-side > .deck-panel-scroll:last-child > section > div:last-child,
+.deck-view-main > .deck-panel-scroll:last-child > section > div:last-child {
   display: flex;
   flex-direction: column;
   min-height: 0;
 }
-.deck-view-side > .deck-panel-scroll:last-child > section > div:last-child > * {
+.deck-view-side > .deck-panel-scroll:last-child > section > div:last-child > *,
+.deck-view-main > .deck-panel-scroll:last-child > section > div:last-child > * {
   min-height: 0;
 }
 .deck-view .pr-flow-chart {
@@ -1745,6 +1749,8 @@ body.gx-warping .ghx-lore {
   .deck-view .deck-short-hide {
     display: none;
   }
+}
+@media (max-height: 950px) {
   /* the side column gives PR flow what Pulse does not need */
   .deck-view-side > :first-child {
     flex: none;

@@ -250,7 +250,9 @@ export default function VitalSignsPanel({
         </div>
       }
     >
-      <div className="flex flex-col gap-6 py-1">
+      {/* deck: the body fills the panel and the contributor chart takes the
+          height that is left, so nothing sits empty under the fingerprint */}
+      <div className={`flex flex-col gap-6 py-1 ${compact ? "h-full min-h-0" : ""}`}>
         {/* ═══ ACT 1 · THE THESIS — the worldwide activity rank ═══ */}
         <div className="flex flex-col gap-2">
           <span className="numeral text-micro tracking-[0.28em] text-faint">
@@ -273,7 +275,7 @@ export default function VitalSignsPanel({
 
         {/* ═══ ACT 2 · THE PEOPLE — who builds this, measured daily ═══ */}
         {cm ? (
-          <div className="flex flex-col gap-3 border-t border-grid pt-5">
+          <div className={`flex flex-col gap-3 border-t border-grid pt-5 ${compact ? "min-h-0 flex-1" : ""}`}>
             <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
               <a
                 href={`https://github.com/${repo}/graphs/contributors`}
