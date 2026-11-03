@@ -52,7 +52,9 @@ export default function GodVelocityRank({ repo, compact = false }: { repo: strin
   const { resolved } = useThemeMode();
   const TC = TIER_COLOR[resolved];
   const [state, setState] = useState<State>({ kind: "locked" });
-  const [range, setRange] = useState<0 | 90 | 30>(0); // 0 = ALL
+  // 0 = ALL. The deck opens on 90 days, the window its neighbours (ladder,
+  // world rank, traffic) show; ALL stays one click away
+  const [range, setRange] = useState<0 | 90 | 30>(compact ? 90 : 0);
 
   useEffect(() => {
     // starts (and, without a token, stays) locked; the teaser shows while the

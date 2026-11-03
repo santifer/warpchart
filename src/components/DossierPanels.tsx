@@ -196,8 +196,13 @@ export function UsagePanel({
                   <div className="deck-usage-rows flex w-full flex-col divide-y divide-grid/60 [container-type:inline-size]">
                     {est !== null ? (
                       <div>
-                        <Row label="NPM INSTALLS · 30D" sub={lastNpm ? `through ${lastNpm}` : d!.npmPkg ?? ""} value={est} title={d!.npmPkg ?? undefined} />
-                        {missing > 0 && d!.npmLast30 !== null ? (
+                        {/* deck strip: the estimate's disclosure joins the date on
+                            one line (both stay visible), so the strip is one line
+                            shorter on a short screen */}
+                        <Row label="NPM INSTALLS · 30D"
+                          sub={`${lastNpm ? `through ${lastNpm}` : d!.npmPkg ?? ""}${compact && missing > 0 && d!.npmLast30 !== null ? ` · ${fmt(d!.npmLast30)} measured + ${missing}d est.` : ""}`}
+                          value={est} title={d!.npmPkg ?? undefined} />
+                        {missing > 0 && d!.npmLast30 !== null && !compact ? (
                           <span className="numeral block pb-1 text-micro leading-snug text-dim">
                             {fmt(d!.npmLast30)} measured + {missing} days estimated
                           </span>

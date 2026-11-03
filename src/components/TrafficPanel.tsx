@@ -174,7 +174,8 @@ export default function TrafficPanel({ repo, compact = false }: { repo: string; 
   const rows = view.map((d) => {
     const b = !people ? d.ciBand : null;
     return {
-      label: d.d.slice(5).replace("-", "/"),
+      // "Sep 4", the date format of every other chart on the page and the deck
+      label: new Date(`${d.d}T00:00:00Z`).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" }),
       views: people ? d.viewsU : d.views,
       clones: people ? d.clonesU : d.clones,
       ciMin: b?.ciMin ?? null,
