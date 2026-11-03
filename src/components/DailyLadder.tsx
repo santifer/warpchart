@@ -15,7 +15,8 @@
 // owner's god mode adds the cut-off figures and each day's zone in the tooltip.
 import { useMemo, useRef, useState, useSyncExternalStore } from "react";
 import {
-  ComposedChart, Bar, Line, Scatter, XAxis, YAxis, CartesianGrid, Tooltip,
+  ComposedChart,
+  ReferenceLine, Bar, Line, Scatter, XAxis, YAxis, CartesianGrid, Tooltip,
   Legend, ResponsiveContainer, ReferenceArea,
 } from "recharts";
 import { useLive } from "./LiveProvider";
@@ -186,8 +187,34 @@ export default function DailyLadder({
     >
     <div ref={ref} className={`w-full touch-pan-y ${fill ? "min-h-0 flex-1" : "h-[250px]"}`} style={{ cursor: canPan ? "ew-resize" : undefined }}>
       <ResponsiveContainer width="100%" height="100%">
-        <ComposedChart data={view} margin={{ top: 6, right: fill ? 20 : 4, left: -14, bottom: 0 }}>
-          {areas.map((a) => (
+        <ComposedChart data={view} margin={{ top: 6, right: fill ? 48 : 4, left: -14, bottom: 0 }}>
+          {/* deck: thresholds as thin neutral lines, labelled at the right
+              edge (FT style); tinted zones and their swatch legend read as
+              colours nobody could match in a short cell */}
+          {fill
+            ? areas
+                .filter((a) => a.y1 > 0 && a.y1 < yTop)
+                .map((a) => (
+                  <ReferenceLine
+                    key={`t-${a.key}`}
+                    yAxisId="day"
+                    segment={[
+                      { x: a.x1, y: a.y1 },
+                      { x: a.x2, y: a.y1 },
+                    ]}
+                    stroke={C.dim}
+                    strokeOpacity={0.55}
+                    strokeDasharray="3 3"
+                    ifOverflow="hidden"
+                    label={
+                      view.length && a.x2 === view[view.length - 1].label
+                        ? { value: `top ${rankOf(a.tier)}`, position: "right", fill: C.dim, fontSize: 10 }
+                        : undefined
+                    }
+                  />
+                ))
+            : null}
+          {!fill && areas.map((a) => (
             <ReferenceArea
               key={a.key}
               yAxisId="day"
@@ -329,7 +356,12 @@ export default function DailyLadder({
               </span>
             </>
           ) : null}
-          {shown.map(({ key }) => (
+          {fill && shown.length ? (
+            <span className="numeral text-micro text-faint">
+              <span style={{ color: C.dim }} aria-hidden>┄</span> top-N thresholds
+            </span>
+          ) : null}
+          {!fill && shown.map(({ key }) => (
             <span key={key} className="numeral text-micro tracking-[0.18em] text-faint">
               {/* the deck keeps the rank and drops the tier name (in the tooltip) */}
               {/* zones are background bands: a swatch in the deck, so the ◆ glyph

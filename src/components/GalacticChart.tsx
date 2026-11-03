@@ -1640,11 +1640,12 @@ export default function GalacticChart({
                           <BadgeSigil badgeKey={mainClass} size={sz} />
                         </g>
                       ) : null}
-                      <text x={lx} y={BAND_A_Y + 26} fill={C.white} fontSize={12.5 * fs}
+                      {/* the name clears the hero's own ship at any type scale */}
+                      <text x={lx} y={BAND_A_Y + 14 + 12 * fs} fill={C.white} fontSize={12.5 * fs}
                         textAnchor="middle" fontWeight={700}>
                         {repoName}
                       </text>
-                      <text x={lx} y={BAND_A_Y + 26 + 15 * fs} fill={C.accent} fontSize={11.5 * fs}
+                      <text x={lx} y={BAND_A_Y + 14 + 27 * fs} fill={C.accent} fontSize={11.5 * fs}
                         textAnchor="middle">
                         {fmt(stars)} ★
                       </text>

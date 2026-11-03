@@ -1474,8 +1474,8 @@ body.gx-warping .ghx-lore {
     display: none;
   }
 }
-/* Next gates: each dense row measures 53px; a size container query reads
-   the content box (padding excluded), so N rows need N×53; the body (the panel's last child)
+/* Next gates: each dense row measures ~43px; a size container query reads
+   the content box (padding excluded), so N rows need N×43; the body (the panel's last child)
    is a size container, and rows that would be cut are not drawn at all */
 .deck-proj > div:last-child {
   container-type: size;
@@ -1486,17 +1486,17 @@ body.gx-warping .ghx-lore {
   padding-top: 0.5rem;
   padding-bottom: 0.5rem;
 }
-@container (max-height: 264px) {
+@container (max-height: 224px) {
   .deck-gates > :nth-child(n + 5) {
     display: none;
   }
 }
-@container (max-height: 211px) {
+@container (max-height: 172px) {
   .deck-gates > :nth-child(n + 4) {
     display: none;
   }
 }
-@container (max-height: 158px) {
+@container (max-height: 128px) {
   .deck-gates > :nth-child(n + 3) {
     display: none;
   }
