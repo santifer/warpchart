@@ -18,7 +18,7 @@
 // fullscreen).
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import LiveNumber from "./LiveNumber";
-import GalacticChart from "./GalacticChart";
+import GalacticChart, { DECK_LOCAL_H } from "./GalacticChart";
 import Panel from "./Panel";
 import CurveChart from "./CurveChart";
 import VelocityChart from "./VelocityChart";
@@ -203,8 +203,8 @@ export default function CommandDeck({
     const measure = () => {
       const r = el.getBoundingClientRect();
       if (r.height < 120 || r.width < 280) return;
-      const w = Math.min(Math.max(Math.round((r.width / r.height) * 740), 1000), 2600);
-      const next = { w, maxPx: Math.floor(r.height * (w / 740)) };
+      const w = Math.min(Math.max(Math.round((r.width / r.height) * DECK_LOCAL_H), 1000), 2600);
+      const next = { w, maxPx: Math.floor(r.height * (w / DECK_LOCAL_H)) };
       setCanvas((c) => (c && c.w === next.w && c.maxPx === next.maxPx ? c : next));
     };
     measure();
@@ -418,14 +418,14 @@ export default function CommandDeck({
               <h2 className="module-title truncate">Star race</h2>
             </div>
             <span className="numeral hidden truncate text-label text-dim sm:block">
-              local system above · route to the #1 below
+              your neighbors by stars · gates in Next gates
             </span>
           </header>
           <div className="relative min-h-0 flex-1">
           <div ref={heroHole} className="absolute inset-0 flex items-center justify-center px-2">
             {canvas ? (
               <div className="w-full" style={{ maxWidth: canvas.maxPx }}>
-                <GalacticChart inputs={inputs} target={target} onPinTarget={onPinTarget} deck deckW={canvas.w} />
+                <GalacticChart inputs={inputs} target={target} onPinTarget={onPinTarget} deck deckW={canvas.w} noRoute />
               </div>
             ) : null}
           </div>

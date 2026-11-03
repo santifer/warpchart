@@ -28,6 +28,8 @@ const BASE_W = 1200;
 // canvas (real room measured from the screen, not scaled pixels) inside
 // the component.
 const BASE_H = 520;
+// deck canvas without the route band: band A's clip (556) plus a margin
+export const DECK_LOCAL_H = 572;
 const BASE_BAND_A_Y = 200; // headroom above keeps three label tiers clear of the header
 const BASE_BAND_B_Y = 436;
 const BASE_CLIP_BOTTOM = 345;
@@ -94,6 +96,7 @@ export default function GalacticChart({
   liveLocals = false,
   deck = false,
   deckW,
+  noRoute = false,
   fitW,
   charted,
 }: {
@@ -114,6 +117,10 @@ export default function GalacticChart({
   // ultrawide monitors get MORE MAP (wider scale, more label room) instead
   // of dead side bands. ViewBox units ~= screen pixels at deck scale.
   deckW?: number;
+  // Command Deck only: drop band B (route to the core). Its gates are the
+  // deck's Next gates panel, and the ~40 % of canvas height it held goes to
+  // the local system, so every label renders proportionally larger.
+  noRoute?: boolean;
   // Same idea for wide inline showcases (landing spotlight): the measured
   // container width becomes the canvas width, so type stays at design size
   // and wide monitors get more map instead of giant letters.
@@ -127,10 +134,12 @@ export default function GalacticChart({
     : fitW
       ? Math.min(Math.max(Math.round(fitW), 1200), 2400)
       : BASE_W;
-  const H = deck ? 740 : BASE_H;
+  const H = deck ? (noRoute ? DECK_LOCAL_H : 740) : BASE_H;
   // 310: the deck's scaled label tiers need the extra headroom above the band
   // to clear the LOCAL SYSTEM hint line; below-band tiers still end above the clip
-  const BAND_A_Y = deck ? 310 : BASE_BAND_A_Y;
+  // without the route band the deck lowers band A into the room it freed, so
+  // three label tiers fit above it at the larger noRoute type
+  const BAND_A_Y = deck ? (noRoute ? 380 : 310) : BASE_BAND_A_Y;
   const CLIP_BOTTOM = deck ? 556 : BASE_CLIP_BOTTOM;
   const BAND_B_Y = deck ? 654 : BASE_BAND_B_Y;
   // Label scale. In deck mode the canvas width varies a lot with the hero's
@@ -140,7 +149,11 @@ export default function GalacticChart({
   // label renders at about hole width / 1550 (fs × hole / W): ~0.9× in the
   // race's 9-column slot on a 1920 screen. Line offsets that stack two
   // labels grow with fs too, so the bigger type never overprints.
-  const fs = deck ? Math.min(1.8, Math.max(0.95, W / 1550)) : 1;
+  const fs = deck
+    ? noRoute
+      ? Math.min(2.2, Math.max(1.1, W / 1300))
+      : Math.min(1.8, Math.max(0.95, W / 1550))
+    : 1;
   // The auto-zoom keeps its own, older scale: tying the zoom to the bigger
   // type widened the span and pushed the nearest rivals out of the window.
   // Bigger labels are resolved by the deck's extra tiers, not by zooming out.
@@ -1576,6 +1589,8 @@ export default function GalacticChart({
             ) : null}
           </g>
 
+          {!noRoute ? (
+          <>
           {/* viewport connectors */}
           <line x1={40} y1={CLIP_BOTTOM} x2={vx0} y2={BAND_B_Y - 15}
             stroke={C.grid} strokeWidth={1} strokeDasharray="3 5" opacity={0.8} />
@@ -1745,6 +1760,8 @@ export default function GalacticChart({
               you are here{rank ? ` · #${rank}` : ""}
             </text>
           </g>
+          </>
+          ) : null}
         </svg>
 
         {scan ? (
