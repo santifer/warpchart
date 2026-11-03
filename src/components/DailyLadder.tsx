@@ -15,7 +15,8 @@
 // owner's god mode adds the cut-off figures and each day's zone in the tooltip.
 import { useMemo, useRef, useState, useSyncExternalStore } from "react";
 import {
-  ComposedChart, Bar, Line, Scatter, XAxis, YAxis, CartesianGrid, Tooltip,
+  ComposedChart,
+  ReferenceLine, Bar, Line, Scatter, XAxis, YAxis, CartesianGrid, Tooltip,
   Legend, ResponsiveContainer, ReferenceArea,
 } from "recharts";
 import { useLive } from "./LiveProvider";
@@ -38,13 +39,15 @@ interface Row {
 }
 
 // The compact panel shows ~1 month and pans back over the repo's FULL history;
-// the full-screen deck (fill) shows ~3 months at once. A `wide` panel spans the
+// the full-screen deck (fill) shows the World rank window (62 days). A `wide` panel spans the
 // whole console row on desktop (it used to share it with the heatmap), so it
 // shows TWICE the days at the same bar width; below lg it is one column, as
 // wide as before, and keeps the month.
 const VISIBLE_COMPACT = 31;
 const VISIBLE_WIDE = 62;
-const VISIBLE_FILL = 93;
+// the deck shows the same 62 days as its World rank panel beside it, so a
+// rank climb and the star days behind it read against one date range
+const VISIBLE_FILL = 62;
 
 const LG = "(min-width: 1024px)";
 function subscribeLg(cb: () => void) {
@@ -109,7 +112,10 @@ export default function DailyLadder({
       const cause = causeByDay.get(p.d) ?? null;
       return {
         d: p.d,
-        label: p.d.slice(5).replace("-", "/"),
+        // the deck writes every date as "Aug 3", like its other panels
+        label: fill
+          ? new Date(`${p.d}T00:00:00Z`).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" })
+          : p.d.slice(5).replace("-", "/"),
         stars,
         ma7: bundle.ma7[i],
         floor: floorByDay.get(p.d) ?? null,
@@ -117,7 +123,7 @@ export default function DailyLadder({
         cause,
       };
     });
-  }, [bundle.daily, bundle.ma7, bundle.floor, bundle.spikes, live.todayCount, todayKey]);
+  }, [bundle.daily, bundle.ma7, bundle.floor, bundle.spikes, live.todayCount, todayKey, fill]);
 
   const span = fill ? VISIBLE_FILL : wide && lg ? VISIBLE_WIDE : VISIBLE_COMPACT;
   const visible = Math.min(span, all.length);
@@ -142,8 +148,23 @@ export default function DailyLadder({
   // every era legible — the axis re-fits as you pan back toward the viral start.
   const dayMax = Math.max(1, ...view.map((r) => Math.max(r.stars, r.ma7 ?? 0)));
   const floorMax = Math.max(1, ...view.map((r) => r.floor ?? 0));
+  // the deck has no right axis: the night-floor series is labelled directly
+  // with its latest value (rounded, it is a rate of whole stars)
+  const lastFloor = [...view].reverse().find((r) => r.floor !== null)?.floor ?? null;
   const canPan = all.length > visible;
-  const yTop = Math.ceil(dayMax * 1.05);
+  // deck: even 1-2-5 steps and a domain that ends ON a labelled tick
+  // (0 · 250 · … · 1000), so the top of the scale is readable
+  const dayStep = (() => {
+    const raw = (dayMax * 1.02) / 4;
+    const mag = Math.pow(10, Math.floor(Math.log10(Math.max(raw, 1))));
+    return [1, 2, 2.5, 5, 10].map((k) => k * mag).find((x) => x >= raw) ?? 10 * mag;
+  })();
+  const yTop = fill ? Math.ceil((dayMax * 1.02) / dayStep) * dayStep : Math.ceil(dayMax * 1.05);
+  const dayTicks = (() => {
+    const out: number[] = [];
+    for (let v = 0; v <= yTop + 1e-9; v += dayStep) out.push(Math.round(v));
+    return out;
+  })();
 
   // zones for the visible window, clipped to the re-fitted axis; the legend
   // names only the zones on screen and quotes the newest visible month
@@ -166,8 +187,64 @@ export default function DailyLadder({
     >
     <div ref={ref} className={`w-full touch-pan-y ${fill ? "min-h-0 flex-1" : "h-[250px]"}`} style={{ cursor: canPan ? "ew-resize" : undefined }}>
       <ResponsiveContainer width="100%" height="100%">
-        <ComposedChart data={view} margin={{ top: 6, right: 4, left: -14, bottom: 0 }}>
-          {areas.map((a) => (
+        <ComposedChart data={view} margin={{ top: 6, right: fill ? 66 : 4, left: -14, bottom: 0 }}>
+          {/* deck: thresholds as thin neutral lines, labelled at the right
+              edge (FT style); tinted zones and their swatch legend read as
+              colours nobody could match in a short cell */}
+          {fill
+            ? areas
+                .filter((a) => a.y1 > 0 && a.y1 <= yTop)
+                .map((a) => (
+                  <ReferenceLine
+                    key={`t-${a.key}`}
+                    yAxisId="day"
+                    segment={[
+                      { x: a.x1, y: a.y1 },
+                      { x: a.x2, y: a.y1 },
+                    ]}
+                    stroke={C.dim}
+                    strokeOpacity={0.55}
+                    strokeDasharray="3 3"
+                    ifOverflow="hidden"
+                    label={
+                      view.length && a.x2 === view[view.length - 1].label
+                        ? { value: `top ${rankOf(a.tier)}`, position: "right", offset: 8, fill: C.dim, fontSize: 10 }
+                        : !areas.some((n) => n.tier === a.tier && n.key.slice(0, 7) > a.key.slice(0, 7) && n.y1 > 0 && n.y1 <= yTop)
+                          ? // its next month runs above the axis: name it where it leaves
+                            { value: `top ${rankOf(a.tier)} ↑`, position: "insideTopRight", fill: C.dim, fontSize: 10 }
+                          : undefined
+                    }
+                  />
+                ))
+            : null}
+          {/* deck: the vertical step where a threshold changes month to
+              month, so each tier reads as one continuous stepped line */}
+          {fill
+            ? BAND_TIERS.flatMap(({ key }) => {
+                const seq = areas.filter((a) => a.tier === key && a.y1 > 0);
+                return seq.slice(1).map((b, i) => {
+                  const a = seq[i];
+                  const ya = Math.min(a.y1, yTop);
+                  const yb = Math.min(b.y1, yTop);
+                  if (ya === yb) return null;
+                  return (
+                    <ReferenceLine
+                      key={`s-${b.key}`}
+                      yAxisId="day"
+                      segment={[
+                        { x: b.x1, y: ya },
+                        { x: b.x1, y: yb },
+                      ]}
+                      stroke={C.dim}
+                      strokeOpacity={0.55}
+                      strokeDasharray="3 3"
+                      ifOverflow="hidden"
+                    />
+                  );
+                });
+              })
+            : null}
+          {!fill && areas.map((a) => (
             <ReferenceArea
               key={a.key}
               yAxisId="day"
@@ -179,7 +256,8 @@ export default function DailyLadder({
               // the velocity-rank opacity is tuned for thin lines; behind
               // bars the dark theme's green, blue and purple vanished, so they
               // get more. Legendary already carries its own boost: more reads brown
-              fillOpacity={tierFillOpacity(a.tier, resolved, resolved === "dark" && a.tier !== "legendary" ? 1.5 : 1)}
+              // in the deck the zones are context, not content: half strength
+              fillOpacity={tierFillOpacity(a.tier, resolved, (resolved === "dark" && a.tier !== "legendary" ? 1.5 : 1) * (fill ? 0.3 : 1))}
               stroke="none"
               ifOverflow="hidden"
             />
@@ -187,19 +265,21 @@ export default function DailyLadder({
           <CartesianGrid stroke={C.grid} strokeDasharray="2 6" vertical={false} />
           <XAxis
             dataKey="label"
-            tick={{ fill: C.faint, fontSize: 9 }}
+            tick={{ fill: C.faint, fontSize: fill ? 11 : 9 }}
             tickLine={false}
             axisLine={{ stroke: C.grid }}
-            // fixed every-4th ticks collide in a narrow deck cell; there the
-            // axis thins itself to whatever fits, keeping both ends
-            interval={fill ? "preserveStartEnd" : 3}
-            minTickGap={fill ? 18 : 5}
+            // the deck labels one day every 14, counted back from today, the
+            // same marks as the World rank axis beside it
+            ticks={fill ? view.filter((r) => (Math.round(Date.parse(`${todayKey}T00:00:00Z`) / 864e5) - Math.round(Date.parse(`${r.d}T00:00:00Z`) / 864e5)) % 14 === 0).map((r) => r.label) : undefined}
+            interval={fill ? 0 : 3}
+            minTickGap={fill ? 0 : 5}
           />
           <YAxis
             yAxisId="day"
             domain={[0, yTop]}
+            ticks={fill ? dayTicks : undefined}
             allowDataOverflow
-            tick={{ fill: C.faint, fontSize: 9 }}
+            tick={{ fill: C.faint, fontSize: fill ? 11 : 9 }}
             tickLine={false}
             axisLine={false}
             width={42}
@@ -209,10 +289,13 @@ export default function DailyLadder({
             orientation="right"
             domain={[0, Math.ceil(floorMax * 1.1)]}
             allowDataOverflow
-            tick={{ fill: C.warn, fontSize: 9, opacity: 0.7 }}
+            // a second numbered axis invites comparing heights that are not
+            // comparable: the deck keeps the night-floor line but drops its
+            // scale (values stay in the tooltip)
+            tick={fill ? false : { fill: C.warn, fontSize: 9, opacity: 0.7 }}
             tickLine={false}
             axisLine={false}
-            width={34}
+            width={fill ? 0 : 34}
           />
           <Tooltip
             cursor={{ fill: C.accentSoft }}
@@ -244,27 +327,31 @@ export default function DailyLadder({
               return null;
             }}
           />
-          <Legend
+          {/* the deck folds the series key into the one legend row below */}
+          {!fill && <Legend
             wrapperStyle={{ fontSize: 10, fontFamily: "var(--font-jbmono)", color: C.dim }}
             formatter={(v) =>
               v === "stars" ? "stars/day" : v === "ma7" ? "7d avg" : "night floor (/h)"
             }
-          />
+          />}
           <Bar yAxisId="day" dataKey="stars" fill={C.accent} fillOpacity={0.55} maxBarSize={16} isAnimationActive={false} />
           <Line
             yAxisId="day" dataKey="ma7" stroke={C.ink} strokeWidth={1.4}
             dot={false} type="monotone" connectNulls isAnimationActive={false}
           />
           <Line
-            yAxisId="floor" dataKey="floor" stroke={C.warn} strokeWidth={1}
+            // deck: orange is for alerts only, so the night floor goes neutral
+            yAxisId="floor" dataKey="floor" stroke={fill ? C.dim : C.warn} strokeWidth={1}
             strokeDasharray="5 3" dot={false} type="monotone" connectNulls isAnimationActive={false}
           />
           <Scatter
-            yAxisId="day" dataKey="spike" fill={C.warn} legendType="none" isAnimationActive={false}
+            // deck: the cause markers are white, so they never read as the
+            // orange TOP 10 zone in the legend
+            yAxisId="day" dataKey="spike" fill={fill ? C.ink : C.warn} legendType="none" isAnimationActive={false}
             shape={(props: { cx?: number; cy?: number }) => (
               <path
                 d={`M ${props.cx} ${(props.cy ?? 0) - 9} l 4 4 l -4 4 l -4 -4 Z`}
-                fill={C.warn}
+                fill={fill ? C.ink : C.warn}
                 opacity={0.95}
               />
             )}
@@ -272,18 +359,49 @@ export default function DailyLadder({
         </ComposedChart>
       </ResponsiveContainer>
     </div>
-      {shown.length > 0 && (
-        // in the deck (fill) the cell is short: the zone definition moves to a
-        // tooltip on the legend so the bars keep the height
-        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 px-1" title={fill ? zoneCaption : undefined}>
-          {shown.map(({ key }) => (
+      {(fill || shown.length > 0) && (
+        // in the deck (fill) the cell is short: ONE legend row carries the
+        // series key and the zones, and the zone definition moves to a tooltip
+        // on it, so the bars keep the height
+        <div
+          className={`flex flex-wrap items-center gap-y-1 px-1 ${fill ? "justify-center gap-x-3" : "gap-x-4"}`}
+          title={fill && shown.length ? zoneCaption : undefined}
+        >
+          {fill ? (
+            <>
+              <span className="numeral text-micro text-faint">
+                <span style={{ color: C.accent }} aria-hidden>▮</span> stars/day
+              </span>
+              <span className="numeral text-micro text-faint">
+                <span style={{ color: C.ink }} aria-hidden>━</span> 7d avg
+              </span>
+              {bundle.spikes.length ? (
+                <span className="numeral text-micro text-faint" title="a day with a known cause (post, launch, mention); hover the bar">
+                  <span style={{ color: C.ink }} aria-hidden>◆</span> event
+                </span>
+              ) : null}
+              <span className="numeral text-micro text-faint">
+                <span style={{ color: C.dim }} aria-hidden>┅</span> night floor
+                {lastFloor !== null ? <span className="text-ink"> {Math.round(lastFloor)}/h</span> : null}
+              </span>
+            </>
+          ) : null}
+          {fill && shown.length ? (
+            <span className="numeral text-micro text-faint">
+              <span style={{ color: C.dim }} aria-hidden>┄</span> top-N thresholds
+            </span>
+          ) : null}
+          {!fill && shown.map(({ key }) => (
             <span key={key} className="numeral text-micro tracking-[0.18em] text-faint">
               {/* the deck keeps the rank and drops the tier name (in the tooltip) */}
-              <span style={{ color: TC[key] }} aria-hidden>◆</span> {fill ? tierLabel(key).split(" · ").pop() : tierLabel(key)}
+              {/* zones are background bands: a swatch in the deck, so the ◆ glyph
+                  means only "event" there */}
+              <span style={{ color: TC[key] }} aria-hidden>{fill ? "▮" : "◆"}</span>{" "}
+              {fill ? (tierLabel(key).split(" · ").pop() ?? "").replace("TOP ", "") : tierLabel(key)}
               {god && lastBand ? ` · ≥${fmt(lastBand.t[key])}/d` : ""}
             </span>
           ))}
-          <span className="numeral text-micro text-faint">{fill ? "ⓘ zones" : zoneCaption}</span>
+          {shown.length && !fill ? <span className="numeral text-micro text-faint">{zoneCaption}</span> : null}
         </div>
       )}
     </div>

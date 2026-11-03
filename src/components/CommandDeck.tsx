@@ -18,7 +18,7 @@
 // fullscreen).
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import LiveNumber from "./LiveNumber";
-import GalacticChart from "./GalacticChart";
+import GalacticChart, { DECK_LOCAL_H } from "./GalacticChart";
 import Panel from "./Panel";
 import CurveChart from "./CurveChart";
 import VelocityChart from "./VelocityChart";
@@ -31,8 +31,70 @@ import type { DashboardBundle } from "@/lib/bundle";
 import type { LadderBand } from "@/lib/ladder-bands";
 import type { Dossier } from "@/lib/explorer";
 import type { ChartInputs } from "@/lib/types";
-import { fmt, fmtEtaRange, shortName } from "@/lib/format";
-import { neighborEtas, milestoneEta, unsteadyLabel, etaText } from "@/lib/projections";
+import { fmt, shortName } from "@/lib/format";
+import { neighborEtas, unsteadyLabel, etaText } from "@/lib/projections";
+import { rankDelta7d, weekOverWeekPct } from "@/lib/deck-deltas";
+
+// Trend glyph for a KPI tile (the "stat with sparkline" of Grafana/Datadog
+// top rows): shape only, no axis and no labels, drawn from series the bundle
+// already carries. `invert` flips it for ranks, where a smaller number is up.
+function Spark({ values, invert, title }: { values: number[]; invert?: boolean; title: string }) {
+  const v = values.filter((x) => Number.isFinite(x));
+  if (v.length < 2) return null;
+  const lo = Math.min(...v);
+  const hi = Math.max(...v);
+  const span = hi - lo || 1;
+  const W = 64;
+  const H = 22;
+  const pts = v.map((x, i) => {
+    const y = invert ? ((x - lo) / span) * H : H - ((x - lo) / span) * H;
+    return [(i / (v.length - 1)) * W, Math.min(H - 1, Math.max(1, y))] as const;
+  });
+  const [lx, ly] = pts[pts.length - 1];
+  return (
+    <svg
+      viewBox={`-2 -2 ${W + 4} ${H + 4}`}
+      preserveAspectRatio="none"
+      // the number always wins the width: the glyph takes what is left (up to
+      // 64px) and a too-narrow cell drops it (globals.css .deck-spark)
+      className="deck-spark hidden h-6 w-16 shrink-0 text-accent sm:block"
+      role="img"
+      aria-label={title}
+    >
+      <title>{title}</title>
+      <polyline
+        points={pts.map(([x, y]) => `${x.toFixed(1)},${y.toFixed(1)}`).join(" ")}
+        fill="none"
+        stroke="currentColor"
+        strokeOpacity={0.55}
+        strokeWidth={1.3}
+        strokeLinejoin="round"
+        vectorEffect="non-scaling-stroke"
+      />
+      <circle cx={lx} cy={ly} r={1.8} fill="currentColor" />
+    </svg>
+  );
+}
+
+// The status mark next to a tile value: one meaning everywhere, as Grafana's
+// guide asks ("blue means good, red means bad"): accent = moving the right way,
+// warn = the wrong way. Null renders nothing (no baseline is not "flat").
+function Delta({ value, suffix = "%", arrow, title }: { value: number | null; suffix?: string; arrow?: boolean; title: string }) {
+  if (value === null) return null;
+  // flat is neither good nor bad: grey, "=" / "±0"
+  const tone = value > 0 ? "text-accent" : value < 0 ? "text-warn" : "text-faint";
+  const text =
+    value === 0
+      ? arrow ? "=" : `±0${suffix}`
+      : arrow
+        ? `${value > 0 ? "▲" : "▼"}${Math.abs(value)}`
+        : `${value > 0 ? "+" : ""}${value}${suffix}`;
+  return (
+    <span className={`ml-2 text-sm ${tone}`} title={title}>
+      {text}
+    </span>
+  );
+}
 
 // One cell of the KPI strip: label, big value, one line of context. Every
 // tile has the same three lines so the strip keeps one baseline and the
@@ -44,6 +106,7 @@ function Tile({
   tone = "ink",
   big,
   title,
+  spark,
 }: {
   label: string;
   children: ReactNode;
@@ -51,31 +114,43 @@ function Tile({
   tone?: "ink" | "accent" | "warn" | "dim";
   big?: boolean;
   title?: string;
+  spark?: ReactNode;
 }) {
+  // a repo name longer than ~10 characters (code-server, awesome-python…)
+  // does not fit a phone's half-width cell at the counters' size
+  const long = typeof children === "string" && children.length > 10;
   const color =
     tone === "accent" ? "text-accent" : tone === "warn" ? "text-warn" : tone === "dim" ? "text-faint" : "text-ink";
   return (
-    <div className="deck-tile flex min-w-0 flex-col gap-1 px-3.5 py-2" title={title}>
+    <div className="deck-tile flex min-w-0 flex-col gap-1 px-3 py-2 sm:px-3.5" title={title}>
       <span className="module-title !text-micro truncate">{label}</span>
       {/* fixed-height value line, bottom-aligned: big and normal values share
           one baseline across the strip */}
-      <span className="flex h-8 items-end">
+      <span className="flex h-8 items-end justify-between gap-2">
         <span
-          className={`numeral truncate leading-none ${big ? "text-3xl" : "text-2xl"} ${color} ${
+          className={`numeral leading-none ${spark ? "shrink-0" : "truncate"} ${
+            big ? "text-2xl sm:text-3xl" : long ? "text-lg sm:text-2xl" : "text-xl sm:text-2xl"
+          } ${color} ${
             big && tone === "accent" ? "glow-accent" : ""
           }`}
         >
           {children}
         </span>
+        {spark}
       </span>
-      <span className="numeral truncate text-micro text-faint">{sub ?? "\u00a0"}</span>
+      {/* phones have no hover tooltip: the context line may wrap to two lines
+          there instead of being cut; from sm up it is one line, full text in title */}
+      <span className="numeral line-clamp-2 text-micro text-faint sm:line-clamp-none sm:truncate">
+        {/* a wrap may only fall between "·" segments, never inside one */}
+        {typeof sub === "string" ? sub.split(" · ").map((seg) => seg.replace(/ /g, "\u00a0")).join(" · ") : (sub ?? "\u00a0")}
+      </span>
     </div>
   );
 }
 
 // Dedicated 1s clock: the shared live tick is 30s, too coarse for a deck. It
 // owns its own state so each tick re-renders this one span, not the deck: in
-// the deck's state it re-rendered the star map and all eight chart cards every
+// the deck's state it re-rendered the star map and every chart card every
 // second.
 function DeckClock() {
   const [clockMs, setClockMs] = useState(() => Date.now());
@@ -127,21 +202,43 @@ export default function CommandDeck({
     [bundle, live.stars, live.rank, live.neighbors, live.nowMs]
   );
 
+  // Wall-panel zoom: 1 up to a 1920x1080 frame, then the smaller of the two
+  // ratios (a 3440x1440 ultrawide gets 1.33: text, cells and charts grow
+  // together and the grid keeps the proportions it was designed in).
+  const [wall, setWall] = useState({ z: 1, w: 0, h: 0 });
+  useEffect(() => {
+    const fit = () => {
+      const w = window.innerWidth;
+      const h = window.innerHeight;
+      const z = Math.max(1, Math.min(w / 1920, h / 1080));
+      setWall((p) => (p.z === z && p.w === w && p.h === h ? p : { z, w, h }));
+    };
+    fit();
+    window.addEventListener("resize", fit);
+    return () => window.removeEventListener("resize", fit);
+  }, []);
+
   // Measure the hero hole so the chart canvas matches its aspect: wide cells
   // get MORE MAP, not scaled-up pixels. The hole is a grid cell whose size
   // depends on the viewport AND on the fullscreen transition, so it is
   // watched with a ResizeObserver rather than guessed from window resizes.
   const heroHole = useRef<HTMLDivElement | null>(null);
-  const [canvas, setCanvas] = useState<{ w: number; maxPx: number } | null>(null);
+  const [canvas, setCanvas] = useState<{ w: number; maxPx: number; px: number } | null>(null);
   useEffect(() => {
     const el = heroHole.current;
     if (!el) return;
     const measure = () => {
-      const r = el.getBoundingClientRect();
+      // layout px (clientWidth/Height), not getBoundingClientRect: under the
+      // wall-panel zoom the latter returns screen px and the canvas overflowed
+      const r = { width: el.clientWidth, height: el.clientHeight };
       if (r.height < 120 || r.width < 280) return;
-      const w = Math.min(Math.max(Math.round((r.width / r.height) * 740), 1000), 2600);
-      const next = { w, maxPx: Math.floor(r.height * (w / 740)) };
-      setCanvas((c) => (c && c.w === next.w && c.maxPx === next.maxPx ? c : next));
+      // 3400: the deck's race row is wide and short; a lower cap letterboxed
+      // the canvas inside its card (the type floor keeps labels legible)
+      const w = Math.min(Math.max(Math.round((r.width / r.height) * DECK_LOCAL_H), 1000), 4800);
+      const maxPx = Math.floor(r.height * (w / DECK_LOCAL_H));
+      // the svg renders at the hole's width minus its px-2 padding, capped by maxPx
+      const next = { w, maxPx, px: Math.min(Math.round(r.width) - 16, maxPx) };
+      setCanvas((c) => (c && c.w === next.w && c.maxPx === next.maxPx && c.px === next.px ? c : next));
     };
     measure();
     const ro = new ResizeObserver(measure);
@@ -178,11 +275,7 @@ export default function CommandDeck({
   const repo = bundle.meta?.repo ?? "unknown/unknown";
   const vOwn = bundle.v7d;
 
-  // KPI strip: the urgent dynamic numbers (next gate, next overtake, threat)
-  const gates = bundle.milestones.map((m) => ({
-    ...milestoneEta(m.rank, m.threshold, live.stars, vOwn, m.drift),
-  }));
-  const nextGate = gates.find((g) => g.gap > 0) ?? null;
+  // KPI strip: the urgent dynamic slots (next overtake, threat)
   const etas = neighborEtas(live.neighbors, live.stars, vOwn, { trend: bundle.vTrend, asOf: bundle.vAsOf }, live.nowMs);
   const chase = target ? etas.find((n) => n.r === target) ?? null : null;
   const nextOvertake =
@@ -194,16 +287,48 @@ export default function CommandDeck({
       .filter((n) => n.gap <= 0 && n.catchDays !== null)
       .sort((a, b) => (a.catchDays ?? 1e9) - (b.catchDays ?? 1e9))[0] ?? null;
 
+  // Sparkline series for the tiles, all from the bundle (no new numbers).
+  // Completed days only: today's partial count would read as a cliff.
+  const sparks = useMemo(() => {
+    const todayKey = new Date(live.nowMs).toISOString().slice(0, 10);
+    const done = bundle.daily.filter((p) => p.d < todayKey);
+    const last30 = done.slice(-30);
+    const after = done.slice(-30).reduce((a, p) => a + p.c, 0) + live.todayCount;
+    const base = live.stars - after;
+    const cum = last30.reduce<number[]>((acc, p) => [...acc, (acc.at(-1) ?? base) + p.c], []);
+    const since = live.nowMs - 30 * 864e5;
+    return {
+      stars: [...cum, live.stars],
+      rank: bundle.rankHistory.filter((r) => r.t >= since).map((r) => r.rank),
+      hour: bundle.hourly.slice(-24).map((h) => h.c),
+      day: done.slice(-14).map((p) => p.c),
+      v7: bundle.ma7.slice(0, done.length).slice(-30).filter((x): x is number => x !== null),
+    };
+  }, [bundle.daily, bundle.rankHistory, bundle.hourly, bundle.ma7, live.nowMs, live.stars, live.todayCount]);
+  const rankMove = rankDelta7d(bundle.rankHistory, live.rank, live.nowMs);
+  const weekPct = weekOverWeekPct(bundle.daily, live.nowMs);
   const live7 = Math.round(bundle.v7d);
   const syncLabel = live.offline ? "SYNC LOST" : live.lastSync === null ? "SYNCING" : "LIVE";
 
   return (
     <div
       ref={hostRef}
-      className="fixed inset-0 z-50 flex flex-col gap-2 overflow-hidden bg-void px-3 py-2.5 sm:px-4 sm:py-3"
+      className="fixed inset-0 z-50 overflow-hidden bg-void"
     >
       <div className="space-backdrop" />
       <div className="space-grid" />
+      {/* wall-panel scale: the layout is drawn for a 1920x1080 frame; a larger
+          screen (an ultrawide, a TV) zooms the whole deck, type and charts
+          together, instead of leaving laptop-size text in giant cells.
+          The frame's own size is the viewport divided by the zoom. */}
+      <div
+        className="relative flex flex-col gap-2 px-3 py-2.5 sm:px-4 sm:py-3"
+        style={
+          wall.z > 1
+            ? { zoom: wall.z, width: wall.w / wall.z, height: wall.h / wall.z }
+            : { width: "100%", height: "100%" }
+        }
+      >
 
       {/* bar: identity and time, one thin line */}
       <div className="relative flex shrink-0 items-center justify-between gap-4 px-1">
@@ -218,8 +343,12 @@ export default function CommandDeck({
               className="h-6 w-6 shrink-0 border border-grid"
             />
           ) : null}
-          <span className="font-display truncate text-sm uppercase tracking-[0.2em] text-star">{repo}</span>
-          <span className="flex shrink-0 items-center gap-1.5">
+          {/* phones show the repo name only; the owner is one tap away */}
+          <span className="font-display truncate text-sm uppercase tracking-[0.2em] text-star">
+            <span className="hidden sm:inline">{repo}</span>
+            <span className="sm:hidden">{repo.split("/")[1] ?? repo}</span>
+          </span>
+          <span className="flex shrink-0 items-center gap-1.5" title={syncLabel} aria-label={syncLabel}>
             <span
               className={
                 live.offline
@@ -229,7 +358,7 @@ export default function CommandDeck({
                     : "pulse-dot"
               }
             />
-            <span className="numeral text-micro tracking-[0.2em] text-dim">{syncLabel}</span>
+            <span className="numeral hidden text-micro tracking-[0.2em] text-dim sm:inline">{syncLabel}</span>
           </span>
         </div>
         <div className="flex shrink-0 items-center gap-4">
@@ -238,7 +367,7 @@ export default function CommandDeck({
             onClick={exit}
             className="numeral border border-grid px-2.5 py-1 text-micro tracking-[0.2em] text-dim transition-colors hover:border-accent/50 hover:text-accent"
           >
-            ✕ EXIT DECK
+            ✕ EXIT<span className="hidden sm:inline"> DECK</span>
           </button>
         </div>
       </div>
@@ -246,53 +375,45 @@ export default function CommandDeck({
       {/* tiles: the eight numbers worth a glance, in reading order
           (state → pace → what comes next). Empty slots keep their cell. */}
       <div className="hud deck-tiles relative shrink-0">
-        <Tile label="STARS" tone="accent" big sub={`since ${bundle.meta?.created_at?.slice(0, 10) ?? "launch"}`}>
+        <Tile label="STARS" tone="accent" big title="GitHub stargazers, live; the line is the total over the last 30 days" spark={<Spark values={sparks.stars} title="total stars, last 30 days" />} sub={`since ${bundle.meta?.created_at?.slice(0, 10) ?? "launch"}`}>
           <LiveNumber value={live.stars} locales="en-US" />
         </Tile>
-        <Tile label="WORLD RANK" big sub="by total stars">
+        <Tile label="RANK" big title="world rank by total stars among all public repos; ▲/▼ = positions vs 7 days ago" sub="worldwide" spark={<Spark values={sparks.rank} invert title="world rank, last 30 days (up = better)" />}>
           {live.rank !== null ? (
             <>
               <span className="text-faint">#</span>
               <LiveNumber value={live.rank} locales="en-US" />
+              <Delta value={rankMove} arrow title="positions gained since 7 days ago" />
             </>
           ) : (
             "n/a"
           )}
         </Tile>
-        <Tile label="LAST HOUR" sub="rolling 60 min">
+        <Tile label="LAST HOUR" title="stars in the rolling last 60 minutes; the line is stars per hour over 24 h" sub="rolling 60 min" spark={<Spark values={sparks.hour} title="stars per hour, last 24 h" />}>
           <LiveNumber value={live.starsLastHour} locales="en-US" />
         </Tile>
-        <Tile label="TODAY" sub="since 00:00 UTC">
+        {/* the same today-vs-yesterday-at-this-hour reading as the console's
+            status bar (LiveProvider.deltaPct), so the deck number has context */}
+        <Tile label="TODAY UTC" title="stars since 00:00 UTC, compared with yesterday at the same hour; the line is the last 14 full days" sub={`yesterday now: ${fmt(live.yesterdaySameHour)}`} spark={<Spark values={sparks.day} title="stars per day, last 14 full days" />}>
           <LiveNumber value={live.todayCount} locales="en-US" />
+          <Delta value={live.deltaPct} title="today so far vs yesterday at this hour" />
         </Tile>
-        <Tile label="V7D" sub="per day, 7-day">
+        <Tile label="V7D" title="canonical 7-day velocity, stars per day; the % compares the last 7 full days with the 7 before" sub="stars/day, 7d" spark={<Spark values={sparks.v7} title="7-day average, last 30 days" />}>
           {fmt(live7)}
+          <Delta value={weekPct} title="stars in the last 7 full days vs the 7 before" />
         </Tile>
-        {nextGate ? (
-          <Tile
-            label="NEXT GATE"
-            tone="accent"
-            sub={`${fmt(nextGate.gap)} to go · eta ${fmtEtaRange(nextGate.etaDays, nextGate.etaRange)}`}
-            title={`${fmt(nextGate.gap)} to go · eta ${fmtEtaRange(nextGate.etaDays, nextGate.etaRange)}`}
-          >
-            TOP {nextGate.rank}
-          </Tile>
-        ) : (
-          <Tile label="NEXT GATE" tone="dim" sub="every gate passed">
-            —
-          </Tile>
-        )}
+        {/* no NEXT GATE tile: the Next gates panel's first row carries it,
+            and a repeated number is noise, not emphasis */}
+        {/* one NEIGHBORS tile instead of OVERTAKE + THREAT: both name the
+            repo next to you, and six tiles split evenly in 6, 3x2 and 2x3.
+            The value is the most urgent neighbour (a threat beats an
+            overtake); the context line carries the other one. */}
         {(() => {
           const n = chase ?? nextOvertake;
-          if (!n)
-            return (
-              <Tile label="OVERTAKE" tone="dim" sub="no neighbor in reach">
-                —
-              </Tile>
-            );
-          const sub =
-            n.gap <= 0
-              ? "passed"
+          const overtakeSub = !n
+            ? "no overtake in reach"
+            : n.gap <= 0
+              ? `${shortName(n.r)} passed`
               : `gap ${fmt(n.gap)} · ${
                   n.etaDays === null
                     ? "eta n/a"
@@ -300,65 +421,92 @@ export default function CommandDeck({
                       ? `no firm eta · ${unsteadyLabel(n.unsteady)}`
                       : `eta ${etaText(n, n.etaDays)}`
                 }`;
-          return (
-            <Tile label={chase ? "CHASE" : "OVERTAKE"} tone="accent" sub={sub} title={`${n.r} · ${sub}`}>
-              {shortName(n.r)}
-            </Tile>
-          );
-        })()}
-        {threat ? (
-          (() => {
-            const sub = `${
-              unsteadyLabel(threat.unsteady)
-                ? `closing in · ${unsteadyLabel(threat.unsteady)}`
-                : `catches you in ${etaText(threat, threat.catchDays)}`
-            } · ${Math.round(threat.v)}/d`;
+          if (threat) {
+            const when = unsteadyLabel(threat.unsteady)
+              ? `closing in · ${unsteadyLabel(threat.unsteady)}`
+              : `catches you in ${etaText(threat, threat.catchDays)}`;
+            const sub = `${when} · ${Math.round(threat.v)}/d`;
             return (
-              <Tile label="THREAT" tone="warn" sub={sub} title={`${threat.r} · ${sub}`}>
+              <Tile
+                label="THREAT"
+                tone="warn"
+                sub={sub}
+                title={`${threat.r} · ${sub}${n ? ` · next overtake ${n.r} · ${overtakeSub}` : ""}`}
+              >
                 {shortName(threat.r)}
               </Tile>
             );
-          })()
-        ) : (
-          <Tile label="THREAT" tone="dim" sub="no neighbor closing in">
-            clear
-          </Tile>
-        )}
+          }
+          return (
+            <Tile
+              label={chase ? "CHASE" : "OVERTAKE"}
+              tone={n ? "ink" : "dim"}
+              sub={`${overtakeSub} · no threat`}
+              title={n ? `${n.r} · ${overtakeSub} · no neighbor closing in` : "no neighbor in reach or closing in"}
+            >
+              {n ? shortName(n.r) : "—"}
+            </Tile>
+          );
+        })()}
       </div>
 
       {/* body: the REAL console cards on a 12-column grid (globals.css
           .deck-body). Each cell is a fixed slot; charts take `fill` and grow
           to it, list panels scroll inside their own cell. */}
       <div className="deck-body relative">
-        <section className="hud deck-hero relative overflow-hidden">
+        {/* the race gets the same header as every other card, so the most
+            important cell is titled like one */}
+        <section className="hud deck-hero relative flex flex-col overflow-hidden">
+          <header className="flex shrink-0 items-center justify-between gap-3 border-b border-grid px-4 py-2 sm:px-5">
+            <div className="flex min-w-0 items-baseline gap-3">
+              <span className="module-index shrink-0">01 /</span>
+              <h2 className="module-title truncate">Star race</h2>
+            </div>
+            <span className="numeral hidden truncate text-label text-dim sm:block">
+              your neighbors by stars · gates in Next gates
+            </span>
+          </header>
+          <div className="relative min-h-0 flex-1">
           <div ref={heroHole} className="absolute inset-0 flex items-center justify-center px-2">
             {canvas ? (
               <div className="w-full" style={{ maxWidth: canvas.maxPx }}>
-                <GalacticChart inputs={inputs} target={target} onPinTarget={onPinTarget} deck deckW={canvas.w} />
+                <GalacticChart inputs={inputs} target={target} onPinTarget={onPinTarget} deck deckW={canvas.w} deckPx={canvas.px} noRoute />
               </div>
             ) : null}
           </div>
+          </div>
         </section>
 
-        <Panel index="06" title="Next gates" meta={`v7d ${fmt(live7)}/d`} className="deck-proj deck-scroll">
-          <Projections bundle={bundle} compact />
+        <Panel index="02" title="Next gates" meta={`v7d ${fmt(live7)}/d`} className="deck-proj deck-scroll">
+          <Projections bundle={bundle} compact dense />
         </Panel>
 
-        <Panel index="05" title="Stars / hour" meta="24h vs prev" className="deck-vel">
+        <Panel index="03" title="Stars / hour" meta="24h vs prev · UTC" className="deck-vel">
           <VelocityChart fill />
         </Panel>
-        <Panel index="07" title="Daily ladder" meta="night floor 00-05 UTC" className="deck-ladder">
+        <Panel
+          index="04"
+          title="Daily ladder"
+          // the zones' definition lives on the header's ⓘ, so the legend stays one line
+          meta={
+            <span title="thresholds = stars a day needed to rank top 10 / 50 / 100 / 250 by new stars among the 1,000 most-starred repos, monthly median">
+              night floor 00-05 UTC · ⓘ thresholds
+            </span>
+          }
+          className="deck-ladder"
+        >
           <DailyLadder bundle={bundle} fill bands={ladderBands} />
         </Panel>
-        <Panel index="09" title="World rank" meta="hourly" className="deck-rank">
+        <Panel index="05" title="World rank" meta="hourly" className="deck-rank">
           <RankChart bundle={bundle} fill />
         </Panel>
 
-        <Panel index="02" title="Cumulative" meta={`since ${bundle.meta?.created_at?.slice(0, 10) ?? "launch"}`} className="deck-cum">
+        <Panel index="06" title="Cumulative" meta={`since ${bundle.meta?.created_at?.slice(0, 10) ?? "launch"}`} className="deck-cum">
           <CurveChart repo={repo} fill />
         </Panel>
-        <PulsePanel dossier={dossier} index="03" className="deck-pulse deck-scroll" />
-        <UsagePanel dossier={dossier} index="04" className="deck-usage deck-scroll" />
+        <PulsePanel dossier={dossier} index="07" className="deck-pulse deck-scroll" compact />
+        <UsagePanel dossier={dossier} index="08" className="deck-usage deck-scroll" compact />
+      </div>
       </div>
     </div>
   );
