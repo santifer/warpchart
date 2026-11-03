@@ -28,6 +28,9 @@ const BASE_W = 1200;
 // canvas (real room measured from the screen, not scaled pixels) inside
 // the component.
 const BASE_H = 520;
+// on-screen px per canvas unit of the console's star chart on a desktop
+// (the 1200-unit canvas fills the ~1352 px panel of the 1440 max-width page)
+const CONSOLE_PX_PER_UNIT = 1352 / 1200;
 // deck canvas without the route band: band A's clip (556) plus a margin
 export const DECK_LOCAL_H = 572;
 const BASE_BAND_A_Y = 200; // headroom above keeps three label tiers clear of the header
@@ -163,7 +166,12 @@ export default function GalacticChart({
     ? noRoute
       ? Math.min(2.7, Math.max(1.1, W / 1300, fsFloor))
       : Math.min(1.8, Math.max(0.95, W / 1550))
-    : 1;
+    : fitW && deckPx
+      ? // the Command Deck draws the console chart at its own size: the type
+        // is scaled so a label renders at exactly the console's pixel size
+        // (console: 1200-unit canvas in a ~1352 px panel on desktop, x1.127)
+        Math.min(1.8, CONSOLE_PX_PER_UNIT * (W / deckPx))
+      : 1;
   // vertical step between label tiers; the deck's larger type needs a full
   // free line between two stacked labels so they never read as one block
   const TIER_STEP = noRoute ? 50 : 40;

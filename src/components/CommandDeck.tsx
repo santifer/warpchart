@@ -259,7 +259,7 @@ export default function CommandDeck({
   // as its hole (1200-2400). The box is capped so the chart never overflows
   // the cell's height. Layout px (clientWidth/Height): under the wall-panel
   // zoom getBoundingClientRect returns screen px.
-  const [canvas, setCanvas] = useState<{ fitW: number; maxPx: number } | null>(null);
+  const [canvas, setCanvas] = useState<{ fitW: number; maxPx: number; px: number } | null>(null);
   useEffect(() => {
     const el = heroHole.current;
     if (!el) return;
@@ -268,8 +268,10 @@ export default function CommandDeck({
       if (r.height < 120 || r.width < 280) return;
       const fitW = Math.min(Math.max(Math.round(r.width), 1200), 2400);
       const maxPx = Math.floor(r.height * (fitW / 520));
-      const next = { fitW, maxPx };
-      setCanvas((c) => (c && c.fitW === next.fitW && c.maxPx === next.maxPx ? c : next));
+      // the width the svg actually renders at (hole minus px-2, capped by maxPx)
+      const px = Math.min(Math.round(r.width) - 16, maxPx);
+      const next = { fitW, maxPx, px };
+      setCanvas((c) => (c && c.fitW === next.fitW && c.maxPx === next.maxPx && c.px === next.px ? c : next));
     };
     measure();
     const ro = new ResizeObserver(measure);
@@ -523,10 +525,11 @@ export default function CommandDeck({
             </div>
           </div>
           <div className="deck-view-side">
-            <PulsePanel dossier={dossier} index="02" compact />
-            <div className="deck-panel-scroll">
-              <PrFlowPanel flow={prFlow} index="03" />
+            {/* PR flow leads the column; pulse closes it as the 30-day totals */}
+            <div className="deck-panel-scroll deck-prflow">
+              <PrFlowPanel flow={prFlow} index="02" />
             </div>
+            <PulsePanel dossier={dossier} index="03" compact />
           </div>
         </div>
       ) : null}
@@ -568,7 +571,7 @@ export default function CommandDeck({
           <div ref={heroHole} className="absolute inset-0 flex items-center justify-center px-2">
             {canvas ? (
               <div className="w-full" style={{ maxWidth: canvas.maxPx }}>
-                <GalacticChart inputs={inputs} target={target} onPinTarget={onPinTarget} fitW={canvas.fitW} hideHelp />
+                <GalacticChart inputs={inputs} target={target} onPinTarget={onPinTarget} fitW={canvas.fitW} deckPx={canvas.px} hideHelp />
               </div>
             ) : null}
           </div>
