@@ -18,12 +18,12 @@ function ago(iso: string): string {
   return `${(days / 365.25).toFixed(1)}y ago`;
 }
 
-function Metric({ label, value, hint, note, tone, wrap }: { label: string; value: string; hint?: string; note?: string; tone?: "accent" | "warn" | "ink"; wrap?: boolean }) {
+function Metric({ label, value, hint, note, tone, wrap, small }: { label: string; value: string; hint?: string; note?: string; tone?: "accent" | "warn" | "ink"; wrap?: boolean; small?: boolean }) {
   const color = tone === "warn" ? "text-warn" : tone === "accent" ? "text-accent" : "text-ink";
   return (
     <div className="flex min-w-0 flex-col gap-1">
       <span className="numeral text-micro tracking-[0.2em] text-faint">{label}</span>
-      <span className={`numeral text-metric leading-none ${color}`}>{value}</span>
+      <span className={`numeral leading-none ${small ? "text-2xl" : "text-metric"} ${color}`}>{value}</span>
       {/* wrap: a narrow cell (the deck) shows the whole hint on two lines */}
       {hint ? <span className={`numeral text-micro text-dim ${wrap ? "line-clamp-2" : "truncate"}`}>{hint}</span> : null}
       {/* never truncated: it carries what makes the figure honest (the
@@ -38,11 +38,15 @@ export function PulsePanel({
   index = "03",
   className = "",
   delay = 0,
+  compact = false,
 }: {
   dossier: Dossier | null;
   index?: string;
   className?: string;
   delay?: number;
+  // Command Deck: numbers one size under the KPI strip (the strip leads) and
+  // the release age in ink (accent is the strip's headline colour)
+  compact?: boolean;
 }) {
   const d = dossier;
   const net = d ? d.issuesOpened30 - d.issuesClosed30 : 0;
@@ -62,22 +66,22 @@ export function PulsePanel({
         {d ? (
           <>
             <div className="grid grid-cols-2 gap-x-6 gap-y-4 sm:grid-cols-4">
-              <Metric
+              <Metric small={compact}
                 label="COMMITS"
                 value={d.commits30 !== null ? fmtCompact(d.commits30) : "—"}
                 hint="default branch"
               />
-              <Metric
+              <Metric small={compact}
                 label="ISSUE FLOW"
                 value={`${fmtCompact(d.issuesOpened30)} in`}
                 hint={`${fmtCompact(d.issuesClosed30)} resolved`}
               />
-              <Metric label="PRS MERGED" value={fmtCompact(d.prsMerged30)} hint="pull requests" />
-              <Metric
+              <Metric small={compact} label="PRS MERGED" value={fmtCompact(d.prsMerged30)} hint="pull requests" />
+              <Metric small={compact}
                 label="LAST RELEASE"
                 value={lastRelease ? ago(lastRelease.at) : "—"}
                 hint={lastRelease ? lastRelease.tag : "no releases"}
-                tone={releaseDays !== null && releaseDays > 120 ? "warn" : "accent"}
+                tone={releaseDays !== null && releaseDays > 120 ? "warn" : compact ? "ink" : "accent"}
               />
             </div>
             {/* issue flow balance: resolved share vs incoming, with the net

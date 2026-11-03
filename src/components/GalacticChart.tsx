@@ -134,7 +134,7 @@ export default function GalacticChart({
   // labels get two extra tiers, the local band breathes, and type stays at
   // UI size (the canvas matches the screen, so 1 unit ~= 1px).
   const W = deck
-    ? Math.min(Math.max(Math.round(deckW ?? 1680), 1200), 2600)
+    ? Math.min(Math.max(Math.round(deckW ?? 1680), 1200), 3400)
     : fitW
       ? Math.min(Math.max(Math.round(fitW), 1200), 2400)
       : BASE_W;

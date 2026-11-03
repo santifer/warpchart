@@ -38,13 +38,15 @@ interface Row {
 }
 
 // The compact panel shows ~1 month and pans back over the repo's FULL history;
-// the full-screen deck (fill) shows ~3 months at once. A `wide` panel spans the
+// the full-screen deck (fill) shows the World rank window (62 days). A `wide` panel spans the
 // whole console row on desktop (it used to share it with the heatmap), so it
 // shows TWICE the days at the same bar width; below lg it is one column, as
 // wide as before, and keeps the month.
 const VISIBLE_COMPACT = 31;
 const VISIBLE_WIDE = 62;
-const VISIBLE_FILL = 93;
+// the deck shows the same 62 days as its World rank panel beside it, so a
+// rank climb and the star days behind it read against one date range
+const VISIBLE_FILL = 62;
 
 const LG = "(min-width: 1024px)";
 function subscribeLg(cb: () => void) {
@@ -149,16 +151,17 @@ export default function DailyLadder({
   // with its latest value (rounded, it is a rate of whole stars)
   const lastFloor = [...view].reverse().find((r) => r.floor !== null)?.floor ?? null;
   const canPan = all.length > visible;
-  const yTop = Math.ceil(dayMax * 1.05);
-  // deck: even 1-2-5 steps (0 · 250 · 500 · 750); the auto ticks ended with
-  // the domain top ("750 · 938"), an odd interval. The peak may rise past
-  // the last labelled tick, as on World rank.
-  const dayTicks = (() => {
-    const raw = yTop / 4;
+  // deck: even 1-2-5 steps and a domain that ends ON a labelled tick
+  // (0 · 250 · … · 1000), so the top of the scale is readable
+  const dayStep = (() => {
+    const raw = (dayMax * 1.02) / 4;
     const mag = Math.pow(10, Math.floor(Math.log10(Math.max(raw, 1))));
-    const step = [1, 2, 2.5, 5, 10].map((k) => k * mag).find((x) => x >= raw) ?? 10 * mag;
+    return [1, 2, 2.5, 5, 10].map((k) => k * mag).find((x) => x >= raw) ?? 10 * mag;
+  })();
+  const yTop = fill ? Math.ceil((dayMax * 1.02) / dayStep) * dayStep : Math.ceil(dayMax * 1.05);
+  const dayTicks = (() => {
     const out: number[] = [];
-    for (let v = 0; v <= yTop; v += step) out.push(Math.round(v));
+    for (let v = 0; v <= yTop + 1e-9; v += dayStep) out.push(Math.round(v));
     return out;
   })();
 
@@ -280,15 +283,18 @@ export default function DailyLadder({
             dot={false} type="monotone" connectNulls isAnimationActive={false}
           />
           <Line
-            yAxisId="floor" dataKey="floor" stroke={C.warn} strokeWidth={1}
+            // deck: orange is for alerts only, so the night floor goes neutral
+            yAxisId="floor" dataKey="floor" stroke={fill ? C.dim : C.warn} strokeWidth={1}
             strokeDasharray="5 3" dot={false} type="monotone" connectNulls isAnimationActive={false}
           />
           <Scatter
-            yAxisId="day" dataKey="spike" fill={C.warn} legendType="none" isAnimationActive={false}
+            // deck: the cause markers are white, so they never read as the
+            // orange TOP 10 zone in the legend
+            yAxisId="day" dataKey="spike" fill={fill ? C.ink : C.warn} legendType="none" isAnimationActive={false}
             shape={(props: { cx?: number; cy?: number }) => (
               <path
                 d={`M ${props.cx} ${(props.cy ?? 0) - 9} l 4 4 l -4 4 l -4 -4 Z`}
-                fill={C.warn}
+                fill={fill ? C.ink : C.warn}
                 opacity={0.95}
               />
             )}
@@ -313,7 +319,7 @@ export default function DailyLadder({
                 <span style={{ color: C.ink }} aria-hidden>━</span> 7d avg
               </span>
               <span className="numeral text-micro text-faint">
-                <span style={{ color: C.warn }} aria-hidden>┅</span> night floor
+                <span style={{ color: C.dim }} aria-hidden>┅</span> night floor
                 {lastFloor !== null ? <span className="text-ink"> {Math.round(lastFloor)}/h</span> : null}
               </span>
             </>

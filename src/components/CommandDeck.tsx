@@ -203,7 +203,9 @@ export default function CommandDeck({
     const measure = () => {
       const r = el.getBoundingClientRect();
       if (r.height < 120 || r.width < 280) return;
-      const w = Math.min(Math.max(Math.round((r.width / r.height) * DECK_LOCAL_H), 1000), 2600);
+      // 3400: the deck's race row is wide and short; a lower cap letterboxed
+      // the canvas inside its card (the type floor keeps labels legible)
+      const w = Math.min(Math.max(Math.round((r.width / r.height) * DECK_LOCAL_H), 1000), 3400);
       const maxPx = Math.floor(r.height * (w / DECK_LOCAL_H));
       // the svg renders at the hole's width minus its px-2 padding, capped by maxPx
       const next = { w, maxPx, px: Math.min(Math.round(r.width) - 16, maxPx) };
@@ -363,17 +365,16 @@ export default function CommandDeck({
         </Tile>
         {/* no NEXT GATE tile: the Next gates panel's first row carries it,
             and a repeated number is noise, not emphasis */}
+        {/* one NEIGHBORS tile instead of OVERTAKE + THREAT: both name the
+            repo next to you, and six tiles split evenly in 6, 3x2 and 2x3.
+            The value is the most urgent neighbour (a threat beats an
+            overtake); the context line carries the other one. */}
         {(() => {
           const n = chase ?? nextOvertake;
-          if (!n)
-            return (
-              <Tile label="OVERTAKE" tone="dim" sub="no neighbor in reach">
-                —
-              </Tile>
-            );
-          const sub =
-            n.gap <= 0
-              ? "passed"
+          const overtakeSub = !n
+            ? "no overtake in reach"
+            : n.gap <= 0
+              ? `${shortName(n.r)} passed`
               : `gap ${fmt(n.gap)} · ${
                   n.etaDays === null
                     ? "eta n/a"
@@ -381,30 +382,33 @@ export default function CommandDeck({
                       ? `no firm eta · ${unsteadyLabel(n.unsteady)}`
                       : `eta ${etaText(n, n.etaDays)}`
                 }`;
-          return (
-            <Tile label={chase ? "CHASE" : "OVERTAKE"} sub={sub} title={`${n.r} · ${sub}`}>
-              {shortName(n.r)}
-            </Tile>
-          );
-        })()}
-        {threat ? (
-          (() => {
-            const sub = `${
-              unsteadyLabel(threat.unsteady)
-                ? `closing in · ${unsteadyLabel(threat.unsteady)}`
-                : `catches you in ${etaText(threat, threat.catchDays)}`
-            } · ${Math.round(threat.v)}/d`;
+          if (threat) {
+            const when = unsteadyLabel(threat.unsteady)
+              ? `closing in · ${unsteadyLabel(threat.unsteady)}`
+              : `catches you in ${etaText(threat, threat.catchDays)}`;
+            const sub = `${when} · ${Math.round(threat.v)}/d`;
             return (
-              <Tile label="THREAT" tone="warn" sub={sub} title={`${threat.r} · ${sub}`}>
+              <Tile
+                label="THREAT"
+                tone="warn"
+                sub={sub}
+                title={`${threat.r} · ${sub}${n ? ` · next overtake ${n.r} · ${overtakeSub}` : ""}`}
+              >
                 {shortName(threat.r)}
               </Tile>
             );
-          })()
-        ) : (
-          <Tile label="THREAT" tone="accent" sub="no neighbor closing in">
-            clear
-          </Tile>
-        )}
+          }
+          return (
+            <Tile
+              label={chase ? "CHASE" : "OVERTAKE"}
+              tone={n ? "ink" : "dim"}
+              sub={`${overtakeSub} · no threat`}
+              title={n ? `${n.r} · ${overtakeSub} · no neighbor closing in` : "no neighbor in reach or closing in"}
+            >
+              {n ? shortName(n.r) : "—"}
+            </Tile>
+          );
+        })()}
       </div>
 
       {/* body: the REAL console cards on a 12-column grid (globals.css
@@ -461,7 +465,7 @@ export default function CommandDeck({
         <Panel index="06" title="Cumulative" meta={`since ${bundle.meta?.created_at?.slice(0, 10) ?? "launch"}`} className="deck-cum">
           <CurveChart repo={repo} fill />
         </Panel>
-        <PulsePanel dossier={dossier} index="07" className="deck-pulse deck-scroll" />
+        <PulsePanel dossier={dossier} index="07" className="deck-pulse deck-scroll" compact />
         <UsagePanel dossier={dossier} index="08" className="deck-usage deck-scroll" compact />
       </div>
     </div>

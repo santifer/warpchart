@@ -1388,7 +1388,7 @@ body.gx-warping .ghx-lore {
 }
 @media (min-width: 640px) {
   .deck-tiles {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 }
 /* seven tiles on a 2- or 4-column strip leave a hole in the last row: the
@@ -1415,12 +1415,12 @@ body.gx-warping .ghx-lore {
 }
 @media (min-width: 1440px) {
   .deck-tiles {
-    /* one row of seven only where seven fit whole (below 1440: two rows).
+    /* one row of six only where six fit whole (below 1440: 3x2, phones 2x3).
        widths follow content: TODAY carries a delta and "yesterday now",
        V7D is the shortest number, the named slots carry repo names and an
        eta line. Order: stars, rank, hour, today, v7d, gate, overtake, threat */
     /* equal cells: every value and sparkline sits on the same rhythm */
-    grid-template-columns: repeat(7, minmax(0, 1fr));
+    grid-template-columns: repeat(6, minmax(0, 1fr));
   }
 }
 .deck-body {
@@ -1527,7 +1527,7 @@ body.gx-warping .ghx-lore {
     grid-template-columns: repeat(12, minmax(0, 1fr));
     /* the race leads but does not hog: one line of ships needs less height
        than the dense charts below (independent review 3-nov, passes 1 and 7) */
-    grid-template-rows: minmax(280px, 1.2fr) minmax(210px, 1.15fr) minmax(210px, 0.85fr);
+    grid-template-rows: minmax(270px, 1.05fr) minmax(230px, 1.3fr) minmax(210px, 0.8fr);
   }
   .deck-hero,
   .deck-body > section.hud:not(.deck-hero) {
