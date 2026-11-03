@@ -1474,10 +1474,10 @@ body.gx-warping .ghx-lore {
     display: none;
   }
 }
-/* a half-width deck cell: the panel's meta and "operated by" yield to the
-   title and the ALIVE state */
+/* a half-width deck cell: "operated by" yields to the title and the ALIVE
+   state. The panel meta stays (it carries the data's window and date,
+   "through Nov 2", "last 30 days"): it truncates, it is never hidden */
 @container (max-width: 760px) {
-  .deck-view header .numeral.hidden.text-label,
   .deck-view header .vs-operated {
     display: none !important;
   }
@@ -1807,9 +1807,12 @@ body.gx-warping .ghx-lore {
 }
 @media (max-height: 950px) {
 
-  /* PR flow's method note goes; its legend stays with the chart */
+  /* PR flow's method note (bots left out, today excluded) is a disclosure:
+     it stays, on one line that truncates */
   .deck-view .pr-flow-note {
-    display: none;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 }
 .deck-panel-scroll {

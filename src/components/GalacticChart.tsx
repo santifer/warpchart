@@ -922,7 +922,9 @@ export default function GalacticChart({
           Math.max(1, Math.min(3, Math.floor((BAND_A_Y - 57 * fs - 8) / (TIER_STEP * fs)) + 1))
         : 3;
     const rowsAbove: number[] = new Array(nTiers).fill(-1e9); // rightmost occupied edge per tier
-    const rowsBelow: number[] = new Array(nTiers).fill(-1e9);
+    // in a short deck hero the passed ships get one row: a second one would
+    // reach the ROUTE TO THE CORE title (Prompt-Engineering-Guide on it at 1440)
+    const rowsBelow: number[] = new Array(twoLine ? 1 : nTiers).fill(-1e9);
     // label priority: hunters first (the chart's most urgent object must
     // never be shed in dense zones), then chase targets with an eta, then
     // the rest of the neighbors, route dots last
@@ -953,7 +955,7 @@ export default function GalacticChart({
         }
         tier++;
       }
-      if (!fits && twoLine && it.kind === "n" && rows === rowsAbove) {
+      if (!fits && twoLine && it.kind === "n") {
         // second chance: the label starts at its ship and runs right, into
         // the free space past the stack (an unlabeled dot cannot be read on
         // a wall screen nobody hovers)
