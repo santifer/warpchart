@@ -921,7 +921,7 @@ export default function GalacticChart({
       : twoLine
         ? // only tiers whose name still lands inside the canvas; the rest shed
           // to bare dots (data on hover), never a clipped half label
-          Math.max(1, Math.min(3, Math.floor((BAND_A_Y - 57 * fs - 8) / (TIER_STEP * fs)) + 1))
+          Math.max(1, Math.min(3, Math.floor((BAND_A_Y - 72 * fs - 8) / (TIER_STEP * fs)) + 1))
         : 3;
     const rowsAbove: number[] = new Array(nTiers).fill(-1e9); // rightmost occupied edge per tier
     // in a short deck hero the passed ships get one row: a second one would

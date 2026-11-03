@@ -187,7 +187,7 @@ export function UsagePanel({
                   // the value away from its label
                   <div className="usage-row grid grid-cols-[minmax(0,1fr)_auto] items-baseline gap-x-3 gap-y-0.5 py-1 @[26rem]:grid-cols-[minmax(0,65%)_auto]" title={title}>
                     <span className="numeral min-w-0 truncate text-micro tracking-[0.15em] text-faint">{label}</span>
-                    <span className="numeral shrink-0 text-xl leading-none text-ink">{value}</span>
+                    <span className="numeral shrink-0 text-xl leading-none text-ink sm:text-2xl">{value}</span>
                     <span className="numeral col-span-2 truncate text-micro text-dim">{sub}</span>
                   </div>
                 );

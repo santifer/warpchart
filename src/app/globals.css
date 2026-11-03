@@ -1578,7 +1578,7 @@ body.gx-warping .ghx-lore {
    cell beside cumulative and world rank, stars/hour runs along the bottom */
 @media (min-width: 1280px) and (min-height: 820px) {
   .deck-body.deck-body--ladder {
-    grid-template-rows: minmax(250px, 1.5fr) minmax(140px, 1fr) minmax(140px, 1fr) minmax(140px, 0.75fr);
+    grid-template-rows: minmax(250px, 1.45fr) minmax(150px, 1fr) minmax(150px, 1fr) minmax(170px, 0.85fr);
   }
   .deck-body--ladder .deck-hero {
     grid-column: 1 / span 8;
@@ -1592,16 +1592,20 @@ body.gx-warping .ghx-lore {
     grid-column: 1 / span 8;
     grid-row: 2 / span 2;
   }
-  .deck-body--ladder .deck-cum {
+  /* right column: world rank, then the two pace charts side by side in
+     the bottom row with the ladder's full width freed above them */
+  .deck-body--ladder .deck-rank {
     grid-column: 9 / span 4;
     grid-row: 2;
   }
-  .deck-body--ladder .deck-rank {
+  .deck-body--ladder .deck-cum {
     grid-column: 9 / span 4;
-    grid-row: 3;
+    grid-row: 3 / span 2;
   }
+  /* stars/hour under the ladder, at the ladder's width: 24 bars at a sane
+     aspect instead of across the whole screen */
   .deck-body--ladder .deck-vel {
-    grid-column: 1 / -1;
+    grid-column: 1 / span 8;
     grid-row: 4;
   }
 }
@@ -1629,7 +1633,7 @@ body.gx-warping .ghx-lore {
     grid-column: 10 / span 3;
   }
   .deck-body.deck-body--ladder {
-    grid-template-rows: minmax(250px, 1.5fr) minmax(140px, 1fr) minmax(140px, 1fr) minmax(140px, 0.75fr);
+    grid-template-rows: minmax(250px, 1.45fr) minmax(150px, 1fr) minmax(150px, 1fr) minmax(170px, 0.85fr);
   }
   .deck-body--ladder .deck-hero,
   .deck-body--ladder .deck-ladder {
@@ -1641,7 +1645,7 @@ body.gx-warping .ghx-lore {
     grid-column: 8 / span 5;
   }
   .deck-body--ladder .deck-vel {
-    grid-column: 1 / -1;
+    grid-column: 1 / span 7;
   }
 }
 /* Real usage as a strip of three when its cell is wide */
