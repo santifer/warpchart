@@ -1737,6 +1737,10 @@ body.gx-warping .ghx-lore {
   .deck-view .deck-short-hide {
     display: none;
   }
+  /* the side column gives PR flow what Pulse does not need */
+  .deck-view-side > :first-child {
+    flex: none;
+  }
   /* PR flow's method note goes; its legend stays with the chart */
   .deck-view .pr-flow-note {
     display: none;
@@ -1753,6 +1757,13 @@ body.gx-warping .ghx-lore {
 @media (min-width: 1280px) {
   .deck-view {
     overflow-y: hidden;
+    /* one row that fills the frame, so HEALTH ends on the same edge as the
+       other views and ROTATE does not jump */
+    grid-template-rows: minmax(0, 1fr);
+    align-content: stretch;
+  }
+  .deck-view > * {
+    min-height: 0;
   }
 }
 /* deck panels whose cell is narrow: four-figure rows become 2x2 */

@@ -35,6 +35,7 @@ export default function MissionLog({
   const reversed = [...events].reverse();
   const listRef = useRef<HTMLUListElement | null>(null);
   const [cols, setCols] = useState(1);
+  const [cap, setCap] = useState<number | null>(null);
   useEffect(() => {
     const el = listRef.current;
     if (!fillHeight || !el) return;
@@ -44,10 +45,14 @@ export default function MissionLog({
       const rows = Math.max(1, Math.floor(el.clientHeight / line));
       // never narrower than ~26rem a column: past that the names truncate,
       // so a short screen shows fewer entries (the fade marks the cut)
+      // a line needs ~36rem to keep its name whole; only full columns are
+      // shown (the newest columns x rows events), so no column is an orphan
       const rem = parseFloat(getComputedStyle(document.documentElement).fontSize) || 16;
-      const maxCols = Math.max(1, Math.floor(el.clientWidth / (26 * rem)));
+      const maxCols = Math.max(1, Math.floor(el.clientWidth / (36 * rem)));
       const next = Math.min(maxCols, Math.max(1, Math.ceil(reversed.length / rows)));
+      const nextCap = next > 1 ? Math.min(reversed.length, next * rows) : null;
       setCols((c) => (c === next ? c : next));
+      setCap((c) => (c === nextCap ? c : nextCap));
     };
     fit();
     const ro = new ResizeObserver(fit);
@@ -67,7 +72,7 @@ export default function MissionLog({
           className="mission-log-list flex flex-col gap-1.5"
           style={fillHeight ? { columnCount: cols } : undefined}
         >
-          {reversed.map((e, i) => (
+          {(fillHeight && cap ? reversed.slice(0, cap) : reversed).map((e, i) => (
             <li key={`${e.ts}-${i}`} className="numeral flex min-w-0 items-baseline gap-3 text-data">
               <span className={`shrink-0 ${GLYPH[e.kind].cls}`}>{GLYPH[e.kind].g}</span>
               <span className="shrink-0 text-faint" suppressHydrationWarning>{fmtTs(e.ts)}</span>
