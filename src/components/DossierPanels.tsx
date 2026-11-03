@@ -180,7 +180,7 @@ export function UsagePanel({
                       : null;
                 const missing = d!.npmLast30MissingDays ?? 0;
                 const Row = ({ label, sub, value, title }: { label: string; sub: string; value: string; title?: string }) => (
-                  <div className="flex items-baseline justify-between gap-3 py-1" title={title}>
+                  <div className="grid grid-cols-[minmax(0,1fr)_auto] items-baseline gap-3 py-1 @[26rem]:grid-cols-[minmax(0,65%)_auto]" title={title}>
                     <div className="flex min-w-0 flex-col gap-0.5">
                       <span className="numeral truncate text-micro tracking-[0.15em] text-faint">{label}</span>
                       <span className="numeral truncate text-micro text-dim">{sub}</span>
@@ -189,8 +189,9 @@ export function UsagePanel({
                   </div>
                 );
                 return (
-                  // label and value stay close on a wide screen (max ~23rem)
-                  <div className="ml-auto flex w-full max-w-[23rem] flex-col divide-y divide-grid/60">
+                  // full width, so rows start at the title's edge; on a wide cell
+                  // the value sits in a column at ~65 % (label and value stay close)
+                  <div className="flex w-full flex-col divide-y divide-grid/60 [container-type:inline-size]">
                     {est !== null ? (
                       <div>
                         <Row label="NPM INSTALLS · 30D" sub={lastNpm ? `through ${lastNpm}` : d!.npmPkg ?? ""} value={est} title={d!.npmPkg ?? undefined} />
