@@ -16,6 +16,7 @@ import {
   StepsSilhouette,
 } from "@/components/PanelSilhouettes";
 import { repoRankTrajectory } from "@/lib/rank-history";
+import { ladderBands } from "@/lib/velocity-rank";
 import GodRank from "@/components/GodRank";
 import GodVelocityRank from "@/components/GodVelocityRank";
 import JsonLd, { repoGraph } from "@/components/JsonLd";
@@ -147,6 +148,8 @@ export default async function ExplorerPage({
   // this route" instead of "is it the tenant".
   const tenant = loadMeta();
   if (tenant && `${owner}/${name}`.toLowerCase() === tenant.repo.toLowerCase()) {
+    // the ladder's zones read the Blob: start now, alongside the live snapshot
+    const bandsP = ladderBands();
     const live = await fetchLiveSnapshot(tenant.repo);
     const tBundle = buildBundle(undefined, live);
     return (
@@ -158,6 +161,7 @@ export default async function ExplorerPage({
           vitals={await loadVitals(owner, name)}
           prFlow={await loadPrFlow(owner, name)}
           charted={chartedRepos}
+          ladderBands={await bandsP}
         />
       </>
     );
@@ -173,6 +177,7 @@ export default async function ExplorerPage({
   if (isHostedRepo(hostedLabel) || isOwnedBy(owner)) {
     const tHistory = loadTenantHistory(hostedLabel);
     const tTimestamps = loadTenantTimestamps(hostedLabel);
+    const bandsP = ladderBands();
     const tLive = await fetchLiveSnapshot(hostedLabel);
     if (tHistory.length) {
       const tMeta = {
@@ -197,6 +202,7 @@ export default async function ExplorerPage({
             vitals={await loadVitals(owner, name)}
             prFlow={await loadPrFlow(owner, name)}
             charted={chartedRepos}
+            ladderBands={await bandsP}
           />
         </>
       );

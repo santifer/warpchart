@@ -319,7 +319,7 @@ export default function VitalSignsPanel({
                 </span>
               ) : null}
             </div>
-            {/* the evolution strip: daily census curve + rate histogram + toggle.
+            {/* the evolution strip: GitHub's contributor curve + rate histogram.
                 The series comes embedded in the vitals blob (cm.census); when a
                 repo has no census yet the block simply does not render. */}
             {cm.census ? <ContributorChart census={cm.census} busFactor={cm.busFactor ?? null} /> : null}
