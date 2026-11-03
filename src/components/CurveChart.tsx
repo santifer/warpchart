@@ -127,14 +127,14 @@ export default function CurveChart({ repo, fill }: { repo: string; fill?: boolea
                   ? new Date(t).toLocaleDateString("en-US", { month: "short", timeZone: "UTC" })
                   : new Date(t).toLocaleDateString("en-US", { month: "short", year: "2-digit" })
               }
-              tick={{ fill: C.dim, fontSize: fill ? 10 : 12, fontFamily: "var(--font-jbmono)" }}
+              tick={{ fill: C.dim, fontSize: fill ? 11 : 12, fontFamily: "var(--font-jbmono)" }}
               tickLine={false}
               axisLine={{ stroke: C.grid }}
               minTickGap={fill ? 24 : 5}
             />
             <YAxis
               tickFormatter={(v: number) => fmtCompact(v)}
-              tick={{ fill: C.dim, fontSize: 12, fontFamily: "var(--font-jbmono)" }}
+              tick={{ fill: C.dim, fontSize: fill ? 11 : 12, fontFamily: "var(--font-jbmono)" }}
               tickLine={false}
               axisLine={false}
               width={52}

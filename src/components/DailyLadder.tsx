@@ -172,7 +172,7 @@ export default function DailyLadder({
     >
     <div ref={ref} className={`w-full touch-pan-y ${fill ? "min-h-0 flex-1" : "h-[250px]"}`} style={{ cursor: canPan ? "ew-resize" : undefined }}>
       <ResponsiveContainer width="100%" height="100%">
-        <ComposedChart data={view} margin={{ top: 6, right: fill ? 10 : 4, left: -14, bottom: 0 }}>
+        <ComposedChart data={view} margin={{ top: 6, right: fill ? 20 : 4, left: -14, bottom: 0 }}>
           {areas.map((a) => (
             <ReferenceArea
               key={a.key}
@@ -194,19 +194,19 @@ export default function DailyLadder({
           <CartesianGrid stroke={C.grid} strokeDasharray="2 6" vertical={false} />
           <XAxis
             dataKey="label"
-            tick={{ fill: C.faint, fontSize: 9 }}
+            tick={{ fill: C.faint, fontSize: fill ? 11 : 9 }}
             tickLine={false}
             axisLine={{ stroke: C.grid }}
             // fixed every-4th ticks collide in a narrow deck cell; there the
             // axis thins itself to whatever fits, keeping both ends
             interval={fill ? "preserveStartEnd" : 3}
-            minTickGap={fill ? 18 : 5}
+            minTickGap={fill ? 30 : 5}
           />
           <YAxis
             yAxisId="day"
             domain={[0, yTop]}
             allowDataOverflow
-            tick={{ fill: C.faint, fontSize: 9 }}
+            tick={{ fill: C.faint, fontSize: fill ? 11 : 9 }}
             tickLine={false}
             axisLine={false}
             width={42}

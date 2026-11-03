@@ -94,10 +94,10 @@ export default function RankChart({ bundle, fill }: { bundle: DashboardBundle; f
             tickFormatter={(t: number) =>
               new Date(t).toLocaleDateString("en-US", { month: "short", day: "numeric" })
             }
-            tick={{ fill: C.faint, fontSize: 9 }}
+            tick={{ fill: C.faint, fontSize: fill ? 11 : 9 }}
             tickLine={false}
             axisLine={{ stroke: C.grid }}
-            minTickGap={56}
+            minTickGap={fill ? 70 : 56}
           />
           <YAxis
             reversed
@@ -106,7 +106,7 @@ export default function RankChart({ bundle, fill }: { bundle: DashboardBundle; f
             allowDataOverflow
             allowDecimals={false}
             tickFormatter={(v: number) => `#${v}`}
-            tick={{ fill: C.faint, fontSize: 9 }}
+            tick={{ fill: C.faint, fontSize: fill ? 11 : 9 }}
             tickLine={false}
             axisLine={false}
             width={48}

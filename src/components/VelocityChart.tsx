@@ -59,16 +59,16 @@ export default function VelocityChart({ fill }: { fill?: boolean }) {
           <CartesianGrid stroke={C.grid} strokeDasharray="2 6" vertical={false} />
           <XAxis
             dataKey="label"
-            tick={{ fill: C.faint, fontSize: 9 }}
+            tick={{ fill: C.faint, fontSize: fill ? 11 : 9 }}
             tickLine={false}
             axisLine={{ stroke: C.grid }}
             // fixed every-4th ticks collide in a narrow deck cell; there the
             // axis thins itself to whatever fits, keeping both ends
             interval={fill ? "preserveStartEnd" : 3}
-            minTickGap={fill ? 18 : 5}
+            minTickGap={fill ? 26 : 5}
           />
           <YAxis
-            tick={{ fill: C.faint, fontSize: 9 }}
+            tick={{ fill: C.faint, fontSize: fill ? 11 : 9 }}
             tickLine={false}
             axisLine={false}
             width={46}
