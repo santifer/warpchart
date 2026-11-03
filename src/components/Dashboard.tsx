@@ -145,6 +145,8 @@ export default function Dashboard({
             onPinTarget={pinTarget}
             onExit={() => setDeck(false)}
             ladderBands={ladderBands}
+            vitals={vitals ?? null}
+            prFlow={prFlow ?? null}
           />
         ) : null}
 
