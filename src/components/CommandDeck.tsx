@@ -126,7 +126,9 @@ function Tile({
       <span className="module-title !text-micro truncate">{label}</span>
       {/* fixed-height value line, bottom-aligned: big and normal values share
           one baseline across the strip */}
-      <span className="flex h-8 items-end justify-between gap-2">
+      {/* the sparkline sits a fixed gap after its number, so a wide tile
+          does not push it away from the value it belongs to */}
+      <span className="flex h-8 items-end gap-5">
         <span
           className={`numeral leading-none ${spark ? "shrink-0" : "truncate"} ${
             big ? "text-2xl sm:text-3xl" : long ? "text-lg sm:text-2xl" : "text-xl sm:text-2xl"

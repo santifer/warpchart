@@ -1573,6 +1573,66 @@ body.gx-warping .ghx-lore {
   }
 }
 
+/* ultrawide (21:9 and wider): the wall-panel zoom fills the height, and the
+   spare width becomes a fourth column instead of stretching every card.
+     row 1  star race (3)            · next gates (1)
+     row 2  stars/hour · daily ladder (2) · world rank · cumulative
+     row 3  maintenance pulse (2)    · real usage (2), both one-line strips
+   Charts read near to far, left to right: 24 h, 62 days, since launch. */
+@media (min-width: 1280px) and (min-height: 820px) and (min-aspect-ratio: 2/1) {
+  .deck-body {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 2fr) minmax(0, 1fr) minmax(0, 1fr);
+    grid-template-rows: minmax(250px, 1fr) minmax(260px, 1.55fr) auto;
+  }
+  .deck-hero {
+    grid-column: 1 / span 3;
+    grid-row: 1;
+  }
+  .deck-proj {
+    grid-column: 4;
+    grid-row: 1;
+  }
+  .deck-vel {
+    grid-column: 1;
+    grid-row: 2;
+  }
+  .deck-ladder {
+    grid-column: 2;
+    grid-row: 2;
+  }
+  .deck-rank {
+    grid-column: 3;
+    grid-row: 2;
+  }
+  .deck-cum {
+    grid-column: 4;
+    grid-row: 2;
+  }
+  .deck-pulse {
+    grid-column: 1 / span 2;
+    grid-row: 3;
+  }
+  .deck-usage {
+    grid-column: 3 / span 2;
+    grid-row: 3;
+  }
+}
+/* Real usage as a strip of three when its cell is wide (ultrawide row 3) */
+@container (min-width: 720px) {
+  .deck-usage-rows {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    column-gap: 2rem;
+  }
+  .deck-usage-rows > * {
+    border-top-width: 0 !important;
+  }
+  /* in the strip each column is narrow: label and value share it 1fr/auto */
+  .deck-usage-rows .usage-row {
+    grid-template-columns: minmax(0, 1fr) auto !important;
+  }
+}
+
 /* ── STARFALL: a prominent golden shooting star per live star gained ──
    Same 45-degree climb as every streak on the site (lower-left to upper-right);
    gold is the living present. A bright head leads a fading tail; both glow. */
