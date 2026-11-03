@@ -189,7 +189,8 @@ export function UsagePanel({
                   </div>
                 );
                 return (
-                  <div className="flex flex-col divide-y divide-grid/60">
+                  // label and value stay close on a wide screen (max ~23rem)
+                  <div className="flex max-w-[23rem] flex-col divide-y divide-grid/60">
                     {est !== null ? (
                       <div>
                         <Row label="NPM INSTALLS · 30D" sub={lastNpm ? `through ${lastNpm}` : d!.npmPkg ?? ""} value={est} title={d!.npmPkg ?? undefined} />

@@ -187,13 +187,13 @@ export default function DailyLadder({
     >
     <div ref={ref} className={`w-full touch-pan-y ${fill ? "min-h-0 flex-1" : "h-[250px]"}`} style={{ cursor: canPan ? "ew-resize" : undefined }}>
       <ResponsiveContainer width="100%" height="100%">
-        <ComposedChart data={view} margin={{ top: 6, right: fill ? 48 : 4, left: -14, bottom: 0 }}>
+        <ComposedChart data={view} margin={{ top: 6, right: fill ? 66 : 4, left: -14, bottom: 0 }}>
           {/* deck: thresholds as thin neutral lines, labelled at the right
               edge (FT style); tinted zones and their swatch legend read as
               colours nobody could match in a short cell */}
           {fill
             ? areas
-                .filter((a) => a.y1 > 0 && a.y1 < yTop)
+                .filter((a) => a.y1 > 0 && a.y1 <= yTop)
                 .map((a) => (
                   <ReferenceLine
                     key={`t-${a.key}`}
@@ -208,11 +208,38 @@ export default function DailyLadder({
                     ifOverflow="hidden"
                     label={
                       view.length && a.x2 === view[view.length - 1].label
-                        ? { value: `top ${rankOf(a.tier)}`, position: "right", fill: C.dim, fontSize: 10 }
+                        ? { value: `top ${rankOf(a.tier)}`, position: "right", offset: 8, fill: C.dim, fontSize: 10 }
                         : undefined
                     }
                   />
                 ))
+            : null}
+          {/* deck: the vertical step where a threshold changes month to
+              month, so each tier reads as one continuous stepped line */}
+          {fill
+            ? BAND_TIERS.flatMap(({ key }) => {
+                const seq = areas.filter((a) => a.tier === key && a.y1 > 0);
+                return seq.slice(1).map((b, i) => {
+                  const a = seq[i];
+                  const ya = Math.min(a.y1, yTop);
+                  const yb = Math.min(b.y1, yTop);
+                  if (ya === yb) return null;
+                  return (
+                    <ReferenceLine
+                      key={`s-${b.key}`}
+                      yAxisId="day"
+                      segment={[
+                        { x: b.x1, y: ya },
+                        { x: b.x1, y: yb },
+                      ]}
+                      stroke={C.dim}
+                      strokeOpacity={0.55}
+                      strokeDasharray="3 3"
+                      ifOverflow="hidden"
+                    />
+                  );
+                });
+              })
             : null}
           {!fill && areas.map((a) => (
             <ReferenceArea

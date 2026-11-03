@@ -451,8 +451,8 @@ export default function CommandDeck({
           title="Daily ladder"
           // the zones' definition lives on the header's ⓘ, so the legend stays one line
           meta={
-            <span title="zones = stars a day needed to rank top 10 / 50 / 100 / 250 by new stars among the 1,000 most-starred repos, monthly median">
-              night floor 00-05 UTC · ⓘ zones
+            <span title="thresholds = stars a day needed to rank top 10 / 50 / 100 / 250 by new stars among the 1,000 most-starred repos, monthly median">
+              night floor 00-05 UTC · ⓘ thresholds
             </span>
           }
           className="deck-ladder"
