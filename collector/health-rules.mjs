@@ -486,8 +486,8 @@ export function buildersLangMismatch(langs, served) {
 
 // The contributor chart draws GitHub's own count over time and must END on the
 // figure the panel prints (one number on the page, 2026-10-11). A missing curve
-// means the calibration refused (rebuild >5% off) or the census never ran: the
-// chart silently fell back to the authors/co-authored toggle.
+// means neither rebuild matched GitHub's figure (githubCurve) or the census
+// never ran: the chart is not drawn (no fallback count since 2026-10-30).
 export function contributorCurve(contributors) {
   if (!contributors) return { severity: null, note: "no contributors block" };
   const total = contributors.total ?? null;
@@ -495,7 +495,7 @@ export function contributorCurve(contributors) {
   if (total == null) return { severity: null, note: "no live figure; covered by presence.contributors" };
   // critical, not warn: on 2026-10-16 the house panel fell back to "516
   // authors" for hours and only Santiago saw it (a warn opens no issue)
-  if (last == null) return { severity: "critical", note: `no GitHub-count curve; the chart fell back to the census toggle (total ${total})` };
+  if (last == null) return { severity: "critical", note: `no GitHub-count curve; the contributor chart is not drawn (total ${total})` };
   return last === total
     ? { severity: null, note: `curve ends on ${total}, GitHub's figure` }
     : { severity: "warn", note: `curve ends on ${last} but the panel prints ${total}` };

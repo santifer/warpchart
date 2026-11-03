@@ -1366,43 +1366,119 @@ body.gx-warping .ghx-lore {
 }
 
 /* ── COMMAND DECK: the real console cards relocated into a fullscreen layout ──
-   The star race is a full-bleed hero whose BOX matches the chart's aspect
-   (~2600/740), so the chart fills the full width with no side bands and its
-   labels stay UI-size. The seven telemetry cards keep their native readable
-   height in the grid below (no stretching). The body scrolls when hero + cards
-   exceed the viewport (tall hero + seven real cards do not fit no-scroll on a
-   laptop; readable beats cramped). */
+   Desktop is one screen, no page scroll: a 12-column grid of fixed slots.
+     row 1  star race (9)              · next gates (3)
+     row 2  stars/hour (3) · daily ladder (6) · world rank (3)
+     row 3  cumulative (3) · pulse (6) · usage (3)
+   Every row keeps the same 3-6-3 rhythm, so the gutters line up top to
+   bottom and the eye can run down a column. Row 1 gets the most height because the race is the story; rows 2-3 split
+   the rest. Each row has a readable floor, so a short laptop screen scrolls
+   the body instead of crushing the charts. Below lg every card stacks with a
+   fixed height so the `fill` charts still have something to fill. */
+.deck-tiles {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.deck-tile {
+  border-top: 1px solid var(--color-grid);
+  border-left: 1px solid var(--color-grid);
+  margin: -1px 0 0 -1px;
+}
+@media (min-width: 640px) {
+  .deck-tiles {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+@media (min-width: 1280px) {
+  .deck-tiles {
+    /* one row of eight only where eight fit whole (below xl: two rows of 4).
+       the two state numbers lead and get more room; the three named slots
+       carry repo names and an eta line, so they get more than the counters */
+    grid-template-columns: 1.15fr 1.05fr repeat(3, minmax(0, 0.9fr)) 1.1fr 1.2fr 1.2fr;
+  }
+}
 .deck-body {
-  display: flex;
-  flex-direction: column;
-  gap: 0.6rem;
+  display: grid;
+  gap: 0.5rem;
+  grid-template-columns: minmax(0, 1fr);
+  flex: 1;
   min-height: 0;
   overflow-y: auto;
 }
-.deck-hero-wrap {
-  width: 100%;
-  aspect-ratio: 2600 / 740;
-  max-height: 62vh;
-  flex: none;
+.deck-body > * {
+  min-height: 0;
+  min-width: 0;
 }
-.deck-hero-wrap > section {
-  height: 100%;
+.deck-hero {
+  height: 240px;
 }
-.deck-grid {
-  display: grid;
-  gap: 0.6rem;
-  grid-template-columns: 1fr;
+.deck-body > section.hud:not(.deck-hero) {
+  height: 300px;
+}
+/* deck cells are narrower than console panels: tighter tracking keeps the
+   titles whole instead of ellipsized */
+.deck-body .module-title,
+.deck-tiles .module-title {
+  letter-spacing: 0.2em;
+}
+@media (max-width: 639px) {
+  .deck-tiles .module-title {
+    letter-spacing: 0.12em;
+  }
+}
+/* a deck cell can be much narrower than the console panel it came from: under
+   ~420px the header's meta line yields so the title stays whole */
+.deck-body > section.hud:not(.deck-hero) {
+  container-type: inline-size;
+}
+@container (max-width: 420px) {
+  .deck-body header .numeral.text-label {
+    display: none;
+  }
+}
+/* panels whose content is a list, not a chart, scroll inside their slot */
+.deck-scroll > div:last-child {
+  overflow-y: auto;
 }
 @media (min-width: 640px) {
-  .deck-grid {
-    /* minmax(0, …): a bare 1fr floors at the card's min-content, so wide
-       charts pushed the grid past the viewport and cut the last column */
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+  .deck-hero {
+    height: 340px;
   }
 }
 @media (min-width: 1024px) {
-  .deck-grid {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+  .deck-body {
+    grid-template-columns: repeat(12, minmax(0, 1fr));
+    grid-template-rows: minmax(300px, 1.55fr) minmax(210px, 1fr) minmax(210px, 1fr);
+  }
+  .deck-hero,
+  .deck-body > section.hud:not(.deck-hero) {
+    height: auto;
+  }
+  .deck-hero {
+    grid-column: 1 / span 9;
+    grid-row: 1;
+  }
+  .deck-proj {
+    grid-column: 10 / span 3;
+    grid-row: 1;
+  }
+  .deck-vel {
+    grid-column: 1 / span 3;
+  }
+  .deck-ladder {
+    grid-column: 4 / span 6;
+  }
+  .deck-rank {
+    grid-column: 10 / span 3;
+  }
+  .deck-cum {
+    grid-column: 1 / span 3;
+  }
+  .deck-pulse {
+    grid-column: 4 / span 6;
+  }
+  .deck-usage {
+    grid-column: 10 / span 3;
   }
 }
 
