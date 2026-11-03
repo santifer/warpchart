@@ -138,11 +138,14 @@ export default function VitalSignsPanel({
   name,
   vitals,
   index = "01",
+  compact = false,
 }: {
   repo: string;
   name: string;
   vitals: Vitals | null;
   index?: string;
+  // Command Deck: no prose paragraphs, so the panel fits one screen
+  compact?: boolean;
 }) {
   // ---- LOCKED: the real dashboard, blurred, behind the upsell ---------------
   if (!vitals) {
@@ -262,7 +265,7 @@ export default function VitalSignsPanel({
               <span className="text-dim">of the {fmtCompact(vitals.universe)} most-starred on GitHub</span>
             </span>
           </div>
-          <span className="numeral text-micro leading-relaxed text-faint/70">
+          <span className={`numeral text-micro leading-relaxed text-faint/70 ${compact ? "hidden" : ""}`}>
             a live daily composite of commits, merged PRs, issues closed &amp; releases — development
             work, not stars — a snapshot, not a fixed title{since ? ` · maintained since ${since}` : ""}
           </span>
@@ -322,9 +325,9 @@ export default function VitalSignsPanel({
             {/* the evolution strip: GitHub's contributor curve + rate histogram.
                 The series comes embedded in the vitals blob (cm.census); when a
                 repo has no census yet the block simply does not render. */}
-            {cm.census ? <ContributorChart census={cm.census} busFactor={cm.busFactor ?? null} /> : null}
+            {cm.census ? <ContributorChart census={cm.census} busFactor={cm.busFactor ?? null} compact={compact} /> : null}
             {/* the sentence: pure facts, top-tier by deduction */}
-            <div className="numeral text-micro leading-relaxed text-faint">
+            <div className={`numeral text-micro leading-relaxed text-faint ${compact ? "hidden" : ""}`}>
               {/* The total is repo-wide; the merge gate and the lead time come from
                   the sampled window, so the sentence says so instead of letting a
                   sample pass for every PR. PRs are counted by their author and
@@ -370,7 +373,7 @@ export default function VitalSignsPanel({
           {fingerprint.map((f, i) => (
             <FingerBar key={f.label} label={f.label} pct={f.pct} i={i} />
           ))}
-          <span className="numeral text-micro text-faint/70">
+          <span className={`numeral text-micro text-faint/70 ${compact ? "hidden" : ""}`}>
             the notch marks the median of the {fmtCompact(vitals.universe)} — every signal sits far past
             it
           </span>

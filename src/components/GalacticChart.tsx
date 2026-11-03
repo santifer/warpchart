@@ -98,6 +98,7 @@ export default function GalacticChart({
   deckW,
   noRoute = false,
   deckPx,
+  hideHelp = false,
   fitW,
   charted,
 }: {
@@ -125,6 +126,8 @@ export default function GalacticChart({
   // on-screen width of the deck canvas in CSS px: lets the type keep a
   // legible floor instead of only following the canvas width
   deckPx?: number;
+  // the deck has no touch interaction: drop the pan/zoom how-to lines
+  hideHelp?: boolean;
   // Same idea for wide inline showcases (landing spotlight): the measured
   // container width becomes the canvas width, so type stays at design size
   // and wide monitors get more map instead of giant letters.
@@ -1113,7 +1116,7 @@ export default function GalacticChart({
             LOCAL SYSTEM
           </text>
           {/* how-to lines are console help, not data: the deck drops them */}
-          {!deck ? (
+          {!deck && !hideHelp ? (
             <text x={40} y={47} fill={C.faint} fontSize={10.5 * fs}>
               scroll sideways to pan · pinch to zoom · doppler tails: length = speed gap · blue = you gain the duel, red = it outruns you
             </text>
@@ -1668,7 +1671,7 @@ export default function GalacticChart({
           <text x={40} y={BAND_B_Y - 88} fill={C.dim} fontSize={12 * fs} letterSpacing={4} className="font-display">
             ROUTE TO THE CORE
           </text>
-          {!deck ? (
+          {!deck && !hideHelp ? (
             <text x={40} y={BAND_B_Y - 71} fill={C.faint} fontSize={10.5 * fs}>
               distance scale, widest around you · every dot is a top 1000 repo · [ ] marks the window above
             </text>

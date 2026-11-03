@@ -35,7 +35,7 @@ export default function MissionLog({
       {reversed.length ? (
         <ul className="flex flex-col gap-1.5">
           {reversed.map((e, i) => (
-            <li key={`${e.ts}-${i}`} className="numeral flex items-baseline gap-3 text-data">
+            <li key={`${e.ts}-${i}`} className="numeral flex min-w-0 items-baseline gap-3 text-data">
               <span className={`shrink-0 ${GLYPH[e.kind].cls}`}>{GLYPH[e.kind].g}</span>
               <span className="shrink-0 text-faint" suppressHydrationWarning>{fmtTs(e.ts)}</span>
               {e.url ? (
@@ -43,12 +43,12 @@ export default function MissionLog({
                   href={e.url}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="text-dim underline decoration-grid underline-offset-4 transition-colors hover:text-ink"
+                  className="min-w-0 truncate text-dim underline decoration-grid underline-offset-4 transition-colors hover:text-ink"
                 >
                   {e.text}
                 </a>
               ) : (
-                <span className="text-dim">{e.text}</span>
+                <span className="min-w-0 truncate text-dim" title={e.text}>{e.text}</span>
               )}
             </li>
           ))}

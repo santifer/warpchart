@@ -1547,7 +1547,8 @@ body.gx-warping .ghx-lore {
     grid-column: 9 / span 4;
     grid-row: 1;
   }
-  .deck-rank {
+  /* world rank sits next to the daily ladder: same 62 days, same marks */
+  .deck-cum {
     grid-column: 9 / span 4;
     grid-row: 2;
   }
@@ -1559,7 +1560,7 @@ body.gx-warping .ghx-lore {
     grid-column: 4 / span 6;
     grid-row: 3;
   }
-  .deck-cum {
+  .deck-rank {
     grid-column: 10 / span 3;
     grid-row: 3;
   }
@@ -1575,7 +1576,7 @@ body.gx-warping .ghx-lore {
     grid-column: 1 / span 7;
   }
   .deck-proj,
-  .deck-rank {
+  .deck-cum {
     grid-column: 8 / span 5;
   }
   .deck-vel {
@@ -1584,7 +1585,7 @@ body.gx-warping .ghx-lore {
   .deck-ladder {
     grid-column: 4 / span 6;
   }
-  .deck-cum {
+  .deck-rank {
     grid-column: 10 / span 3;
   }
 }
@@ -1620,6 +1621,41 @@ body.gx-warping .ghx-lore {
   flex-direction: column;
   gap: 0.5rem;
   min-width: 0;
+  min-height: 0;
+}
+/* the last panel of a column takes what is left and scrolls inside, so a
+   column never ends early or runs past the frame */
+.deck-view-main > :last-child,
+.deck-view-side > :last-child {
+  flex: 1;
+  min-height: 0;
+}
+.deck-log > div:last-child {
+  overflow-y: auto;
+}
+.deck-panel-scroll {
+  min-height: 0;
+  overflow-y: auto;
+  scrollbar-width: thin;
+}
+.deck-panel-scroll > section {
+  min-height: 100%;
+}
+@media (min-width: 1280px) {
+  .deck-view {
+    overflow-y: hidden;
+  }
+}
+/* deck panels whose cell is narrow: four-figure rows become 2x2 */
+.deck-view section.hud,
+.deck-body > section.hud {
+  container-type: inline-size;
+}
+@container (max-width: 560px) {
+  .deck-view .sm\:grid-cols-4,
+  .deck-body .sm\:grid-cols-4 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 @media (min-width: 1280px) {
   .deck-view {

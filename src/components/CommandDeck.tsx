@@ -518,12 +518,16 @@ export default function CommandDeck({
       {view === "health" ? (
         <div className="deck-view relative">
           <div className="deck-view-main">
-            <VitalSignsPanel repo={repo} name={repo.split("/")[1] ?? ""} vitals={vitals} index="01" />
+            {/* on a short screen the panel scrolls inside itself; the frame never does */}
+            <div className="deck-panel-scroll">
+              <VitalSignsPanel repo={repo} name={repo.split("/")[1] ?? ""} vitals={vitals} index="01" compact />
+            </div>
           </div>
           <div className="deck-view-side">
-            <PrFlowPanel flow={prFlow} index="02" />
-            <PulsePanel dossier={dossier} index="03" compact />
-            <UsagePanel dossier={dossier} index="04" compact />
+            <PulsePanel dossier={dossier} index="02" compact />
+            <div className="deck-panel-scroll">
+              <PrFlowPanel flow={prFlow} index="03" />
+            </div>
           </div>
         </div>
       ) : null}
@@ -543,7 +547,9 @@ export default function CommandDeck({
             <Panel index="03" title="Daily velocity rank" meta="by new stars each day">
               <GodVelocityRank repo={repo} />
             </Panel>
-            <Panel index="04" title="Mission log" meta="auto-detected from telemetry" className="deck-scroll">
+            {/* adoption reads with audience, not with repo health */}
+            <UsagePanel dossier={dossier} index="04" compact />
+            <Panel index="05" title="Mission log" meta="auto-detected from telemetry" className="deck-scroll deck-log">
               <MissionLog events={bundle.events} captain={bundle.captain} />
             </Panel>
           </div>
@@ -568,7 +574,7 @@ export default function CommandDeck({
           <div ref={heroHole} className="absolute inset-0 flex items-center justify-center px-2">
             {canvas ? (
               <div className="w-full" style={{ maxWidth: canvas.maxPx }}>
-                <GalacticChart inputs={inputs} target={target} onPinTarget={onPinTarget} fitW={canvas.fitW} />
+                <GalacticChart inputs={inputs} target={target} onPinTarget={onPinTarget} fitW={canvas.fitW} hideHelp />
               </div>
             ) : null}
           </div>

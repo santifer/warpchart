@@ -89,9 +89,13 @@ function monthSegments(points: [string, number][], endMs: number): Seg[] {
 export default function ContributorChart({
   census,
   busFactor,
+  compact = false,
 }: {
   census: VitalsCensus;
   busFactor: VitalsBusFactor | null;
+  // Command Deck: the chart and bus factor only; the sentences stay in the
+  // console, where they are read rather than glanced at
+  compact?: boolean;
 }) {
   const pts = useMemo(
     () => (census.github != null ? (census.githubDaily ?? []) : []),
@@ -311,6 +315,7 @@ export default function ContributorChart({
         </div>
       ) : null}
 
+      {compact ? null : (<>
       <div className="numeral text-micro leading-relaxed text-faint">
         <>
           <span className="text-dim">{N} contributors</span> since{" "}
@@ -351,6 +356,7 @@ export default function ContributorChart({
         · {capMonth(cur.label)} spans {curDays} day{curDays === 1 ? "" : "s"} ·
         bots and AI accounts count, as on GitHub
       </span>
+      </>)}
     </div>
   );
 }

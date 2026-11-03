@@ -236,7 +236,7 @@ export default function PrFlowPanel({ flow, index = "02" }: { flow: PrFlow | nul
 
           <div className="h-[260px] w-full">
             <ResponsiveContainer width="100%" height="100%">
-              <ComposedChart data={rows} margin={{ top: 6, right: 8, bottom: 0, left: 4 }}>
+              <ComposedChart data={rows} margin={{ top: 6, right: 24, bottom: 0, left: 4 }}>
                 <CartesianGrid stroke={C.grid} strokeDasharray="2 6" vertical={false} />
                 <XAxis
                   dataKey="t"
