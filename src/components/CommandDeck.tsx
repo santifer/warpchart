@@ -185,6 +185,22 @@ export default function CommandDeck({
     [bundle, live.stars, live.rank, live.neighbors, live.nowMs]
   );
 
+  // Wall-panel zoom: 1 up to a 1920x1080 frame, then the smaller of the two
+  // ratios (a 3440x1440 ultrawide gets 1.33: text, cells and charts grow
+  // together and the grid keeps the proportions it was designed in).
+  const [wall, setWall] = useState({ z: 1, w: 0, h: 0 });
+  useEffect(() => {
+    const fit = () => {
+      const w = window.innerWidth;
+      const h = window.innerHeight;
+      const z = Math.max(1, Math.min(w / 1920, h / 1080));
+      setWall((p) => (p.z === z && p.w === w && p.h === h ? p : { z, w, h }));
+    };
+    fit();
+    window.addEventListener("resize", fit);
+    return () => window.removeEventListener("resize", fit);
+  }, []);
+
   // Dedicated 1s clock: the shared live tick is 30s, too coarse for a deck.
   const [clockMs, setClockMs] = useState(() => Date.now());
   useEffect(() => {
@@ -202,11 +218,13 @@ export default function CommandDeck({
     const el = heroHole.current;
     if (!el) return;
     const measure = () => {
-      const r = el.getBoundingClientRect();
+      // layout px (clientWidth/Height), not getBoundingClientRect: under the
+      // wall-panel zoom the latter returns screen px and the canvas overflowed
+      const r = { width: el.clientWidth, height: el.clientHeight };
       if (r.height < 120 || r.width < 280) return;
       // 3400: the deck's race row is wide and short; a lower cap letterboxed
       // the canvas inside its card (the type floor keeps labels legible)
-      const w = Math.min(Math.max(Math.round((r.width / r.height) * DECK_LOCAL_H), 1000), 3400);
+      const w = Math.min(Math.max(Math.round((r.width / r.height) * DECK_LOCAL_H), 1000), 4800);
       const maxPx = Math.floor(r.height * (w / DECK_LOCAL_H));
       // the svg renders at the hole's width minus its px-2 padding, capped by maxPx
       const next = { w, maxPx, px: Math.min(Math.round(r.width) - 16, maxPx) };
@@ -285,10 +303,22 @@ export default function CommandDeck({
   return (
     <div
       ref={hostRef}
-      className="fixed inset-0 z-50 flex flex-col gap-2 overflow-hidden bg-void px-3 py-2.5 sm:px-4 sm:py-3"
+      className="fixed inset-0 z-50 overflow-hidden bg-void"
     >
       <div className="space-backdrop" />
       <div className="space-grid" />
+      {/* wall-panel scale: the layout is drawn for a 1920x1080 frame; a larger
+          screen (an ultrawide, a TV) zooms the whole deck, type and charts
+          together, instead of leaving laptop-size text in giant cells.
+          The frame's own size is the viewport divided by the zoom. */}
+      <div
+        className="relative flex flex-col gap-2 px-3 py-2.5 sm:px-4 sm:py-3"
+        style={
+          wall.z > 1
+            ? { zoom: wall.z, width: wall.w / wall.z, height: wall.h / wall.z }
+            : { width: "100%", height: "100%" }
+        }
+      >
 
       {/* bar: identity and time, one thin line */}
       <div className="relative flex shrink-0 items-center justify-between gap-4 px-1">
@@ -468,6 +498,7 @@ export default function CommandDeck({
         </Panel>
         <PulsePanel dossier={dossier} index="07" className="deck-pulse deck-scroll" compact />
         <UsagePanel dossier={dossier} index="08" className="deck-usage deck-scroll" compact />
+      </div>
       </div>
     </div>
   );
