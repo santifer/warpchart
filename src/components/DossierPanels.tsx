@@ -18,13 +18,14 @@ function ago(iso: string): string {
   return `${(days / 365.25).toFixed(1)}y ago`;
 }
 
-function Metric({ label, value, hint, note, tone }: { label: string; value: string; hint?: string; note?: string; tone?: "accent" | "warn" | "ink" }) {
+function Metric({ label, value, hint, note, tone, wrap, small }: { label: string; value: string; hint?: string; note?: string; tone?: "accent" | "warn" | "ink"; wrap?: boolean; small?: boolean }) {
   const color = tone === "warn" ? "text-warn" : tone === "accent" ? "text-accent" : "text-ink";
   return (
     <div className="flex min-w-0 flex-col gap-1">
       <span className="numeral text-micro tracking-[0.2em] text-faint">{label}</span>
-      <span className={`numeral text-metric leading-none ${color}`}>{value}</span>
-      {hint ? <span className="numeral truncate text-micro text-dim">{hint}</span> : null}
+      <span className={`numeral leading-none ${small ? "text-2xl" : "text-metric"} ${color}`}>{value}</span>
+      {/* wrap: a narrow cell (the deck) shows the whole hint on two lines */}
+      {hint ? <span className={`numeral text-micro text-dim ${wrap ? "line-clamp-2" : "truncate"}`}>{hint}</span> : null}
       {/* never truncated: it carries what makes the figure honest (the
           measured number behind an estimate), so it wraps instead */}
       {note ? <span className="numeral max-w-[22rem] text-micro leading-snug text-dim">{note}</span> : null}
@@ -37,11 +38,15 @@ export function PulsePanel({
   index = "03",
   className = "",
   delay = 0,
+  compact = false,
 }: {
   dossier: Dossier | null;
   index?: string;
   className?: string;
   delay?: number;
+  // Command Deck: numbers one size under the KPI strip (the strip leads) and
+  // the release age in ink (accent is the strip's headline colour)
+  compact?: boolean;
 }) {
   const d = dossier;
   // Each count is null when GitHub did not answer it: shown as "—", and the
@@ -68,22 +73,22 @@ export function PulsePanel({
         {d ? (
           <>
             <div className="grid grid-cols-2 gap-x-6 gap-y-4 sm:grid-cols-4">
-              <Metric
+              <Metric small={compact}
                 label="COMMITS"
                 value={d.commits30 !== null ? fmtCompact(d.commits30) : "—"}
                 hint="default branch"
               />
-              <Metric
+              <Metric small={compact}
                 label="ISSUE FLOW"
                 value={opened !== null ? `${fmtCompact(opened)} in` : "—"}
                 hint={`${count(closed)} resolved`}
               />
-              <Metric label="PRS MERGED" value={count(d.prsMerged30)} hint="pull requests" />
-              <Metric
+              <Metric small={compact} label="PRS MERGED" value={count(d.prsMerged30)} hint="pull requests" />
+              <Metric small={compact}
                 label="LAST RELEASE"
                 value={lastRelease ? ago(lastRelease.at) : "—"}
                 hint={lastRelease ? lastRelease.tag : "no releases"}
-                tone={releaseDays !== null && releaseDays > 120 ? "warn" : "accent"}
+                tone={releaseDays !== null && releaseDays > 120 ? "warn" : compact ? "ink" : "accent"}
               />
             </div>
             {/* issue flow balance: resolved share vs incoming, with the net
@@ -123,11 +128,17 @@ export function UsagePanel({
   index = "04",
   className = "",
   delay = 0,
+  compact = false,
 }: {
   dossier: Dossier | null;
   index?: string;
   className?: string;
   delay?: number;
+  // the Command Deck's cell: the three headline figures in a two-column grid,
+  // without the acquisition chart and the per-version list (the console keeps
+  // them), and the clone count in the neutral numeral colour: warn is for
+  // things that need attention, and a clone total does not
+  compact?: boolean;
 }) {
   const d = dossier;
   const withDownloads = (d?.releases ?? []).filter((r) => r.downloads > 0).slice(0, 4);
@@ -170,6 +181,51 @@ export function UsagePanel({
               const lastClone = ch && ch.length ? fmtDay(ch[ch.length - 1].day) : "";
               const nh = d!.npmHistory;
               const lastNpm = nh && nh.length ? fmtDay(nh[nh.length - 1].day) : "";
+              if (compact) {
+                // the deck: one row per figure (label left, number right), the
+                // freshness once per row and the estimate's honesty line kept
+                // whole, so all three fit a short cell at any width
+                const est =
+                  d!.npmLast30Estimate !== null && d!.npmLast30Estimate !== undefined
+                    ? `~${fmtCompact(d!.npmLast30Estimate)}`
+                    : d!.npmLast30 !== null
+                      ? fmtCompact(d!.npmLast30)
+                      : null;
+                const missing = d!.npmLast30MissingDays ?? 0;
+                const Row = ({ label, sub, value, title }: { label: string; sub: string; value: string; title?: string }) => (
+                  <div className="flex items-baseline justify-between gap-3 py-1" title={title}>
+                    <div className="flex min-w-0 flex-col gap-0.5">
+                      <span className="numeral truncate text-micro tracking-[0.15em] text-faint">{label}</span>
+                      <span className="numeral truncate text-micro text-dim">{sub}</span>
+                    </div>
+                    <span className="numeral shrink-0 text-xl leading-none text-ink">{value}</span>
+                  </div>
+                );
+                return (
+                  <div className="flex flex-col divide-y divide-grid/60">
+                    {est !== null ? (
+                      <div>
+                        <Row label="NPM INSTALLS · 30D" sub={lastNpm ? `through ${lastNpm}` : d!.npmPkg ?? ""} value={est} title={d!.npmPkg ?? undefined} />
+                        {missing > 0 && d!.npmLast30 !== null ? (
+                          <span className="numeral block pb-1 text-micro leading-snug text-dim">
+                            {fmt(d!.npmLast30)} measured + {missing} unrecorded days, estimated
+                          </span>
+                        ) : null}
+                      </div>
+                    ) : null}
+                    {ch && ch.length ? (
+                      <Row label={`CLONE EVENTS · SINCE ${since}`} sub={`not people · through ${lastClone}`} value={fmtCompact(cloneTotal)} />
+                    ) : null}
+                    {d!.uniqueCloners14d !== null ? (
+                      <Row
+                        label="UNIQUE CLONERS · 14D"
+                        sub={d!.uniqueCloners14dAt ? `GitHub's dedup · ${fmtDay(d!.uniqueCloners14dAt)}` : "GitHub's dedup"}
+                        value={fmtCompact(d!.uniqueCloners14d)}
+                      />
+                    ) : null}
+                  </div>
+                );
+              }
               return (
                 <div className="flex flex-wrap gap-x-8 gap-y-3">
                   {d!.npmLast30 !== null ? (
@@ -229,11 +285,12 @@ export function UsagePanel({
                 </div>
               );
             })()}
-            {(d!.npmHistory && d!.npmHistory.length >= 2) ||
-            (d!.clonesHistory && d!.clonesHistory.length >= 2) ? (
+            {!compact &&
+            ((d!.npmHistory && d!.npmHistory.length >= 2) ||
+              (d!.clonesHistory && d!.clonesHistory.length >= 2)) ? (
               <UsageChart npm={d!.npmHistory ?? []} clones={d!.clonesHistory} />
             ) : null}
-            {d!.npmVersions?.length
+            {!compact && d!.npmVersions?.length
               ? (() => {
                   // adoption per release, from npm's rolling week (downloads, not people)
                   const v = summarizeVersions(d!.npmVersions!, 4);
@@ -280,7 +337,7 @@ export function UsagePanel({
                   );
                 })()
               : null}
-            {withDownloads.length ? (
+            {!compact && withDownloads.length ? (
               <div className="flex flex-col gap-1.5">
                 <span className="numeral text-micro tracking-[0.2em] text-faint">
                   RELEASE DOWNLOADS

@@ -1366,41 +1366,205 @@ body.gx-warping .ghx-lore {
 }
 
 /* ── COMMAND DECK: the real console cards relocated into a fullscreen layout ──
-   The star race is a full-bleed hero whose BOX matches the chart's aspect
-   (~2600/740), so the chart fills the full width with no side bands and its
-   labels stay UI-size. The eight telemetry cards keep their native readable
-   height in the grid below (no stretching). The body scrolls when hero + cards
-   exceed the viewport (tall hero + eight real cards do not fit no-scroll on a
-   laptop; readable beats cramped). */
+   Desktop is one screen, no page scroll: a 12-column grid of fixed slots.
+     row 1  star race (9)              · next gates (3)
+     row 2  stars/hour (3) · daily ladder (6) · world rank (3)
+     row 3  cumulative (3) · pulse (6) · usage (3)
+   Every row keeps the same 3-6-3 rhythm, so the gutters line up top to
+   bottom and the eye can run down a column. Row 1 gets the most height because the race is the story; rows 2-3 split
+   the rest. Each row has a readable floor, so a short laptop screen scrolls
+   the body instead of crushing the charts. Below 1280 wide or 820 tall it is
+   two columns that scroll; below 640 one. Off the 12-column grid every card has
+   a fixed height so the `fill` charts still have something to fill. */
+.deck-tiles {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.deck-tile {
+  container-type: inline-size;
+  border-top: 1px solid var(--color-grid);
+  border-left: 1px solid var(--color-grid);
+  margin: -1px 0 0 -1px;
+}
+@media (min-width: 640px) {
+  .deck-tiles {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+/* seven tiles on a 2- or 4-column strip leave a hole in the last row: the
+   last tile takes the spare width instead */
+@media (max-width: 1439px) {
+  .deck-tiles > .deck-tile:last-child:nth-child(odd) {
+    grid-column: span 2;
+  }
+}
+/* a phone cannot read the race at 390px: the gates come first there, and
+   the card numbers (reading order on the grid) would then read 02, 01 */
+@media (max-width: 639px) {
+  .deck-proj {
+    order: -1;
+  }
+  .deck-body .module-index {
+    display: none;
+  }
+  /* a phone cannot read the race at all: OVERTAKE and Next gates carry what
+     it says, so the card is not drawn */
+  .deck-hero {
+    display: none;
+  }
+}
+@media (min-width: 1440px) {
+  .deck-tiles {
+    /* one row of six only where six fit whole (below 1440: 3x2, phones 2x3).
+       widths follow content: TODAY carries a delta and "yesterday now",
+       V7D is the shortest number, the named slots carry repo names and an
+       eta line. Order: stars, rank, hour, today, v7d, gate, overtake, threat */
+    /* equal cells: every value and sparkline sits on the same rhythm */
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+  }
+}
 .deck-body {
-  display: flex;
-  flex-direction: column;
-  gap: 0.6rem;
+  display: grid;
+  gap: 0.5rem;
+  grid-template-columns: minmax(0, 1fr);
+  flex: 1;
   min-height: 0;
   overflow-y: auto;
 }
-.deck-hero-wrap {
-  width: 100%;
-  aspect-ratio: 2600 / 740;
-  max-height: 62vh;
-  flex: none;
+.deck-body > * {
+  min-height: 0;
+  min-width: 0;
 }
-.deck-hero-wrap > section {
-  height: 100%;
+.deck-hero {
+  height: 240px;
 }
-.deck-grid {
-  display: grid;
-  gap: 0.6rem;
-  grid-template-columns: 1fr;
+.deck-body > section.hud:not(.deck-hero) {
+  height: 300px;
 }
-@media (min-width: 640px) {
-  .deck-grid {
-    grid-template-columns: repeat(2, 1fr);
+/* a tile's sparkline yields to its number: under ~150px of cell there is no
+   room for both, and the number is the point */
+@container (max-width: 150px) {
+  .deck-spark {
+    display: none !important;
   }
 }
-@media (min-width: 1024px) {
-  .deck-grid {
-    grid-template-columns: repeat(4, 1fr);
+/* deck cells are narrower than console panels: tighter tracking keeps the
+   titles whole instead of ellipsized */
+.deck-body .module-title,
+.deck-tiles .module-title {
+  letter-spacing: 0.2em;
+}
+@media (max-width: 639px) {
+  .deck-tiles .module-title {
+    letter-spacing: 0.12em;
+  }
+}
+/* a deck cell can be much narrower than the console panel it came from: under
+   ~420px the header's meta line yields so the title stays whole */
+.deck-body > section.hud:not(.deck-hero) {
+  container-type: inline-size;
+}
+@container (max-width: 420px) {
+  .deck-body header .numeral.text-label {
+    display: none;
+  }
+}
+/* Next gates: each dense row measures 53px; a size container query reads
+   the content box (padding excluded), so N rows need N×53; the body (the panel's last child)
+   is a size container, and rows that would be cut are not drawn at all */
+.deck-proj > div:last-child {
+  container-type: size;
+}
+/* list cells (gates, usage) trade the panel's roomy padding for rows */
+.deck-proj > div:last-child,
+.deck-usage > div:last-child {
+  padding-top: 0.5rem;
+  padding-bottom: 0.5rem;
+}
+@container (max-height: 264px) {
+  .deck-gates > :nth-child(n + 5) {
+    display: none;
+  }
+}
+@container (max-height: 211px) {
+  .deck-gates > :nth-child(n + 4) {
+    display: none;
+  }
+}
+@container (max-height: 158px) {
+  .deck-gates > :nth-child(n + 3) {
+    display: none;
+  }
+}
+/* panels whose content is a list, not a chart, scroll inside their slot */
+.deck-scroll > div:last-child {
+  overflow-y: auto;
+}
+/* tablet and small laptop (640-1279): the 3-6-3 grid would crush the charts,
+   so two columns at a readable height and a deliberate scroll; the wide
+   readers (race, ladder, pulse) take the full row */
+@media (min-width: 640px) {
+  .deck-body {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .deck-hero {
+    grid-column: 1 / -1;
+    height: 320px;
+  }
+  .deck-ladder,
+  .deck-pulse,
+  .deck-usage {
+    grid-column: 1 / -1;
+  }
+  .deck-body > section.hud:not(.deck-hero) {
+    height: 290px;
+  }
+}
+/* the one-screen grid needs room in BOTH directions: a 1280x800 laptop gets
+   the two-column layout and scrolls rather than a crushed bottom row */
+@media (min-width: 1280px) and (min-height: 820px) {
+  .deck-body {
+    grid-template-columns: repeat(12, minmax(0, 1fr));
+    /* the race leads but does not hog: one line of ships needs less height
+       than the dense charts below (independent review 3-nov, passes 1 and 7) */
+    grid-template-rows: minmax(270px, 1.05fr) minmax(230px, 1.3fr) minmax(210px, 0.8fr);
+  }
+  .deck-hero,
+  .deck-body > section.hud:not(.deck-hero) {
+    height: auto;
+  }
+  .deck-hero {
+    grid-column: 1 / span 9;
+    grid-row: 1;
+  }
+  .deck-proj {
+    grid-column: 10 / span 3;
+    grid-row: 1;
+  }
+  .deck-vel {
+    grid-column: 1 / span 3;
+  }
+  .deck-ladder {
+    grid-column: 4 / span 6;
+  }
+  .deck-rank {
+    grid-column: 10 / span 3;
+  }
+  .deck-cum {
+    grid-column: 1 / span 3;
+  }
+  .deck-pulse {
+    grid-column: 4 / span 6;
+  }
+  .deck-usage {
+    grid-column: 10 / span 3;
+  }
+}
+/* a 900px-tall laptop: the list cells of row 3 need ~230px to show every
+   figure whole, so the race gives up a little height there */
+@media (min-width: 1280px) and (min-height: 820px) and (max-height: 1000px) {
+  .deck-body {
+    grid-template-rows: minmax(270px, 1.25fr) minmax(200px, 1fr) minmax(232px, 1.12fr);
   }
 }
 

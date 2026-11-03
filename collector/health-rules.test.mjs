@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { COLLECTOR_STALE_H as APP_STALE_H } from "../src/lib/staleness.ts";
-import { ARTIFACTS, COLLECTOR_STALE_H, cancelledVerdict, cronLag, etaIncoherences, maxAgeFromEnv, newestRunMs, pickFreshestRuns, pipelineRunsGate, RUNS_LIST_TOL_H, runsListStale, openPartials, presenceEval, presenceLost, presenceMap, prflowFreshness, npmUsageFreshness, contributorsDrift, contributorCurve, buildersWallFreshness, buildersLangMismatch, curveEndsOnTotal, staleArtifacts, watchdogStale, v7StampLags, v7WindowFreshness } from "./health-rules.mjs";
+import { ARTIFACTS, COLLECTOR_STALE_H, npmLagExplains, cancelledVerdict, cronLag, etaIncoherences, maxAgeFromEnv, newestRunMs, pickFreshestRuns, pipelineRunsGate, RUNS_LIST_TOL_H, runsListStale, openPartials, presenceEval, presenceLost, presenceMap, prflowFreshness, npmUsageFreshness, contributorsDrift, contributorCurve, buildersWallFreshness, buildersLangMismatch, velocityRankFreshness, velocityRankReconstructed, ladderBandsPresence, gapsAfter, ciBandViolations, curveEndsOnTotal, staleArtifacts, watchdogStale, v7StampLags, v7WindowFreshness } from "./health-rules.mjs";
 
 describe("prflowFreshness", () => {
   // 26-sep: the first run after 00:00Z was cancelled and 25-sep never closed.
@@ -509,7 +509,7 @@ describe("contributorCurve", () => {
   it("warns when the curve and the number disagree", () => {
     expect(contributorCurve({ total: 614, series: { github: win(row("2026-10-11", 616)) } }).severity).toBe("warn");
   });
-  it("warns when the chart fell back to the census toggle", () => {
+  it("flags a missing GitHub-count curve (chart not drawn)", () => {
     // the dossier of 2026-10-11 before this change: no github series at all
     expect(contributorCurve({ total: 611, series: { github: null, authors: win(row("2026-10-11", 480)), credited: win() } }).severity).toBe("critical");
   });
@@ -608,5 +608,130 @@ describe("buildersLangMismatch", () => {
   });
   it("passes when every language answers in itself", () => {
     expect(buildersLangMismatch(["en", "ja"], { en: "en", ja: "ja" }).severity).toBeNull();
+  });
+});
+
+describe("velocityRankFreshness", () => {
+  const meta = { days: 108, first: "2026-06-14", last: "2026-10-19", lastTo: "2026-10-20" };
+  const now = Date.parse("2026-10-20T09:00:00Z");
+  it("passes when the table reaches the newest recorded day", () => {
+    expect(velocityRankFreshness(meta, "2026-10-20", "2026-10-20T04:42:17Z", now).severity).toBeNull();
+  });
+  it("gives the run that recorded the day time to build it", () => {
+    expect(velocityRankFreshness({ ...meta, lastTo: "2026-10-19" }, "2026-10-20", "2026-10-20T04:42:17Z", now).severity).toBeNull();
+  });
+  it("warns when the table stays behind the moat past the grace", () => {
+    const r = velocityRankFreshness({ ...meta, lastTo: "2026-10-19" }, "2026-10-20", "2026-10-19T22:00:00Z", now);
+    expect(r.severity).toBe("warn");
+    expect(r.note).toMatch(/stops at 2026-10-19/);
+  });
+  it("warns when the newest day ranked a top 1,000 with holes (2026-06-29 kept 909)", () => {
+    expect(velocityRankFreshness({ ...meta, lastN: 909 }, "2026-10-20", "2026-10-20T04:42:17Z", now).severity).toBe("warn");
+    expect(velocityRankFreshness({ ...meta, lastN: 999 }, "2026-10-20", "2026-10-20T04:42:17Z", now).severity).toBeNull();
+  });
+  it("a missing table is a warning, never a pass", () => {
+    expect(velocityRankFreshness(null, "2026-10-20", null, now).severity).toBe("warn");
+  });
+});
+
+describe("velocityRankReconstructed", () => {
+  it("warns when the hand-made reconstruction is gone or truncated, passes on the real shape", () => {
+    expect(velocityRankReconstructed(null).severity).toBe("warn");
+    expect(velocityRankReconstructed({ days: Array(74).fill("d"), repos: { a: {} } }).severity).toBe("warn");
+    const repos = Object.fromEntries(Array.from({ length: 2000 }, (_, i) => [`r/${i}`, {}]));
+    expect(velocityRankReconstructed({ from: "2026-04-01", to: "2026-06-13", days: Array(74).fill("d"), repos }).severity).toBeNull();
+  });
+});
+
+describe("npmLagExplains: a family stale because npm stopped publishing is not our outage", () => {
+  // the health run of 2026-10-21T14:06Z: npm-versions/ 86 h old, react's
+  // point/last-week ended on 2026-10-18 (npm 3 days behind for every package)
+  const now = Date.parse("2026-10-21T14:06:34Z");
+  const npmFam = { ...ARTIFACTS.find((a) => a.prefix === "npm-versions/"), ageH: 86 };
+
+  it("explains the real case: npm 3 days behind and we kept up until it stalled", () => {
+    expect(npmLagExplains(npmFam, "2026-10-18", now)).toEqual({ lagDays: 3, npmEnd: "2026-10-18" });
+  });
+  it("npm current (ends yesterday): our staleness is ours, stays critical", () => {
+    expect(npmLagExplains(npmFam, "2026-10-20", now)).toBeNull();
+  });
+  it("the first day of a stall is covered too: 2 days behind", () => {
+    expect(npmLagExplains({ ...npmFam, ageH: 40 }, "2026-10-19", now)).toEqual({ lagDays: 2, npmEnd: "2026-10-19" });
+  });
+  it("staleArtifacts keeps the upstream tag the rule reads (the wiring health.mjs relies on)", () => {
+    const newest = new Map([["npm-versions/", now - 86 * 3600e3]]);
+    const npmStale = staleArtifacts(newest, now).stale.find((x) => x.prefix === "npm-versions/");
+    expect(npmStale.upstream).toBe("npm");
+    expect(npmLagExplains(npmStale, "2026-10-18", now)).toEqual({ lagDays: 3, npmEnd: "2026-10-18" });
+  });
+  it("we stopped long before npm did: not explained", () => {
+    expect(npmLagExplains({ ...npmFam, ageH: 300 }, "2026-10-18", now)).toBeNull();
+  });
+  it("npm unreachable or a non-npm family: never explained", () => {
+    expect(npmLagExplains(npmFam, null, now)).toBeNull();
+    expect(npmLagExplains({ ...ARTIFACTS.find((a) => a.prefix === "traffic/"), ageH: 86 }, "2026-10-18", now)).toBeNull();
+  });
+});
+
+describe("velocityRankReconstructed: a new gap after the reconstruction", () => {
+  const repos = Object.fromEntries(Array.from({ length: 2000 }, (_, i) => [`r/${i}`, {}]));
+  const rec = { from: "2026-04-01", to: "2026-09-30", days: Array(183).fill("d"), repos };
+  // the real table around the end: complete through 22 Oct, but say 9 Oct is cut short
+  const table = ["2026-09-29", "2026-09-30", "2026-10-01", "2026-10-02", "2026-10-03", "2026-10-04", "2026-10-05", "2026-10-06", "2026-10-07", "2026-10-08", "2026-10-10"];
+
+  it("a table day missing after rec.to is a warn naming it", () => {
+    const r = velocityRankReconstructed(rec, table);
+    expect(r.severity).toBe("warn");
+    expect(r.note).toContain("2026-10-09");
+  });
+
+  it("no gap after rec.to, or the table not read: no warn", () => {
+    expect(velocityRankReconstructed(rec, [...table, "2026-10-09"]).severity).toBeNull();
+    expect(velocityRankReconstructed(rec, null).severity).toBeNull();
+  });
+
+  it("gapsAfter ignores the days up to rec.to and the open end", () => {
+    expect(gapsAfter(["2026-09-02", "2026-09-05"], "2026-09-02")).toEqual(["2026-09-03", "2026-09-04"]);
+    expect(gapsAfter([], "2026-09-30")).toEqual([]);
+  });
+});
+
+describe("ciBandViolations", () => {
+  const vault = { "2026-08-25": { c: 5174 }, "2026-10-21": { c: 8391 }, "2026-10-22": { c: 100 } };
+  it("21 Oct is consistent (1,361 checkouts x 1 <= 8,391 clones)", () => {
+    expect(ciBandViolations({ "2026-10-21": { checkouts: 1361 } }, vault).severity).toBeNull();
+  });
+  it("a day counting more CI than clones is a warn naming it", () => {
+    const r = ciBandViolations({ "2026-08-25": { checkouts: 6000 } }, vault);
+    expect(r.severity).toBe("warn");
+    expect(r.note).toContain("2026-08-25");
+  });
+  it("the vault's newest day is skipped: GitHub may still be closing it", () => {
+    expect(ciBandViolations({ "2026-10-22": { checkouts: 900 } }, vault).severity).toBeNull();
+  });
+  it("days only one side has are not compared", () => {
+    expect(ciBandViolations({ "2026-10-22": { checkouts: 9999 } }, { "2026-10-21": { c: 10 } }).severity).toBeNull();
+  });
+});
+
+describe("ladderBandsPresence", () => {
+  // what React renders on the ladder's wrapper (DailyLadder.tsx)
+  const html = (n, last) => `<div class="flex w-full flex-col gap-1.5 " data-ladder-bands="${n}" data-ladder-bands-last="${last}"><div class="w-full">`;
+
+  it("passes with zones whose newest month is this month", () => {
+    expect(ladderBandsPresence(html(5, "2026-10"), "2026-10-26")).toMatchObject({ severity: null });
+  });
+  it("warns when the server handed over no zones", () => {
+    expect(ladderBandsPresence(html(0, ""), "2026-10-26").severity).toBe("warn");
+  });
+  it("warns when the ladder is not on the page at all", () => {
+    expect(ladderBandsPresence("<html>no ladder</html>", "2026-10-26").severity).toBe("warn");
+  });
+  it("lets the 1st of a month through on last month's zone (caches), not the 2nd", () => {
+    expect(ladderBandsPresence(html(5, "2026-10"), "2026-11-01").severity).toBeNull();
+    expect(ladderBandsPresence(html(5, "2026-10"), "2026-11-02")).toMatchObject({ severity: "warn", note: expect.stringContaining("not 2026-11") });
+  });
+  it("handles the year boundary", () => {
+    expect(ladderBandsPresence(html(7, "2026-12"), "2027-01-01").severity).toBeNull();
   });
 });

@@ -25,8 +25,8 @@ export default function ConsoleLayout({
   velocity,
   projections,
   ladder,
-  heatmap,
   rank,
+  velocityRank,
   traffic,
   log,
   firstIndex = 2,
@@ -37,8 +37,10 @@ export default function ConsoleLayout({
   velocity: ConsoleSlot;
   projections: ConsoleSlot;
   ladder: ConsoleSlot;
-  heatmap: ConsoleSlot;
   rank: ConsoleSlot;
+  // daily place among the top 1,000 by new stars (locked); optional so a
+  // surface without it keeps its numbering
+  velocityRank?: ConsoleSlot;
   traffic: ConsoleSlot;
   log: ConsoleSlot;
   // Panels are numbered in page order. Vital Signs (01) always sits above the
@@ -48,6 +50,7 @@ export default function ConsoleLayout({
   firstIndex?: number;
 }) {
   const n = (k: number) => String(firstIndex + k).padStart(2, "0");
+  const after = velocityRank ? 1 : 0; // panels below it move down one number
   return (
     <>
       <Panel index={n(0)} title="Star chart" meta={starChart.meta} delay={80}>
@@ -85,24 +88,28 @@ export default function ConsoleLayout({
         </Panel>
       </div>
 
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <Panel index={n(6)} title="Daily ladder" meta={ladder.meta} delay={360}>
-          {ladder.node}
-        </Panel>
-        <Panel index={n(7)} title="Activity heatmap" meta={heatmap.meta} delay={400}>
-          {heatmap.node}
-        </Panel>
-      </div>
+      {/* full width on its own (the all-time heatmap that shared this row was
+          retired 26-oct: 40% of its cells were launch week). The ladder shows
+          more DAYS at the same bar width, not wider bars */}
+      <Panel index={n(6)} title="Daily ladder" meta={ladder.meta} delay={360}>
+        {ladder.node}
+      </Panel>
 
-      <Panel index={n(8)} title="World rank over time" meta={rank.meta} delay={440}>
+      <Panel index={n(7)} title="World rank over time" meta={rank.meta} delay={440}>
         {rank.node}
       </Panel>
 
-      <Panel index={n(9)} title="Traffic vault" meta={traffic.meta} delay={480}>
+      {velocityRank && (
+        <Panel index={n(8)} title="Daily velocity rank, top 1,000" meta={velocityRank.meta} delay={460}>
+          {velocityRank.node}
+        </Panel>
+      )}
+
+      <Panel index={n(8 + after)} title="Traffic vault" meta={traffic.meta} delay={480}>
         {traffic.node}
       </Panel>
 
-      <Panel index={n(10)} title="Mission log" meta={log.meta} delay={520}>
+      <Panel index={n(9 + after)} title="Mission log" meta={log.meta} delay={520}>
         {log.node}
       </Panel>
     </>

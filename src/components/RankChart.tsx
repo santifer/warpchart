@@ -54,6 +54,18 @@ export default function RankChart({ bundle, fill }: { bundle: DashboardBundle; f
     const lo = Math.min(...ranks), hi = Math.max(...ranks);
     return [lo - 2, hi + 2];
   }, [data, effStart, effEnd]);
+  // Even ticks on round ranks: recharts' own ticks on this padded domain
+  // ended with the boundary value ("#268 #273", 5 apart after steps of 15),
+  // which reads as a broken scale. Multiples of a 1-2-5 step instead.
+  const yTicks = useMemo(() => {
+    const [a, b] = yDomain;
+    const raw = (b - a) / 5;
+    const mag = Math.pow(10, Math.floor(Math.log10(Math.max(raw, 1))));
+    const step = [1, 2, 5, 10].map((k) => k * mag).find((x) => x >= raw) ?? 10 * mag;
+    const out: number[] = [];
+    for (let v = Math.ceil(a / step) * step; v <= b; v += step) out.push(v);
+    return out;
+  }, [yDomain]);
 
   if (data.length < 5) {
     return (
@@ -71,7 +83,7 @@ export default function RankChart({ bundle, fill }: { bundle: DashboardBundle; f
   return (
     <div ref={ref} className={`w-full touch-pan-y ${fill ? "h-full min-h-0" : "h-[230px]"}`} style={{ cursor: canPan ? "ew-resize" : undefined }}>
       <ResponsiveContainer width="100%" height="100%">
-        <LineChart data={data} margin={{ top: 10, right: 8, left: -14, bottom: 0 }}>
+        <LineChart data={data} margin={{ top: 10, right: fill ? 22 : 8, left: -14, bottom: 0 }}>
           <CartesianGrid stroke={C.grid} strokeDasharray="2 6" vertical={false} />
           <XAxis
             dataKey="t"
@@ -82,18 +94,19 @@ export default function RankChart({ bundle, fill }: { bundle: DashboardBundle; f
             tickFormatter={(t: number) =>
               new Date(t).toLocaleDateString("en-US", { month: "short", day: "numeric" })
             }
-            tick={{ fill: C.faint, fontSize: 9 }}
+            tick={{ fill: C.faint, fontSize: fill ? 11 : 9 }}
             tickLine={false}
             axisLine={{ stroke: C.grid }}
-            minTickGap={56}
+            minTickGap={fill ? 70 : 56}
           />
           <YAxis
             reversed
             domain={yDomain}
+            ticks={yTicks}
             allowDataOverflow
             allowDecimals={false}
             tickFormatter={(v: number) => `#${v}`}
-            tick={{ fill: C.faint, fontSize: 9 }}
+            tick={{ fill: C.faint, fontSize: fill ? 11 : 9 }}
             tickLine={false}
             axisLine={false}
             width={48}
