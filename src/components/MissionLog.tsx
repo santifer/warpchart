@@ -48,10 +48,16 @@ export default function MissionLog({
       // (that one depends on the column count and fed back into it). Both
       // rects are in the same units, so the wall zoom cancels out.
       const panel = el.closest("section");
-      const avail = panel
-        ? panel.getBoundingClientRect().bottom - el.getBoundingClientRect().top - 16
+      // measured to the panel body's real content edge (its bottom padding
+      // read, not assumed: a guessed 10 px let a 14th row be laid out that
+      // the clip then hid); the last row needs no trailing gap
+      const body = panel?.lastElementChild as HTMLElement | null;
+      const avail = body
+        ? body.getBoundingClientRect().bottom -
+          (parseFloat(getComputedStyle(body).paddingBottom) || 0) * zoom -
+          el.getBoundingClientRect().top
         : el.clientHeight;
-      const rows = Math.max(1, Math.floor(avail / line));
+      const rows = Math.max(1, Math.floor((avail + 6 * zoom) / line));
       // never narrower than ~26rem a column: past that the names truncate,
       // so a short screen shows fewer entries (the fade marks the cut)
       // a line needs ~36rem to keep its name whole; only full columns are

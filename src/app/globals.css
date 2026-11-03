@@ -1730,6 +1730,18 @@ body.gx-warping .ghx-lore {
     grid-row: 2;
     height: 100% !important;
   }
+  /* stacked, its three figures spread over the column's height */
+  .deck-audience:has(.vault-chart) > .deck-usage-wide > div:last-child,
+  .deck-audience:has(.vault-chart) > .deck-usage-wide > div:last-child > div {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    min-height: 0;
+  }
+  .deck-audience:has(.vault-chart) .deck-usage-rows {
+    flex: 1;
+    justify-content: space-around;
+  }
   .deck-audience:has(.vault-chart) > .deck-log {
     grid-column: 2;
     grid-row: 2;
@@ -1760,10 +1772,11 @@ body.gx-warping .ghx-lore {
 .deck-log-cols {
   min-height: 0;
 }
+/* the log shows only whole rows and full columns (MissionLog fillHeight),
+   so nothing is cut and no fade is needed: the old 24 px fade hid the last
+   row that fit */
 .deck-log-cols > div:last-child {
   overflow: hidden;
-  -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 24px), transparent);
-  mask-image: linear-gradient(to bottom, #000 calc(100% - 24px), transparent);
 }
 @media (min-width: 1024px) {
   .deck-log-cols .mission-log-list {
