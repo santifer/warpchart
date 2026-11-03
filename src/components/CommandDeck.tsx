@@ -31,8 +31,6 @@ import PrFlowPanel from "./PrFlowPanel";
 import TrafficPanel from "./TrafficPanel";
 import GodVelocityRank from "./GodVelocityRank";
 import MissionLog from "./MissionLog";
-import CompareLab from "./CompareLab";
-import { RaceProvider } from "./RaceContext";
 import type { Vitals } from "@/lib/vitals";
 import type { PrFlow } from "@/lib/prflow";
 import { useLive } from "./LiveProvider";
@@ -533,25 +531,23 @@ export default function CommandDeck({
       ) : null}
       {view === "audience" ? (
         <div className="deck-view relative">
+          {/* The race panel's single curve repeats GROWTH's cumulative, so the
+              deck gives its room to the mission log; locked panels fold to a
+              line, and the race stays a click away in the console. */}
           <div className="deck-view-main">
             <Panel index="01" title="Traffic vault" meta="private · kept past GitHub's 14-day window">
-              <TrafficPanel repo={repo} />
+              <TrafficPanel repo={repo} compact />
             </Panel>
-            <Panel index="02" title="The race" meta="cumulative stars vs the repos you track">
-              <RaceProvider repo={repo}>
-                <CompareLab initialRepos={[repo]} embedded />
-              </RaceProvider>
+            <Panel index="02" title="Mission log" meta="auto-detected from telemetry" className="deck-log">
+              <MissionLog events={bundle.events} captain={bundle.captain} />
             </Panel>
           </div>
           <div className="deck-view-side">
             <Panel index="03" title="Daily velocity rank" meta="by new stars each day">
-              <GodVelocityRank repo={repo} />
+              <GodVelocityRank repo={repo} compact />
             </Panel>
             {/* adoption reads with audience, not with repo health */}
             <UsagePanel dossier={dossier} index="04" compact />
-            <Panel index="05" title="Mission log" meta="auto-detected from telemetry" className="deck-scroll deck-log">
-              <MissionLog events={bundle.events} captain={bundle.captain} />
-            </Panel>
           </div>
         </div>
       ) : null}
@@ -601,11 +597,11 @@ export default function CommandDeck({
         >
           <DailyLadder bundle={bundle} fill bands={ladderBands} />
         </Panel>
-        <Panel index="03" title="World rank" meta="hourly" className="deck-rank">
+        <Panel index="06" title="World rank" meta="hourly" className="deck-rank">
           <RankChart bundle={bundle} fill />
         </Panel>
 
-        <Panel index="06" title="Cumulative" meta={`since ${bundle.meta?.created_at?.slice(0, 10) ?? "launch"}`} className="deck-cum">
+        <Panel index="03" title="Cumulative" meta={`since ${bundle.meta?.created_at?.slice(0, 10) ?? "launch"}`} className="deck-cum">
           <CurveChart repo={repo} fill />
         </Panel>
       </div>

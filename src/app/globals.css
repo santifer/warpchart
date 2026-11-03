@@ -1633,6 +1633,22 @@ body.gx-warping .ghx-lore {
 .deck-log > div:last-child {
   overflow-y: auto;
 }
+/* PR flow's chart takes a height that scales with the screen (recharts needs
+   a definite height, not a flex grow), so the panel fills its cell with data */
+.deck-view .pr-flow-chart {
+  height: clamp(200px, calc(100vh - 640px), 520px);
+}
+/* a short laptop (<=950 px tall): Vital Signs drops its operations row in the
+   deck (the console keeps it), so the view fits without scrolling */
+@media (max-height: 950px) {
+  .deck-view .deck-short-hide {
+    display: none;
+  }
+  /* and PR flow's chart keeps a readable floor without pushing past the frame */
+  .deck-view .pr-flow-chart {
+    height: clamp(160px, calc(100vh - 690px), 260px);
+  }
+}
 .deck-panel-scroll {
   min-height: 0;
   overflow-y: auto;

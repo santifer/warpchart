@@ -53,7 +53,7 @@ const read = (): string | null => {
   }
 };
 
-export default function TrafficPanel({ repo }: { repo: string }) {
+export default function TrafficPanel({ repo, compact = false }: { repo: string; compact?: boolean }) {
   const C = usePalette();
   const [vault, setVault] = useState<TrafficVault | null>(null);
   // a key this browser holds that the server refused, or that returned nothing.
@@ -144,6 +144,15 @@ export default function TrafficPanel({ repo }: { repo: string }) {
 
   // teaser: shown to everyone on the public console (privacy is the pitch)
   if (!vault) {
+    // Command Deck: a locked panel folds to one line, so it never takes a
+    // screen's worth of height from panels with data
+    if (compact)
+      return (
+        <div className="numeral flex items-center justify-between gap-3 text-micro">
+          <span className="font-display tracking-[0.3em] text-accent">◈ PRIVATE</span>
+          <span className="truncate text-faint">open your private vault link to see views, clones and referrers</span>
+        </div>
+      );
     return (
       <div className="flex h-[230px] flex-col items-center justify-center gap-2 text-center">
         <span className="font-display text-label tracking-[0.3em] text-accent">◈ PRIVATE TRAFFIC VAULT</span>

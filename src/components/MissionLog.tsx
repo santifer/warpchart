@@ -48,7 +48,18 @@ export default function MissionLog({
                   {e.text}
                 </a>
               ) : (
-                <span className="min-w-0 truncate text-dim" title={e.text}>{e.text}</span>
+                (() => {
+                  // the figure in parentheses stays whole; the name truncates
+                  const m = e.text.match(/^(.*?)(\s\([^()]*\))$/);
+                  return m ? (
+                    <span className="flex min-w-0 text-dim" title={e.text}>
+                      <span className="min-w-0 truncate">{m[1]}</span>
+                      <span className="shrink-0 whitespace-pre">{m[2]}</span>
+                    </span>
+                  ) : (
+                    <span className="min-w-0 truncate text-dim" title={e.text}>{e.text}</span>
+                  );
+                })()
               )}
             </li>
           ))}

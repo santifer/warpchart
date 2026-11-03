@@ -380,7 +380,7 @@ export default function VitalSignsPanel({
         </div>
 
         {/* ═══ ACT 4 · THE OPERATION — velocity, quality, the gate ═══ */}
-        <div className="grid grid-cols-1 gap-x-8 gap-y-6 border-t border-grid pt-5 sm:grid-cols-3">
+        <div className={`grid grid-cols-1 gap-x-8 gap-y-6 border-t border-grid pt-5 sm:grid-cols-3 ${compact ? "deck-short-hide" : ""}`}>
           <OpsGroup title="VELOCITY">
             {lt ? (
               <Figure
@@ -481,7 +481,7 @@ export default function VitalSignsPanel({
         {/* footer credentials — verified from public data. Important, but a
             reader scanning for traction reads rank and growth first. */}
         {ar?.agentNative || (docs && docs.chips.length > 0) ? (
-          <div className="flex flex-col gap-2 border-t border-grid pt-5">
+          <div className={`flex flex-col gap-2 border-t border-grid pt-5 ${compact ? "deck-short-hide" : ""}`}>
             <span className="numeral text-micro tracking-[0.22em] text-faint">
               VERIFIED · PUBLIC GITHUB DATA
             </span>

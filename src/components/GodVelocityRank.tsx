@@ -47,7 +47,7 @@ function LockedTeaser({ repo }: { repo: string }) {
   );
 }
 
-export default function GodVelocityRank({ repo }: { repo: string }) {
+export default function GodVelocityRank({ repo, compact = false }: { repo: string; compact?: boolean }) {
   const C = usePalette();
   const { resolved } = useThemeMode();
   const TC = TIER_COLOR[resolved];
@@ -132,7 +132,15 @@ export default function GodVelocityRank({ repo }: { repo: string }) {
     return { data, wow: { ...wow, best }, bestRec, yMax, ticks, months, liveT, firstLive, filled, trendDays: data.filter((p) => p.tr != null) };
   }, [state, range]);
 
-  if (state.kind === "locked") return <LockedTeaser repo={repo} />;
+  if (state.kind === "locked")
+    return compact ? (
+      <a href={`/pricing?repo=${encodeURIComponent(repo)}`} className="numeral flex items-center justify-between gap-3 text-micro">
+        <span className="tracking-[0.28em] text-faint">◈ UNLOCK WITH TRACKING</span>
+        <span className="truncate text-faint">daily rank by new stars</span>
+      </a>
+    ) : (
+      <LockedTeaser repo={repo} />
+    );
   if (state.kind === "unavailable" || state.kind === "empty") {
     const msg = {
       unavailable: "VELOCITY RANK UNAVAILABLE · the daily table is not built yet",
