@@ -33,6 +33,7 @@ import type { Dossier } from "@/lib/explorer";
 import type { ChartInputs } from "@/lib/types";
 import { fmt, fmtEtaRange, shortName } from "@/lib/format";
 import { neighborEtas, milestoneEta, unsteadyLabel, etaText } from "@/lib/projections";
+import { rankDelta7d, weekOverWeekPct } from "@/lib/deck-deltas";
 
 // Trend glyph for a KPI tile (the "stat with sparkline" of Grafana/Datadog
 // top rows): shape only, no axis and no labels, drawn from series the bundle
@@ -72,6 +73,26 @@ function Spark({ values, invert, title }: { values: number[]; invert?: boolean; 
       />
       <circle cx={lx} cy={ly} r={1.8} fill="currentColor" />
     </svg>
+  );
+}
+
+// The status mark next to a tile value: one meaning everywhere, as Grafana's
+// guide asks ("blue means good, red means bad"): accent = moving the right way,
+// warn = the wrong way. Null renders nothing (no baseline is not "flat").
+function Delta({ value, suffix = "%", arrow, title }: { value: number | null; suffix?: string; arrow?: boolean; title: string }) {
+  if (value === null) return null;
+  // flat is neither good nor bad: grey, "=" / "±0"
+  const tone = value > 0 ? "text-accent" : value < 0 ? "text-warn" : "text-faint";
+  const text =
+    value === 0
+      ? arrow ? "=" : `±0${suffix}`
+      : arrow
+        ? `${value > 0 ? "▲" : "▼"}${Math.abs(value)}`
+        : `${value > 0 ? "+" : ""}${value}${suffix}`;
+  return (
+    <span className={`ml-2 text-sm ${tone}`} title={title}>
+      {text}
+    </span>
   );
 }
 
@@ -255,6 +276,8 @@ export default function CommandDeck({
       v7: bundle.ma7.slice(0, done.length).slice(-30).filter((x): x is number => x !== null),
     };
   }, [bundle.daily, bundle.rankHistory, bundle.hourly, bundle.ma7, live.nowMs, live.stars, live.todayCount]);
+  const rankMove = rankDelta7d(bundle.rankHistory, live.rank, live.nowMs);
+  const weekPct = weekOverWeekPct(bundle.daily, live.nowMs);
   const live7 = Math.round(bundle.v7d);
   const syncLabel = live.offline ? "SYNC LOST" : live.lastSync === null ? "SYNCING" : "LIVE";
 
@@ -313,35 +336,32 @@ export default function CommandDeck({
       {/* tiles: the eight numbers worth a glance, in reading order
           (state → pace → what comes next). Empty slots keep their cell. */}
       <div className="hud deck-tiles relative shrink-0">
-        <Tile label="STARS" tone="accent" big spark={<Spark values={sparks.stars} title="total stars, last 30 days" />} sub={`since ${bundle.meta?.created_at?.slice(0, 10) ?? "launch"}`}>
+        <Tile label="STARS" tone="accent" big title="GitHub stargazers, live; the line is the total over the last 30 days" spark={<Spark values={sparks.stars} title="total stars, last 30 days" />} sub={`since ${bundle.meta?.created_at?.slice(0, 10) ?? "launch"}`}>
           <LiveNumber value={live.stars} locales="en-US" />
         </Tile>
-        <Tile label="RANK" big sub="worldwide" spark={<Spark values={sparks.rank} invert title="world rank, last 30 days (up = better)" />}>
+        <Tile label="RANK" big title="world rank by total stars among all public repos; ▲/▼ = positions vs 7 days ago" sub="worldwide" spark={<Spark values={sparks.rank} invert title="world rank, last 30 days (up = better)" />}>
           {live.rank !== null ? (
             <>
               <span className="text-faint">#</span>
               <LiveNumber value={live.rank} locales="en-US" />
+              <Delta value={rankMove} arrow title="positions gained since 7 days ago" />
             </>
           ) : (
             "n/a"
           )}
         </Tile>
-        <Tile label="LAST HOUR" sub="rolling 60 min" spark={<Spark values={sparks.hour} title="stars per hour, last 24 h" />}>
+        <Tile label="LAST HOUR" title="stars in the rolling last 60 minutes; the line is stars per hour over 24 h" sub="rolling 60 min" spark={<Spark values={sparks.hour} title="stars per hour, last 24 h" />}>
           <LiveNumber value={live.starsLastHour} locales="en-US" />
         </Tile>
         {/* the same today-vs-yesterday-at-this-hour reading as the console's
             status bar (LiveProvider.deltaPct), so the deck number has context */}
-        <Tile label="TODAY UTC" sub={`yesterday now: ${fmt(live.yesterdaySameHour)}`} spark={<Spark values={sparks.day} title="stars per day, last 14 full days" />}>
+        <Tile label="TODAY UTC" title="stars since 00:00 UTC, compared with yesterday at the same hour; the line is the last 14 full days" sub={`yesterday now: ${fmt(live.yesterdaySameHour)}`} spark={<Spark values={sparks.day} title="stars per day, last 14 full days" />}>
           <LiveNumber value={live.todayCount} locales="en-US" />
-          {live.deltaPct !== null ? (
-            <span className={`ml-2 text-sm ${live.deltaPct >= 0 ? "text-accent" : "text-warn"}`}>
-              {live.deltaPct >= 0 ? "+" : ""}
-              {live.deltaPct}%
-            </span>
-          ) : null}
+          <Delta value={live.deltaPct} title="today so far vs yesterday at this hour" />
         </Tile>
-        <Tile label="V7D" sub="stars/day, 7d" spark={<Spark values={sparks.v7} title="7-day average, last 30 days" />}>
+        <Tile label="V7D" title="canonical 7-day velocity, stars per day; the % compares the last 7 full days with the 7 before" sub="stars/day, 7d" spark={<Spark values={sparks.v7} title="7-day average, last 30 days" />}>
           {fmt(live7)}
+          <Delta value={weekPct} title="stars in the last 7 full days vs the 7 before" />
         </Tile>
         {nextGate ? (
           <Tile
