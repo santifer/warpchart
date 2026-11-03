@@ -1398,10 +1398,14 @@ body.gx-warping .ghx-lore {
     grid-column: span 2;
   }
 }
-/* a phone cannot read the race at 390px: the gates come first there */
+/* a phone cannot read the race at 390px: the gates come first there, and
+   the card numbers (reading order on the grid) would then read 02, 01 */
 @media (max-width: 639px) {
   .deck-proj {
     order: -1;
+  }
+  .deck-body .module-index {
+    display: none;
   }
 }
 @media (min-width: 1440px) {
@@ -1552,7 +1556,7 @@ body.gx-warping .ghx-lore {
 }
 /* a 900px-tall laptop: the list cells of row 3 need ~230px to show every
    figure whole, so the race gives up a little height there */
-@media (min-width: 1280px) and (min-height: 820px) and (max-height: 940px) {
+@media (min-width: 1280px) and (min-height: 820px) and (max-height: 1000px) {
   .deck-body {
     grid-template-rows: minmax(270px, 1.25fr) minmax(200px, 1fr) minmax(232px, 1.12fr);
   }

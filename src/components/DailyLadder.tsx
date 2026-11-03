@@ -312,7 +312,7 @@ export default function DailyLadder({
               {god && lastBand ? ` · ≥${fmt(lastBand.t[key])}/d` : ""}
             </span>
           ))}
-          {shown.length ? <span className="numeral text-micro text-faint">{fill ? "ⓘ" : zoneCaption}</span> : null}
+          {shown.length && !fill ? <span className="numeral text-micro text-faint">{zoneCaption}</span> : null}
         </div>
       )}
     </div>

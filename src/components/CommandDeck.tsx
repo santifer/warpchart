@@ -439,7 +439,17 @@ export default function CommandDeck({
         <Panel index="03" title="Stars / hour" meta="24h vs prev · UTC" className="deck-vel">
           <VelocityChart fill />
         </Panel>
-        <Panel index="04" title="Daily ladder" meta="night floor 00-05 UTC" className="deck-ladder">
+        <Panel
+          index="04"
+          title="Daily ladder"
+          // the zones' definition lives on the header's ⓘ, so the legend stays one line
+          meta={
+            <span title="zones = stars a day needed to rank top 10 / 50 / 100 / 250 by new stars among the 1,000 most-starred repos, monthly median">
+              night floor 00-05 UTC · ⓘ zones
+            </span>
+          }
+          className="deck-ladder"
+        >
           <DailyLadder bundle={bundle} fill bands={ladderBands} />
         </Panel>
         <Panel index="05" title="World rank" meta="hourly" className="deck-rank">
