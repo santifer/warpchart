@@ -150,6 +150,17 @@ export default function DailyLadder({
   const lastFloor = [...view].reverse().find((r) => r.floor !== null)?.floor ?? null;
   const canPan = all.length > visible;
   const yTop = Math.ceil(dayMax * 1.05);
+  // deck: even 1-2-5 steps (0 · 250 · 500 · 750); the auto ticks ended with
+  // the domain top ("750 · 938"), an odd interval. The peak may rise past
+  // the last labelled tick, as on World rank.
+  const dayTicks = (() => {
+    const raw = yTop / 4;
+    const mag = Math.pow(10, Math.floor(Math.log10(Math.max(raw, 1))));
+    const step = [1, 2, 2.5, 5, 10].map((k) => k * mag).find((x) => x >= raw) ?? 10 * mag;
+    const out: number[] = [];
+    for (let v = 0; v <= yTop; v += step) out.push(Math.round(v));
+    return out;
+  })();
 
   // zones for the visible window, clipped to the re-fitted axis; the legend
   // names only the zones on screen and quotes the newest visible month
@@ -206,6 +217,7 @@ export default function DailyLadder({
           <YAxis
             yAxisId="day"
             domain={[0, yTop]}
+            ticks={fill ? dayTicks : undefined}
             allowDataOverflow
             tick={{ fill: C.faint, fontSize: fill ? 11 : 9 }}
             tickLine={false}
