@@ -28,7 +28,7 @@ export default function Projections({
     return (
       // deck-gates: globals.css hides the rows that would not fit whole in
       // the cell's height (container query), so a gate is shown entire or not
-      <div className="deck-gates numeral flex flex-col">
+      <div className="deck-gates numeral flex h-full flex-col justify-between">
         {ahead.slice(0, 5).map((m) => {
           const e = milestoneEta(m.rank, m.threshold, live.stars, vOwn, m.drift);
           const pct = Math.min(100, (live.stars / m.threshold) * 100);

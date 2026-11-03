@@ -153,9 +153,9 @@ export default function GalacticChart({
   // label renders at about hole width / 1550 (fs × hole / W): ~0.9× in the
   // race's 9-column slot on a 1920 screen. Line offsets that stack two
   // labels grow with fs too, so the bigger type never overprints.
-  // noRoute: secondary lines (11 units × fs) never render under ~10 px on
-  // screen, so names (12.5 × fs) sit at ~11.5 px or more on a laptop
-  const fsFloor = noRoute && deckPx ? (10 / 11) * (W / deckPx) : 0;
+  // noRoute: secondary lines (11 units × fs) never render under ~11 px on
+  // screen, so names (12.5 × fs) sit at ~12.5 px or more on a laptop
+  const fsFloor = noRoute && deckPx ? (11 / 11) * (W / deckPx) : 0;
   const fs = deck
     ? noRoute
       ? Math.min(2.7, Math.max(1.1, W / 1300, fsFloor))
