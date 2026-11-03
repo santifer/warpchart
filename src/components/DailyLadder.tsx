@@ -197,10 +197,11 @@ export default function DailyLadder({
             tick={{ fill: C.faint, fontSize: fill ? 11 : 9 }}
             tickLine={false}
             axisLine={{ stroke: C.grid }}
-            // fixed every-4th ticks collide in a narrow deck cell; there the
-            // axis thins itself to whatever fits, keeping both ends
-            interval={fill ? "preserveStartEnd" : 3}
-            minTickGap={fill ? 30 : 5}
+            // the deck labels one day every 14, counted from a fixed epoch so
+            // the step is regular and does not shift while panning
+            ticks={fill ? view.filter((r) => Math.round(Date.parse(`${r.d}T00:00:00Z`) / 864e5) % 14 === 0).map((r) => r.label) : undefined}
+            interval={fill ? 0 : 3}
+            minTickGap={fill ? 0 : 5}
           />
           <YAxis
             yAxisId="day"

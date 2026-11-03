@@ -104,6 +104,21 @@ export default function CurveChart({ repo, fill }: { repo: string; fill?: boolea
   // middle (archive unavailable) draws dashed, and it is BOUNDED at exactStart
   // so the recent window we recorded never renders as a guess. Boundary and
   // exactStart points belong to both series so the pens meet without a gap.
+  // month starts inside the curve's span, every second one past six months
+  const monthTicks = (() => {
+    if (!curve.pts.length) return [] as number[];
+    const t0 = curve.pts[0].t;
+    const t1 = curve.pts[curve.pts.length - 1].t;
+    const out: number[] = [];
+    const d = new Date(t0);
+    let m = Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 1);
+    while (m <= t1) {
+      out.push(m);
+      const n = new Date(m);
+      m = Date.UTC(n.getUTCFullYear(), n.getUTCMonth() + 1, 1);
+    }
+    return out.length > 6 ? out.filter((_, i) => i % 2 === (out.length % 2 === 0 ? 1 : 0)) : out;
+  })();
   const rows: Row[] = curve.pts.map((p, i) => {
     const inEst = boundary !== null && i >= boundary && (exactStart === null || i <= exactStart);
     const inSolid = !inEst || i === boundary || i === exactStart;
@@ -121,7 +136,9 @@ export default function CurveChart({ repo, fill }: { repo: string; fill?: boolea
               type="number"
               domain={["dataMin", "dataMax"]}
               // "Apr 26" reads as the 26th of April; the deck says the month
-              // only (the year is in the panel header) and thins the ticks
+              // only (the year is in the panel header), so its ticks sit on
+              // the 1st of a month: equal spacing then means equal time
+              ticks={fill ? monthTicks : undefined}
               tickFormatter={(t: number) =>
                 fill
                   ? new Date(t).toLocaleDateString("en-US", { month: "short", timeZone: "UTC" })
@@ -130,7 +147,7 @@ export default function CurveChart({ repo, fill }: { repo: string; fill?: boolea
               tick={{ fill: C.dim, fontSize: fill ? 11 : 12, fontFamily: "var(--font-jbmono)" }}
               tickLine={false}
               axisLine={{ stroke: C.grid }}
-              minTickGap={fill ? 24 : 5}
+              minTickGap={fill ? 0 : 5}
             />
             <YAxis
               tickFormatter={(v: number) => fmtCompact(v)}

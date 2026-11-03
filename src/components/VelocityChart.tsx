@@ -62,10 +62,11 @@ export default function VelocityChart({ fill }: { fill?: boolean }) {
             tick={{ fill: C.faint, fontSize: fill ? 11 : 9 }}
             tickLine={false}
             axisLine={{ stroke: C.grid }}
-            // fixed every-4th ticks collide in a narrow deck cell; there the
-            // axis thins itself to whatever fits, keeping both ends
-            interval={fill ? "preserveStartEnd" : 3}
-            minTickGap={fill ? 26 : 5}
+            // the deck labels the UTC 00/06/12/18 hours only: a regular step,
+            // never a final "now" tick at an odd interval
+            ticks={fill ? data.filter((r) => new Date(r.t).getUTCHours() % 6 === 0).map((r) => r.label) : undefined}
+            interval={fill ? 0 : 3}
+            minTickGap={fill ? 0 : 5}
           />
           <YAxis
             tick={{ fill: C.faint, fontSize: fill ? 11 : 9 }}
