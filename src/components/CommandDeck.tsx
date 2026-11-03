@@ -55,20 +55,24 @@ function Tile({
   const color =
     tone === "accent" ? "text-accent" : tone === "warn" ? "text-warn" : tone === "dim" ? "text-faint" : "text-ink";
   return (
-    <div className="deck-tile flex min-w-0 flex-col gap-1 px-3.5 py-2" title={title}>
+    <div className="deck-tile flex min-w-0 flex-col gap-1 px-3 py-2 sm:px-3.5" title={title}>
       <span className="module-title !text-micro truncate">{label}</span>
       {/* fixed-height value line, bottom-aligned: big and normal values share
           one baseline across the strip */}
       <span className="flex h-8 items-end">
         <span
-          className={`numeral truncate leading-none ${big ? "text-3xl" : "text-2xl"} ${color} ${
+          className={`numeral truncate leading-none ${big ? "text-2xl sm:text-3xl" : "text-xl sm:text-2xl"} ${color} ${
             big && tone === "accent" ? "glow-accent" : ""
           }`}
         >
           {children}
         </span>
       </span>
-      <span className="numeral truncate text-micro text-faint">{sub ?? "\u00a0"}</span>
+      {/* phones have no hover tooltip: the context line may wrap to two lines
+          there instead of being cut; from sm up it is one line, full text in title */}
+      <span className="numeral line-clamp-2 text-micro text-faint sm:line-clamp-none sm:truncate">
+        {sub ?? "\u00a0"}
+      </span>
     </div>
   );
 }
@@ -208,8 +212,12 @@ export default function CommandDeck({
               className="h-6 w-6 shrink-0 border border-grid"
             />
           ) : null}
-          <span className="font-display truncate text-sm uppercase tracking-[0.2em] text-star">{repo}</span>
-          <span className="flex shrink-0 items-center gap-1.5">
+          {/* phones show the repo name only; the owner is one tap away */}
+          <span className="font-display truncate text-sm uppercase tracking-[0.2em] text-star">
+            <span className="hidden sm:inline">{repo}</span>
+            <span className="sm:hidden">{repo.split("/")[1] ?? repo}</span>
+          </span>
+          <span className="flex shrink-0 items-center gap-1.5" title={syncLabel} aria-label={syncLabel}>
             <span
               className={
                 live.offline
@@ -219,7 +227,7 @@ export default function CommandDeck({
                     : "pulse-dot"
               }
             />
-            <span className="numeral text-micro tracking-[0.2em] text-dim">{syncLabel}</span>
+            <span className="numeral hidden text-micro tracking-[0.2em] text-dim sm:inline">{syncLabel}</span>
           </span>
         </div>
         <div className="flex shrink-0 items-center gap-4">
@@ -230,7 +238,7 @@ export default function CommandDeck({
             onClick={exit}
             className="numeral border border-grid px-2.5 py-1 text-micro tracking-[0.2em] text-dim transition-colors hover:border-accent/50 hover:text-accent"
           >
-            ✕ EXIT DECK
+            ✕ EXIT<span className="hidden sm:inline"> DECK</span>
           </button>
         </div>
       </div>
