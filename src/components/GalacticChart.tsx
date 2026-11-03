@@ -128,14 +128,23 @@ export default function GalacticChart({
       ? Math.min(Math.max(Math.round(fitW), 1200), 2400)
       : BASE_W;
   const H = deck ? 740 : BASE_H;
-  const BAND_A_Y = deck ? 300 : BASE_BAND_A_Y;
+  // 310: the deck's scaled label tiers need the extra headroom above the band
+  // to clear the LOCAL SYSTEM hint line; below-band tiers still end above the clip
+  const BAND_A_Y = deck ? 310 : BASE_BAND_A_Y;
   const CLIP_BOTTOM = deck ? 556 : BASE_CLIP_BOTTOM;
   const BAND_B_Y = deck ? 654 : BASE_BAND_B_Y;
   // Label scale. In deck mode the canvas width varies a lot with the hero's
   // aspect; tie fs to W so on-screen label size stays roughly constant (a wide
   // hero would otherwise shrink the text to unreadable). fs also drives the
-  // collision spacing, so the label room scales with it too.
-  const fs = deck ? Math.min(1.7, Math.max(0.95, W / 1750)) : 1;
+  // collision spacing, so the label room scales with it too. On screen a deck
+  // label renders at about hole width / 1550 (fs × hole / W): ~0.9× in the
+  // race's 9-column slot on a 1920 screen. Line offsets that stack two
+  // labels grow with fs too, so the bigger type never overprints.
+  const fs = deck ? Math.min(1.8, Math.max(0.95, W / 1550)) : 1;
+  // The auto-zoom keeps its own, older scale: tying the zoom to the bigger
+  // type widened the span and pushed the nearest rivals out of the window.
+  // Bigger labels are resolved by the deck's extra tiers, not by zooming out.
+  const fsZoom = deck ? Math.min(1.7, Math.max(0.95, W / 1750)) : 1;
 
   const C = usePalette();
   const router = useRouter();
@@ -513,7 +522,7 @@ export default function GalacticChart({
     if (nbrs.length) {
       const set = Array.from(new Set([stars, ...nbrs.map((n) => n.s)])).sort((a, b) => a - b);
       const plotPx = W - 80;
-      const TARGET_PX = 165 * fs; // label room between the two TIGHTEST ships
+      const TARGET_PX = 165 * fsZoom; // label room between the two TIGHTEST ships
       let minGap = Infinity;
       for (let i = 1; i < set.length; i++) minGap = Math.min(minGap, log10(set[i]) - log10(set[i - 1]));
       // span that puts the tightest adjacent pair exactly TARGET_PX apart (zoom
@@ -822,7 +831,12 @@ export default function GalacticChart({
   const tiers: number[] = new Array(items.length).fill(-1);
   {
     // the deck's taller canvas buys two extra tiers per side
-    const nTiers = deck ? 5 : 3;
+    // Tier spacing and the label's own line offsets scale with fs (fs is 1
+    // outside the deck, so the panel is unchanged); the deck keeps only the
+    // tiers whose text still lands below the LOCAL SYSTEM hint (y ≈ 56).
+    const nTiers = deck
+      ? Math.max(2, Math.min(5, Math.floor((BAND_A_Y - 67 * fs - 56) / (40 * fs)) + 1))
+      : 3;
     const rowsAbove: number[] = new Array(nTiers).fill(-1e9); // rightmost occupied edge per tier
     const rowsBelow: number[] = new Array(nTiers).fill(-1e9);
     // label priority: hunters first (the chart's most urgent object must
@@ -1301,10 +1315,10 @@ export default function GalacticChart({
                 const hunts = !isAhead && n.catchDays !== null;
                 const labelAbove = isAhead || hunts;
                 const tierY = labelAbove
-                  ? BAND_A_Y - 44 - tiers[i] * 40
-                  : BAND_A_Y + 64 + tiers[i] * 34;
-                const lineY1 = labelAbove ? tierY + 8 : BAND_A_Y + 6;
-                const lineY2 = labelAbove ? BAND_A_Y - 5 : tierY - 24;
+                  ? BAND_A_Y - 44 * fs - tiers[i] * 40 * fs
+                  : BAND_A_Y + 64 * fs + tiers[i] * 34 * fs;
+                const lineY1 = labelAbove ? tierY + 8 * fs : BAND_A_Y + 6;
+                const lineY2 = labelAbove ? BAND_A_Y - 5 : tierY - 24 * fs;
                 return (
                   <g
                     key={n.r}
@@ -1342,19 +1356,19 @@ export default function GalacticChart({
                       </>
                     ) : null}
                     <circle className="nbr-dot" cx={x} cy={BAND_A_Y} r={3.2} fill={color} opacity={isAhead ? 0.95 : 0.55} />
-                    {nodeSigil(n.r, x, tierY - 13, trunc(shortName(n.r)))}
-                    <text className="nbr-name" x={x} y={tierY - 13} fill={labelAbove ? C.ink : C.faint} fontSize={12.5 * fs}
+                    {nodeSigil(n.r, x, tierY - 13 * fs, trunc(shortName(n.r)))}
+                    <text className="nbr-name" x={x} y={tierY - 13 * fs} fill={labelAbove ? C.ink : C.faint} fontSize={12.5 * fs}
                       textAnchor="middle">
                       {trunc(shortName(n.r))}
                     </text>
                     {/* passed ships compress to two lines so the below band
                         never outgrows its tier spacing or the clip */}
-                    <text x={x} y={tierY + 1} fill={C.dim} fontSize={11 * fs} textAnchor="middle">
+                    <text x={x} y={tierY + 1 * fs} fill={C.dim} fontSize={11 * fs} textAnchor="middle">
                       {fmtSignedGap(n.gap)} · {Math.round(n.v)}/d
                       {!labelAbove ? " · passed" : ""}
                     </text>
                     {labelAbove ? (
-                      <text x={x} y={tierY + 14} fontSize={11 * fs} textAnchor="middle"
+                      <text x={x} y={tierY + 14 * fs} fontSize={11 * fs} textAnchor="middle"
                         fill={hunts ? color : n.receding ? C.warn : C.accent}>
                         {hunts
                           ? unsteadyLabel(n.unsteady)
@@ -1392,7 +1406,7 @@ export default function GalacticChart({
                   </g>
                 );
               }
-              const tierY = BAND_A_Y - 44 - tiers[i] * 40;
+              const tierY = BAND_A_Y - 44 * fs - tiers[i] * 40 * fs;
               return (
                 <g
                   key={p.r}
@@ -1403,7 +1417,7 @@ export default function GalacticChart({
                   onMouseLeave={scheduleClose}
                   onClick={() => togglePin(p.r)}
                 >
-                  <line x1={x} y1={tierY + 8} x2={x} y2={BAND_A_Y - 5} stroke={C.grid} strokeWidth={1} />
+                  <line x1={x} y1={tierY + 8 * fs} x2={x} y2={BAND_A_Y - 5} stroke={C.grid} strokeWidth={1} />
                   {isTarget ? (
                     <circle cx={x} cy={BAND_A_Y} r={8} fill="none" stroke={C.accent} strokeWidth={1.2} />
                   ) : null}
@@ -1416,11 +1430,11 @@ export default function GalacticChart({
                   })()}
                   <circle className="nbr-dot" cx={x} cy={BAND_A_Y} r={2.4}
                     fill={routeDotColor.get(p.r) ?? C.white} opacity={0.85} />
-                  {nodeSigil(p.r, x, tierY - 2, trunc(shortName(p.r)))}
-                  <text className="nbr-name" x={x} y={tierY - 2} fill={C.ink} fontSize={12.5 * fs} textAnchor="middle">
+                  {nodeSigil(p.r, x, tierY - 2 * fs, trunc(shortName(p.r)))}
+                  <text className="nbr-name" x={x} y={tierY - 2 * fs} fill={C.ink} fontSize={12.5 * fs} textAnchor="middle">
                     {trunc(shortName(p.r))}
                   </text>
-                  <text x={x} y={tierY + 12} fill={C.dim} fontSize={11 * fs} textAnchor="middle">
+                  <text x={x} y={tierY + 12 * fs} fill={C.dim} fontSize={11 * fs} textAnchor="middle">
                     {fmtCompact(p.s)} · #{p.rank}
                     {p.v != null ? ` · ${Math.round(p.v)}/d` : ""}
                   </text>
@@ -1523,7 +1537,7 @@ export default function GalacticChart({
                         textAnchor="middle" fontWeight={700}>
                         {repoName}
                       </text>
-                      <text x={lx} y={BAND_A_Y + 41} fill={C.accent} fontSize={11.5 * fs}
+                      <text x={lx} y={BAND_A_Y + 26 + 15 * fs} fill={C.accent} fontSize={11.5 * fs}
                         textAnchor="middle">
                         {fmt(stars)} ★
                       </text>
@@ -1593,9 +1607,9 @@ export default function GalacticChart({
             .filter((p) => Math.abs(bx(p.s) - bx(stars)) > 150)
             .map((p, i) => (
               <g key={p.r}>
-                <line x1={bx(p.s)} y1={BAND_B_Y + 6} x2={bx(p.s)} y2={BAND_B_Y + 26 + (i % 2) * 13}
+                <line x1={bx(p.s)} y1={BAND_B_Y + 6} x2={bx(p.s)} y2={BAND_B_Y + 26 + (i % 2) * 13 * fs}
                   stroke={C.grid} strokeWidth={1} />
-                <text x={bx(p.s)} y={BAND_B_Y + 38 + (i % 2) * 13} fill={C.dim} fontSize={11 * fs}
+                <text x={bx(p.s)} y={BAND_B_Y + 38 + (i % 2) * 13 * fs} fill={C.dim} fontSize={11 * fs}
                   textAnchor="middle">
                   {shortName(p.r)} · {fmtCompact(p.s)}
                 </text>
@@ -1611,7 +1625,7 @@ export default function GalacticChart({
                 textAnchor="middle">
                 TOP {m.rank}
               </text>
-              <text x={bx(m.threshold)} y={BAND_B_Y - 32} fill={C.faint} fontSize={10.5 * fs}
+              <text x={bx(m.threshold)} y={BAND_B_Y - 20 - 12 * fs} fill={C.faint} fontSize={10.5 * fs}
                 textAnchor="middle">
                 {fmtCompact(m.threshold)}
               </text>
@@ -1641,7 +1655,7 @@ export default function GalacticChart({
                 textAnchor="middle">
                 TOP {m.rank}
               </text>
-              <text x={bx(m.at ?? m.threshold)} y={BAND_B_Y - 32} fill={C.faint} fontSize={10.5 * fs}
+              <text x={bx(m.at ?? m.threshold)} y={BAND_B_Y - 20 - 12 * fs} fill={C.faint} fontSize={10.5 * fs}
                 textAnchor="middle">
                 {fmtCompact(m.threshold)}
               </text>
@@ -1652,7 +1666,7 @@ export default function GalacticChart({
             <g className="core-glow">
               <circle cx={bx(coreStars)} cy={BAND_B_Y} r={26} fill="url(#coreGrad)" />
               <circle cx={bx(coreStars)} cy={BAND_B_Y} r={3.4} fill={C.white} />
-              <text x={bx(coreStars)} y={BAND_B_Y - 36} fill={C.white} fontSize={12 * fs}
+              <text x={bx(coreStars)} y={BAND_B_Y - 24 - 12 * fs} fill={C.white} fontSize={12 * fs}
                 textAnchor="end" fontWeight={700}>
                 GALACTIC CORE
               </text>

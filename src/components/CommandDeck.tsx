@@ -254,8 +254,16 @@ export default function CommandDeck({
         <Tile label="LAST HOUR" sub="rolling 60 min">
           <LiveNumber value={live.starsLastHour} locales="en-US" />
         </Tile>
-        <Tile label="TODAY" sub="since 00:00 UTC">
+        {/* the same today-vs-yesterday-at-this-hour reading as the console's
+            status bar (LiveProvider.deltaPct), so the deck number has context */}
+        <Tile label="TODAY UTC" sub={`yesterday now: ${fmt(live.yesterdaySameHour)}`}>
           <LiveNumber value={live.todayCount} locales="en-US" />
+          {live.deltaPct !== null ? (
+            <span className={`ml-2 text-sm ${live.deltaPct >= 0 ? "text-accent" : "text-warn"}`}>
+              {live.deltaPct >= 0 ? "+" : ""}
+              {live.deltaPct}%
+            </span>
+          ) : null}
         </Tile>
         <Tile label="V7D" sub="per day, 7-day">
           {fmt(live7)}

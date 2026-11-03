@@ -244,12 +244,13 @@ export default function DailyLadder({
               return null;
             }}
           />
-          <Legend
+          {/* the deck folds the series key into the one legend row below */}
+          {!fill && <Legend
             wrapperStyle={{ fontSize: 10, fontFamily: "var(--font-jbmono)", color: C.dim }}
             formatter={(v) =>
               v === "stars" ? "stars/day" : v === "ma7" ? "7d avg" : "night floor (/h)"
             }
-          />
+          />}
           <Bar yAxisId="day" dataKey="stars" fill={C.accent} fillOpacity={0.55} maxBarSize={16} isAnimationActive={false} />
           <Line
             yAxisId="day" dataKey="ma7" stroke={C.ink} strokeWidth={1.4}
@@ -272,10 +273,27 @@ export default function DailyLadder({
         </ComposedChart>
       </ResponsiveContainer>
     </div>
-      {shown.length > 0 && (
-        // in the deck (fill) the cell is short: the zone definition moves to a
-        // tooltip on the legend so the bars keep the height
-        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 px-1" title={fill ? zoneCaption : undefined}>
+      {(fill || shown.length > 0) && (
+        // in the deck (fill) the cell is short: ONE legend row carries the
+        // series key and the zones, and the zone definition moves to a tooltip
+        // on it, so the bars keep the height
+        <div
+          className={`flex flex-wrap items-center gap-x-4 gap-y-1 px-1 ${fill ? "justify-center" : ""}`}
+          title={fill && shown.length ? zoneCaption : undefined}
+        >
+          {fill ? (
+            <>
+              <span className="numeral text-micro text-faint">
+                <span style={{ color: C.accent }} aria-hidden>▮</span> stars/day
+              </span>
+              <span className="numeral text-micro text-faint">
+                <span style={{ color: C.ink }} aria-hidden>━</span> 7d avg
+              </span>
+              <span className="numeral text-micro text-faint">
+                <span style={{ color: C.warn }} aria-hidden>┅</span> night floor (/h)
+              </span>
+            </>
+          ) : null}
           {shown.map(({ key }) => (
             <span key={key} className="numeral text-micro tracking-[0.18em] text-faint">
               {/* the deck keeps the rank and drops the tier name (in the tooltip) */}
@@ -283,7 +301,7 @@ export default function DailyLadder({
               {god && lastBand ? ` · ≥${fmt(lastBand.t[key])}/d` : ""}
             </span>
           ))}
-          <span className="numeral text-micro text-faint">{fill ? "ⓘ zones" : zoneCaption}</span>
+          {shown.length ? <span className="numeral text-micro text-faint">{fill ? "ⓘ zones" : zoneCaption}</span> : null}
         </div>
       )}
     </div>
