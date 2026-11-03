@@ -1381,6 +1381,7 @@ body.gx-warping .ghx-lore {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 .deck-tile {
+  container-type: inline-size;
   border-top: 1px solid var(--color-grid);
   border-left: 1px solid var(--color-grid);
   margin: -1px 0 0 -1px;
@@ -1416,6 +1417,13 @@ body.gx-warping .ghx-lore {
 }
 .deck-body > section.hud:not(.deck-hero) {
   height: 300px;
+}
+/* a tile's sparkline yields to its number: under ~150px of cell there is no
+   room for both, and the number is the point */
+@container (max-width: 150px) {
+  .deck-spark {
+    display: none !important;
+  }
 }
 /* deck cells are narrower than console panels: tighter tracking keeps the
    titles whole instead of ellipsized */

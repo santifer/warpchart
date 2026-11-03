@@ -34,6 +34,47 @@ import type { ChartInputs } from "@/lib/types";
 import { fmt, fmtEtaRange, shortName } from "@/lib/format";
 import { neighborEtas, milestoneEta, unsteadyLabel, etaText } from "@/lib/projections";
 
+// Trend glyph for a KPI tile (the "stat with sparkline" of Grafana/Datadog
+// top rows): shape only, no axis and no labels, drawn from series the bundle
+// already carries. `invert` flips it for ranks, where a smaller number is up.
+function Spark({ values, invert, title }: { values: number[]; invert?: boolean; title: string }) {
+  const v = values.filter((x) => Number.isFinite(x));
+  if (v.length < 2) return null;
+  const lo = Math.min(...v);
+  const hi = Math.max(...v);
+  const span = hi - lo || 1;
+  const W = 64;
+  const H = 22;
+  const pts = v.map((x, i) => {
+    const y = invert ? ((x - lo) / span) * H : H - ((x - lo) / span) * H;
+    return [(i / (v.length - 1)) * W, Math.min(H - 1, Math.max(1, y))] as const;
+  });
+  const [lx, ly] = pts[pts.length - 1];
+  return (
+    <svg
+      viewBox={`-2 -2 ${W + 4} ${H + 4}`}
+      preserveAspectRatio="none"
+      // the number always wins the width: the glyph takes what is left (up to
+      // 64px) and a too-narrow cell drops it (globals.css .deck-spark)
+      className="deck-spark hidden h-6 min-w-0 max-w-16 flex-1 text-accent sm:block"
+      role="img"
+      aria-label={title}
+    >
+      <title>{title}</title>
+      <polyline
+        points={pts.map(([x, y]) => `${x.toFixed(1)},${y.toFixed(1)}`).join(" ")}
+        fill="none"
+        stroke="currentColor"
+        strokeOpacity={0.55}
+        strokeWidth={1.3}
+        strokeLinejoin="round"
+        vectorEffect="non-scaling-stroke"
+      />
+      <circle cx={lx} cy={ly} r={1.8} fill="currentColor" />
+    </svg>
+  );
+}
+
 // One cell of the KPI strip: label, big value, one line of context. Every
 // tile has the same three lines so the strip keeps one baseline and the
 // cells never reflow when a slot is empty.
@@ -44,6 +85,7 @@ function Tile({
   tone = "ink",
   big,
   title,
+  spark,
 }: {
   label: string;
   children: ReactNode;
@@ -51,7 +93,11 @@ function Tile({
   tone?: "ink" | "accent" | "warn" | "dim";
   big?: boolean;
   title?: string;
+  spark?: ReactNode;
 }) {
+  // a repo name longer than ~10 characters (code-server, awesome-python…)
+  // does not fit a phone's half-width cell at the counters' size
+  const long = typeof children === "string" && children.length > 10;
   const color =
     tone === "accent" ? "text-accent" : tone === "warn" ? "text-warn" : tone === "dim" ? "text-faint" : "text-ink";
   return (
@@ -59,14 +105,17 @@ function Tile({
       <span className="module-title !text-micro truncate">{label}</span>
       {/* fixed-height value line, bottom-aligned: big and normal values share
           one baseline across the strip */}
-      <span className="flex h-8 items-end">
+      <span className="flex h-8 items-end justify-between gap-2">
         <span
-          className={`numeral truncate leading-none ${big ? "text-2xl sm:text-3xl" : "text-xl sm:text-2xl"} ${color} ${
+          className={`numeral leading-none ${spark ? "shrink-0" : "truncate"} ${
+            big ? "text-2xl sm:text-3xl" : long ? "text-lg sm:text-2xl" : "text-xl sm:text-2xl"
+          } ${color} ${
             big && tone === "accent" ? "glow-accent" : ""
           }`}
         >
           {children}
         </span>
+        {spark}
       </span>
       {/* phones have no hover tooltip: the context line may wrap to two lines
           there instead of being cut; from sm up it is one line, full text in title */}
@@ -188,6 +237,24 @@ export default function CommandDeck({
       .filter((n) => n.gap <= 0 && n.catchDays !== null)
       .sort((a, b) => (a.catchDays ?? 1e9) - (b.catchDays ?? 1e9))[0] ?? null;
 
+  // Sparkline series for the tiles, all from the bundle (no new numbers).
+  // Completed days only: today's partial count would read as a cliff.
+  const sparks = useMemo(() => {
+    const todayKey = new Date(live.nowMs).toISOString().slice(0, 10);
+    const done = bundle.daily.filter((p) => p.d < todayKey);
+    const last30 = done.slice(-30);
+    const after = done.slice(-30).reduce((a, p) => a + p.c, 0) + live.todayCount;
+    const base = live.stars - after;
+    const cum = last30.reduce<number[]>((acc, p) => [...acc, (acc.at(-1) ?? base) + p.c], []);
+    const since = live.nowMs - 30 * 864e5;
+    return {
+      stars: [...cum, live.stars],
+      rank: bundle.rankHistory.filter((r) => r.t >= since).map((r) => r.rank),
+      hour: bundle.hourly.slice(-24).map((h) => h.c),
+      day: done.slice(-14).map((p) => p.c),
+      v7: bundle.ma7.slice(0, done.length).slice(-30).filter((x): x is number => x !== null),
+    };
+  }, [bundle.daily, bundle.rankHistory, bundle.hourly, bundle.ma7, live.nowMs, live.stars, live.todayCount]);
   const live7 = Math.round(bundle.v7d);
   const syncLabel = live.offline ? "SYNC LOST" : live.lastSync === null ? "SYNCING" : "LIVE";
 
@@ -246,10 +313,10 @@ export default function CommandDeck({
       {/* tiles: the eight numbers worth a glance, in reading order
           (state → pace → what comes next). Empty slots keep their cell. */}
       <div className="hud deck-tiles relative shrink-0">
-        <Tile label="STARS" tone="accent" big sub={`since ${bundle.meta?.created_at?.slice(0, 10) ?? "launch"}`}>
+        <Tile label="STARS" tone="accent" big spark={<Spark values={sparks.stars} title="total stars, last 30 days" />} sub={`since ${bundle.meta?.created_at?.slice(0, 10) ?? "launch"}`}>
           <LiveNumber value={live.stars} locales="en-US" />
         </Tile>
-        <Tile label="RANK" big sub="worldwide">
+        <Tile label="RANK" big sub="worldwide" spark={<Spark values={sparks.rank} invert title="world rank, last 30 days (up = better)" />}>
           {live.rank !== null ? (
             <>
               <span className="text-faint">#</span>
@@ -259,12 +326,12 @@ export default function CommandDeck({
             "n/a"
           )}
         </Tile>
-        <Tile label="LAST HOUR" sub="rolling 60 min">
+        <Tile label="LAST HOUR" sub="rolling 60 min" spark={<Spark values={sparks.hour} title="stars per hour, last 24 h" />}>
           <LiveNumber value={live.starsLastHour} locales="en-US" />
         </Tile>
         {/* the same today-vs-yesterday-at-this-hour reading as the console's
             status bar (LiveProvider.deltaPct), so the deck number has context */}
-        <Tile label="TODAY UTC" sub={`yesterday now: ${fmt(live.yesterdaySameHour)}`}>
+        <Tile label="TODAY UTC" sub={`yesterday now: ${fmt(live.yesterdaySameHour)}`} spark={<Spark values={sparks.day} title="stars per day, last 14 full days" />}>
           <LiveNumber value={live.todayCount} locales="en-US" />
           {live.deltaPct !== null ? (
             <span className={`ml-2 text-sm ${live.deltaPct >= 0 ? "text-accent" : "text-warn"}`}>
@@ -273,7 +340,7 @@ export default function CommandDeck({
             </span>
           ) : null}
         </Tile>
-        <Tile label="V7D" sub="stars/day, 7d">
+        <Tile label="V7D" sub="stars/day, 7d" spark={<Spark values={sparks.v7} title="7-day average, last 30 days" />}>
           {fmt(live7)}
         </Tile>
         {nextGate ? (
