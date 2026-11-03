@@ -209,7 +209,10 @@ export default function DailyLadder({
                     label={
                       view.length && a.x2 === view[view.length - 1].label
                         ? { value: `top ${rankOf(a.tier)}`, position: "right", offset: 8, fill: C.dim, fontSize: 10 }
-                        : undefined
+                        : !areas.some((n) => n.tier === a.tier && n.key.slice(0, 7) > a.key.slice(0, 7) && n.y1 > 0 && n.y1 <= yTop)
+                          ? // its next month runs above the axis: name it where it leaves
+                            { value: `top ${rankOf(a.tier)} ↑`, position: "insideTopRight", fill: C.dim, fontSize: 10 }
+                          : undefined
                     }
                   />
                 ))
