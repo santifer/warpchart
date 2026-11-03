@@ -62,7 +62,9 @@ export function PulsePanel({
       className={className}
       delay={delay}
     >
-      <div className="flex min-h-[150px] flex-col justify-between gap-4 py-1">
+      {/* compact (Command Deck): sized to its content, so the backlog bar
+          sits right under the figures instead of 50 px below them */}
+      <div className={`flex flex-col gap-4 py-1 ${compact ? "" : "min-h-[150px] justify-between"}`}>
         {d ? (
           <>
             <div className="grid grid-cols-2 gap-x-6 gap-y-4 sm:grid-cols-4">

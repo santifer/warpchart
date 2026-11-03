@@ -415,8 +415,9 @@ export default function CommandDeck({
               onClick={() => setRotate((r) => !r)}
               aria-pressed={rotate}
               title="show GROWTH, HEALTH and AUDIENCE in turn, 45 s each, for a screen left on; press a tab or 1/2/3 to stop"
-              className={`numeral hidden border px-2 py-0.5 text-micro tracking-[0.2em] transition-colors sm:inline ${
-                rotate ? "border-accent/60 text-accent" : "border-grid text-dim hover:text-ink"
+              // a mode, not a fourth view: no tab frame, set apart by a divider
+              className={`numeral ml-2 hidden border-l border-grid py-0.5 pl-4 text-micro tracking-[0.2em] transition-colors sm:inline ${
+                rotate ? "text-accent" : "text-faint hover:text-ink"
               }`}
             >
               {rotate ? "■ STOP CYCLE" : "▶ AUTO-CYCLE"}

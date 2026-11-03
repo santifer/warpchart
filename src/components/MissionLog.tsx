@@ -41,15 +41,26 @@ export default function MissionLog({
     if (!fillHeight || !el) return;
     const fit = () => {
       const li = el.querySelector("li");
-      const line = li ? li.getBoundingClientRect().height + 6 : 26;
-      const rows = Math.max(1, Math.floor(el.clientHeight / line));
+      // rect units (wall-zoomed px): the 6 px row gap is zoomed too
+      const zoom = el.clientWidth > 0 ? el.getBoundingClientRect().width / el.clientWidth : 1;
+      const line = li ? li.getBoundingClientRect().height + 6 * zoom : 26 * zoom;
+      // the height the PANEL leaves for the list, not the list's own height
+      // (that one depends on the column count and fed back into it). Both
+      // rects are in the same units, so the wall zoom cancels out.
+      const panel = el.closest("section");
+      const avail = panel
+        ? panel.getBoundingClientRect().bottom - el.getBoundingClientRect().top - 16
+        : el.clientHeight;
+      const rows = Math.max(1, Math.floor(avail / line));
       // never narrower than ~26rem a column: past that the names truncate,
       // so a short screen shows fewer entries (the fade marks the cut)
       // a line needs ~36rem to keep its name whole; only full columns are
       // shown (the newest columns x rows events), so no column is an orphan
       const rem = parseFloat(getComputedStyle(document.documentElement).fontSize) || 16;
       const maxCols = Math.max(1, Math.floor(el.clientWidth / (36 * rem)));
-      const next = Math.min(maxCols, Math.max(1, Math.ceil(reversed.length / rows)));
+      // only full columns: with fewer events than slots (60 for 4 x 19 at
+      // 3440) one column fewer, wider, instead of a 3-entry orphan
+      const next = Math.min(maxCols, Math.max(1, Math.floor(reversed.length / rows)));
       const nextCap = next > 1 ? Math.min(reversed.length, next * rows) : null;
       setCols((c) => (c === next ? c : next));
       setCap((c) => (c === nextCap ? c : nextCap));
