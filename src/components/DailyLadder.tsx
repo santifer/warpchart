@@ -109,7 +109,10 @@ export default function DailyLadder({
       const cause = causeByDay.get(p.d) ?? null;
       return {
         d: p.d,
-        label: p.d.slice(5).replace("-", "/"),
+        // the deck writes every date as "Aug 3", like its other panels
+        label: fill
+          ? new Date(`${p.d}T00:00:00Z`).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" })
+          : p.d.slice(5).replace("-", "/"),
         stars,
         ma7: bundle.ma7[i],
         floor: floorByDay.get(p.d) ?? null,
@@ -117,7 +120,7 @@ export default function DailyLadder({
         cause,
       };
     });
-  }, [bundle.daily, bundle.ma7, bundle.floor, bundle.spikes, live.todayCount, todayKey]);
+  }, [bundle.daily, bundle.ma7, bundle.floor, bundle.spikes, live.todayCount, todayKey, fill]);
 
   const span = fill ? VISIBLE_FILL : wide && lg ? VISIBLE_WIDE : VISIBLE_COMPACT;
   const visible = Math.min(span, all.length);
@@ -180,7 +183,7 @@ export default function DailyLadder({
               // bars the dark theme's green, blue and purple vanished, so they
               // get more. Legendary already carries its own boost: more reads brown
               // in the deck the zones are context, not content: half strength
-              fillOpacity={tierFillOpacity(a.tier, resolved, (resolved === "dark" && a.tier !== "legendary" ? 1.5 : 1) * (fill ? 0.5 : 1))}
+              fillOpacity={tierFillOpacity(a.tier, resolved, (resolved === "dark" && a.tier !== "legendary" ? 1.5 : 1) * (fill ? 0.3 : 1))}
               stroke="none"
               ifOverflow="hidden"
             />
@@ -210,10 +213,13 @@ export default function DailyLadder({
             orientation="right"
             domain={[0, Math.ceil(floorMax * 1.1)]}
             allowDataOverflow
-            tick={{ fill: C.warn, fontSize: 9, opacity: 0.7 }}
+            // a second numbered axis invites comparing heights that are not
+            // comparable: the deck keeps the night-floor line but drops its
+            // scale (values stay in the tooltip)
+            tick={fill ? false : { fill: C.warn, fontSize: 9, opacity: 0.7 }}
             tickLine={false}
             axisLine={false}
-            width={34}
+            width={fill ? 0 : 34}
           />
           <Tooltip
             cursor={{ fill: C.accentSoft }}

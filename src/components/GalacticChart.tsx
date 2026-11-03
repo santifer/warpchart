@@ -605,6 +605,19 @@ export default function GalacticChart({
     }
     return 40 + (Math.log1p(d / KD) / bSpan) * (W - 80);
   };
+  // Route-band gate label lift: greedy left-to-right, a label within ~one
+  // label width of the previous one on the same line moves up a line.
+  const routeLift = (xs: { key: string; x: number }[]) => {
+    const out = new Map<string, number>();
+    const gap = 58 * fs;
+    const lastX = [-1e9, -1e9];
+    for (const p of [...xs].sort((a, b) => a.x - b.x)) {
+      const tier = p.x - lastX[0] >= gap ? 0 : p.x - lastX[1] >= gap ? 1 : 0;
+      lastX[tier] = p.x;
+      out.set(p.key, tier);
+    }
+    return out;
+  };
   const inWindow = (s: number) => {
     const l = log10(s);
     return l >= logLo - 0.0005 && l <= logHi + 0.0005;
@@ -886,6 +899,18 @@ export default function GalacticChart({
       .filter((rk) => rk < rank && inputs.routeAll.length >= rk)
       .map((rk) => ({ rank: rk, threshold: inputs.routeAll[rk - 1].s }));
   }, [rank, inputs.routeAll]);
+
+  // route band: which gate labels lift a line, and the waypoints that would
+  // sit inside the core's right-aligned label (dropped; the dot stays)
+  const coreBX = apex ? bx(coreStars) : null;
+  const shownExtra = extraGates.filter(
+    (m) => coreBX === null || bx(m.threshold) < coreBX - 190 * fs || bx(m.threshold) > coreBX + 20,
+  );
+  const routeTier = routeLift([
+    ...shownExtra.map((m) => ({ key: `x${m.rank}`, x: bx(m.threshold) })),
+    ...inputs.milestones.map((m) => ({ key: `m${m.rank}`, x: bx(m.at ?? m.threshold) })),
+  ]);
+  const LIFT = 26 * fs;
 
   const vx0 = bx(Math.pow(10, logLo));
   const vx1 = bx(Math.pow(10, logHi));
@@ -1621,21 +1646,32 @@ export default function GalacticChart({
               </g>
             ))}
 
+          {/* gate labels on the route sit a fixed 11-12 units apart: when two
+              gates are closer than a label's width ("TOP 100TOP 90") the second
+              lifts one line, and a waypoint inside the core's label is dropped */}
           {/* high-route waypoints (top 50/25/10), dimmer than projections */}
-          {extraGates.map((m) => (
-            <g key={`x${m.rank}`} opacity={0.6}>
-              <circle cx={bx(m.threshold)} cy={BAND_B_Y} r={4} fill="none" stroke={C.accent}
-                strokeWidth={1} opacity={0.7} />
-              <text x={bx(m.threshold)} y={BAND_B_Y - 20} fill={C.dim} fontSize={11 * fs}
-                textAnchor="middle">
-                TOP {m.rank}
-              </text>
-              <text x={bx(m.threshold)} y={BAND_B_Y - 20 - 12 * fs} fill={C.faint} fontSize={10.5 * fs}
-                textAnchor="middle">
-                {fmtCompact(m.threshold)}
-              </text>
-            </g>
-          ))}
+          {extraGates.map((m) => {
+            const labeled = shownExtra.includes(m);
+            const dy = (routeTier.get(`x${m.rank}`) ?? 0) * LIFT;
+            return (
+              <g key={`x${m.rank}`} opacity={0.6}>
+                <circle cx={bx(m.threshold)} cy={BAND_B_Y} r={4} fill="none" stroke={C.accent}
+                  strokeWidth={1} opacity={0.7} />
+                {labeled ? (
+                  <>
+                    <text x={bx(m.threshold)} y={BAND_B_Y - 20 - dy} fill={C.dim} fontSize={11 * fs}
+                      textAnchor="middle">
+                      TOP {m.rank}
+                    </text>
+                    <text x={bx(m.threshold)} y={BAND_B_Y - 20 - 12 * fs - dy} fill={C.faint} fontSize={10.5 * fs}
+                      textAnchor="middle">
+                      {fmtCompact(m.threshold)}
+                    </text>
+                  </>
+                ) : null}
+              </g>
+            );
+          })}
 
           {/* HOME: this instance's tracked repo, always on the map */}
           {inputs.home ? (
@@ -1651,21 +1687,24 @@ export default function GalacticChart({
             </g>
           ) : null}
 
-          {[...inputs.milestones].sort((a, b) => b.rank - a.rank).map((m) => (
-            <g key={m.rank}>
-              <circle cx={bx(m.at ?? m.threshold)} cy={BAND_B_Y} r={5} fill="none" stroke={C.accent}
-                strokeWidth={1} opacity={0.85} />
-              <circle cx={bx(m.at ?? m.threshold)} cy={BAND_B_Y} r={1.6} fill={C.accent} />
-              <text x={bx(m.at ?? m.threshold)} y={BAND_B_Y - 20} fill={C.ink} fontSize={11.5 * fs}
-                textAnchor="middle">
-                TOP {m.rank}
-              </text>
-              <text x={bx(m.at ?? m.threshold)} y={BAND_B_Y - 20 - 12 * fs} fill={C.faint} fontSize={10.5 * fs}
-                textAnchor="middle">
-                {fmtCompact(m.threshold)}
-              </text>
-            </g>
-          ))}
+          {[...inputs.milestones].sort((a, b) => b.rank - a.rank).map((m) => {
+            const dy = (routeTier.get(`m${m.rank}`) ?? 0) * LIFT;
+            return (
+              <g key={m.rank}>
+                <circle cx={bx(m.at ?? m.threshold)} cy={BAND_B_Y} r={5} fill="none" stroke={C.accent}
+                  strokeWidth={1} opacity={0.85} />
+                <circle cx={bx(m.at ?? m.threshold)} cy={BAND_B_Y} r={1.6} fill={C.accent} />
+                <text x={bx(m.at ?? m.threshold)} y={BAND_B_Y - 20 - dy} fill={C.ink} fontSize={11.5 * fs}
+                  textAnchor="middle">
+                  TOP {m.rank}
+                </text>
+                <text x={bx(m.at ?? m.threshold)} y={BAND_B_Y - 20 - 12 * fs - dy} fill={C.faint} fontSize={10.5 * fs}
+                  textAnchor="middle">
+                  {fmtCompact(m.threshold)}
+                </text>
+              </g>
+            );
+          })}
 
           {apex ? (
             <g className="core-glow">

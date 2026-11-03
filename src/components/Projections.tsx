@@ -26,14 +26,15 @@ export default function Projections({
 
   if (dense) {
     return (
-      <div className="numeral flex flex-col">
-        {/* the three nearest gates: what a laptop cell holds whole */}
-        {ahead.slice(0, 3).map((m) => {
+      // deck-gates: globals.css hides the rows that would not fit whole in
+      // the cell's height (container query), so a gate is shown entire or not
+      <div className="deck-gates numeral flex flex-col">
+        {ahead.slice(0, 5).map((m) => {
           const e = milestoneEta(m.rank, m.threshold, live.stars, vOwn, m.drift);
           const pct = Math.min(100, (live.stars / m.threshold) * 100);
           const date = e.etaDays !== null ? etaDate(e.etaDays, new Date(live.nowMs)) : null;
           return (
-            <div key={m.rank} className="border-b border-grid/60 py-2 last:border-b-0">
+            <div key={m.rank} className="border-b border-grid/60 py-1.5 last:border-b-0">
               <div className="flex items-baseline justify-between gap-3">
                 <span className="font-display text-sm tracking-[0.2em] text-ink">TOP {m.rank}</span>
                 <span className="truncate text-sm text-accent">

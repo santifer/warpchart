@@ -57,7 +57,7 @@ function Spark({ values, invert, title }: { values: number[]; invert?: boolean; 
       preserveAspectRatio="none"
       // the number always wins the width: the glyph takes what is left (up to
       // 64px) and a too-narrow cell drops it (globals.css .deck-spark)
-      className="deck-spark hidden h-6 min-w-0 max-w-16 flex-1 text-accent sm:block"
+      className="deck-spark hidden h-6 w-16 shrink-0 text-accent sm:block"
       role="img"
       aria-label={title}
     >

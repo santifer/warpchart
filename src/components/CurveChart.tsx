@@ -120,12 +120,17 @@ export default function CurveChart({ repo, fill }: { repo: string; fill?: boolea
               dataKey="t"
               type="number"
               domain={["dataMin", "dataMax"]}
+              // "Apr 26" reads as the 26th of April; the deck says the month
+              // only (the year is in the panel header) and thins the ticks
               tickFormatter={(t: number) =>
-                new Date(t).toLocaleDateString("en-US", { month: "short", year: "2-digit" })
+                fill
+                  ? new Date(t).toLocaleDateString("en-US", { month: "short", timeZone: "UTC" })
+                  : new Date(t).toLocaleDateString("en-US", { month: "short", year: "2-digit" })
               }
-              tick={{ fill: C.dim, fontSize: 12, fontFamily: "var(--font-jbmono)" }}
+              tick={{ fill: C.dim, fontSize: fill ? 10 : 12, fontFamily: "var(--font-jbmono)" }}
               tickLine={false}
               axisLine={{ stroke: C.grid }}
+              minTickGap={fill ? 24 : 5}
             />
             <YAxis
               tickFormatter={(v: number) => fmtCompact(v)}
@@ -214,8 +219,10 @@ export default function CurveChart({ repo, fill }: { repo: string; fill?: boolea
           </ComposedChart>
         </ResponsiveContainer>
       </div>
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <span className="numeral text-micro text-faint">
+      {/* the deck cell is short: the caption stays one line (full text on
+          hover) and the button shrinks, so the curve keeps the height */}
+      <div className={`flex items-center justify-between gap-2 ${fill ? "" : "flex-wrap"}`}>
+        <span className={`numeral text-micro text-faint ${fill ? "min-w-0 truncate" : ""}`}>
           {exactWide
             ? "exact api timestamps + the recent window recorded EXACTLY, daily — our own record beyond GitHub's 40K cap"
             : seam !== null
@@ -226,7 +233,8 @@ export default function CurveChart({ repo, fill }: { repo: string; fill?: boolea
         </span>
         <button
           onClick={() => setRun((r) => r + 1)}
-          className="numeral border border-grid px-3 py-1.5 text-micro tracking-[0.2em] text-dim transition-colors hover:border-accent/50 hover:text-accent"
+          className={`numeral shrink-0 border border-grid text-micro tracking-[0.2em] text-dim transition-colors hover:border-accent/50 hover:text-accent ${fill ? "px-2 py-0.5" : "px-3 py-1.5"}`}
+          title="replay the curve"
         >
           ↻ REPLAY
         </button>
