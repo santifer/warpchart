@@ -195,7 +195,7 @@ export function UsagePanel({
                         <Row label="NPM INSTALLS · 30D" sub={lastNpm ? `through ${lastNpm}` : d!.npmPkg ?? ""} value={est} title={d!.npmPkg ?? undefined} />
                         {missing > 0 && d!.npmLast30 !== null ? (
                           <span className="numeral block pb-1 text-micro leading-snug text-dim">
-                            {fmt(d!.npmLast30)} measured + {missing} unrecorded days, estimated
+                            {fmt(d!.npmLast30)} measured + {missing} days estimated
                           </span>
                         ) : null}
                       </div>

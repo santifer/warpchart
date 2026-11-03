@@ -1380,6 +1380,11 @@ body.gx-warping .ghx-lore {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
+.deck-body,
+.deck-tiles {
+  /* no single word left alone on a wrapped line */
+  text-wrap: pretty;
+}
 .deck-tile {
   container-type: inline-size;
   border-top: 1px solid var(--color-grid);
@@ -1564,7 +1569,7 @@ body.gx-warping .ghx-lore {
    figure whole, so the race gives up a little height there */
 @media (min-width: 1280px) and (min-height: 820px) and (max-height: 1000px) {
   .deck-body {
-    grid-template-rows: minmax(270px, 1.25fr) minmax(200px, 1fr) minmax(232px, 1.12fr);
+    grid-template-rows: minmax(236px, 1fr) minmax(230px, 1.35fr) 232px;
   }
 }
 

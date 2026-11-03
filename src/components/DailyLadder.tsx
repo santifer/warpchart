@@ -211,9 +211,9 @@ export default function DailyLadder({
             tick={{ fill: C.faint, fontSize: fill ? 11 : 9 }}
             tickLine={false}
             axisLine={{ stroke: C.grid }}
-            // the deck labels one day every 14, counted from a fixed epoch so
-            // the step is regular and does not shift while panning
-            ticks={fill ? view.filter((r) => Math.round(Date.parse(`${r.d}T00:00:00Z`) / 864e5) % 14 === 0).map((r) => r.label) : undefined}
+            // the deck labels one day every 14, counted back from today, the
+            // same marks as the World rank axis beside it
+            ticks={fill ? view.filter((r) => (Math.round(Date.parse(`${todayKey}T00:00:00Z`) / 864e5) - Math.round(Date.parse(`${r.d}T00:00:00Z`) / 864e5)) % 14 === 0).map((r) => r.label) : undefined}
             interval={fill ? 0 : 3}
             minTickGap={fill ? 0 : 5}
           />
@@ -318,6 +318,11 @@ export default function DailyLadder({
               <span className="numeral text-micro text-faint">
                 <span style={{ color: C.ink }} aria-hidden>━</span> 7d avg
               </span>
+              {bundle.spikes.length ? (
+                <span className="numeral text-micro text-faint" title="a day with a known cause (post, launch, mention); hover the bar">
+                  <span style={{ color: C.ink }} aria-hidden>◆</span> event
+                </span>
+              ) : null}
               <span className="numeral text-micro text-faint">
                 <span style={{ color: C.dim }} aria-hidden>┅</span> night floor
                 {lastFloor !== null ? <span className="text-ink"> {Math.round(lastFloor)}/h</span> : null}
@@ -327,7 +332,10 @@ export default function DailyLadder({
           {shown.map(({ key }) => (
             <span key={key} className="numeral text-micro tracking-[0.18em] text-faint">
               {/* the deck keeps the rank and drops the tier name (in the tooltip) */}
-              <span style={{ color: TC[key] }} aria-hidden>◆</span> {fill ? tierLabel(key).split(" · ").pop() : tierLabel(key)}
+              {/* zones are background bands: a swatch in the deck, so the ◆ glyph
+                  means only "event" there */}
+              <span style={{ color: TC[key] }} aria-hidden>{fill ? "▮" : "◆"}</span>{" "}
+              {fill ? (tierLabel(key).split(" · ").pop() ?? "").replace("TOP ", "") : tierLabel(key)}
               {god && lastBand ? ` · ≥${fmt(lastBand.t[key])}/d` : ""}
             </span>
           ))}

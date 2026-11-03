@@ -1144,6 +1144,32 @@ export default function GalacticChart({
               stroke="url(#fadeBeyond)" strokeWidth={1} />
           ) : null}
 
+          {/* deck: a distance scale under the line, stars ahead of you on a
+              1-2-5 step, so a neighbour's x position can be read */}
+          {noRoute
+            ? (() => {
+                const ahead = Math.pow(10, logHi) - stars;
+                if (!(ahead > 0)) return null;
+                const raw = ahead / 4;
+                const mag = Math.pow(10, Math.floor(Math.log10(Math.max(raw, 1))));
+                const step = [1, 2, 5, 10].map((k) => k * mag).find((x) => x >= raw) ?? 10 * mag;
+                const marks: number[] = [];
+                for (let d = step; d <= ahead; d += step) marks.push(d);
+                return marks.map((d) => {
+                  const x = ax(stars + d);
+                  if (x < 120 || x > W - 60) return null;
+                  return (
+                    <g key={`dist${d}`}>
+                      <line x1={x} y1={BAND_A_Y + 4} x2={x} y2={BAND_A_Y + 10 * fs} stroke={C.dim} strokeWidth={1} />
+                      <text x={x} y={BAND_A_Y + 22 * fs} fill={C.faint} fontSize={10 * fs} textAnchor="middle">
+                        +{fmtCompact(d)}
+                      </text>
+                    </g>
+                  );
+                });
+              })()
+            : null}
+
           <g clipPath={deck ? "url(#bandAClip-deck)" : "url(#bandAClip)"}>
             {/* proximity hit layer (NYT rule B): at the back so every real
                 mark stays on top and keeps its own hover; these only fire in
@@ -1410,7 +1436,8 @@ export default function GalacticChart({
                     onMouseLeave={scheduleClose}
                     onClick={() => togglePin(n.r)}
                   >
-                    <line x1={x} y1={lineY1} x2={x} y2={lineY2} stroke={C.grid} strokeWidth={1} />
+                    {/* deck: the leader joins the label block to its own ship */}
+                    <line x1={noRoute ? lx : x} y1={lineY1} x2={x} y2={lineY2} stroke={noRoute ? C.dim : C.grid} strokeWidth={1} opacity={noRoute ? 0.6 : 1} />
                     {isTarget ? (
                       <circle cx={x} cy={BAND_A_Y} r={8} fill="none" stroke={C.accent} strokeWidth={1.2} />
                     ) : null}

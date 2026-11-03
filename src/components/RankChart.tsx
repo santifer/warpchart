@@ -63,9 +63,23 @@ export default function RankChart({ bundle, fill }: { bundle: DashboardBundle; f
     const mag = Math.pow(10, Math.floor(Math.log10(Math.max(raw, 1))));
     const step = [1, 2, 5, 10].map((k) => k * mag).find((x) => x >= raw) ?? 10 * mag;
     const out: number[] = [];
-    for (let v = Math.ceil(a / step) * step; v <= b; v += step) out.push(v);
+    // deck: the domain snaps outward to whole steps, so the current rank
+    // (the line's end) is never above the highest labelled tick
+    const lo = fill ? Math.floor(a / step) * step : Math.ceil(a / step) * step;
+    const hi = fill ? Math.ceil(b / step) * step : b;
+    for (let v = lo; v <= hi; v += step) out.push(v);
     return out;
-  }, [yDomain]);
+  }, [yDomain, fill]);
+  const yDom: [number, number] = fill && yTicks.length ? [yTicks[0], yTicks[yTicks.length - 1]] : yDomain;
+  // deck: the same date marks as the Daily ladder beside it, every 14 days
+  // counted back from today (UTC), so the two axes pair day for day
+  const xTicks = useMemo(() => {
+    if (!fill) return undefined;
+    const today = Math.floor(live.nowMs / 864e5) * 864e5;
+    const out: number[] = [];
+    for (let t = today; t >= effStart; t -= 14 * 864e5) if (t <= effEnd) out.push(t);
+    return out.reverse();
+  }, [fill, live.nowMs, effStart, effEnd]);
 
   if (data.length < 5) {
     return (
@@ -90,18 +104,19 @@ export default function RankChart({ bundle, fill }: { bundle: DashboardBundle; f
             type="number"
             scale="time"
             domain={[effStart, effEnd]}
+            ticks={xTicks}
             allowDataOverflow
             tickFormatter={(t: number) =>
-              new Date(t).toLocaleDateString("en-US", { month: "short", day: "numeric" })
+              new Date(t).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" })
             }
             tick={{ fill: C.faint, fontSize: fill ? 11 : 9 }}
             tickLine={false}
             axisLine={{ stroke: C.grid }}
-            minTickGap={fill ? 70 : 56}
+            minTickGap={fill ? 0 : 56}
           />
           <YAxis
             reversed
-            domain={yDomain}
+            domain={yDom}
             ticks={yTicks}
             allowDataOverflow
             allowDecimals={false}
