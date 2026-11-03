@@ -382,7 +382,7 @@ export default function VitalSignsPanel({
         </div>
 
         {/* ═══ ACT 4 · THE OPERATION — velocity, quality, the gate ═══ */}
-        <div className={`grid grid-cols-1 gap-x-8 gap-y-6 border-t border-grid pt-5 sm:grid-cols-3 ${compact ? "deck-short-hide" : ""}`}>
+        <div className={`grid grid-cols-1 gap-x-8 gap-y-6 border-t border-grid pt-5 sm:grid-cols-3 ${compact ? "vs-ops" : ""}`}>
           <OpsGroup title="VELOCITY">
             {lt ? (
               <Figure

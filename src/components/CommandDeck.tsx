@@ -615,7 +615,7 @@ export default function CommandDeck({
           <div ref={heroHole} className="absolute inset-0 flex items-center justify-center px-2">
             {canvas ? (
               <div className="w-full" style={{ maxWidth: canvas.maxPx }}>
-                <GalacticChart inputs={inputs} target={target} onPinTarget={onPinTarget} fitW={canvas.fitW} deckPx={canvas.px} hideHelp />
+                <GalacticChart inputs={inputs} target={target} onPinTarget={onPinTarget} fitW={canvas.fitW} deckPx={canvas.px} hideHelp shortBand={growthLayout === "ladder"} />
               </div>
             ) : null}
           </div>

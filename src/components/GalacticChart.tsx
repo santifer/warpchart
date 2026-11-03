@@ -102,6 +102,7 @@ export default function GalacticChart({
   noRoute = false,
   deckPx,
   hideHelp = false,
+  shortBand = false,
   fitW,
   charted,
 }: {
@@ -131,6 +132,9 @@ export default function GalacticChart({
   deckPx?: number;
   // the deck has no touch interaction: drop the pan/zoom how-to lines
   hideHelp?: boolean;
+  // Command Deck ladder-led layout: the race is a short band, so passed
+  // ships (below the line) stay dots with their data on hover
+  shortBand?: boolean;
   // Same idea for wide inline showcases (landing spotlight): the measured
   // container width becomes the canvas width, so type stays at design size
   // and wide monitors get more map instead of giant letters.
@@ -926,7 +930,7 @@ export default function GalacticChart({
     const rowsAbove: number[] = new Array(nTiers).fill(-1e9); // rightmost occupied edge per tier
     // in a short deck hero the passed ships get one row: a second one would
     // reach the ROUTE TO THE CORE title (Prompt-Engineering-Guide on it at 1440)
-    const rowsBelow: number[] = new Array(twoLine ? 1 : nTiers).fill(-1e9);
+    const rowsBelow: number[] = new Array(shortBand ? 0 : twoLine ? 1 : nTiers).fill(-1e9);
     // label priority: hunters first (the chart's most urgent object must
     // never be shed in dense zones), then chase targets with an eta, then
     // the rest of the neighbors, route dots last
@@ -948,6 +952,7 @@ export default function GalacticChart({
       // chase: their catch eta is the most urgent number on the chart
       const hunts = it.kind === "n" && it.n.gap <= 0 && it.n.catchDays !== null;
       const rows = it.kind === "n" && it.n.gap <= 0 && !hunts ? rowsBelow : rowsAbove;
+      if (rows.length === 0) continue; // no row on this side: a bare dot
       let tier = 0;
       let fits = true;
       while (x - halfW < rows[tier] + 8) {

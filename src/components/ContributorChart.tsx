@@ -153,7 +153,7 @@ export default function ContributorChart({
   // cell gives a tall chart and the type stays at a readable 11 px.
   const box = compact ? measured : null;
   const W = box ? Math.max(320, box.w) : 960;
-  const TH = box ? Math.max(150, box.h) : LBL_DEFAULT + 8;
+  const TH = box ? Math.max(110, box.h) : LBL_DEFAULT + 8;
   const fz = box ? 11 : 9;
   const X0 = 8,
     X1 = W - (box ? 60 : 52),
@@ -194,7 +194,7 @@ export default function ContributorChart({
         </span>
       </div>
 
-      <div ref={boxRef} className={compact ? "min-h-[150px] flex-1" : ""}>
+      <div ref={boxRef} className={compact ? "contrib-box min-h-[150px] flex-1" : ""}>
       <svg
         viewBox={`0 0 ${W} ${TH}`}
         className={box ? "block h-full w-full" : "block w-full"}

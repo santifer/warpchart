@@ -137,8 +137,8 @@ export default function GodVelocityRank({ repo, compact = false }: { repo: strin
   if (state.kind === "locked")
     return compact ? (
       <a href={`/pricing?repo=${encodeURIComponent(repo)}`} className="numeral flex items-center justify-between gap-3 text-micro">
-        <span className="tracking-[0.28em] text-faint">◈ UNLOCK WITH TRACKING</span>
-        <span className="truncate text-faint">daily rank by new stars</span>
+        <span className="locked-status tracking-[0.28em] text-faint">◈ UNLOCK WITH TRACKING</span>
+        <span className="locked-cta truncate text-faint">daily rank by new stars</span>
       </a>
     ) : (
       <LockedTeaser repo={repo} />

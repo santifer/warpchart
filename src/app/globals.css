@@ -1578,7 +1578,7 @@ body.gx-warping .ghx-lore {
    cell beside cumulative and world rank, stars/hour runs along the bottom */
 @media (min-width: 1280px) and (min-height: 820px) {
   .deck-body.deck-body--ladder {
-    grid-template-rows: minmax(250px, 1.45fr) minmax(150px, 1fr) minmax(150px, 1fr) minmax(170px, 0.85fr);
+    grid-template-rows: minmax(250px, 1.4fr) minmax(140px, 1fr) minmax(140px, 1fr) minmax(190px, 1fr);
   }
   .deck-body--ladder .deck-hero {
     grid-column: 1 / span 8;
@@ -1594,18 +1594,19 @@ body.gx-warping .ghx-lore {
   }
   /* right column: world rank, then the two pace charts side by side in
      the bottom row with the ladder's full width freed above them */
-  .deck-body--ladder .deck-rank {
+  /* height goes to the series whose shape needs it: world rank's steps
+     and stars/hour's daily profile take the right column; cumulative, a
+     monotone curve, reads fine as the low strip under the ladder */
+  .deck-body--ladder .deck-vel {
     grid-column: 9 / span 4;
-    grid-row: 2;
+    grid-row: 2 / span 3;
   }
   .deck-body--ladder .deck-cum {
-    grid-column: 9 / span 4;
-    grid-row: 3 / span 2;
+    grid-column: 1 / span 4;
+    grid-row: 4;
   }
-  /* stars/hour under the ladder, at the ladder's width: 24 bars at a sane
-     aspect instead of across the whole screen */
-  .deck-body--ladder .deck-vel {
-    grid-column: 1 / span 8;
+  .deck-body--ladder .deck-rank {
+    grid-column: 5 / span 4;
     grid-row: 4;
   }
 }
@@ -1633,19 +1634,21 @@ body.gx-warping .ghx-lore {
     grid-column: 10 / span 3;
   }
   .deck-body.deck-body--ladder {
-    grid-template-rows: minmax(250px, 1.45fr) minmax(150px, 1fr) minmax(150px, 1fr) minmax(170px, 0.85fr);
+    grid-template-rows: minmax(250px, 1.4fr) minmax(140px, 1fr) minmax(140px, 1fr) minmax(190px, 1fr);
   }
   .deck-body--ladder .deck-hero,
   .deck-body--ladder .deck-ladder {
     grid-column: 1 / span 7;
   }
   .deck-body--ladder .deck-proj,
-  .deck-body--ladder .deck-cum,
-  .deck-body--ladder .deck-rank {
+  .deck-body--ladder .deck-vel {
     grid-column: 8 / span 5;
   }
-  .deck-body--ladder .deck-vel {
-    grid-column: 1 / span 7;
+  .deck-body--ladder .deck-cum {
+    grid-column: 1 / span 4;
+  }
+  .deck-body--ladder .deck-rank {
+    grid-column: 5 / span 3;
   }
 }
 /* Real usage as a strip of three when its cell is wide */
@@ -1771,12 +1774,29 @@ body.gx-warping .ghx-lore {
     flex: none;
     border-bottom: 0;
   }
-  .deck-audience:not(:has(.vault-chart)) .deck-audience-top > section > header > div:last-child {
-    display: none;
-  }
-  .deck-audience:not(:has(.vault-chart)) .deck-audience-top > section > div:last-child {
+  .deck-audience:not(:has(.vault-chart)) .deck-audience-top > section > header {
     flex: 1;
     min-width: 0;
+  }
+  /* the status stays on one line; the call to action is what yields */
+  .deck-audience:not(:has(.vault-chart)) .deck-audience-top .locked-status {
+    white-space: nowrap;
+  }
+  .deck-audience:not(:has(.vault-chart)) .deck-audience-top > section > div:last-child {
+    flex: none !important;
+  }
+  .deck-audience:not(:has(.vault-chart)) .deck-audience-top .locked-cta {
+    display: none;
+  }
+}
+/* narrower desktops: the locked row's wide letter-spacing yields first, so
+   the window note ("kept past GitHub's 14-day window") stays readable */
+@media (min-width: 1024px) and (max-width: 1700px) {
+  .deck-audience:not(:has(.vault-chart)) .deck-audience-top .module-title,
+  .deck-audience:not(:has(.vault-chart)) .deck-audience-top .locked-status {
+    letter-spacing: 0.08em;
+  }
+  .deck-audience:not(:has(.vault-chart)) .deck-audience-top > section > div:last-child {
     padding-top: 0.5rem;
     padding-bottom: 0.5rem;
   }
@@ -1879,6 +1899,24 @@ body.gx-warping .ghx-lore {
 @media (max-height: 950px) {
   .deck-view .deck-short-hide {
     display: none;
+  }
+}
+/* short screens: Vital Signs keeps its ops block (lead time, revert rate,
+   the maintainer) as headline figures only; their detail rows yield, the
+   contributor chart gives up height and the fingerprint rows tighten */
+@media (max-height: 950px) {
+  .deck-view .vs-ops {
+    padding-top: 0.75rem;
+    row-gap: 0.5rem;
+  }
+  .deck-view .vs-ops > div {
+    gap: 0.375rem;
+  }
+  .deck-view .vs-ops > div > :nth-child(3) {
+    display: none;
+  }
+  .deck-view .contrib-box {
+    min-height: 110px !important;
   }
 }
 @media (max-height: 950px) {

@@ -149,8 +149,8 @@ export default function TrafficPanel({ repo, compact = false }: { repo: string; 
     if (compact)
       return (
         <div className="numeral flex items-center justify-between gap-3 text-micro">
-          <span className="font-display tracking-[0.3em] text-accent">◈ PRIVATE</span>
-          <span className="truncate text-faint">open your private vault link to see views, clones and referrers</span>
+          <span className="locked-status font-display tracking-[0.3em] text-accent">◈ PRIVATE</span>
+          <span className="locked-cta truncate text-faint">open your private vault link to see views, clones and referrers</span>
         </div>
       );
     return (
