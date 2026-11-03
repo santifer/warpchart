@@ -544,7 +544,7 @@ export default function CommandDeck({
           </div>
           <UsagePanel dossier={dossier} index="03" compact className="deck-usage-wide" />
           <Panel index="04" title="Mission log" meta="auto-detected from telemetry" className="deck-log deck-log-cols">
-            <MissionLog events={bundle.events} captain={bundle.captain} />
+            <MissionLog events={bundle.events} captain={bundle.captain} fillHeight />
           </Panel>
         </div>
       ) : null}

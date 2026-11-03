@@ -1599,8 +1599,16 @@ body.gx-warping .ghx-lore {
   .deck-usage-rows > * {
     border-top-width: 0 !important;
   }
+  /* in the strip each figure sits beside its label, KPI-tile style, and
+     the list's row dividers go */
   .deck-usage-rows .usage-row {
-    grid-template-columns: minmax(0, 1fr) auto !important;
+    grid-template-columns: auto auto !important;
+    justify-content: start;
+    column-gap: 1.5rem;
+  }
+  .deck-usage-rows,
+  .deck-usage-rows * {
+    border-width: 0 !important;
   }
 }
 
@@ -1671,9 +1679,15 @@ body.gx-warping .ghx-lore {
   display: grid;
   gap: 0.5rem;
   grid-template-rows: auto auto minmax(0, 1fr);
+  /* a single track that never grows past the frame (the log's columns
+     otherwise set the grid's width to their max-content) */
+  grid-template-columns: minmax(0, 1fr);
   align-content: stretch;
   flex: 1;
   min-height: 0;
+}
+.deck-audience > * {
+  min-width: 0;
 }
 .deck-audience-top {
   display: grid;
@@ -1700,9 +1714,8 @@ body.gx-warping .ghx-lore {
 @media (min-width: 1024px) {
   .deck-log-cols .mission-log-list {
     display: block;
-    column-width: 26rem;
     column-gap: 3rem;
-    column-fill: balance;
+    column-fill: auto;
   }
   .deck-log-cols .mission-log-list > li {
     break-inside: avoid;

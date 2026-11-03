@@ -481,7 +481,7 @@ export default function VitalSignsPanel({
         {/* footer credentials — verified from public data. Important, but a
             reader scanning for traction reads rank and growth first. */}
         {ar?.agentNative || (docs && docs.chips.length > 0) ? (
-          <div className={`flex flex-col gap-2 border-t border-grid pt-5 ${compact ? "deck-short-hide" : ""}`}>
+          <div className={`flex flex-col gap-2 border-t border-grid pt-5 ${compact ? "hidden" : ""}`}>
             <span className="numeral text-micro tracking-[0.22em] text-faint">
               VERIFIED · PUBLIC GITHUB DATA
             </span>

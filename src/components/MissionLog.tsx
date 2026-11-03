@@ -1,5 +1,7 @@
 "use client";
 
+import { useEffect, useRef, useState } from "react";
+
 import type { MissionEvent } from "@/lib/types";
 
 const GLYPH: Record<MissionEvent["kind"], { g: string; cls: string }> = {
@@ -7,7 +9,8 @@ const GLYPH: Record<MissionEvent["kind"], { g: string; cls: string }> = {
   overtake: { g: "▸", cls: "text-ink" },
   record: { g: "★", cls: "text-warn" },
   online: { g: "●", cls: "text-faint" },
-  spike: { g: "◈", cls: "text-warn" },
+  // a spike is good news: accent, not the alert orange
+  spike: { g: "◈", cls: "text-accent" },
 };
 
 function fmtTs(ts: string): string {
@@ -20,11 +23,37 @@ function fmtTs(ts: string): string {
 export default function MissionLog({
   events,
   captain,
+  fillHeight = false,
 }: {
   events: MissionEvent[];
   captain: string | null;
+  // Command Deck: as many columns as the height needs (rows = height / line),
+  // so the log fills its panel top to bottom instead of leaving the bottom
+  // empty and squeezing names into narrow columns
+  fillHeight?: boolean;
 }) {
   const reversed = [...events].reverse();
+  const listRef = useRef<HTMLUListElement | null>(null);
+  const [cols, setCols] = useState(1);
+  useEffect(() => {
+    const el = listRef.current;
+    if (!fillHeight || !el) return;
+    const fit = () => {
+      const li = el.querySelector("li");
+      const line = li ? li.getBoundingClientRect().height + 6 : 26;
+      const rows = Math.max(1, Math.floor(el.clientHeight / line));
+      // never narrower than ~26rem a column: past that the names truncate,
+      // so a short screen shows fewer entries (the fade marks the cut)
+      const rem = parseFloat(getComputedStyle(document.documentElement).fontSize) || 16;
+      const maxCols = Math.max(1, Math.floor(el.clientWidth / (26 * rem)));
+      const next = Math.min(maxCols, Math.max(1, Math.ceil(reversed.length / rows)));
+      setCols((c) => (c === next ? c : next));
+    };
+    fit();
+    const ro = new ResizeObserver(fit);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [fillHeight, reversed.length]);
   return (
     <div className="flex flex-col gap-3">
       {captain ? (
@@ -33,7 +62,11 @@ export default function MissionLog({
         </p>
       ) : null}
       {reversed.length ? (
-        <ul className="mission-log-list flex flex-col gap-1.5">
+        <ul
+          ref={listRef}
+          className="mission-log-list flex flex-col gap-1.5"
+          style={fillHeight ? { columnCount: cols } : undefined}
+        >
           {reversed.map((e, i) => (
             <li key={`${e.ts}-${i}`} className="numeral flex min-w-0 items-baseline gap-3 text-data">
               <span className={`shrink-0 ${GLYPH[e.kind].cls}`}>{GLYPH[e.kind].g}</span>
