@@ -166,7 +166,7 @@ export default function DailyLadder({
     >
     <div ref={ref} className={`w-full touch-pan-y ${fill ? "min-h-0 flex-1" : "h-[250px]"}`} style={{ cursor: canPan ? "ew-resize" : undefined }}>
       <ResponsiveContainer width="100%" height="100%">
-        <ComposedChart data={view} margin={{ top: 6, right: 4, left: -14, bottom: 0 }}>
+        <ComposedChart data={view} margin={{ top: 6, right: fill ? 10 : 4, left: -14, bottom: 0 }}>
           {areas.map((a) => (
             <ReferenceArea
               key={a.key}
@@ -179,7 +179,8 @@ export default function DailyLadder({
               // the velocity-rank opacity is tuned for thin lines; behind
               // bars the dark theme's green, blue and purple vanished, so they
               // get more. Legendary already carries its own boost: more reads brown
-              fillOpacity={tierFillOpacity(a.tier, resolved, resolved === "dark" && a.tier !== "legendary" ? 1.5 : 1)}
+              // in the deck the zones are context, not content: half strength
+              fillOpacity={tierFillOpacity(a.tier, resolved, (resolved === "dark" && a.tier !== "legendary" ? 1.5 : 1) * (fill ? 0.5 : 1))}
               stroke="none"
               ifOverflow="hidden"
             />

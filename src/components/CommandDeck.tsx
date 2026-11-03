@@ -31,8 +31,8 @@ import type { DashboardBundle } from "@/lib/bundle";
 import type { LadderBand } from "@/lib/ladder-bands";
 import type { Dossier } from "@/lib/explorer";
 import type { ChartInputs } from "@/lib/types";
-import { fmt, fmtEtaRange, shortName } from "@/lib/format";
-import { neighborEtas, milestoneEta, unsteadyLabel, etaText } from "@/lib/projections";
+import { fmt, shortName } from "@/lib/format";
+import { neighborEtas, unsteadyLabel, etaText } from "@/lib/projections";
 import { rankDelta7d, weekOverWeekPct } from "@/lib/deck-deltas";
 
 // Trend glyph for a KPI tile (the "stat with sparkline" of Grafana/Datadog
@@ -242,11 +242,7 @@ export default function CommandDeck({
   const repo = bundle.meta?.repo ?? "unknown/unknown";
   const vOwn = bundle.v7d;
 
-  // KPI strip: the urgent dynamic numbers (next gate, next overtake, threat)
-  const gates = bundle.milestones.map((m) => ({
-    ...milestoneEta(m.rank, m.threshold, live.stars, vOwn, m.drift),
-  }));
-  const nextGate = gates.find((g) => g.gap > 0) ?? null;
+  // KPI strip: the urgent dynamic slots (next overtake, threat)
   const etas = neighborEtas(live.neighbors, live.stars, vOwn, { trend: bundle.vTrend, asOf: bundle.vAsOf }, live.nowMs);
   const chase = target ? etas.find((n) => n.r === target) ?? null : null;
   const nextOvertake =
@@ -363,20 +359,8 @@ export default function CommandDeck({
           {fmt(live7)}
           <Delta value={weekPct} title="stars in the last 7 full days vs the 7 before" />
         </Tile>
-        {nextGate ? (
-          <Tile
-            label="NEXT GATE"
-            tone="accent"
-            sub={`${fmt(nextGate.gap)} to go · eta ${fmtEtaRange(nextGate.etaDays, nextGate.etaRange)}`}
-            title={`${fmt(nextGate.gap)} to go · eta ${fmtEtaRange(nextGate.etaDays, nextGate.etaRange)}`}
-          >
-            TOP {nextGate.rank}
-          </Tile>
-        ) : (
-          <Tile label="NEXT GATE" tone="dim" sub="every gate passed">
-            —
-          </Tile>
-        )}
+        {/* no NEXT GATE tile: the Next gates panel's first row carries it,
+            and a repeated number is noise, not emphasis */}
         {(() => {
           const n = chase ?? nextOvertake;
           if (!n)
@@ -396,7 +380,7 @@ export default function CommandDeck({
                       : `eta ${etaText(n, n.etaDays)}`
                 }`;
           return (
-            <Tile label={chase ? "CHASE" : "OVERTAKE"} tone="accent" sub={sub} title={`${n.r} · ${sub}`}>
+            <Tile label={chase ? "CHASE" : "OVERTAKE"} sub={sub} title={`${n.r} · ${sub}`}>
               {shortName(n.r)}
             </Tile>
           );
@@ -415,7 +399,7 @@ export default function CommandDeck({
             );
           })()
         ) : (
-          <Tile label="THREAT" tone="dim" sub="no neighbor closing in">
+          <Tile label="THREAT" tone="accent" sub="no neighbor closing in">
             clear
           </Tile>
         )}
@@ -435,25 +419,25 @@ export default function CommandDeck({
           </div>
         </section>
 
-        <Panel index="06" title="Next gates" meta={`v7d ${fmt(live7)}/d`} className="deck-proj deck-scroll">
-          <Projections bundle={bundle} compact />
+        <Panel index="01" title="Next gates" meta={`v7d ${fmt(live7)}/d`} className="deck-proj deck-scroll">
+          <Projections bundle={bundle} compact dense />
         </Panel>
 
-        <Panel index="05" title="Stars / hour" meta="24h vs prev" className="deck-vel">
+        <Panel index="02" title="Stars / hour" meta="24h vs prev · UTC" className="deck-vel">
           <VelocityChart fill />
         </Panel>
-        <Panel index="07" title="Daily ladder" meta="night floor 00-05 UTC" className="deck-ladder">
+        <Panel index="03" title="Daily ladder" meta="night floor 00-05 UTC" className="deck-ladder">
           <DailyLadder bundle={bundle} fill bands={ladderBands} />
         </Panel>
-        <Panel index="09" title="World rank" meta="hourly" className="deck-rank">
+        <Panel index="04" title="World rank" meta="hourly" className="deck-rank">
           <RankChart bundle={bundle} fill />
         </Panel>
 
-        <Panel index="02" title="Cumulative" meta={`since ${bundle.meta?.created_at?.slice(0, 10) ?? "launch"}`} className="deck-cum">
+        <Panel index="05" title="Cumulative" meta={`since ${bundle.meta?.created_at?.slice(0, 10) ?? "launch"}`} className="deck-cum">
           <CurveChart repo={repo} fill />
         </Panel>
-        <PulsePanel dossier={dossier} index="03" className="deck-pulse deck-scroll" />
-        <UsagePanel dossier={dossier} index="04" className="deck-usage deck-scroll" />
+        <PulsePanel dossier={dossier} index="06" className="deck-pulse deck-scroll" />
+        <UsagePanel dossier={dossier} index="07" className="deck-usage deck-scroll" compact />
       </div>
     </div>
   );

@@ -40,18 +40,22 @@ export default function VelocityChart({ fill }: { fill?: boolean }) {
       const t = currentHour - i * HOUR;
       rows.push({
         t,
-        label: new Date(t).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+        // the deck is a UTC console (clock, TODAY UTC, night floor): its axis
+        // is UTC 24 h; the console panel keeps the reader's local time
+        label: fill
+          ? new Date(t).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", timeZone: "UTC" })
+          : new Date(t).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
         now: counts.get(t) ?? 0,
         prev: counts.get(t - 24 * HOUR) ?? 0,
       });
     }
     return rows;
-  }, [live.merged, live.windowMs]);
+  }, [live.merged, live.windowMs, fill]);
 
   return (
     <div className={fill ? "h-full min-h-0 w-full" : "h-[230px] w-full"}>
       <ResponsiveContainer width="100%" height="100%">
-        <ComposedChart data={data} margin={{ top: 6, right: 4, left: -18, bottom: 0 }}>
+        <ComposedChart data={data} margin={{ top: 6, right: fill ? 18 : 4, left: -18, bottom: 0 }}>
           <CartesianGrid stroke={C.grid} strokeDasharray="2 6" vertical={false} />
           <XAxis
             dataKey="label"

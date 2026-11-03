@@ -1391,13 +1391,26 @@ body.gx-warping .ghx-lore {
     grid-template-columns: repeat(4, minmax(0, 1fr));
   }
 }
+/* seven tiles on a 2- or 4-column strip leave a hole in the last row: the
+   last tile takes the spare width instead */
+@media (max-width: 1439px) {
+  .deck-tiles > .deck-tile:last-child:nth-child(odd) {
+    grid-column: span 2;
+  }
+}
+/* a phone cannot read the race at 390px: the gates come first there */
+@media (max-width: 639px) {
+  .deck-proj {
+    order: -1;
+  }
+}
 @media (min-width: 1440px) {
   .deck-tiles {
-    /* one row of eight only where eight fit whole (below 1440: two rows of 4).
+    /* one row of seven only where seven fit whole (below 1440: two rows).
        widths follow content: TODAY carries a delta and "yesterday now",
        V7D is the shortest number, the named slots carry repo names and an
        eta line. Order: stars, rank, hour, today, v7d, gate, overtake, threat */
-    grid-template-columns: 1.05fr 1fr 0.9fr 1.1fr 0.8fr 1.1fr 1.15fr 1.1fr;
+    grid-template-columns: 1.1fr 1fr 0.95fr 1.15fr 0.95fr 1.2fr 1.15fr;
   }
 }
 .deck-body {
@@ -1475,7 +1488,9 @@ body.gx-warping .ghx-lore {
 @media (min-width: 1280px) and (min-height: 820px) {
   .deck-body {
     grid-template-columns: repeat(12, minmax(0, 1fr));
-    grid-template-rows: minmax(300px, 1.55fr) minmax(210px, 1fr) minmax(210px, 1fr);
+    /* the race leads but does not hog: its labels are sparse, and the rows
+       below are the dense charts that need height (independent review 3-nov) */
+    grid-template-rows: minmax(280px, 1.35fr) minmax(215px, 1fr) minmax(215px, 1fr);
   }
   .deck-hero,
   .deck-body > section.hud:not(.deck-hero) {

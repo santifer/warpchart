@@ -18,13 +18,14 @@ function ago(iso: string): string {
   return `${(days / 365.25).toFixed(1)}y ago`;
 }
 
-function Metric({ label, value, hint, note, tone }: { label: string; value: string; hint?: string; note?: string; tone?: "accent" | "warn" | "ink" }) {
+function Metric({ label, value, hint, note, tone, wrap }: { label: string; value: string; hint?: string; note?: string; tone?: "accent" | "warn" | "ink"; wrap?: boolean }) {
   const color = tone === "warn" ? "text-warn" : tone === "accent" ? "text-accent" : "text-ink";
   return (
     <div className="flex min-w-0 flex-col gap-1">
       <span className="numeral text-micro tracking-[0.2em] text-faint">{label}</span>
       <span className={`numeral text-metric leading-none ${color}`}>{value}</span>
-      {hint ? <span className="numeral truncate text-micro text-dim">{hint}</span> : null}
+      {/* wrap: a narrow cell (the deck) shows the whole hint on two lines */}
+      {hint ? <span className={`numeral text-micro text-dim ${wrap ? "line-clamp-2" : "truncate"}`}>{hint}</span> : null}
       {/* never truncated: it carries what makes the figure honest (the
           measured number behind an estimate), so it wraps instead */}
       {note ? <span className="numeral max-w-[22rem] text-micro leading-snug text-dim">{note}</span> : null}
@@ -110,11 +111,17 @@ export function UsagePanel({
   index = "04",
   className = "",
   delay = 0,
+  compact = false,
 }: {
   dossier: Dossier | null;
   index?: string;
   className?: string;
   delay?: number;
+  // the Command Deck's cell: the three headline figures in a two-column grid,
+  // without the acquisition chart and the per-version list (the console keeps
+  // them), and the clone count in the neutral numeral colour: warn is for
+  // things that need attention, and a clone total does not
+  compact?: boolean;
 }) {
   const d = dossier;
   const withDownloads = (d?.releases ?? []).filter((r) => r.downloads > 0).slice(0, 4);
@@ -158,10 +165,11 @@ export function UsagePanel({
               const nh = d!.npmHistory;
               const lastNpm = nh && nh.length ? fmtDay(nh[nh.length - 1].day) : "";
               return (
-                <div className="flex flex-wrap gap-x-8 gap-y-3">
+                <div className={compact ? "grid grid-cols-[repeat(auto-fit,minmax(6.5rem,1fr))] gap-x-4 gap-y-3" : "flex flex-wrap gap-x-8 gap-y-3"}>
                   {d!.npmLast30 !== null ? (
                     <Metric
                       label="NPM INSTALLS · 30D"
+                      wrap={compact}
                       // npm's own total skips the days it never recorded. With
                       // holes in its window the headline is the measured total
                       // plus a LABELLED estimate of those days ("~"), and the
@@ -182,7 +190,8 @@ export function UsagePanel({
                             : undefined
                       }
                       hint={[
-                        d!.npmPkg ?? "",
+                        // the deck cell keeps the freshness, the console the package too
+                        compact ? "" : d!.npmPkg ?? "",
                         lastNpm ? `through ${lastNpm}` : "",
                       ]
                         .filter(Boolean)
@@ -193,9 +202,10 @@ export function UsagePanel({
                   {ch && ch.length ? (
                     <Metric
                       label={`CLONES · SINCE ${since}`}
+                      wrap={compact}
                       value={fmtCompact(cloneTotal)}
-                      hint={`clone events, not people · through ${lastClone}`}
-                      tone="warn"
+                      hint={compact ? `events, not people · thru ${lastClone}` : `clone events, not people · through ${lastClone}`}
+                      tone={compact ? "ink" : "warn"}
                     />
                   ) : null}
                   {/* The deduplicated headcount, and the only place the word
@@ -205,10 +215,13 @@ export function UsagePanel({
                   {d!.uniqueCloners14d !== null ? (
                     <Metric
                       label="UNIQUE CLONERS · 14D"
+                      wrap={compact}
                       value={fmtCompact(d!.uniqueCloners14d)}
                       hint={
                         d!.uniqueCloners14dAt
-                          ? `deduplicated by GitHub · as of ${fmtDay(d!.uniqueCloners14dAt)}`
+                          ? compact
+                            ? `GitHub dedup · ${fmtDay(d!.uniqueCloners14dAt)}`
+                            : `deduplicated by GitHub · as of ${fmtDay(d!.uniqueCloners14dAt)}`
                           : "deduplicated by GitHub"
                       }
                     />
@@ -216,11 +229,12 @@ export function UsagePanel({
                 </div>
               );
             })()}
-            {(d!.npmHistory && d!.npmHistory.length >= 2) ||
-            (d!.clonesHistory && d!.clonesHistory.length >= 2) ? (
+            {!compact &&
+            ((d!.npmHistory && d!.npmHistory.length >= 2) ||
+              (d!.clonesHistory && d!.clonesHistory.length >= 2)) ? (
               <UsageChart npm={d!.npmHistory ?? []} clones={d!.clonesHistory} />
             ) : null}
-            {d!.npmVersions?.length
+            {!compact && d!.npmVersions?.length
               ? (() => {
                   // adoption per release, from npm's rolling week (downloads, not people)
                   const v = summarizeVersions(d!.npmVersions!, 4);
@@ -267,7 +281,7 @@ export function UsagePanel({
                   );
                 })()
               : null}
-            {withDownloads.length ? (
+            {!compact && withDownloads.length ? (
               <div className="flex flex-col gap-1.5">
                 <span className="numeral text-micro tracking-[0.2em] text-faint">
                   RELEASE DOWNLOADS

@@ -114,7 +114,7 @@ export default function CurveChart({ repo, fill }: { repo: string; fill?: boolea
     <div ref={hostRef} className={`flex flex-col gap-2 ${fill ? "h-full min-h-0" : ""}`}>
       <div className={`w-full ${fill ? "min-h-0 flex-1" : "h-[280px]"}`}>
         <ResponsiveContainer width="100%" height="100%">
-          <ComposedChart key={run} data={rows} margin={{ top: 8, right: 12, bottom: 0, left: 0 }}>
+          <ComposedChart key={run} data={rows} margin={{ top: 8, right: fill ? 22 : 12, bottom: 0, left: 0 }}>
             <CartesianGrid stroke={C.grid} strokeDasharray="2 6" vertical={false} />
             <XAxis
               dataKey="t"

@@ -1038,9 +1038,12 @@ export default function GalacticChart({
           <text x={40} y={30} fill={C.dim} fontSize={12 * fs} letterSpacing={4} className="font-display">
             LOCAL SYSTEM
           </text>
-          <text x={40} y={47} fill={C.faint} fontSize={10.5 * fs}>
-            scroll sideways to pan · pinch to zoom · doppler tails: length = speed gap · blue = you gain the duel, red = it outruns you
-          </text>
+          {/* how-to lines are console help, not data: the deck drops them */}
+          {!deck ? (
+            <text x={40} y={47} fill={C.faint} fontSize={10.5 * fs}>
+              scroll sideways to pan · pinch to zoom · doppler tails: length = speed gap · blue = you gain the duel, red = it outruns you
+            </text>
+          ) : null}
           {/* AUTO-ZOOM toggle: frames the local system for legibility on load */}
           <text
             x={W - 40}
@@ -1558,9 +1561,11 @@ export default function GalacticChart({
           <text x={40} y={BAND_B_Y - 88} fill={C.dim} fontSize={12 * fs} letterSpacing={4} className="font-display">
             ROUTE TO THE CORE
           </text>
-          <text x={40} y={BAND_B_Y - 71} fill={C.faint} fontSize={10.5 * fs}>
-            distance scale, widest around you · every dot is a top 1000 repo · [ ] marks the window above
-          </text>
+          {!deck ? (
+            <text x={40} y={BAND_B_Y - 71} fill={C.faint} fontSize={10.5 * fs}>
+              distance scale, widest around you · every dot is a top 1000 repo · [ ] marks the window above
+            </text>
+          ) : null}
 
           <line x1={40} y1={BAND_B_Y} x2={W - 40} y2={BAND_B_Y} stroke="url(#routeGrad)" strokeWidth={0.5} />
           <line className="route-flow" x1={40} y1={BAND_B_Y} x2={W - 40} y2={BAND_B_Y}

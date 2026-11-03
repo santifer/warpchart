@@ -71,7 +71,7 @@ export default function RankChart({ bundle, fill }: { bundle: DashboardBundle; f
   return (
     <div ref={ref} className={`w-full touch-pan-y ${fill ? "h-full min-h-0" : "h-[230px]"}`} style={{ cursor: canPan ? "ew-resize" : undefined }}>
       <ResponsiveContainer width="100%" height="100%">
-        <LineChart data={data} margin={{ top: 10, right: 8, left: -14, bottom: 0 }}>
+        <LineChart data={data} margin={{ top: 10, right: fill ? 22 : 8, left: -14, bottom: 0 }}>
           <CartesianGrid stroke={C.grid} strokeDasharray="2 6" vertical={false} />
           <XAxis
             dataKey="t"
