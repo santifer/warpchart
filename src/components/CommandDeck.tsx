@@ -196,7 +196,7 @@ export default function CommandDeck({
   // depends on the viewport AND on the fullscreen transition, so it is
   // watched with a ResizeObserver rather than guessed from window resizes.
   const heroHole = useRef<HTMLDivElement | null>(null);
-  const [canvas, setCanvas] = useState<{ w: number; maxPx: number } | null>(null);
+  const [canvas, setCanvas] = useState<{ w: number; maxPx: number; px: number } | null>(null);
   useEffect(() => {
     const el = heroHole.current;
     if (!el) return;
@@ -204,8 +204,10 @@ export default function CommandDeck({
       const r = el.getBoundingClientRect();
       if (r.height < 120 || r.width < 280) return;
       const w = Math.min(Math.max(Math.round((r.width / r.height) * DECK_LOCAL_H), 1000), 2600);
-      const next = { w, maxPx: Math.floor(r.height * (w / DECK_LOCAL_H)) };
-      setCanvas((c) => (c && c.w === next.w && c.maxPx === next.maxPx ? c : next));
+      const maxPx = Math.floor(r.height * (w / DECK_LOCAL_H));
+      // the svg renders at the hole's width minus its px-2 padding, capped by maxPx
+      const next = { w, maxPx, px: Math.min(Math.round(r.width) - 16, maxPx) };
+      setCanvas((c) => (c && c.w === next.w && c.maxPx === next.maxPx && c.px === next.px ? c : next));
     };
     measure();
     const ro = new ResizeObserver(measure);
@@ -425,7 +427,7 @@ export default function CommandDeck({
           <div ref={heroHole} className="absolute inset-0 flex items-center justify-center px-2">
             {canvas ? (
               <div className="w-full" style={{ maxWidth: canvas.maxPx }}>
-                <GalacticChart inputs={inputs} target={target} onPinTarget={onPinTarget} deck deckW={canvas.w} noRoute />
+                <GalacticChart inputs={inputs} target={target} onPinTarget={onPinTarget} deck deckW={canvas.w} deckPx={canvas.px} noRoute />
               </div>
             ) : null}
           </div>

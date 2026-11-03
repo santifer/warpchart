@@ -97,6 +97,7 @@ export default function GalacticChart({
   deck = false,
   deckW,
   noRoute = false,
+  deckPx,
   fitW,
   charted,
 }: {
@@ -121,6 +122,9 @@ export default function GalacticChart({
   // deck's Next gates panel, and the ~40 % of canvas height it held goes to
   // the local system, so every label renders proportionally larger.
   noRoute?: boolean;
+  // on-screen width of the deck canvas in CSS px: lets the type keep a
+  // legible floor instead of only following the canvas width
+  deckPx?: number;
   // Same idea for wide inline showcases (landing spotlight): the measured
   // container width becomes the canvas width, so type stays at design size
   // and wide monitors get more map instead of giant letters.
@@ -149,11 +153,17 @@ export default function GalacticChart({
   // label renders at about hole width / 1550 (fs × hole / W): ~0.9× in the
   // race's 9-column slot on a 1920 screen. Line offsets that stack two
   // labels grow with fs too, so the bigger type never overprints.
+  // noRoute: secondary lines (11 units × fs) never render under ~10 px on
+  // screen, so names (12.5 × fs) sit at ~11.5 px or more on a laptop
+  const fsFloor = noRoute && deckPx ? (10 / 11) * (W / deckPx) : 0;
   const fs = deck
     ? noRoute
-      ? Math.min(2.2, Math.max(1.1, W / 1300))
+      ? Math.min(2.7, Math.max(1.1, W / 1300, fsFloor))
       : Math.min(1.8, Math.max(0.95, W / 1550))
     : 1;
+  // vertical step between label tiers; the deck's larger type needs a full
+  // free line between two stacked labels so they never read as one block
+  const TIER_STEP = noRoute ? 50 : 40;
   // The auto-zoom keeps its own, older scale: tying the zoom to the bigger
   // type widened the span and pushed the nearest rivals out of the window.
   // Bigger labels are resolved by the deck's extra tiers, not by zooming out.
@@ -878,7 +888,7 @@ export default function GalacticChart({
     // outside the deck, so the panel is unchanged); the deck keeps only the
     // tiers whose text still lands below the LOCAL SYSTEM hint (y ≈ 56).
     const nTiers = deck
-      ? Math.max(2, Math.min(5, Math.floor((BAND_A_Y - 67 * fs - 56) / (40 * fs)) + 1))
+      ? Math.max(2, Math.min(5, Math.floor((BAND_A_Y - 69 * fs - 56) / (TIER_STEP * fs)) + 1))
       : 3;
     const rowsAbove: number[] = new Array(nTiers).fill(-1e9); // rightmost occupied edge per tier
     const rowsBelow: number[] = new Array(nTiers).fill(-1e9);
@@ -1373,7 +1383,7 @@ export default function GalacticChart({
                 const hunts = !isAhead && n.catchDays !== null;
                 const labelAbove = isAhead || hunts;
                 const tierY = labelAbove
-                  ? BAND_A_Y - 44 * fs - tiers[i] * 40 * fs
+                  ? BAND_A_Y - 44 * fs - tiers[i] * TIER_STEP * fs
                   : BAND_A_Y + 64 * fs + tiers[i] * 34 * fs;
                 const lineY1 = labelAbove ? tierY + 8 * fs : BAND_A_Y + 6;
                 const lineY2 = labelAbove ? BAND_A_Y - 5 : tierY - 24 * fs;
@@ -1464,7 +1474,7 @@ export default function GalacticChart({
                   </g>
                 );
               }
-              const tierY = BAND_A_Y - 44 * fs - tiers[i] * 40 * fs;
+              const tierY = BAND_A_Y - 44 * fs - tiers[i] * TIER_STEP * fs;
               return (
                 <g
                   key={p.r}
