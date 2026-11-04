@@ -641,6 +641,23 @@ describe("velocityRankReconstructed", () => {
     const repos = Object.fromEntries(Array.from({ length: 2000 }, (_, i) => [`r/${i}`, {}]));
     expect(velocityRankReconstructed({ from: "2026-04-01", to: "2026-06-13", days: Array(74).fill("d"), repos }).severity).toBeNull();
   });
+  // incident 2026-11-04: 2026-11-03 erased from the moat, rebuilt in the gap file
+  const repos = Object.fromEntries(Array.from({ length: 2000 }, (_, i) => [`r/${i}`, {}]));
+  const main = { from: "2026-04-01", to: "2026-09-30", days: Array(183).fill("d"), repos };
+  const table = ["2026-10-01", "2026-11-01", "2026-11-02", "2026-11-04"].concat(
+    Array.from({ length: 30 }, (_, i) => `2026-10-${String(i + 2).padStart(2, "0")}`),
+  );
+  it("a table hole the gap file does not cover warns", () => {
+    expect(velocityRankReconstructed(main, table, null).note).toMatch(/2026-11-03/);
+  });
+  it("the gap file's window covers the hole: no warning", () => {
+    const gap = { windows: [{ from: "2026-11-03", to: "2026-11-03", days: ["2026-11-03"], repos }] };
+    expect(velocityRankReconstructed(main, table, gap).severity).toBeNull();
+  });
+  it("a gap window short of the universe is a broken rebuild, not a cover", () => {
+    const gap = { windows: [{ from: "2026-11-03", to: "2026-11-03", days: ["2026-11-03"], repos: { a: {} } }] };
+    expect(velocityRankReconstructed(main, table, gap).note).toMatch(/truncated/);
+  });
 });
 
 describe("npmLagExplains: a family stale because npm stopped publishing is not our outage", () => {

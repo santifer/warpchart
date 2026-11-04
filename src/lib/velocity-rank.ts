@@ -44,11 +44,13 @@ interface Meta {
   builtAt: string;
 }
 
-async function readBlob<T>(key: string): Promise<T | null> {
+async function readBlob<T>(key: string, fresh = false): Promise<T | null> {
   const token = process.env.BLOB_READ_WRITE_TOKEN;
   if (!token) return null;
   try {
-    const res = await get(key, { access: "private", token });
+    // fresh: from origin, for a file rewritten in place (the CDN keeps the
+    // old copy for weeks, and a bumped cache key alone would read it again)
+    const res = await get(key, { access: "private", token, ...(fresh ? { useCache: false } : {}) });
     if (!res || res.statusCode !== 200 || !res.stream) return null;
     return JSON.parse(await new Response(res.stream).text()) as T;
   } catch {
@@ -98,12 +100,33 @@ const readReconstructedCached = unstable_cache(
 );
 // re-uploading the file needs a NEW key above, or the old one is served a day
 const readReconstructed = () => readReconstructedCached().catch(() => null);
+// holes opened after the main reconstruction (velocity-rank-backfill.mjs gap
+// mode): a short window of its own, same shape, same rules. First: 2026-11-03,
+// erased by a stale shard write (incident 2026-11-04). Only a found file is
+// cached, so a miss never hides a later upload.
+const readGapsCached = unstable_cache(
+  async () => {
+    const r = await readBlob<{ windows?: Reconstructed[] }>("velocity-rank/reconstructed-gaps.json", true);
+    if (!r?.windows?.length) throw new Error("velocity-rank/reconstructed-gaps.json missing");
+    return r.windows;
+  },
+  // re-uploading the gap file (a new window) needs a NEW key, or the old
+  // copy is served for up to a day
+  ["velocity-rank-reconstructed-gaps-v1"],
+  { revalidate: 86_400 },
+);
+const readGaps = () => readGapsCached().catch(() => [] as Reconstructed[]);
 // 74 sorts of 2,000 repos per request is cheap but pointless: once per file
-let recMemo: { key: string; days: ReturnType<typeof reconstructDays> } | null = null;
+const recMemo = new Map<string, ReturnType<typeof reconstructDays>>();
 const reconstructedDays = (rec: Reconstructed & { builtAt?: string }) => {
-  const key = rec.builtAt ?? rec.to;
-  if (recMemo?.key !== key) recMemo = { key, days: reconstructDays(rec.days, rec.repos) };
-  return recMemo.days;
+  const key = `${rec.from}:${rec.to}:${rec.builtAt ?? ""}`;
+  let days = recMemo.get(key);
+  if (!days) {
+    days = reconstructDays(rec.days, rec.repos);
+    if (recMemo.size > 16) recMemo.clear();
+    recMemo.set(key, days);
+  }
+  return days;
 };
 
 export async function velocityRankTable(): Promise<{ meta: Meta; days: VelocityRankDay[] } | null> {
@@ -135,13 +158,14 @@ export async function repoVelocityRank(repo: string): Promise<{
   // truncated sweeps left in it); a recorded day always wins
   // (mergeReconstructed). A missing file just means no reconstructed part,
   // never an error.
-  const rec = await readReconstructed();
-  const rebuilt: VelocityRankPoint[] = rec?.days?.length
-    ? (repoReconstructedRanks(reconstructedDays(rec), rec.repos, allNamesOf(repo)) as Omit<VelocityRankPoint, "hours">[]).map((p) => ({
-        ...p,
-        hours: null,
-      }))
-    : [];
+  const [main, gaps] = await Promise.all([readReconstructed(), readGaps()]);
+  const files = [main, ...gaps].filter((r): r is Reconstructed => !!r?.days?.length);
+  const rebuilt: VelocityRankPoint[] = files.flatMap((rec) =>
+    (repoReconstructedRanks(reconstructedDays(rec), rec.repos, allNamesOf(repo)) as Omit<VelocityRankPoint, "hours">[]).map((p) => ({
+      ...p,
+      hours: null,
+    })),
+  );
   const points = mergeReconstructed(recorded, rebuilt) as VelocityRankPoint[];
   // the record starts on the repo's first measured day, not on the moat's
   const first = points.findIndex((p) => p.rank != null);

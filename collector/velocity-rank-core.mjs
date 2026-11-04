@@ -256,3 +256,30 @@ export function keepRecordedDays(prev, rebuilt) {
   }
   return [...byDay.values()].sort((a, b) => (a.day < b.day ? -1 : 1));
 }
+
+// The gap file (velocity-rank/reconstructed-gaps.json) holds one WINDOW per
+// hole opened after the main reconstruction: { windows: [{ from, to, days,
+// repos, ... }] }. A new window is ADDED; re-running the same range replaces
+// it; a window that overlaps another is refused (two rebuilt rows on one day).
+// Returns { ok, windows } or { ok:false, why }.
+export function addGapWindow(existing, win) {
+  const list = (existing?.windows ?? []).filter((w) => !(w.from === win.from && w.to === win.to));
+  const clash = list.find((w) => !(win.to < w.from || win.from > w.to));
+  if (clash) return { ok: false, why: `window ${win.from}..${win.to} overlaps ${clash.from}..${clash.to}` };
+  return { ok: true, windows: [...list, win].sort((a, b) => (a.from < b.from ? -1 : 1)) };
+}
+
+// A gap window must be a real, CLOSED range: ISO days, from <= to, and the
+// Pacific-time day `to` over (it ends at 08:00Z the next day in winter, 07:00Z
+// in summer) with a margin, or GitHub's history still has a half day.
+export const MAIN_RECONSTRUCTION_TO = "2026-09-30";
+export function gapWindowError(from, to, now = Date.now()) {
+  const iso = /^\d{4}-\d{2}-\d{2}$/;
+  if (!iso.test(from ?? "") || !iso.test(to ?? "")) return "VR_GAP_FROM/VR_GAP_TO must be YYYY-MM-DD";
+  if (from > to) return `VR_GAP_FROM ${from} is after VR_GAP_TO ${to}`;
+  // the main reconstruction covers through 30 Sep: two rebuilt rows on one day
+  if (from <= MAIN_RECONSTRUCTION_TO) return `VR_GAP_FROM ${from} overlaps the main reconstruction (through ${MAIN_RECONSTRUCTION_TO})`;
+  const closes = Date.parse(`${to}T00:00:00Z`) + 864e5 + 10 * 3600e3; // +1 day 08:00Z + 2 h
+  if (!(now > closes)) return `${to} is not closed yet in Pacific time (wait until ${new Date(closes).toISOString()})`;
+  return null;
+}

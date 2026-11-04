@@ -23,15 +23,39 @@
 // repo missing, writes nothing.
 //
 // Usage (by hand, once): BLOB_READ_WRITE_TOKEN=... GH_TOKEN=... node collector/velocity-rank-backfill.mjs [--out file]
+// GAP MODE, for a hole opened after the main window (one window per hole,
+// added to velocity-rank/reconstructed-gaps.json; bump its cache key in
+// src/lib/velocity-rank.ts after an upload):
+//   VR_GAP_FROM=2026-11-03 VR_GAP_TO=2026-11-03 BLOB_READ_WRITE_TOKEN=... GH_TOKEN=... node collector/velocity-rank-backfill.mjs
 import { writeFileSync } from "node:fs";
 import { readConfig } from "./lib.mjs";
-import { historyCovers } from "./velocity-rank-core.mjs";
+import { addGapWindow, gapWindowError, historyCovers } from "./velocity-rank-core.mjs";
 
 const SHARDS = 32;
-const FROM = "2026-04-01";
+// GAP MODE (VR_GAP_FROM/VR_GAP_TO): a short window for a hole opened AFTER
+// the main reconstruction, written to its own file (reconstructed-gaps.json)
+// so the main April-September file is never rebuilt (page 1 of the history no
+// longer reaches April, and the longer file would pass the 1.8 MB cap). First
+// use: 2026-11-03, the day a stale shard write erased (incident 2026-11-04).
+const GAP_FROM = process.env.VR_GAP_FROM ?? null;
+const GAP_TO = process.env.VR_GAP_TO ?? null;
+const GAP = !!(GAP_FROM && GAP_TO);
+if ((GAP_FROM || GAP_TO) && !GAP) {
+  console.log("[vr-backfill] gap mode needs both VR_GAP_FROM and VR_GAP_TO; nothing done");
+  process.exit(1);
+}
+if (GAP) {
+  const err = gapWindowError(GAP_FROM, GAP_TO);
+  if (err) {
+    console.log(`[vr-backfill] ${err}; nothing done`);
+    process.exit(1);
+  }
+}
+const FROM = GAP ? GAP_FROM : "2026-04-01";
 // through the last gap of the recorded table (27 Sep), plus a margin; a later
 // gap needs a re-run with a later TO (VR_TO: validation runs only)
-const TO = process.env.VR_TO ?? "2026-09-30";
+const TO = GAP ? GAP_TO : process.env.VR_TO ?? "2026-09-30";
+const KEY = GAP ? "velocity-rank/reconstructed-gaps.json" : "velocity-rank/reconstructed.json";
 const UNIVERSE = 2000;
 const args = process.argv.slice(2);
 const OUT = args.includes("--out") ? args[args.indexOf("--out") + 1] : null;
@@ -142,13 +166,23 @@ async function main() {
     source: `GitHub /stargazers/history (current stargazers only), universe = top ${UNIVERSE} of ${last}`,
     days, repos,
   };
-  const body = JSON.stringify(file);
+  if (!days.length) throw new Error("empty window; nothing written");
+  let out = file;
+  if (GAP) {
+    // add this window to the gap file; never drop another hole's window
+    const prev = await readJson(KEY); // throws on a read error: never "no file"
+    const merged = addGapWindow(prev, file);
+    if (!merged.ok) throw new Error(`${merged.why}; nothing written`);
+    out = { builtAt: file.builtAt, windows: merged.windows };
+    console.log(`[vr-backfill] gap file: ${merged.windows.length} window(s): ${merged.windows.map((w) => `${w.from}..${w.to}`).join(", ")}`);
+  }
+  const body = JSON.stringify(out);
   console.log(`[vr-backfill] ${days.length} days, ${Object.keys(repos).length} repos, ${(body.length / 1024).toFixed(0)} KB`);
   if (body.length > 1.8 * 1024 * 1024) throw new Error("file over 1.8 MB (Next's data cache drops >2 MB); nothing written");
   if (OUT) return writeFileSync(OUT, body);
   const { put } = await import("@vercel/blob");
-  await put("velocity-rank/reconstructed.json", body, { access: "private", token, addRandomSuffix: false, allowOverwrite: true, contentType: "application/json" });
-  console.log("[vr-backfill] written velocity-rank/reconstructed.json");
+  await put(KEY, body, { access: "private", token, addRandomSuffix: false, allowOverwrite: true, contentType: "application/json" });
+  console.log(`[vr-backfill] written ${KEY}`);
 }
 
 main().catch((e) => {

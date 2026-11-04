@@ -433,14 +433,20 @@ export function ladderBandsPresence(html, todayISO) {
 //   - gone or truncated: the chart silently starts on 14 Jun, not in April;
 //   - outrun: a NEW gap in the table after rec.to stays a silent hole
 //     (tableDays = the table's days; null = not read this run, not compared).
-export function velocityRankReconstructed(rec, tableDays = null) {
+export function velocityRankReconstructed(rec, tableDays = null, gapFile = null) {
   if (!rec) return { severity: "warn", note: "velocity-rank/reconstructed.json missing: the chart starts at the live record" };
   const repos = Object.keys(rec.repos ?? {}).length;
   if (!(rec.days?.length >= 60) || repos < 1900) return { severity: "warn", note: `reconstructed table truncated: ${rec.days?.length ?? 0} days, ${repos} repos` };
-  const gaps = tableDays ? gapsAfter(tableDays, rec.to) : [];
+  // the gap file's windows (holes rebuilt after the main window) are covered;
+  // a window short of the universe is a broken rebuild, not a cover
+  const windows = gapFile?.windows ?? [];
+  const thin = windows.find((w) => !(w.days?.length >= 1) || Object.keys(w.repos ?? {}).length < 1900);
+  if (thin) return { severity: "warn", note: `gap reconstruction ${thin.from}..${thin.to} truncated: ${thin.days?.length ?? 0} days, ${Object.keys(thin.repos ?? {}).length} repos` };
+  const covered = new Set(windows.flatMap((w) => w.days ?? []));
+  const gaps = tableDays ? gapsAfter(tableDays, rec.to).filter((d) => !covered.has(d)) : [];
   if (gaps.length)
-    return { severity: "warn", note: `${gaps.length} velocity-rank day(s) unmeasured after the reconstruction ends (${rec.to}): ${gaps.slice(0, 5).join(", ")}; re-run collector/velocity-rank-backfill.mjs with a later TO` };
-  return { severity: null, note: `reconstructed ${rec.from} .. ${rec.to}, ${repos} repos` };
+    return { severity: "warn", note: `${gaps.length} velocity-rank day(s) unmeasured after the reconstruction ends (${rec.to}): ${gaps.slice(0, 5).join(", ")}; rebuild them with collector/velocity-rank-backfill.mjs in gap mode (VR_GAP_FROM/VR_GAP_TO)` };
+  return { severity: null, note: `reconstructed ${rec.from} .. ${rec.to}, ${repos} repos${windows.length ? `; gaps rebuilt: ${windows.map((w) => `${w.from}..${w.to}`).join(", ")}` : ""}` };
 }
 
 // The Traffic Vault's CI band (collector/ci-checkouts-core.mjs) rests on one
