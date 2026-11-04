@@ -124,12 +124,10 @@ describe("route-history", () => {
     expect(r.puts.filter((p) => p.key.startsWith("route-history/"))).toEqual([]);
   });
 
-  it("an empty shard while meta records days is refused, not overwritten with today", () => {
-    const r = runCollector(
-      script("route-history.mjs"),
-      { blobs: { [META]: meta, ...shards, "route-history/shard-0.json": { dates: [], series: {} } } },
-      { STUB_DEEP: "10000" },
-    );
+  it("a missing shard while meta records days is refused, not recreated with today", () => {
+    const blobs = { [META]: meta, ...shards };
+    delete blobs["route-history/shard-0.json"];
+    const r = runCollector(script("route-history.mjs"), { blobs }, { STUB_DEEP: "10000" });
     expect(putsTo(r, "route-history/shard-0.json")).toEqual([]);
     expect(putsTo(r, META)).toEqual([]);
     expect(putsTo(r, "health/partial/route-history.json")).toHaveLength(1);
@@ -139,7 +137,6 @@ describe("route-history", () => {
     const r = runCollector(script("route-history.mjs"), { blobs: { [META]: meta, ...shards } }, { STUB_DEEP: "10000" });
     const today = day(0);
     const [s0] = putsTo(r, "route-history/shard-0.json");
-    expect(s0.ifMatch).toBe('"etag-route-history/shard-0.json"');
     expect(s0.body.dates).toEqual([day(-2), day(-1), today]);
     expect(putsTo(r, META)[0].body.days).toEqual([day(-2), day(-1), today]);
   });

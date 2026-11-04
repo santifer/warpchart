@@ -17,7 +17,10 @@ export function detectEvents(
   history: Snapshot[],
   dailyAll: DayPoint[],
   spikes: Spike[] = [],
-  extra: MissionEvent[] = []
+  extra: MissionEvent[] = [],
+  // 20 for feeds and the alerts cron (unchanged); the dashboard bundle asks
+  // for more so the Command Deck's full-width log can show them
+  limit = 20,
 ): MissionEvent[] {
   const events: MissionEvent[] = [...extra];
   if (history.length) {
@@ -82,19 +85,28 @@ export function detectEvents(
   }
 
   events.sort((x, y) => (x.ts < y.ts ? -1 : 1));
-  return events.slice(-20);
+  return events.slice(-limit);
 }
 
 // One sober, data-driven line about the latest completed day.
-export function captainsLog(dailyAll: DayPoint[], rank: number | null): string | null {
+// The summary reports the last CLOSED UTC day and says which one: it sat
+// under a live KPI strip (TODAY, RANK) and read as a contradiction when it
+// gave yesterday's count and a cached rank undated (deck review, 3-nov).
+// No rank: the live strip and the hero already show the current one.
+export function captainsLog(dailyAll: DayPoint[]): string | null {
   if (dailyAll.length < 3) return null;
   const yesterday = dailyAll[dailyAll.length - 2];
   const before = dailyAll[dailyAll.length - 3];
-  const dayN = dailyAll.length;
+  const dayN = dailyAll.length - 1;
   let trend = "";
   if (before.c > 0) {
     const pct = Math.round(((yesterday.c - before.c) / before.c) * 100);
     trend = `, ${pct >= 0 ? "+" : ""}${pct}% vs the day before`;
   }
-  return `Day ${dayN}: +${fmt(yesterday.c)} stars${trend}.${rank ? ` Holding rank #${fmt(rank)}.` : ""}`;
+  const label = new Date(`${yesterday.d}T00:00:00Z`).toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    timeZone: "UTC",
+  });
+  return `${label} close · day ${dayN}: +${fmt(yesterday.c)} stars${trend}.`;
 }

@@ -26,8 +26,8 @@ still shows a placeholder tonight, that is the backfill at work, not a
 problem. Everything fills in on its own.
 
 What you have now:
-- The full mission console: velocity, projections, daily ladder, heatmap,
-  rank over time and the mission log with spike forensics
+- The full mission console: velocity, projections, daily ladder, rank over
+  time and the mission log with spike forensics
 - Embeds with EXACT live counters for your README
 - Alerts for milestone gates and incoming overtakes (Discord, Slack or
   RSS: reply to this email and we will wire them with you)
