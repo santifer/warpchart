@@ -125,7 +125,7 @@ async function sendWelcomeEmail(
     `ones take a few more. If a panel still shows a placeholder tonight, that is the backfill ` +
     `at work, not a problem. It fills in on its own.\n\n` +
     `What you have now:\n` +
-    `- The full console: velocity, projections, daily ladder, heatmap, rank over time and the mission log\n` +
+    `- The full console: velocity, projections, daily ladder, rank over time and the mission log\n` +
     `- Embeds with exact live counters for your README\n` +
     `- Alerts for milestone gates and incoming overtakes (reply to wire Slack, Discord or RSS)\n` +
     fleetLine +

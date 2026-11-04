@@ -241,3 +241,18 @@ export function historyCovers(weeks, { more, from, stars }) {
     return { ok: false, why: `history from ${new Date(oldest).toISOString().slice(0, 10)} adds up to ${total}, the repo has ${stars}` };
   return { ok: true };
 }
+
+// The table is rebuilt from the moat every day, so a point lost in the moat
+// (2026-11-04: a stale shard write erased 2026-11-03 for 2,676 repos) would
+// silently drop a day already ranked from complete data. A recorded day stays;
+// a day the rebuild still computes replaces it; new days are added. Oldest first.
+export function keepRecordedDays(prev, rebuilt) {
+  const byDay = new Map((prev ?? []).map((d) => [d.day, d]));
+  for (const d of rebuilt ?? []) {
+    // the rebuild never carries `hours` for a day whose captures left the
+    // route-history meta (90 days): keep the window it was published with
+    const was = byDay.get(d.day);
+    byDay.set(d.day, d.hours == null && was?.hours != null ? { ...d, hours: was.hours } : d);
+  }
+  return [...byDay.values()].sort((a, b) => (a.day < b.day ? -1 : 1));
+}

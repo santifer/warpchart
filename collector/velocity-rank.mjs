@@ -9,8 +9,10 @@
 // is ~130 KB. The page reads these and the repo's own series
 // (src/lib/velocity-rank.ts). Locked: served only by the god-key API.
 //
-// Recomputed from scratch from the whole moat each time (the history is small
-// and a full rebuild heals itself), idempotent on the newest recorded day: it
+// Recomputed from the whole moat each time, merged over the published days: a
+// day already ranked from complete data is kept when the moat loses points
+// under it (keepRecordedDays, incident 2026-11-04), a day the rebuild still
+// computes is refreshed. Idempotent on the newest recorded day: it
 // runs on every collect but only reads the 64 shards when route-history has
 // recorded a day this table does not have yet.
 //
@@ -22,7 +24,7 @@
 // Usage: BLOB_READ_WRITE_TOKEN=... node collector/velocity-rank.mjs [--force] [--out dir]
 import { writeFileSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
-import { buildDays } from "./velocity-rank-core.mjs";
+import { buildDays, keepRecordedDays } from "./velocity-rank-core.mjs";
 import { markPartial, markComplete } from "./blob.mjs";
 
 const SHARDS = 32; // MUST match route-history.mjs and src/lib/rank-history.ts
@@ -55,7 +57,10 @@ async function main() {
     console.log("[velocity-rank] rank-history has no recorded day yet, skipping");
     return;
   }
-  const prev = await readJson(`${PREFIX}/meta.json`).catch(() => null);
+  // a read ERROR must not read as "no table yet": with prev null nothing is
+  // kept and the shrink guard is off, so the short table would be published.
+  // readJson throws on anything but 404; main().catch writes nothing.
+  const prev = await readJson(`${PREFIX}/meta.json`);
   if (!FORCE && prev?.lastTo === rhLast) {
     console.log(`[velocity-rank] already built through ${rhLast} (${prev.days} days), skipping`);
     return;
@@ -100,9 +105,22 @@ async function main() {
     return;
   }
 
-  const days = buildDays([...series].map(([repo, m]) => [repo, [...m.values()]]));
+  // the days already published: a day ranked from complete data is kept even
+  // when the moat lost points under it since (keepRecordedDays). All or
+  // nothing: a month that does not read refuses the run, never a shorter table.
+  const prevDays = [];
+  for (const m of prev?.months ?? []) {
+    const f = await readJson(`${PREFIX}/${m}.json`); // throws on a read error
+    if (!f?.days) {
+      console.log(`[velocity-rank] REFUSED: published month ${m} unreadable; the table stays as it was`);
+      if (!OUT) await markPartial(FAMILY, { reason: `month ${m} unreadable`, rhLast });
+      return;
+    }
+    prevDays.push(...f.days);
+  }
+  const days = keepRecordedDays(prevDays, buildDays([...series].map(([repo, m]) => [repo, [...m.values()]])));
   if (prev?.days && days.length < prev.days && !FORCE) {
-    console.log(`[velocity-rank] REFUSED: ${days.length} days, the table had ${prev.days} (a short read?); re-run with --force if real`);
+    console.log(`[velocity-rank] REFUSED: ${days.length} days, the table had ${prev.days} (a short read?); published days are kept, so this is a read problem`);
     if (!OUT) await markPartial(FAMILY, { reason: `${days.length} days < ${prev.days}`, rhLast });
     return;
   }
@@ -112,7 +130,8 @@ async function main() {
   for (const d of days) {
     const a = Date.parse(at[d.day] ?? "");
     const b = Date.parse(at[d.to] ?? "");
-    d.hours = Number.isFinite(a) && Number.isFinite(b) ? Math.round((b - a) / 36e5 * 10) / 10 : null;
+    // a kept day whose captures left the meta keeps the window it was built with
+    d.hours = Number.isFinite(a) && Number.isFinite(b) ? Math.round((b - a) / 36e5 * 10) / 10 : (d.hours ?? null);
   }
 
   const months = new Map();

@@ -16,8 +16,9 @@ import { useEffect, useMemo, useState } from "react";
 import { ComposedChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceArea, ReferenceLine, ReferenceDot } from "recharts";
 import type { TrendingMarks } from "@/lib/trending-marks";
 import { usePalette, useThemeMode } from "@/lib/usePalette";
-import { fillCalendar, lastDays, liveSplit, monthStarts, rankTicks, tierOf, TIERS, type TierKey, trailingMedian, weekOverWeek } from "@/lib/velocity-rank-view";
+import { fillCalendar, lastDays, liveSplit, monthStarts, rankTicks, tierOf, TIERS, trailingMedian, weekOverWeek } from "@/lib/velocity-rank-view";
 import { StepsSilhouette } from "./PanelSilhouettes";
+import { TIER_COLOR, tierFillOpacity } from "@/lib/tier-colors";
 
 type Pt = { day: string; rank: number | null; gain: number | null; n: number; hours: number | null; inTop?: boolean; reconstructed?: boolean; why?: string };
 type State =
@@ -28,14 +29,6 @@ type State =
 
 const H = 260;
 
-// RPG rarity colours for the background zones, one set per theme: saturated
-// enough to name the zone at a glance, faint enough (fill opacity) that the
-// marks on top keep the contrast. Common gets no fill: the default zone.
-const TIER_COLOR: Record<"dark" | "light", Record<TierKey, string>> = {
-  dark: { legendary: "#ff8c1a", epic: "#b06cff", rare: "#4c8dff", uncommon: "#34c26b", common: "#8a94a6" },
-  light: { legendary: "#e07000", epic: "#9333ea", rare: "#2563eb", uncommon: "#15924a", common: "#6b7280" },
-};
-const TIER_FILL: Record<"dark" | "light", number> = { dark: 0.11, light: 0.09 };
 const dayLabel = (d: string) => new Date(`${d}T12:00:00Z`).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
 
 function LockedTeaser({ repo }: { repo: string }) {
@@ -54,12 +47,14 @@ function LockedTeaser({ repo }: { repo: string }) {
   );
 }
 
-export default function GodVelocityRank({ repo }: { repo: string }) {
+export default function GodVelocityRank({ repo, compact = false }: { repo: string; compact?: boolean }) {
   const C = usePalette();
   const { resolved } = useThemeMode();
   const TC = TIER_COLOR[resolved];
   const [state, setState] = useState<State>({ kind: "locked" });
-  const [range, setRange] = useState<0 | 90 | 30>(0); // 0 = ALL
+  // 0 = ALL. The deck opens on 90 days, the window its neighbours (ladder,
+  // world rank, traffic) show; ALL stays one click away
+  const [range, setRange] = useState<0 | 90 | 30>(compact ? 90 : 0);
 
   useEffect(() => {
     // starts (and, without a token, stays) locked; the teaser shows while the
@@ -139,7 +134,15 @@ export default function GodVelocityRank({ repo }: { repo: string }) {
     return { data, wow: { ...wow, best }, bestRec, yMax, ticks, months, liveT, firstLive, filled, trendDays: data.filter((p) => p.tr != null) };
   }, [state, range]);
 
-  if (state.kind === "locked") return <LockedTeaser repo={repo} />;
+  if (state.kind === "locked")
+    return compact ? (
+      <a href={`/pricing?repo=${encodeURIComponent(repo)}`} className="numeral flex items-center justify-between gap-3 text-micro">
+        <span className="locked-status tracking-[0.28em] text-faint">◈ UNLOCK WITH TRACKING</span>
+        <span className="locked-cta truncate text-faint">daily rank by new stars</span>
+      </a>
+    ) : (
+      <LockedTeaser repo={repo} />
+    );
   if (state.kind === "unavailable" || state.kind === "empty") {
     const msg = {
       unavailable: "VELOCITY RANK UNAVAILABLE · the daily table is not built yet",
@@ -163,7 +166,7 @@ export default function GodVelocityRank({ repo }: { repo: string }) {
   const better = wow.thisWeek != null && wow.prevWeek != null ? wow.prevWeek - wow.thisWeek : null;
 
   return (
-    <div className="relative flex w-full flex-col gap-2">
+    <div className="vrank-root relative flex w-full flex-col gap-2">
       <div className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-1 px-1">
         <div className="flex flex-wrap items-baseline gap-x-6 gap-y-1">
           <span className="numeral text-label text-ink">
@@ -212,7 +215,7 @@ export default function GodVelocityRank({ repo }: { repo: string }) {
           <span className="numeral text-micro tracking-[0.24em] text-accent/70">◈ GOD MODE</span>
         </div>
       </div>
-      <div style={{ height: H }}>
+      <div className="vrank-chart" style={{ height: H }}>
         <ResponsiveContainer width="100%" height="100%">
           <ComposedChart data={data} margin={{ top: 10, right: 18, left: -14, bottom: 0 }}>
             {TIERS.filter((t) => t.from <= yMax && t.key !== "common").map((t) => (
@@ -221,8 +224,7 @@ export default function GodVelocityRank({ repo }: { repo: string }) {
                 y1={t.from}
                 y2={Math.min(t.to, yMax)}
                 fill={TC[t.key]}
-                // orange over navy reads brown at the shared opacity: legendary gets a little more
-                fillOpacity={TIER_FILL[resolved] * (t.key === "legendary" && resolved === "dark" ? 1.7 : 1)}
+                fillOpacity={tierFillOpacity(t.key, resolved)}
                 stroke="none"
                 ifOverflow="hidden"
               />
@@ -364,7 +366,8 @@ export default function GodVelocityRank({ repo }: { repo: string }) {
           </span>
         )}
       </div>
-      <span className="numeral px-1 text-micro text-faint">
+      {/* method note: console only, the deck keeps chart, tiers and legend */}
+      <span className={`numeral px-1 text-micro text-faint ${compact ? "hidden" : ""}`}>
         {state.pts.some((p) => p.inTop === false) ? `where it placed (or would have) among the worldwide top ${top}` : `place among the worldwide top ${top}`} by net new stars that day · lower is better · line = 7-day median · gaps = day not measured · √ scale ·{" "}
         {data.some((p) => p.rec)
           ? `hollow dots${data.some((p) => p.pre && p.rank != null) ? " + dashed line" : ""} = reconstructed from GitHub's star history (current stargazers per Pacific-time day; ~10% of the rank off the live record on a median day, closer at the top)${firstLive ? ` · recorded live since ${dayLabel(firstLive)}` : ""}${filled ? `; ${filled} hollow ${filled === 1 ? "dot" : "dots"} inside the live record ${filled === 1 ? "fills a day" : "fill days"} a cut-short daily sweep left unmeasured, kept out of the median` : ""}`

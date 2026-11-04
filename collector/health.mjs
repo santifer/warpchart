@@ -34,7 +34,7 @@
 // Exit code 1 when a critical finding is open, so CI turns red by itself.
 import { writeFileSync } from "node:fs";
 import { candidatePackages } from "./npm-versions.mjs";
-import { ARTIFACTS, COLLECTOR_STALE_H, npmLagExplains, cancelledVerdict, cronLag, etaIncoherences, openPartials, pipelineRunsGate, presenceEval, presenceMap, prflowFreshness, staleArtifacts, npmUsageFreshness, contributorsDrift, contributorCurve, curveEndsOnTotal, buildersWallFreshness, buildersLangMismatch, velocityRankFreshness, velocityRankReconstructed, v7StampLags, v7WindowFreshness, V7_WINDOW_MAX_H } from "./health-rules.mjs";
+import { ARTIFACTS, COLLECTOR_STALE_H, npmLagExplains, cancelledVerdict, cronLag, etaIncoherences, openPartials, pipelineRunsGate, presenceEval, presenceMap, prflowFreshness, staleArtifacts, npmUsageFreshness, contributorsDrift, contributorCurve, curveEndsOnTotal, buildersWallFreshness, buildersLangMismatch, velocityRankFreshness, velocityRankReconstructed, ladderBandsPresence, ciBandViolations, v7StampLags, v7WindowFreshness, V7_WINDOW_MAX_H } from "./health-rules.mjs";
 
 const args = process.argv.slice(2);
 const JSON_OUT = args.includes("--json");
@@ -1114,7 +1114,7 @@ async function checkPresence() {
     // the curve and the number are one figure (contributorCurve)
     const curve = contributorCurve(body?.contributors ?? null);
     if (curve.severity) fail("presence.contributor-curve", "PRESENCE", curve.severity, curve.note,
-      "collector/contributors.mjs rebuilds GitHub's count from commits (contributors-core.mjs) and vitals.mjs calibrates it to the sidebar figure. A missing curve: check the [contributors] log line (\"GitHub's count rebuilt N\") and whether the rebuild drifted >5% from the sidebar.");
+      "collector/contributors.mjs rebuilds GitHub's count from commits (contributors-core.mjs) and vitals.mjs calibrates it to the sidebar figure. A missing curve: check the [contributors] log line (\"GitHub's count rebuilt N\") and whether both rebuilds (capped and uncapped, githubCurve in contributors-core.mjs) drifted >2% from the sidebar.");
     else pass("presence.contributor-curve", "PRESENCE", curve.note);
     const sb = await fetch(`https://github.com/${TENANT}/_sidebar`, { headers: { Accept: "application/json" }, signal: AbortSignal.timeout(20_000) })
       .then((r) => (r.ok ? r.json() : null)).catch(() => null);
@@ -1161,6 +1161,35 @@ async function checkPresence() {
     if (r.severity) fail("presence.builders-wall", "PRESENCE", r.severity, r.note,
       "collector/builders.mjs (workflow builders.yml, every 6 h) renders it from the contributor census into builders/{repo}.{lang}.svg; it refuses (partial marker 'builders') when the census shrinks or >5% of avatars fail. Re-run: gh workflow run builders.yml -f force=true.");
     else pass("presence.builders-wall", "PRESENCE", r.note);
+  });
+
+  // The daily ladder's rank zones are on the house console, the newest this month.
+  await check("presence.ladder-bands", "PRESENCE", async () => {
+    const res = await fetch(`${BASE}/r/${TENANT}`, { signal: AbortSignal.timeout(30_000) }).catch(() => null);
+    if (!res?.ok) {
+      return fail("presence.ladder-bands", "PRESENCE", "warn",
+        `the house console answered ${res ? `HTTP ${res.status}` : "nothing (timeout or network)"}`,
+        "The ladder zones could not be read this run; public.* checks cover the page itself.");
+    }
+    const r = ladderBandsPresence(await res.text(), new Date().toISOString().slice(0, 10));
+    if (r.severity) fail("presence.ladder-bands", "PRESENCE", r.severity, r.note,
+      "src/lib/velocity-rank.ts ladderBands builds the zones from the velocity-rank table (velocity-rank/meta.json + one file per month; data.velocity-rank says whether the table itself is fresh), cached an hour under 'ladder-bands-v1'. No zones = the table did not load; an old newest month = the table stopped, and monthlyTierBands (src/lib/ladder-bands.ts) rightly refuses to repaint old cut-offs as this month's.");
+    else pass("presence.ladder-bands", "PRESENCE", r.note);
+  });
+
+  // The Traffic Vault's CI band is possible: our CI never counted above the clones.
+  await check("data.ci-band", "DATA", async () => {
+    if (!BLOB_TOKEN) return pass("data.ci-band", "DATA", "no Blob token, skipped");
+    const repo = TENANT.toLowerCase().replace("/", "--");
+    const [ci, vault] = await Promise.all([
+      blobJson(`ci-checkouts/${repo}.json`).catch(() => undefined),
+      blobJson(`traffic/${repo}.json`).catch(() => undefined),
+    ]);
+    if (!ci?.days || !vault?.clones) return pass("data.ci-band", "DATA", "no CI record or vault this run; not compared");
+    const r = ciBandViolations(ci.days, vault.clones, ci.range?.low ?? 1);
+    if (r.severity) fail("data.ci-band", "DATA", r.severity, r.note,
+      "collector/ci-checkouts.mjs counts the house repo's CI checkout jobs; a day above the clones means runs that never ran jobs were counted (see isGhost) or a workflow's checkout jobs were misread. Check that day's runs with gh api, fix the rule, and delete the day from ci-checkouts/ so it is recounted.");
+    else pass("data.ci-band", "DATA", r.note);
   });
 
   // The locked daily velocity-rank table keeps up with the rank-history moat.

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { COLLECTOR_STALE_H as APP_STALE_H } from "../src/lib/staleness.ts";
-import { ARTIFACTS, COLLECTOR_STALE_H, npmLagExplains, cancelledVerdict, cronLag, etaIncoherences, maxAgeFromEnv, newestRunMs, pickFreshestRuns, pipelineRunsGate, RUNS_LIST_TOL_H, runsListStale, openPartials, presenceEval, presenceLost, presenceMap, prflowFreshness, npmUsageFreshness, contributorsDrift, contributorCurve, buildersWallFreshness, buildersLangMismatch, velocityRankFreshness, velocityRankReconstructed, gapsAfter, curveEndsOnTotal, staleArtifacts, watchdogStale, v7StampLags, v7WindowFreshness } from "./health-rules.mjs";
+import { ARTIFACTS, COLLECTOR_STALE_H, npmLagExplains, cancelledVerdict, cronLag, etaIncoherences, maxAgeFromEnv, newestRunMs, pickFreshestRuns, pipelineRunsGate, RUNS_LIST_TOL_H, runsListStale, openPartials, presenceEval, presenceLost, presenceMap, prflowFreshness, npmUsageFreshness, contributorsDrift, contributorCurve, buildersWallFreshness, buildersLangMismatch, velocityRankFreshness, velocityRankReconstructed, ladderBandsPresence, gapsAfter, ciBandViolations, curveEndsOnTotal, staleArtifacts, watchdogStale, v7StampLags, v7WindowFreshness } from "./health-rules.mjs";
 
 describe("prflowFreshness", () => {
   // 26-sep: the first run after 00:00Z was cancelled and 25-sep never closed.
@@ -509,7 +509,7 @@ describe("contributorCurve", () => {
   it("warns when the curve and the number disagree", () => {
     expect(contributorCurve({ total: 614, series: { github: win(row("2026-10-11", 616)) } }).severity).toBe("warn");
   });
-  it("warns when the chart fell back to the census toggle", () => {
+  it("flags a missing GitHub-count curve (chart not drawn)", () => {
     // the dossier of 2026-10-11 before this change: no github series at all
     expect(contributorCurve({ total: 611, series: { github: null, authors: win(row("2026-10-11", 480)), credited: win() } }).severity).toBe("critical");
   });
@@ -693,5 +693,45 @@ describe("velocityRankReconstructed: a new gap after the reconstruction", () => 
   it("gapsAfter ignores the days up to rec.to and the open end", () => {
     expect(gapsAfter(["2026-09-02", "2026-09-05"], "2026-09-02")).toEqual(["2026-09-03", "2026-09-04"]);
     expect(gapsAfter([], "2026-09-30")).toEqual([]);
+  });
+});
+
+describe("ciBandViolations", () => {
+  const vault = { "2026-08-25": { c: 5174 }, "2026-10-21": { c: 8391 }, "2026-10-22": { c: 100 } };
+  it("21 Oct is consistent (1,361 checkouts x 1 <= 8,391 clones)", () => {
+    expect(ciBandViolations({ "2026-10-21": { checkouts: 1361 } }, vault).severity).toBeNull();
+  });
+  it("a day counting more CI than clones is a warn naming it", () => {
+    const r = ciBandViolations({ "2026-08-25": { checkouts: 6000 } }, vault);
+    expect(r.severity).toBe("warn");
+    expect(r.note).toContain("2026-08-25");
+  });
+  it("the vault's newest day is skipped: GitHub may still be closing it", () => {
+    expect(ciBandViolations({ "2026-10-22": { checkouts: 900 } }, vault).severity).toBeNull();
+  });
+  it("days only one side has are not compared", () => {
+    expect(ciBandViolations({ "2026-10-22": { checkouts: 9999 } }, { "2026-10-21": { c: 10 } }).severity).toBeNull();
+  });
+});
+
+describe("ladderBandsPresence", () => {
+  // what React renders on the ladder's wrapper (DailyLadder.tsx)
+  const html = (n, last) => `<div class="flex w-full flex-col gap-1.5 " data-ladder-bands="${n}" data-ladder-bands-last="${last}"><div class="w-full">`;
+
+  it("passes with zones whose newest month is this month", () => {
+    expect(ladderBandsPresence(html(5, "2026-10"), "2026-10-26")).toMatchObject({ severity: null });
+  });
+  it("warns when the server handed over no zones", () => {
+    expect(ladderBandsPresence(html(0, ""), "2026-10-26").severity).toBe("warn");
+  });
+  it("warns when the ladder is not on the page at all", () => {
+    expect(ladderBandsPresence("<html>no ladder</html>", "2026-10-26").severity).toBe("warn");
+  });
+  it("lets the 1st of a month through on last month's zone (caches), not the 2nd", () => {
+    expect(ladderBandsPresence(html(5, "2026-10"), "2026-11-01").severity).toBeNull();
+    expect(ladderBandsPresence(html(5, "2026-10"), "2026-11-02")).toMatchObject({ severity: "warn", note: expect.stringContaining("not 2026-11") });
+  });
+  it("handles the year boundary", () => {
+    expect(ladderBandsPresence(html(7, "2026-12"), "2027-01-01").severity).toBeNull();
   });
 });

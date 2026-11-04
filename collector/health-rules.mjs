@@ -216,6 +216,7 @@ export const ARTIFACTS = [
   // trending pages fail: a single bad run must not read as "stopped" (the
   // partial marker 'trending-marks' says that one), so a day and a half
   { prefix: "trending/", kind: "periodic", maxAgeH: 36, what: "the house repo's GitHub Trending days" },
+  { prefix: "ci-checkouts/", kind: "periodic", maxAgeH: 36, what: "the house repo's CI checkout jobs per day (Traffic Vault CI band)" },
   // builders.yml every 6 h; it skips while the people are the same and the
   // wall is under 20 h old, so a healthy wall is at most ~26 h old
   { prefix: "builders/", kind: "periodic", maxAgeH: 30, what: "the README builders wall" },
@@ -404,6 +405,28 @@ export function velocityRankFreshness(meta, rhLast, rhAt, now = Date.now(), grac
   return { severity: "warn", note: `velocity-rank table stops at ${meta.lastTo}, rank-history has ${rhLast} (${sinceH.toFixed(0)} h ago)` };
 }
 
+// DAILY LADDER ZONES (src/lib/ladder-bands.ts, served by velocity-rank.ts
+// ladderBands): the house console must carry its monthly rank zones, and the
+// newest must be THIS month. A new month borrows the last 30 days, and refuses
+// to when the table stopped, so a stalled table reaches this check as a
+// missing month instead of old cut-offs repainted as current. The 1st of a
+// month is let through: the page and the zones are cached for up to an hour
+// each. Zones are a reference drawn behind the bars, not a published figure,
+// so their absence is a warning, never critical.
+export function ladderBandsPresence(html, todayISO) {
+  const n = /data-ladder-bands="(\d+)"/.exec(html ?? "");
+  if (!n) return { severity: "warn", note: "no daily ladder on the house console (data-ladder-bands attribute missing)" };
+  if (Number(n[1]) === 0) return { severity: "warn", note: "the daily ladder carries no rank zones (ladderBands answered null)" };
+  const last = /data-ladder-bands-last="(\d{4}-\d{2})"/.exec(html)?.[1] ?? null;
+  const month = todayISO.slice(0, 7);
+  const [y, m] = month.split("-").map(Number);
+  const prev = new Date(Date.UTC(y, m - 2, 1)).toISOString().slice(0, 7);
+  if (last === month || (todayISO.slice(8, 10) === "01" && last === prev)) {
+    return { severity: null, note: `${n[1]} monthly zones, newest ${last}` };
+  }
+  return { severity: "warn", note: `the newest ladder zone is ${last ?? "unreadable"}, not ${month}` };
+}
+
 // The reconstructed days (velocity-rank/reconstructed.json, written by hand by
 // collector/velocity-rank-backfill.mjs): before the live record, and the gaps
 // cut-short sweeps left in it. Nothing rewrites it, so it fails two ways:
@@ -418,6 +441,23 @@ export function velocityRankReconstructed(rec, tableDays = null) {
   if (gaps.length)
     return { severity: "warn", note: `${gaps.length} velocity-rank day(s) unmeasured after the reconstruction ends (${rec.to}): ${gaps.slice(0, 5).join(", ")}; re-run collector/velocity-rank-backfill.mjs with a later TO` };
   return { severity: null, note: `reconstructed ${rec.from} .. ${rec.to}, ${repos} repos` };
+}
+
+// The Traffic Vault's CI band (collector/ci-checkouts-core.mjs) rests on one
+// claim: our own CI makes AT LEAST checkouts x low clones. A day where that is
+// more than the clones GitHub counted means the count is wrong (ghost runs
+// counted, a ratio misread), and the band hides it by capping at the total.
+// ciDays = { D: { checkouts } }, clones = { D: { c } }; only days both have.
+// The vault's newest day is skipped: GitHub may still be closing it, and its
+// count grows over the next runs.
+export function ciBandViolations(ciDays, clones, low = 1) {
+  const newest = Object.keys(clones ?? {}).sort().at(-1);
+  const bad = Object.entries(ciDays ?? {})
+    .filter(([d, e]) => d !== newest && Number.isFinite(clones?.[d]?.c) && Number.isFinite(e?.checkouts) && e.checkouts * low > clones[d].c)
+    .map(([d, e]) => `${d} (${e.checkouts} checkouts x ${low} > ${clones[d].c} clones)`);
+  return bad.length
+    ? { severity: "warn", note: `CI band impossible on ${bad.length} day(s): ${bad.slice(0, 3).join(", ")}` }
+    : { severity: null, note: `CI band consistent on ${Object.keys(ciDays ?? {}).filter((d) => clones?.[d]).length} day(s)` };
 }
 
 // calendar days after `after` and before the table's last day that the table lacks
@@ -446,8 +486,8 @@ export function buildersLangMismatch(langs, served) {
 
 // The contributor chart draws GitHub's own count over time and must END on the
 // figure the panel prints (one number on the page, 2026-10-11). A missing curve
-// means the calibration refused (rebuild >5% off) or the census never ran: the
-// chart silently fell back to the authors/co-authored toggle.
+// means neither rebuild matched GitHub's figure (githubCurve) or the census
+// never ran: the chart is not drawn (no fallback count since 2026-10-30).
 export function contributorCurve(contributors) {
   if (!contributors) return { severity: null, note: "no contributors block" };
   const total = contributors.total ?? null;
@@ -455,7 +495,7 @@ export function contributorCurve(contributors) {
   if (total == null) return { severity: null, note: "no live figure; covered by presence.contributors" };
   // critical, not warn: on 2026-10-16 the house panel fell back to "516
   // authors" for hours and only Santiago saw it (a warn opens no issue)
-  if (last == null) return { severity: "critical", note: `no GitHub-count curve; the chart fell back to the census toggle (total ${total})` };
+  if (last == null) return { severity: "critical", note: `no GitHub-count curve; the contributor chart is not drawn (total ${total})` };
   return last === total
     ? { severity: null, note: `curve ends on ${total}, GitHub's figure` }
     : { severity: "warn", note: `curve ends on ${last} but the panel prints ${total}` };
