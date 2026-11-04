@@ -53,5 +53,6 @@ describe("warpchart dossier: absence is a dash, never a number", () => {
     expect(line("PRs merged")).toMatch(/PRs merged\s+—\s*$/);
     expect(line("issues")).toMatch(/— closed\s+— opened · — open/);
     expect(stdout).not.toMatch(/NaN|null|undefined/);
-  });
+    // spawns a real node process: the 5 s default flaked once on a cold full run
+  }, 30_000);
 });
