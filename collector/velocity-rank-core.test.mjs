@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildDays, dailyDeltas, historyCovers, mergeReconstructed, rankAmong, reconstructDays, repoDailyRanks, repoReconstructedRanks } from "./velocity-rank-core.mjs";
+import { buildDays, dailyDeltas, historyCovers, keepRecordedDays, mergeReconstructed, rankAmong, reconstructDays, repoDailyRanks, repoReconstructedRanks } from "./velocity-rank-core.mjs";
 
 // A tiny universe: minUniverse is lowered so a handful of repos stand in for
 // the 10k sweep; the rules are the same.
@@ -219,5 +219,30 @@ describe("historyCovers (one page of /stargazers/history)", () => {
   it("a page that reaches FROM is covered", () => {
     const old = [{ week: Date.parse("2026-03-29T00:00:00Z") / 1000, days: [1, 1, 1, 1, 1, 1, 1], total: 7 }];
     expect(historyCovers(old, { more: true, from, stars: 99999 }).ok).toBe(true);
+  });
+});
+
+// Incident 2026-11-04: losing points in the moat (a stale shard write erased
+// 2026-11-03 for 2,676 repos) made the full rebuild drop a day it had already
+// ranked from complete data (2026-11-02 -> 11-03, 1,000 repos). A recorded day
+// is kept; only a day the rebuild can still compute replaces it.
+describe("keepRecordedDays", () => {
+  const prev = [
+    { day: "2026-11-01", to: "2026-11-02", n: 1000, gains: [400, 300], hours: 24 },
+    { day: "2026-11-02", to: "2026-11-03", n: 1000, gains: [500, 200], hours: 24.7 },
+  ];
+  const rebuilt = [{ day: "2026-11-01", to: "2026-11-02", n: 1000, gains: [401, 300] }];
+  it("keeps a recorded day the rebuild can no longer compute", () => {
+    expect(keepRecordedDays(prev, rebuilt).map((d) => d.day)).toEqual(["2026-11-01", "2026-11-02"]);
+  });
+  it("a day both have comes from the rebuild", () => {
+    expect(keepRecordedDays(prev, rebuilt)[0].gains).toEqual([401, 300]);
+  });
+  it("a refreshed day keeps its published window length when the rebuild has none", () => {
+    expect(keepRecordedDays(prev, rebuilt)[0].hours).toBe(24);
+  });
+  it("new days are added, oldest first", () => {
+    const more = [...rebuilt, { day: "2026-11-04", to: "2026-11-05", n: 1000, gains: [9] }];
+    expect(keepRecordedDays(prev, more).map((d) => d.day)).toEqual(["2026-11-01", "2026-11-02", "2026-11-04"]);
   });
 });
