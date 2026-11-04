@@ -200,7 +200,7 @@ export default function TrafficPanel({ repo, compact = false }: { repo: string; 
   const stale = lagDays >= 2;
 
   return (
-    <div className="flex h-full flex-col gap-2">
+    <div className="vault-root flex h-full flex-col gap-2">
       <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1">
         {/* PER-DAY totals are addable; per-day UNIQUES are not (a person who
             comes back on Tuesday is two of them). So the people view heads with

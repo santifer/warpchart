@@ -1808,51 +1808,97 @@ body.gx-warping .ghx-lore {
 .deck-usage-rows .usage-row > span:nth-child(2) {
   font-size: 1.875rem;
 }
-/* a short screen with the owner's panels unlocked: both charts give up
-   height (whichever cell is taller sets the row) so the mission log keeps a
-   few rows instead of only its summary */
-/* a short desktop screen: Real usage stacks in the left third and the
-   mission log takes the right two thirds of the same band, so the log gets
-   the height of both bands instead of a sliver under the strip */
-@media (min-width: 1280px) and (max-height: 950px) {
-  /* only with the owner's panels unlocked (their charts take the top
-     band); locked, the strip-over-log layout shows more entries */
-  .deck-audience:has(.vault-chart) {
-    grid-template-columns: minmax(0, 1fr) minmax(0, 2fr);
+/* AUDIENCE on a desktop (Santiago, 4-nov): the owner's two charts lead,
+   tall; under them Real usage (figures on top, the acquisition chart
+   filling the rest) beside the mission log, which scrolls in its own box.
+   Locked, the top row is the one-line strips and the bottom row gets the
+   height. Every chart is a flex item down to its recharts box. */
+@media (min-width: 1280px) {
+  .deck-audience {
+    grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
     grid-template-rows: auto minmax(0, 1fr);
   }
-  .deck-audience:has(.vault-chart) > .deck-audience-top {
+  .deck-audience:has(.vault-chart) {
+    grid-template-rows: minmax(0, 1.25fr) minmax(0, 1fr);
+  }
+  .deck-audience > .deck-audience-top {
     grid-column: 1 / -1;
-  }
-  .deck-audience:has(.vault-chart) > .deck-usage-wide {
-    grid-column: 1;
-    grid-row: 2;
-    height: 100% !important;
-  }
-  /* stacked, its three figures spread over the column's height */
-  .deck-audience:has(.vault-chart) > .deck-usage-wide > div:last-child,
-  .deck-audience:has(.vault-chart) > .deck-usage-wide > div:last-child > div {
-    display: flex;
-    flex: 1;
-    flex-direction: column;
     min-height: 0;
   }
-  .deck-audience:has(.vault-chart) .deck-usage-rows {
-    flex: 1;
-    justify-content: space-around;
+  .deck-audience > .deck-usage-wide {
+    grid-column: 1;
+    grid-row: 2;
+    height: auto !important;
   }
-  .deck-audience:has(.vault-chart) > .deck-log {
+  .deck-audience > .deck-log {
     grid-column: 2;
     grid-row: 2;
   }
-}
-@media (max-height: 950px) {
-  .deck-audience .vault-chart {
-    height: 150px !important;
+  /* flex chains: panel body -> component root -> chart box */
+  .deck-audience-top > section,
+  .deck-audience > .deck-usage-wide,
+  .deck-audience > .deck-log {
+    min-height: 0;
   }
+  .deck-audience:has(.vault-chart) .deck-audience-top > section > div:last-child,
+  .deck-audience > .deck-usage-wide > div:last-child {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+  }
+  .deck-audience .vault-root,
+  .deck-audience .vrank-root,
+  .deck-audience > .deck-usage-wide > div:last-child > div {
+    flex: 1;
+    min-height: 0;
+  }
+  .deck-audience .vrank-root {
+    display: flex;
+  }
+  .deck-audience .vault-chart,
   .deck-audience .vrank-chart {
-    height: 175px !important;
+    flex: 1 1 0;
+    height: auto !important;
+    min-height: 140px;
   }
+  .deck-audience .usage-chart {
+    flex: 1;
+    min-height: 0;
+  }
+  .deck-audience .usage-chart-box {
+    flex: 1 1 0;
+    height: auto;
+    min-height: 110px;
+  }
+  /* Real usage: three figures in one row on top */
+  .deck-audience .deck-usage-rows {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    column-gap: 1.5rem;
+  }
+  .deck-audience .deck-usage-rows .usage-row > span:nth-child(2) {
+    font-size: 1.6rem;
+  }
+}
+/* short desktop (<=950 px tall): the owner's row takes more of the height
+   (its headers wrap at half width) and the vault keeps a real chart */
+@media (min-width: 1280px) and (max-height: 950px) {
+  .deck-audience:has(.vault-chart) {
+    grid-template-rows: minmax(0, 1.7fr) minmax(0, 1fr);
+  }
+  .deck-audience .vault-chart,
+  .deck-audience .vrank-chart {
+    min-height: 150px;
+  }
+  .deck-audience .usage-chart-box {
+    min-height: 90px;
+  }
+}
+/* the mission log scrolls inside its own box */
+.deck-log-scroll > div:last-child {
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
 }
 .deck-audience-top {
   display: grid;

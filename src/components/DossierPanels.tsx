@@ -118,6 +118,7 @@ export function UsagePanel({
   className = "",
   delay = 0,
   compact = false,
+  withChart = false,
 }: {
   dossier: Dossier | null;
   index?: string;
@@ -128,6 +129,8 @@ export function UsagePanel({
   // them), and the clone count in the neutral numeral colour: warn is for
   // things that need attention, and a clone total does not
   compact?: boolean;
+  // Command Deck AUDIENCE: the figures strip AND the acquisition chart
+  withChart?: boolean;
 }) {
   const d = dossier;
   const withDownloads = (d?.releases ?? []).filter((r) => r.downloads > 0).slice(0, 4);
@@ -282,7 +285,7 @@ export function UsagePanel({
                 </div>
               );
             })()}
-            {!compact &&
+            {(!compact || withChart) &&
             ((d!.npmHistory && d!.npmHistory.length >= 2) ||
               (d!.clonesHistory && d!.clonesHistory.length >= 2)) ? (
               <UsageChart npm={d!.npmHistory ?? []} clones={d!.clonesHistory} />

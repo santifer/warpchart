@@ -575,9 +575,9 @@ export default function CommandDeck({
         </div>
       ) : null}
       {view === "audience" ? (
-        // three full-width bands: locked panels folded to a line, adoption as
-        // one strip of figures, and the mission log filling the rest in
-        // columns (the race's single curve repeats GROWTH, so it is left out)
+        // Santiago (4-nov): the owner's two charts lead, tall; under them
+        // Real usage (figures on top, then the console's acquisition chart)
+        // beside the mission log, which scrolls in its own box
         <div className="deck-audience relative">
           <div className="deck-audience-top">
             <Panel index="01" title="Traffic vault" meta="private · kept past GitHub's 14-day window">
@@ -587,9 +587,9 @@ export default function CommandDeck({
               <GodVelocityRank repo={repo} compact />
             </Panel>
           </div>
-          <UsagePanel dossier={dossier} index="03" compact className="deck-usage-wide" />
-          <Panel index="04" title="Mission log" meta="auto-detected from telemetry" className="deck-log deck-log-cols">
-            <MissionLog events={bundle.events} captain={bundle.captain} fillHeight />
+          <UsagePanel dossier={dossier} index="03" compact withChart className="deck-usage-wide" />
+          <Panel index="04" title="Mission log" meta={`${bundle.events.length} events · scroll`} className="deck-log deck-log-scroll">
+            <MissionLog events={bundle.events} captain={bundle.captain} />
           </Panel>
         </div>
       ) : null}

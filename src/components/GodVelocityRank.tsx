@@ -166,7 +166,7 @@ export default function GodVelocityRank({ repo, compact = false }: { repo: strin
   const better = wow.thisWeek != null && wow.prevWeek != null ? wow.prevWeek - wow.thisWeek : null;
 
   return (
-    <div className="relative flex w-full flex-col gap-2">
+    <div className="vrank-root relative flex w-full flex-col gap-2">
       <div className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-1 px-1">
         <div className="flex flex-wrap items-baseline gap-x-6 gap-y-1">
           <span className="numeral text-label text-ink">
