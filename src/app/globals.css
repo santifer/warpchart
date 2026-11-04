@@ -1815,7 +1815,8 @@ body.gx-warping .ghx-lore {
    height. Every chart is a flex item down to its recharts box. */
 @media (min-width: 1280px) {
   .deck-audience {
-    grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+    /* the same 50/50 cut as the owner's row above, so the columns line up */
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     grid-template-rows: auto minmax(0, 1fr);
   }
   .deck-audience:has(.vault-chart) {
@@ -1878,6 +1879,20 @@ body.gx-warping .ghx-lore {
   }
   .deck-audience .deck-usage-rows .usage-row > span:nth-child(2) {
     font-size: 1.6rem;
+  }
+  /* label over the figure, so the window ("30D", "14D") and the estimate's
+     disclosure ("+ 7d est.") are never cut in a narrow tile */
+  .deck-audience .deck-usage-rows .usage-row {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+  .deck-audience .deck-usage-rows .usage-row > span {
+    grid-column: 1 / -1;
+    white-space: normal;
+    overflow: visible;
+    text-overflow: clip;
+  }
+  .deck-audience .deck-usage-rows .usage-row > span:nth-child(2) {
+    order: -1;
   }
 }
 /* short desktop (<=950 px tall): the owner's row takes more of the height

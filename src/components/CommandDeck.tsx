@@ -153,7 +153,9 @@ function Tile({
       </span>
       {/* phones have no hover tooltip: the context line may wrap to two lines
           there instead of being cut; from sm up it is one line, full text in title */}
-      <span className="numeral line-clamp-2 text-micro text-faint sm:line-clamp-none sm:truncate">
+      {/* the context line may take two lines: it can carry a staleness
+          warning ("rate over a day old") that must not be cut */}
+      <span className="numeral line-clamp-2 text-micro leading-snug text-faint">
         {/* a wrap may only fall between "·" segments, never inside one */}
         {typeof sub === "string" ? sub.split(" · ").map((seg) => seg.replace(/ /g, "\u00a0")).join(" · ") : (sub ?? "\u00a0")}
       </span>
