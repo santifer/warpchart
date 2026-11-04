@@ -258,6 +258,15 @@ describe("mergeReconstructed with the gap file", () => {
     expect(out.map((p) => p.day)).toEqual(["2026-11-01", "2026-11-02", "2026-11-03", "2026-11-04"]);
     expect(out[2].reconstructed).toBe(true);
   });
+  it("a gap-window day past the table's last day shows at once (the table ends on 2 Nov)", () => {
+    const upTo2 = recorded.slice(0, 2);
+    const out = mergeReconstructed(upTo2, [{ day: "2026-11-03", rank: 49, gain: 331, n: 1000, reconstructed: true, gap: true }]);
+    expect(out.map((p) => p.day)).toEqual(["2026-11-01", "2026-11-02", "2026-11-03"]);
+  });
+  it("a main-window day past the table's last day still does not", () => {
+    const upTo2 = recorded.slice(0, 2);
+    expect(mergeReconstructed(upTo2, [{ day: "2026-11-03", rank: 49, gain: 331, n: 1000, reconstructed: true }])).toHaveLength(2);
+  });
   it("never replaces a recorded day", () => {
     const out = mergeReconstructed(recorded, [{ day: "2026-11-02", rank: 1, gain: 9, n: 1000, reconstructed: true }]);
     expect(out.find((p) => p.day === "2026-11-02").rank).toBe(58);

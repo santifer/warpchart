@@ -217,8 +217,11 @@ export function mergeReconstructed(recorded, rebuilt) {
   const first = days[0] ?? "9999";
   const last = days.at(-1) ?? "9999";
   const firstRanked = recorded.filter((p) => p.rank != null).map((p) => p.day).sort()[0] ?? "9999";
+  // a gap-window row (p.gap: a hole rebuilt after the main window, always a
+  // CLOSED day) may also sit past the table's last day: the erased day right
+  // before the newest capture shows at once instead of a day later
   const fill = rebuilt.filter(
-    (p) => !have.has(p.day) && p.why !== "unborn" && p.day < last && (p.day < first || p.day > firstRanked),
+    (p) => !have.has(p.day) && p.why !== "unborn" && (p.day < last || p.gap) && (p.day < first || p.day > firstRanked),
   );
   return [...fill, ...recorded].sort((a, b) => (a.day < b.day ? -1 : a.day > b.day ? 1 : 0));
 }

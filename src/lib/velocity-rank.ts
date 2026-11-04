@@ -159,11 +159,12 @@ export async function repoVelocityRank(repo: string): Promise<{
   // (mergeReconstructed). A missing file just means no reconstructed part,
   // never an error.
   const [main, gaps] = await Promise.all([readReconstructed(), readGaps()]);
-  const files = [main, ...gaps].filter((r): r is Reconstructed => !!r?.days?.length);
-  const rebuilt: VelocityRankPoint[] = files.flatMap((rec) =>
+  const files = [...(main?.days?.length ? [{ rec: main, gap: false }] : []), ...gaps.filter((g) => g?.days?.length).map((rec) => ({ rec, gap: true }))];
+  const rebuilt: VelocityRankPoint[] = files.flatMap(({ rec, gap }) =>
     (repoReconstructedRanks(reconstructedDays(rec), rec.repos, allNamesOf(repo)) as Omit<VelocityRankPoint, "hours">[]).map((p) => ({
       ...p,
       hours: null,
+      ...(gap ? { gap: true } : {}),
     })),
   );
   const points = mergeReconstructed(recorded, rebuilt) as VelocityRankPoint[];
