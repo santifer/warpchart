@@ -223,7 +223,8 @@ export async function graphql(query, variables) {
   throw new Error("GraphQL: " + JSON.stringify(last?.errors).slice(0, 400));
 }
 
-const onlyWholeAliasesMissing = (data, errors) =>
+// Exported for the parity test against its twin in src/lib/github.ts.
+export const onlyWholeAliasesMissing = (data, errors) =>
   !!data &&
   typeof data === "object" &&
   Array.isArray(errors) &&
