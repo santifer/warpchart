@@ -24,6 +24,7 @@ import { allNamesOf } from "./aliases";
 import { reqLog } from "./log";
 import { nextMilestones } from "./milestones";
 import { canonicalVelocity, velocityQuality } from "./velocity";
+import { gateMilestones } from "./projections";
 import { buildRouteLayers, forkRatioPercentile } from "./bundle";
 import type { ChartInputs, Neighbor, RouteRepo } from "./types";
 
@@ -380,12 +381,12 @@ export async function getExplorerData(owner: string, name: string): Promise<Expl
   });
 
   const milestoneRanks = nextMilestones(rank, 4).filter((m) => m <= ranked.length);
-  const milestones = milestoneRanks.map((m) => ({
-    rank: m,
-    threshold: ranked[m - 1].s,
-    drift: null,
+  // each gate moves with the repo holding it (was a hard-coded null drift:
+  // every gate stood still and every eta was optimistic)
+  const milestones = gateMilestones(ranked, milestoneRanks).map((g) => ({
+    ...g,
     // drawn midway between rank N and rank N-1, a doorway between ships
-    at: m >= 2 ? Math.round((ranked[m - 1].s + ranked[m - 2].s) / 2) : null,
+    at: g.rank >= 2 ? Math.round((ranked[g.rank - 1].s + ranked[g.rank - 2].s) / 2) : null,
   }));
 
   const apex = { r: ranked[0].r, s: ranked[0].s };
@@ -470,7 +471,8 @@ const getCachedExplorerData = unstable_cache(
   // v4: neighbors gained trend/v7_to and inputs vTrend/vAsOf (v7 window fix);
   // v3: the dossier inside gained npmLatest (same commit as dossier-v17);
   // v2: npmLast30MissingDays/npmLast30Estimate, npm's holes out (dossier-v15)
-  ["explorer-data-v4"],
+  // v5: milestones carry the gate holder's drift (was always null)
+  ["explorer-data-v5"],
   { revalidate: 900 },
 );
 

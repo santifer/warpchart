@@ -3,7 +3,8 @@
 // Persistent chase HUD for the pinned target repo.
 import { useLive } from "./LiveProvider";
 import type { DashboardBundle } from "@/lib/bundle";
-import { fmt, fmtEtaDays, shortName } from "@/lib/format";
+import { fmt, shortName } from "@/lib/format";
+import { etaText, neighborEtas, unsteadyLabel } from "@/lib/projections";
 
 export default function TargetHud({
   bundle,
@@ -31,8 +32,14 @@ export default function TargetHud({
   }
 
   const gap = s - live.stars;
-  const closing = v !== null ? Math.round((bundle.v7d - v) * 10) / 10 : null;
-  const eta = gap > 0 && closing !== null && closing > 0 ? fmtEtaDays(gap / closing) : null;
+  // the chase through the one crossing definition (neighborEtas ->
+  // projectCrossing), so the HUD and the scan card read the same eta for the
+  // same pair. It used to divide the gap by its own closing speed, blind to
+  // either rate's doubt.
+  const n = liveN && v !== null ? neighborEtas([liveN], live.stars, bundle.v7d, { trend: bundle.vTrend, asOf: bundle.vAsOf }, live.nowMs)[0] : null;
+  const closing = n ? n.closing : null;
+  const why = n && n.etaDays !== null ? unsteadyLabel(n.unsteady) : null;
+  const eta = n && n.etaDays !== null ? (why ? `no firm eta · ${why}` : `eta ${etaText(n, n.etaDays)}`) : null;
 
   return (
     <div className="hud rise numeral flex flex-wrap items-center justify-between gap-x-4 gap-y-1 border-accent/30 px-4 py-2 text-data">
@@ -48,7 +55,7 @@ export default function TargetHud({
             closing {closing >= 0 ? "+" : ""}{closing}/d
           </span>
         ) : null}
-        {eta ? <span className="text-dim">eta {eta}</span> : null}
+        {eta ? <span className="text-dim">{eta}</span> : null}
         {gap > 0 && closing !== null && closing <= 0 ? (
           <span className="text-warn">receding</span>
         ) : null}

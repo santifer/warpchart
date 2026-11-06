@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 import { useLive } from "./LiveProvider";
 import type { DashboardBundle } from "@/lib/bundle";
 import { fmt, fmtEtaDays } from "@/lib/format";
+import { milestoneEta } from "@/lib/projections";
 
 const KEY = "mc_last_visit";
 const MIN_GAP_H = 18;
@@ -43,9 +44,8 @@ export default function DailyBriefing({ bundle }: { bundle: DashboardBundle }) {
   const next = bundle.milestones.find((m) => m.threshold > live.stars) ?? null;
   let eta: string | null = null;
   if (next) {
-    const net = bundle.v7d - (next.drift ?? 0);
-    const gap = Math.max(0, next.threshold - live.stars);
-    eta = net > 0 ? fmtEtaDays(gap / net) : null;
+    const e = milestoneEta(next.rank, next.threshold, live.stars, bundle.v7d, next.drift);
+    eta = e.etaDays !== null ? fmtEtaDays(e.etaDays) : null;
   }
   const hours = Math.round((Date.now() - prev.ts) / 3600_000);
 
