@@ -4,7 +4,7 @@
 // Gated by the VAULT_KEY master secret. ?forget=owner/name removes an entry
 // (e.g. a test sighting). No-store; never cached.
 import { NextRequest, NextResponse } from "next/server";
-import { get, put } from "@vercel/blob";
+import { readJsonStrict, updateJson } from "@/lib/blob";
 
 export const dynamic = "force-dynamic";
 const NO_STORE = { "Cache-Control": "no-store, private" };
@@ -30,30 +30,29 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "no blob store" }, { status: 500, headers: NO_STORE });
   }
 
-  let seen: SeenMap = {};
+  // An unreadable map is an error, not "no embeds yet": an empty list here
+  // reads as adoption falling to zero.
+  let seen: SeenMap;
   try {
-    const res = await get(KEY, { access: "private", token });
-    if (res?.statusCode === 200 && res.stream) {
-      seen = JSON.parse(await new Response(res.stream).text()) as SeenMap;
-    }
-  } catch {
-    /* none yet */
-  }
-
-  const forget = (req.nextUrl.searchParams.get("forget") ?? "").trim().toLowerCase();
-  if (forget && seen[forget]) {
-    delete seen[forget];
-    try {
-      await put(KEY, JSON.stringify(seen), {
-        access: "private",
-        addRandomSuffix: false,
-        allowOverwrite: true,
-        contentType: "application/json",
-        token,
+    const forget = (req.nextUrl.searchParams.get("forget") ?? "").trim().toLowerCase();
+    if (forget) {
+      // drop exactly the one entry, merged into the fresh store
+      const { value } = await updateJson<SeenMap>(KEY, (stored) => {
+        if (!stored?.[forget]) return undefined;
+        const next = { ...stored };
+        delete next[forget];
+        return next;
       });
-    } catch {
-      /* best effort */
+      seen = value ?? {};
+    } else {
+      const r = await readJsonStrict<SeenMap>(KEY);
+      seen = r.state === "data" ? r.value : {};
     }
+  } catch (e) {
+    return NextResponse.json(
+      { error: `embeds map unreadable: ${e instanceof Error ? e.message : e}` },
+      { status: 503, headers: NO_STORE },
+    );
   }
 
   const repos = Object.entries(seen)

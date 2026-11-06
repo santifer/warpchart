@@ -5,7 +5,7 @@
 // per repo in the private Blob and fire ONE notification (email via Resend if
 // configured, else the Discord/Slack alert webhook). Called from after() so it
 // never delays the image response.
-import { get, put } from "@vercel/blob";
+import { updateJson, keepsEveryKey } from "./blob";
 
 const KEY = "embeds/seen.json";
 // per-instance short-circuit so we hit the Blob at most once per repo per warm
@@ -13,18 +13,6 @@ const KEY = "embeds/seen.json";
 const seenMem = new Set<string>();
 
 type SeenMap = Record<string, { at: string; surface: string }>;
-
-async function readSeen(token: string): Promise<SeenMap> {
-  try {
-    const res = await get(KEY, { access: "private", token });
-    if (res?.statusCode === 200 && res.stream) {
-      return JSON.parse(await new Response(res.stream).text()) as SeenMap;
-    }
-  } catch {
-    /* first run / transient */
-  }
-  return {};
-}
 
 async function notify(repo: string, surface: string, count: number) {
   const subject = `WARPCHART embed live on GitHub: ${repo}`;
@@ -84,26 +72,29 @@ export async function noteEmbedHit(
     return "no-token";
   }
 
-  const seen = await readSeen(token);
-  if (seen[key]) {
+  // A union into the fresh store. A read that fails (anything but a 404) used
+  // to come back {}, and the write then replaced every sighting with this one.
+  let already = false;
+  let count = 0;
+  try {
+    await updateJson<SeenMap>(KEY, (stored) => {
+      already = !!stored?.[key];
+      if (already) return undefined;
+      const next = { ...(stored ?? {}), [key]: { at: new Date().toISOString(), surface } };
+      keepsEveryKey(stored, next, KEY);
+      count = Object.keys(next).length;
+      return next;
+    });
+  } catch (e) {
+    return "not-written:" + (e instanceof Error ? e.message.slice(0, 60) : "err");
+  }
+  if (already) {
     seenMem.add(key);
     return "blob-seen";
   }
-  seen[key] = { at: new Date().toISOString(), surface };
-  try {
-    await put(KEY, JSON.stringify(seen), {
-      access: "private",
-      addRandomSuffix: false,
-      allowOverwrite: true,
-      contentType: "application/json",
-      token,
-    });
-  } catch (e) {
-    return "write-failed:" + (e instanceof Error ? e.message.slice(0, 60) : "err");
-  }
   seenMem.add(key);
   try {
-    await notify(repo, surface, Object.keys(seen).length);
+    await notify(repo, surface, count);
   } catch {
     return "written-no-notify";
   }
