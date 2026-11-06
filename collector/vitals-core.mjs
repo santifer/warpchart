@@ -120,7 +120,9 @@ export function derivePrAnalysis({ nodes, want = 1000, now = Date.now(), mergedT
         contributorsSampled: humans.length,
         mergedTotal, // every merged PR ever, not just the sampled window
         prsSampled: hrs.length,
-        mergedByDistinct: mergerCount.size || 1,
+        // null when the sweep read no merger at all (mergedBy denied, or every
+        // merger a deleted account): unmeasured, never "a single maintainer"
+        mergedByDistinct: mergerCount.size || null,
         maintainers: rankMaintainers(mergerCount), // the actual merge-gate keepers
         topContributors: humans.slice(0, 10).map(([login]) => ({ login })),
         cohorts,
