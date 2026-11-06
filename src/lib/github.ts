@@ -152,7 +152,8 @@ export async function repoLite(owner: string, name: string): Promise<RepoLite> {
 }
 
 // Nearest ranking neighbors via the search API (for repos outside the
-// precomputed top 1000). Two search calls.
+// precomputed top 1000). Two search calls, independent of each other, so they
+// run in parallel; either one failing still fails the whole call, as before.
 export async function searchNeighbors(
   ownFullName: string,
   stars: number,
@@ -160,12 +161,14 @@ export async function searchNeighbors(
 ): Promise<string[]> {
   const deltaHi = Math.max(Math.ceil(stars * 0.12), 200);
   const deltaLo = Math.max(Math.ceil(stars * 0.06), 100);
-  const up = await ghFetch<{ items?: { full_name: string }[] }>(
-    `/search/repositories?q=${encodeURIComponent(`stars:${stars + 1}..${stars + deltaHi}`)}&sort=stars&order=asc&per_page=${Math.min(above + 10, 50)}`
-  );
-  const down = await ghFetch<{ items?: { full_name: string }[] }>(
-    `/search/repositories?q=${encodeURIComponent(`stars:${Math.max(1, stars - deltaLo)}..${stars}`)}&sort=stars&order=desc&per_page=${below + 5}`
-  );
+  const [up, down] = await Promise.all([
+    ghFetch<{ items?: { full_name: string }[] }>(
+      `/search/repositories?q=${encodeURIComponent(`stars:${stars + 1}..${stars + deltaHi}`)}&sort=stars&order=asc&per_page=${Math.min(above + 10, 50)}`
+    ),
+    ghFetch<{ items?: { full_name: string }[] }>(
+      `/search/repositories?q=${encodeURIComponent(`stars:${Math.max(1, stars - deltaLo)}..${stars}`)}&sort=stars&order=desc&per_page=${below + 5}`
+    ),
+  ]);
   const own = ownFullName.toLowerCase();
   const upNames = (up.items ?? [])
     .filter((i) => i.full_name.toLowerCase() !== own)
@@ -236,13 +239,14 @@ export async function backwalkSince(
   return { timestamps, stars, complete };
 }
 
-// Velocity for up to ~25 repos. CHUNKED into small aliased queries: a
-// single 25-alias query with stargazer edges is heavy enough that GitHub's
-// GraphQL executor times it out under load (intermittent 502s after
-// retries, observed in production via fetch.failed traces) and every page
-// degraded to 0/day. Seven aliases with last:50 resolve fast and reliably,
-// chunks run in parallel and individual chunk failures only cost their own
-// repos, never the whole page.
+// Velocity for up to ~25 repos in ONE aliased query. This used to be chunked
+// (5 aliases per query, in parallel) because each alias carried stargazer
+// edges, and 25 of those were heavy enough for GitHub's GraphQL executor to
+// time out under load. The edges are gone since 9-oct-2026 (see the query
+// below): an alias is now a few scalar fields, 25 of them resolve in one
+// cheap request, and chunking only turned 1 request into 5. A renamed or
+// deleted repo still costs only itself: graphql() keeps the good data next to
+// a NOT_FOUND partial (INVARIANTS §3).
 interface VelocityRepoNode {
   nameWithOwner: string;
   stargazerCount: number;
@@ -261,9 +265,8 @@ export async function neighborsVelocity(
 ): Promise<{ r: string; s: number; v: number | null; d: string | null; l: string | null }[]> {
   if (!fullNames.length) return [];
   const names = fullNames.slice(0, 25);
-  // 5 aliases with last:30 keep each query cheap enough to survive the
-  // executor's bad days (7x last:50 still 502d under the 11-jun storm)
-  const CHUNK = 5;
+  // one chunk: the 25-name cap above is the whole batch (see the header)
+  const CHUNK = 25;
   const chunks: string[][] = [];
   for (let i = 0; i < names.length; i += CHUNK) chunks.push(names.slice(i, i + CHUNK));
 

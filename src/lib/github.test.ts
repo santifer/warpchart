@@ -76,6 +76,86 @@ describe("neighborsVelocity (web twin of reposVelocity)", () => {
   });
 });
 
+describe("neighborsVelocity request count", () => {
+  // Echo one node per alias the query asks for, so the stub answers any batch.
+  const echo = (body: string, missing = new Set<string>()) => {
+    const { query } = JSON.parse(body) as { query: string };
+    const data: Record<string, unknown> = {};
+    const errors: { type: string }[] = [];
+    for (const m of query.matchAll(/(r\d+): repository\(owner:"([^"]+)", name:"([^"]+)"\)/g)) {
+      const repo = `${m[2]}/${m[3]}`;
+      if (missing.has(repo)) {
+        data[m[1]] = null;
+        errors.push({ type: "NOT_FOUND" });
+      } else data[m[1]] = node(repo, 1000);
+    }
+    return json(200, errors.length ? { data, errors } : { data });
+  };
+  const names = Array.from({ length: 25 }, (_, i) => `o${i}/r${i}`);
+
+  it("asks for a full 25-name band in ONE GraphQL request", async () => {
+    const fetchMock = vi.fn(async (_url: string, init: { body: string }) => echo(init.body));
+    vi.stubGlobal("fetch", fetchMock);
+    const { neighborsVelocity } = await import("@/lib/github");
+    const out = await neighborsVelocity(names);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(out.map((r) => r.r).sort()).toEqual([...names].sort());
+  });
+
+  it("keeps every other repo when one alias is NOT_FOUND (renamed or deleted)", async () => {
+    const fetchMock = vi.fn(async (_url: string, init: { body: string }) => echo(init.body, new Set(["o3/r3"])));
+    vi.stubGlobal("fetch", fetchMock);
+    const { neighborsVelocity } = await import("@/lib/github");
+    const out = await neighborsVelocity(names);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(out).toHaveLength(24);
+    expect(out.find((r) => r.r === "o3/r3")).toBeUndefined();
+    // unmeasurable stays null, never a measured-looking 0
+    expect(out.every((r) => r.v === null)).toBe(true);
+  });
+
+  it("retries once, then throws so callers take their degraded path", async () => {
+    vi.useFakeTimers();
+    try {
+      const fetchMock = vi.fn(async () => json(502, { message: "bad gateway" }));
+      vi.stubGlobal("fetch", fetchMock);
+      const { neighborsVelocity } = await import("@/lib/github");
+      const p = neighborsVelocity(names);
+      const settled = p.then(
+        () => "resolved",
+        (e: Error) => e.message,
+      );
+      await vi.runAllTimersAsync();
+      expect(await settled).toMatch(/neighborsVelocity/);
+      // graphql() tries twice (one short retry), neighborsVelocity once more:
+      // the same budget as one chunk had before, not five times it
+      expect(fetchMock).toHaveBeenCalledTimes(4);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
+
+describe("searchNeighbors", () => {
+  it("runs both star-band searches at the same time", async () => {
+    let inFlight = 0;
+    let peak = 0;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => {
+        inFlight++;
+        peak = Math.max(peak, inFlight);
+        await new Promise((r) => setTimeout(r, 5));
+        inFlight--;
+        return json(200, { items: [{ full_name: "x/y" }] });
+      }),
+    );
+    const { searchNeighbors } = await import("@/lib/github");
+    await searchNeighbors("me/repo", 5000);
+    expect(peak).toBe(2);
+  });
+});
+
 describe("graphql partial errors", () => {
   it("returns the good data next to a NOT_FOUND alias instead of throwing", async () => {
     vi.stubGlobal(

@@ -2,8 +2,11 @@ import { unstable_cache } from "next/cache";
 // Data assembly for the instant explorer (/r/owner/name): a live snapshot of
 // ANY GitHub repo's position on the route, with tiered cost:
 //   - repo in the precomputed top 1000 -> 1 GraphQL call (velocities only)
-//   - deep space -> ~5 calls (meta, rank, 2 searches, velocities)
-// Pages are ISR-cached, so cost stays flat regardless of traffic.
+//   - deep space -> ~5 calls (meta, rank, 2 searches, velocities), in three
+//     serial steps: meta, then rank + both searches together, then velocities
+//     (the dossier runs alongside from the moment the name is known)
+// The data is cached 15 min (getCachedExplorerData), so cost stays flat
+// regardless of traffic.
 import { loadRoute, loadMeta, lastSnapshot } from "./history";
 import {
   repoLite,
@@ -287,6 +290,28 @@ export async function getExplorerData(owner: string, name: string): Promise<Expl
   const log = reqLog("explorer", { repo: `${owner}/${name}` });
   const t0 = Date.now();
 
+  // the dossier (maintenance pulse + real usage) is best-effort: one extra
+  // GraphQL call plus an unauthenticated npm lookup, never page-fatal. It only
+  // needs the repo's canonical name, so it starts as soon as that is known and
+  // runs alongside the other stages instead of after all of them. It never
+  // rejects (a failure is a logged null), so starting it early cannot leave an
+  // unhandled rejection behind when a later stage throws.
+  let dossierP: Promise<Dossier | null>;
+  const dossierFor = async (full: string): Promise<Dossier | null> => {
+    try {
+      const [o, n] = full.split("/");
+      const raw = await repoDossier(o, n);
+      const { npmPkg, npmLast30, npmLast30MissingDays, npmLast30Estimate, npmHistory, npmVersions, npmVersionsStart, npmVersionsThrough, npmLatest } = await resolveNpmUsage(o, n, raw.npmPkg);
+      // clones (private traffic) are surfaced only via the cached dossier path
+      // (getCachedDossier -> fetchDossier), which the panels actually render
+      return { ...raw, npmPkg, npmLast30, npmLast30MissingDays, npmLast30Estimate, npmHistory, npmVersions, npmVersionsStart, npmVersionsThrough, npmLatest, clonesHistory: null,
+               uniqueCloners14d: null, uniqueCloners14dAt: null };
+    } catch (err) {
+      log.warn("dossier.failed", { err: err instanceof Error ? err.message.slice(0, 120) : String(err) });
+      return null;
+    }
+  };
+
   if (inTop1000) {
     const e = ranked[idx];
     repoName = e.r;
@@ -302,6 +327,7 @@ export async function getExplorerData(owner: string, name: string): Promise<Expl
       ...ranked.slice(idx + 1, idx + 11).map((p) => p.r).reverse(),
       ...ranked.slice(Math.max(0, idx - 15), idx).map((p) => p.r).reverse(), // ahead, nearest first
     ];
+    dossierP = dossierFor(repoName);
   } else {
     // LOW FUEL: a deep-space scan costs ~5 calls including the scarce
     // search budget; when every token is nearly dry, defer instead of
@@ -316,8 +342,11 @@ export async function getExplorerData(owner: string, name: string): Promise<Expl
     desc = lite.description;
     lang = lite.primaryLanguage?.name ?? null;
     forks = lite.forkCount;
-    rank = await worldwideRank(stars);
-    neighborNames = await searchNeighbors(repoName, stars);
+    // GitHub just resolved the canonical name: the dossier needs nothing else,
+    // so it runs alongside the rank, neighbor and velocity calls below.
+    dossierP = dossierFor(repoName);
+    // both need only the star count; either failing fails the scan, as before
+    [rank, neighborNames] = await Promise.all([worldwideRank(stars), searchNeighbors(repoName, stars)]);
   }
 
   // one aliased call: own velocity + every neighbor's. If JUST this fails
@@ -422,20 +451,11 @@ export async function getExplorerData(owner: string, name: string): Promise<Expl
   const forkPercentile =
     forkRatio !== null ? forkRatioPercentile(forkRatio, route?.repos ?? []) : null;
 
-  // the dossier (maintenance pulse + real usage) is best-effort: one extra
-  // GraphQL call plus an unauthenticated npm lookup, never page-fatal
-  let dossier: Dossier | null = null;
-  try {
-    const [o, n] = repoName.split("/");
-    const raw = await repoDossier(o, n);
-    const { npmPkg, npmLast30, npmLast30MissingDays, npmLast30Estimate, npmHistory, npmVersions, npmVersionsStart, npmVersionsThrough, npmLatest } = await resolveNpmUsage(o, n, raw.npmPkg);
-    // clones (private traffic) are surfaced only via the cached dossier path
-    // (getCachedDossier -> fetchDossier), which the panels actually render
-    dossier = { ...raw, npmPkg, npmLast30, npmLast30MissingDays, npmLast30Estimate, npmHistory, npmVersions, npmVersionsStart, npmVersionsThrough, npmLatest, clonesHistory: null,
-                uniqueCloners14d: null, uniqueCloners14dAt: null };
-  } catch (err) {
-    log.warn("dossier.failed", { err: err instanceof Error ? err.message.slice(0, 120) : String(err) });
-  }
+  // Started early under the name known then. The velocity call can only have
+  // changed that name's CASE (self is matched case-insensitively above), and
+  // every dossier source (GraphQL, search `repo:`, the npm candidates) ignores
+  // case, so the early answer is the one the late call would have given.
+  const dossier = await dossierP;
 
   return {
     inputs,
@@ -467,10 +487,14 @@ const getCachedExplorerData = unstable_cache(
     if (data?.degraded) throw new DegradedResult(data);
     return data;
   },
+  // v5: inputs.routeAll/routeDots/routeLandmarks trimmed to the client fields
+  //     (clientRouteRepo: no f/v1, no null fields), and the (owner, name)
+  //     arguments, which unstable_cache folds into the key, are lowercased so
+  //     /r/Foo/Bar and /r/foo/bar share one entry;
   // v4: neighbors gained trend/v7_to and inputs vTrend/vAsOf (v7 window fix);
   // v3: the dossier inside gained npmLatest (same commit as dossier-v17);
   // v2: npmLast30MissingDays/npmLast30Estimate, npm's holes out (dossier-v15)
-  ["explorer-data-v4"],
+  ["explorer-data-v5"],
   { revalidate: 900 },
 );
 
@@ -493,7 +517,11 @@ export async function loadExplorerData(
   const recent = degradedCache.get(key);
   if (recent && recent.until > Date.now()) return recent.data;
   try {
-    return await getCachedExplorerData(owner, name);
+    // GitHub names are case-insensitive and the arguments are part of the
+    // cache key: lowercased, every casing of a URL reads one entry instead of
+    // paying its own scan. Nothing case-bearing leaks into the result (the
+    // repo's display name comes from the registry or from GitHub).
+    return await getCachedExplorerData(owner.toLowerCase(), name.toLowerCase());
   } catch (err) {
     if (err instanceof DegradedResult) {
       degradedCache.set(key, { data: err.data, until: Date.now() + 180_000 });
