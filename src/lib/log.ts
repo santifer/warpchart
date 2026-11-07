@@ -52,11 +52,23 @@ export interface Log {
   time: <T>(event: string, fn: () => Promise<T>, fields?: Record<string, unknown>) => Promise<T>;
 }
 
+// One logger per request (route handler, cron tick, webhook delivery): create
+// it inside the handler, never at module scope, or every request a warm
+// instance serves shares one id.
 export function reqLog(scope: string, base: Record<string, unknown> = {}): Log {
   const reqId = Math.random().toString(36).slice(2, 10);
-  const ctx = { reqId, ...base };
-  const log: Log = {
-    reqId,
+  return { reqId, ...build(scope, { reqId, ...base }) };
+}
+
+// For library code that runs under many requests at once (the GitHub client,
+// the token pool): its lines carry no reqId rather than one that would join
+// unrelated requests together.
+export function scopeLog(scope: string): Omit<Log, "reqId"> {
+  return build(scope, {});
+}
+
+function build(scope: string, ctx: Record<string, unknown>): Omit<Log, "reqId"> {
+  return {
     debug: (event, fields = {}) => emit("debug", scope, event, { ...ctx, ...fields }),
     info: (event, fields = {}) => emit("info", scope, event, { ...ctx, ...fields }),
     warn: (event, fields = {}) => emit("warn", scope, event, { ...ctx, ...fields }),
@@ -80,5 +92,4 @@ export function reqLog(scope: string, base: Record<string, unknown> = {}): Log {
       }
     },
   };
-  return log;
 }
