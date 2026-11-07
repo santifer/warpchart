@@ -21,7 +21,7 @@ import GodVelocityRank from "./GodVelocityRank";
 import MissionLog from "./MissionLog";
 import TrafficPanel from "./TrafficPanel";
 import VitalSignsPanel from "./VitalSignsPanel";
-import type { Vitals } from "@/lib/vitals";
+import type { VitalsReading } from "@/lib/vitals-reading";
 import PrFlowPanel from "./PrFlowPanel";
 import type { PrFlow } from "@/lib/prflow";
 import DailyBriefing from "./DailyBriefing";
@@ -84,7 +84,7 @@ export default function Dashboard({
   bundle,
   polling = true,
   dossier = null,
-  vitals = null,
+  vitals,
   prFlow = null,
   charted,
   ladderBands = null,
@@ -92,7 +92,7 @@ export default function Dashboard({
   bundle: DashboardBundle;
   polling?: boolean;
   dossier?: Dossier | null;
-  vitals?: Vitals | null;
+  vitals: VitalsReading;
   prFlow?: PrFlow | null;
   charted?: string[];
   // the daily ladder's monthly rank zones (velocity-rank.ts ladderBands)
@@ -134,7 +134,7 @@ export default function Dashboard({
         </div>
         <StatusBar bundle={bundle} />
         <DailyBriefing bundle={bundle} />
-        <VitalSignsPanel repo={repo ?? ""} name={repo?.split("/")[1] ?? ""} vitals={vitals} />
+        <VitalSignsPanel repo={repo ?? ""} name={repo?.split("/")[1] ?? ""} reading={vitals} />
         <PrFlowPanel flow={prFlow} />
         {target ? (
           <TargetHud bundle={bundle} target={target} onClear={() => pinTarget(null)} />
