@@ -27,64 +27,12 @@ import { repoStats, repoOvertakes, SITE } from "@/lib/api-v1";
 import { getCachedDossier } from "@/lib/explorer";
 import { loadVitals } from "@/lib/vitals";
 import { loadMeta } from "@/lib/history";
+import { resolveWindow, windowed } from "@/lib/dossier-window";
 
 export const revalidate = 900;
 
 const BAD = (msg: string, status = 400) =>
   NextResponse.json({ error: msg }, { status, headers: { "Cache-Control": "no-store" } });
-
-// "30d" | "12w" | "6m" | "1y" -> milliseconds. Anything else -> null.
-function parseRange(s: string | null): number | null {
-  if (!s) return null;
-  const m = /^(\d+)\s*([dwmy])$/i.exec(s.trim());
-  if (!m) return null;
-  const n = Number(m[1]);
-  if (!Number.isFinite(n) || n <= 0) return null;
-  const unit = { d: 864e5, w: 7 * 864e5, m: 30 * 864e5, y: 365 * 864e5 }[m[2].toLowerCase()]!;
-  return n * unit;
-}
-
-const isDay = (s: string | null): s is string => !!s && /^\d{4}-\d{2}-\d{2}$/.test(s);
-
-// One window, resolved once and applied to every series so they are directly
-// comparable. Explicit since/until win; ?range is relative to the newest day
-// present in the data, NOT to now - a series that stopped updating must not
-// silently return empty because "the last 30 days" moved past it.
-function resolveWindow(req: NextRequest, newestDay: string | null) {
-  const p = req.nextUrl.searchParams;
-  const since = p.get("since");
-  const until = p.get("until");
-  const range = parseRange(p.get("range"));
-  if (isDay(since) || isDay(until)) {
-    return { since: isDay(since) ? since : null, until: isDay(until) ? until : null, kind: "explicit" as const };
-  }
-  if (range && newestDay) {
-    const end = Date.parse(newestDay + "T00:00:00Z");
-    return {
-      since: new Date(end - range).toISOString().slice(0, 10),
-      until: null,
-      kind: "range" as const,
-    };
-  }
-  return { since: null, until: null, kind: "full" as const };
-}
-
-type Win = ReturnType<typeof resolveWindow>;
-
-// Trim a day-keyed series and report what the trim actually produced. `days`
-// is the covered span, so a caller can never mistake a 4-day window for a
-// month just because the numbers look small.
-function windowed<T extends { day: string }>(rows: T[] | null, w: Win) {
-  if (!rows?.length) return null;
-  const kept = rows.filter((r) => (!w.since || r.day >= w.since) && (!w.until || r.day <= w.until));
-  if (!kept.length) return { from: null, to: null, days: 0, points: [] as T[] };
-  return {
-    from: kept[0].day,
-    to: kept[kept.length - 1].day,
-    days: kept.length,
-    points: kept,
-  };
-}
 
 const sum = (rows: { [k: string]: unknown }[] | undefined, k: string) =>
   (rows ?? []).reduce((a, r) => a + (typeof r[k] === "number" ? (r[k] as number) : 0), 0);
@@ -115,7 +63,7 @@ export async function GET(req: NextRequest) {
     .filter(Boolean)
     .sort()
     .at(-1) as string | undefined;
-  const win = resolveWindow(req, newest ?? null);
+  const win = resolveWindow(req.nextUrl.searchParams, newest ?? null);
 
   const clones = windowed(dossier?.clonesHistory ?? null, win);
   const npm = windowed(dossier?.npmHistory ?? null, win);

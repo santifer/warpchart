@@ -12,6 +12,7 @@ import { reqLog } from "@/lib/log";
 import { fmt, fmtCompact } from "@/lib/format";
 import { fmtEmbed, adaptiveTtl, embedCache, TENANT_EMBED_CACHE } from "@/lib/embed";
 import { noteEmbedHit } from "@/lib/embed-track";
+import { rankByStars } from "@/lib/rank";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -116,9 +117,10 @@ export async function GET(req: Request) {
       const hist = loadHistory();
       worldRank = hist.length ? hist[hist.length - 1].rank : null;
     } else {
+      // counted against the registry, never its array position (src/lib/rank.ts)
       const route = loadRoute();
-      const idx = route ? route.repos.findIndex((p) => p.r.toLowerCase() === repo.toLowerCase()) : -1;
-      worldRank = idx >= 0 ? idx + 1 : null;
+      const e = route?.repos.find((p) => p.r.toLowerCase() === repo.toLowerCase());
+      worldRank = e && route ? rankByStars(route.repos, e.s) : null;
     }
   }
   const archiveFrom = curve.archiveFrom ?? null;

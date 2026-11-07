@@ -9,6 +9,7 @@ import { loadRoute, loadMeta, lastSnapshot } from "@/lib/history";
 import { neighborsVelocity } from "@/lib/github";
 import { buildRouteLayers } from "@/lib/bundle";
 import { canonicalVelocity, velocityQuality } from "@/lib/velocity";
+import { rankByStars, rankedRegistry } from "@/lib/rank";
 
 function seedFrom(text: string): number {
   let h = 2166136261;
@@ -66,22 +67,26 @@ export async function buildDemoSpotlight(): Promise<DemoSpotlight | null> {
     /* route-only degradation */
   }
 
-  const apex = { r: route.repos[0].r, s: route.repos[0].s };
+  // The hero is PICKED by position (collector/warm-core.mjs must pick the same
+  // one), but its rank and the gates are COUNTED (src/lib/rank.ts).
+  const reg = rankedRegistry(route.repos);
+  const heroRank = rankByStars(route.repos, hero.s);
+  const apex = { r: reg[0].r, s: reg[0].s };
   const milestones = [50, 100, 200, 300, 400, 500]
-    .filter((rk) => rk < idx + 1 && route.repos.length >= rk)
+    .filter((rk) => rk < heroRank && reg.length >= rk)
     .slice(-2)
-    .map((rk) => ({ rank: rk, threshold: route.repos[rk - 1].s, drift: null }));
+    .map((rk) => ({ rank: rk, threshold: reg[rk - 1].s, drift: null }));
 
   const layers = buildRouteLayers(hero.s, milestones, apex, hero.r);
   const meta = loadMeta();
   const homeStars = lastSnapshot()?.stars ?? null;
 
   return {
-    rank: idx + 1,
+    rank: heroRank,
     inputs: {
       repo: hero.r,
       stars: hero.s,
-      rank: idx + 1,
+      rank: heroRank,
       v7d: heroV,
       vTrend: velocityQuality(hero).trend,
       vAsOf: velocityQuality(hero).v7_to,
