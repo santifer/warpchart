@@ -188,7 +188,7 @@ async function checkFreshness(route) {
     // most normal cycles.
     if (h > COLLECTOR_STALE_H) {
       fail("fresh.snapshot", "FRESH", "critical", `last snapshot is ${h.toFixed(1)}h old (a normal gap is up to ~8h)`,
-        "The collector is failing or being cancelled. Check the run log, especially step timeouts: a job-level timeout kills 'Trigger deploy' silently (that is what froze the site on 2026-07-19).", { lastSnapshot: iso });
+        "The collector is failing or being cancelled. Check the run log, especially step timeouts: a job-level timeout cancels every remaining snapshot step silently. 'Trigger deploy' lives in its own job since that froze the site on 2026-07-19, so check that the deploy job ran too.", { lastSnapshot: iso });
     } else if (h > 8) {
       fail("fresh.snapshot", "FRESH", "warn", `last snapshot is ${h.toFixed(1)}h old`,
         "One missed cron is tolerable; two in a row is not. Watch the next run.", { lastSnapshot: iso });
@@ -1037,7 +1037,7 @@ async function checkPipeline() {
       fail("pipeline.cancelled", "PIPELINE", cv.severity,
         `${cancelled} of the last ${list.length} collector runs were CANCELLED` +
           (cv.severity === "warn" ? " (none in the last 8 runs: the fix seems to hold)" : ""),
-        "A cancelled run usually means the job hit its timeout, which kills the remaining steps silently - including 'Trigger deploy'. That is exactly how the site froze on 2026-07-19. Find the step that overran and give it its own timeout-minutes rather than raising the job's; if none overran and the steps' normal durations simply add up past the job cap (the first run of each UTC day carries the daily sweeps), raise the job cap above that sum.",
+        "A cancelled run usually means the snapshot job hit its timeout, which kills its remaining steps silently. Before 'Trigger deploy' moved to its own job, that is exactly how the site froze on 2026-07-19. Every step has its own timeout-minutes and the caps add up to less than the job's (collector/workflow-caps.test.mjs), so a cancelled run means someone broke that rule or a runner died: find the step that overran.",
         { cancelled, of: list.length, listToken: picked.token, newest: picked.newestIso });
     }
 

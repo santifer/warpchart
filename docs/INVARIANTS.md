@@ -48,7 +48,7 @@ a different question. It never throws, never logs, and the panel stays green.
 
 ## 4. Pipeline (`collect.yml`, `health.yml`)
 
-- **A job-level timeout cancels every remaining step, `continue-on-error` included**, and 'Trigger deploy' with them. Every non-critical network step gets its own `timeout-minutes`, and the job cap stays above the sum of the steps' normal durations.
+- **A job-level timeout cancels every remaining step, `continue-on-error` included.** So 'Trigger deploy' is its own job (`needs: snapshot`, `if: always()`), every step has its own `timeout-minutes`, and the step caps add up to less than the job cap. `ghFetch`, IndexNow, the traffic reads, the webhooks and the cache warm carry an `AbortSignal` timeout, so a hung endpoint fails its call, not its step. Sensor: `collector/workflow-caps.test.mjs`.
 - `continue-on-error` rewrites a failed step as `success` in the API. The truth is in the run's annotations (the watchdog reads those).
 - The cron runs every ~6 h in practice (declared every 2 h). Anything the collector writes can be ~8 h behind.
 - **route-history runs before velocity7** (and collisions after it): the 7-day window closes on the day route-history just recorded. Recomputes when `route.v7_at` (later of the registry refresh and the newest capture) moves.
