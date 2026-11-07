@@ -120,16 +120,6 @@ export function ringPoint(radius: number, deg: number): { x: number; y: number }
   };
 }
 
-// a system's TRUE galactic angle (squash undone), degrees in [0, 360).
-// the warp dive rotates the galaxy by (angle - 180) while unsquashing, so
-// the system->core line lands exactly horizontal, core to the right: the
-// same geometry the /r/ chart opens with (match cut)
-export function galaxyAngle(x: number, y: number): number {
-  const deg =
-    (Math.atan2((GX_CORE_Y - y) / GX_SQUASH, x - GX_CORE_X) * 180) / Math.PI;
-  return (deg + 360) % 360;
-}
-
 export function buildGalaxy(
   repos: { r: string; s: number; v?: number | null; v7?: number | null }[],
   homeRepo?: string | null,

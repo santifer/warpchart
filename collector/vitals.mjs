@@ -107,32 +107,6 @@ async function gqlRetry(query, vars, tries = 4) {
   }
 }
 
-// ---- distribution activity: NON-SEARCH metrics only (fast over top-1000) ----
-// The GraphQL search connection is capped at 30/min, so a 1000-repo sweep using
-// search would take ~1h. The reference distribution therefore uses only metrics
-// that come from the plain repository query (no search): 30d commits (default
-// branch history) and 90d releases. Velocity (v7) is free from route.json. This
-// keeps Phase A at ~1 point/repo, no search limit, ~3-4 min for the full top-N.
-async function distActivity(repo) {
-  const [owner, name] = repo.split("/");
-  const since = new Date(Date.now() - 30 * DAY);
-  const d = await gqlRetry(
-    `query($owner:String!,$name:String!,$since:GitTimestamp!){
-      repository(owner:$owner,name:$name){
-        defaultBranchRef{ target{ ... on Commit{ history(since:$since){ totalCount } } } }
-        releases(first:40, orderBy:{field:CREATED_AT,direction:DESC}){ nodes{ publishedAt isPrerelease } }
-      }
-    }`,
-    { owner, name, since: since.toISOString() },
-  );
-  const commits30 = d.repository?.defaultBranchRef?.target?.history?.totalCount ?? 0;
-  const cutoff = Date.now() - 90 * DAY;
-  const releases90 = (d.repository?.releases?.nodes ?? []).filter(
-    (r) => r.publishedAt && !r.isPrerelease && Date.parse(r.publishedAt) >= cutoff,
-  ).length;
-  return { commits30, releases90 };
-}
-
 // ---- one aliased call: 30d commits/PRs/issues + recent releases (per-repo) ---
 async function lightActivity(repo) {
   const [owner, name] = repo.split("/");
