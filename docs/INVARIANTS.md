@@ -18,12 +18,17 @@ a different question. It never throws, never logs, and the panel stays green.
 | Windows are temporal, never by count. | A window of the last N items shrinks by itself when a project speeds up, so the series jumps. | `collector/vitals-core.test.mjs` (90-day lead time, truncated month) |
 | Count openings, not signs. | "12 good first issues" when 2 were free: count `no:assignee -linked:pr`. | `collector/vitals-core.test.mjs` |
 | A one-off correction is not a rate. | A 21.8k-star purge inside the 7-day window read as −2903★/day, and its restore as +4587★/day. | `collector/velocity7-core.test.mjs` |
-| A rate closes on the newest point, dated by its real capture. | v7 closed on the daily registry refresh and dated each day at 12:00Z (captured ~00:25Z): ruflo read 95.5/d while its last week was ~139/d. The window close is published (`v7_to`), and a rate that is a wave starting or ending carries `trend` (ratio >2 or <0.5 AND at least 25/d apart). An eta that the shift can only shorten is shown as a ceiling ("eta ≤5d"); one it can push out, or a window older than 26 h, says "accelerating" / "cooling" / "rate over a day old" instead of a date. **Known gaps:** (a) `trend: null` mixes "steady" with "unknown" (under 7 days of history, or no point ~24 h before the end); proposal: publish `v7_days` or a `trend: "unknown"`. (b) CompareLab, the OG card, `/api/v1/overtakes`, MCP/CLI (`collisions.json`) and CommandDeck's milestone gates still give a firm eta without the rate's quality. | `collector/velocity7-core.test.mjs`, `src/lib/compare.test.ts`, `fresh.v7-window` |
+| A rate closes on the newest point, dated by its real capture. | v7 closed on the daily registry refresh and dated each day at 12:00Z (captured ~00:25Z): ruflo read 95.5/d while its last week was ~139/d. Details and known gaps under the table. | `collector/velocity7-core.test.mjs`, `src/lib/compare.test.ts`, `fresh.v7-window` |
 | No point in the future. | Stamping today at 12:00 UTC put the morning point ahead of `now`. | `src/lib/trajectory.test.ts` |
 | Check the size of the universe before a percentile. | A truncated day (6,010 of ~10,000 repos) made every rank look better. | `collector/guards.test.mjs`; route-history and the catalog refuse a short sweep and leave a marker (`data.partial-markers`) |
 | UI order never comes from a `Set`. | Insertion order made the newest merger "operate" a 70K-star repo. | `collector/vitals-core.test.mjs` |
 | A stamp of the ATTEMPT is not freshness of the DATA. | A vault stamped `updatedAt` every run while upstream had stopped publishing. | `fresh.traffic-days` |
 | A number printed inside an image ages with the image. | The builders wall (`/api/builders`) prints "N joined this week" in 19 READMEs; a wall that stops refreshing keeps saying it. It shows people (census minus bots and AI pairing tools), never a total (so it cannot contradict GitHub's sidebar count), and says nothing instead of "0 joined". | `collector/builders-core.test.mjs`, `presence.builders-wall` (≤30 h) |
+
+**Rate quality, in detail.** The window close is published (`v7_to`). A rate that is a wave starting or ending carries `trend` (ratio above 2 or below 0.5, and at least 25/d apart). An eta the shift can only shorten is shown as a ceiling ("eta ≤5d"); one it can push out, or one on a window older than 26 h, says "accelerating", "cooling" or "rate over a day old" instead of a date. Known gaps:
+
+- `trend: null` mixes "steady" with "unknown" (under 7 days of history, or no point ~24 h before the end). Proposal: publish `v7_days`, or `trend: "unknown"`.
+- CompareLab, the OG card, `/api/v1/overtakes`, MCP/CLI (`collisions.json`) and CommandDeck's milestone gates still give a firm eta without the rate's quality.
 
 ## 2. Caches and deploys
 

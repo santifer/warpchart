@@ -50,7 +50,7 @@ A locked section returns a reason, never a zero. Absence is reported as absence.
 
 ## Agents
 
-`--json` on any command prints the raw payload. The same data is one HTTP call away:
+`--json` prints the raw payload on the commands that support it (`warpchart owner/name`, `dossier`, `contributors`, `usage` and `find`; the current list is at [warpchart.dev/docs](https://warpchart.dev/docs#cli)). The same data is one HTTP call away:
 
 ```
 https://warpchart.dev/api/v1/dossier?repo=owner/name&range=30d
