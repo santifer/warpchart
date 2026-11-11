@@ -433,14 +433,20 @@ export function ladderBandsPresence(html, todayISO) {
 //   - gone or truncated: the chart silently starts on 14 Jun, not in April;
 //   - outrun: a NEW gap in the table after rec.to stays a silent hole
 //     (tableDays = the table's days; null = not read this run, not compared).
-export function velocityRankReconstructed(rec, tableDays = null) {
+export function velocityRankReconstructed(rec, tableDays = null, gapFile = null) {
   if (!rec) return { severity: "warn", note: "velocity-rank/reconstructed.json missing: the chart starts at the live record" };
   const repos = Object.keys(rec.repos ?? {}).length;
   if (!(rec.days?.length >= 60) || repos < 1900) return { severity: "warn", note: `reconstructed table truncated: ${rec.days?.length ?? 0} days, ${repos} repos` };
-  const gaps = tableDays ? gapsAfter(tableDays, rec.to) : [];
+  // the gap file's windows (holes rebuilt after the main window) are covered;
+  // a window short of the universe is a broken rebuild, not a cover
+  const windows = gapFile?.windows ?? [];
+  const thin = windows.find((w) => !(w.days?.length >= 1) || Object.keys(w.repos ?? {}).length < 1900);
+  if (thin) return { severity: "warn", note: `gap reconstruction ${thin.from}..${thin.to} truncated: ${thin.days?.length ?? 0} days, ${Object.keys(thin.repos ?? {}).length} repos` };
+  const covered = new Set(windows.flatMap((w) => w.days ?? []));
+  const gaps = tableDays ? gapsAfter(tableDays, rec.to).filter((d) => !covered.has(d)) : [];
   if (gaps.length)
-    return { severity: "warn", note: `${gaps.length} velocity-rank day(s) unmeasured after the reconstruction ends (${rec.to}): ${gaps.slice(0, 5).join(", ")}; re-run collector/velocity-rank-backfill.mjs with a later TO` };
-  return { severity: null, note: `reconstructed ${rec.from} .. ${rec.to}, ${repos} repos` };
+    return { severity: "warn", note: `${gaps.length} velocity-rank day(s) unmeasured after the reconstruction ends (${rec.to}): ${gaps.slice(0, 5).join(", ")}; rebuild them with collector/velocity-rank-backfill.mjs in gap mode (VR_GAP_FROM/VR_GAP_TO)` };
+  return { severity: null, note: `reconstructed ${rec.from} .. ${rec.to}, ${repos} repos${windows.length ? `; gaps rebuilt: ${windows.map((w) => `${w.from}..${w.to}`).join(", ")}` : ""}` };
 }
 
 // The Traffic Vault's CI band (collector/ci-checkouts-core.mjs) rests on one
@@ -522,6 +528,11 @@ export function curveEndsOnTotal(curve) {
 // expected upstream noise, reported, never critical.
 export function npmUsageFreshness(npm, todayISO, maxAgeDays = 10) {
   if (!npm) return { severity: null, note: "no npm channel" };
+  // a package with a 30-day total and no daily series is the REAL USAGE chart
+  // drawing clone bars only (#42, 2026-11-10: it came and went with the hour)
+  if (npm.package && (npm.last30 ?? 0) > 0 && !(npm.series?.points?.length >= 2)) {
+    return { severity: "warn", ageDays: null, note: `${npm.package} has ${npm.last30} installs in 30 days but no daily series: the usage chart shows no npm bars` };
+  }
   const through = npm.versions?.through ?? null;
   const ageDays = through ? Math.round((Date.parse(`${todayISO}T00:00:00Z`) - Date.parse(`${through}T00:00:00Z`)) / 864e5) : null;
   const floor = npm.last30IsLowerBound ? `last30 is a floor (${npm.last30MissingDays} of 30 days missing in npm's data)` : "";

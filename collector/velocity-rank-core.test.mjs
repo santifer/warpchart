@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildDays, dailyDeltas, historyCovers, mergeReconstructed, rankAmong, reconstructDays, repoDailyRanks, repoReconstructedRanks } from "./velocity-rank-core.mjs";
+import { addGapWindow, buildDays, dailyDeltas, gapWindowError, historyCovers, keepRecordedDays, mergeReconstructed, rankAmong, reconstructDays, repoDailyRanks, repoReconstructedRanks } from "./velocity-rank-core.mjs";
 
 // A tiny universe: minUniverse is lowered so a handful of repos stand in for
 // the 10k sweep; the rules are the same.
@@ -219,5 +219,84 @@ describe("historyCovers (one page of /stargazers/history)", () => {
   it("a page that reaches FROM is covered", () => {
     const old = [{ week: Date.parse("2026-03-29T00:00:00Z") / 1000, days: [1, 1, 1, 1, 1, 1, 1], total: 7 }];
     expect(historyCovers(old, { more: true, from, stars: 99999 }).ok).toBe(true);
+  });
+});
+
+// Incident 2026-11-04: losing points in the moat (a stale shard write erased
+// 2026-11-03 for 2,676 repos) made the full rebuild drop a day it had already
+// ranked from complete data (2026-11-02 -> 11-03, 1,000 repos). A recorded day
+// is kept; only a day the rebuild can still compute replaces it.
+describe("keepRecordedDays", () => {
+  const prev = [
+    { day: "2026-11-01", to: "2026-11-02", n: 1000, gains: [400, 300], hours: 24 },
+    { day: "2026-11-02", to: "2026-11-03", n: 1000, gains: [500, 200], hours: 24.7 },
+  ];
+  const rebuilt = [{ day: "2026-11-01", to: "2026-11-02", n: 1000, gains: [401, 300] }];
+  it("keeps a recorded day the rebuild can no longer compute", () => {
+    expect(keepRecordedDays(prev, rebuilt).map((d) => d.day)).toEqual(["2026-11-01", "2026-11-02"]);
+  });
+  it("a day both have comes from the rebuild", () => {
+    expect(keepRecordedDays(prev, rebuilt)[0].gains).toEqual([401, 300]);
+  });
+  it("a refreshed day keeps its published window length when the rebuild has none", () => {
+    expect(keepRecordedDays(prev, rebuilt)[0].hours).toBe(24);
+  });
+  it("new days are added, oldest first", () => {
+    const more = [...rebuilt, { day: "2026-11-04", to: "2026-11-05", n: 1000, gains: [9] }];
+    expect(keepRecordedDays(prev, more).map((d) => d.day)).toEqual(["2026-11-01", "2026-11-02", "2026-11-04"]);
+  });
+});
+
+// Incident 2026-11-04: 2026-11-03 was erased from the moat; the gap file
+// (velocity-rank/reconstructed-gaps.json) brings it back as a reconstructed
+// row between recorded days, never over one.
+describe("mergeReconstructed with the gap file", () => {
+  const rec = (day, rank) => ({ day, rank, gain: 10, n: 1000 });
+  const recorded = [rec("2026-11-01", 60), rec("2026-11-02", 58), rec("2026-11-04", 55)];
+  it("fills the erased day between recorded ones", () => {
+    const out = mergeReconstructed(recorded, [{ day: "2026-11-03", rank: 61, gain: 300, n: 1000, reconstructed: true }]);
+    expect(out.map((p) => p.day)).toEqual(["2026-11-01", "2026-11-02", "2026-11-03", "2026-11-04"]);
+    expect(out[2].reconstructed).toBe(true);
+  });
+  it("a gap-window day past the table's last day shows at once (the table ends on 2 Nov)", () => {
+    const upTo2 = recorded.slice(0, 2);
+    const out = mergeReconstructed(upTo2, [{ day: "2026-11-03", rank: 49, gain: 331, n: 1000, reconstructed: true, gap: true }]);
+    expect(out.map((p) => p.day)).toEqual(["2026-11-01", "2026-11-02", "2026-11-03"]);
+  });
+  it("a main-window day past the table's last day still does not", () => {
+    const upTo2 = recorded.slice(0, 2);
+    expect(mergeReconstructed(upTo2, [{ day: "2026-11-03", rank: 49, gain: 331, n: 1000, reconstructed: true }])).toHaveLength(2);
+  });
+  it("never replaces a recorded day", () => {
+    const out = mergeReconstructed(recorded, [{ day: "2026-11-02", rank: 1, gain: 9, n: 1000, reconstructed: true }]);
+    expect(out.find((p) => p.day === "2026-11-02").rank).toBe(58);
+  });
+});
+
+describe("gap windows (velocity-rank/reconstructed-gaps.json)", () => {
+  const w = (from, to) => ({ from, to, days: [from], repos: {} });
+  it("a new hole is ADDED, never replacing another hole's window", () => {
+    const r = addGapWindow({ windows: [w("2026-11-03", "2026-11-03")] }, w("2026-12-10", "2026-12-10"));
+    expect(r.windows.map((x) => x.from)).toEqual(["2026-11-03", "2026-12-10"]);
+  });
+  it("re-running the same range replaces it", () => {
+    const r = addGapWindow({ windows: [w("2026-11-03", "2026-11-03")] }, { ...w("2026-11-03", "2026-11-03"), builtAt: "x" });
+    expect(r.windows).toHaveLength(1);
+    expect(r.windows[0].builtAt).toBe("x");
+  });
+  it("an overlapping window is refused", () => {
+    expect(addGapWindow({ windows: [w("2026-11-03", "2026-11-03")] }, w("2026-11-01", "2026-11-05")).ok).toBe(false);
+  });
+  it("no file yet: the first window", () => {
+    expect(addGapWindow(null, w("2026-11-03", "2026-11-03")).windows).toHaveLength(1);
+  });
+  it("refuses a window that is malformed, reversed or not closed in Pacific time", () => {
+    const now = Date.parse("2026-11-04T16:53:00Z");
+    expect(gapWindowError("2026-11-03", "2026-11-03", now)).toBeNull();
+    expect(gapWindowError("2026-11-05", "2026-11-03", now)).toMatch(/after/);
+    expect(gapWindowError("3 Nov", "2026-11-03", now)).toMatch(/YYYY-MM-DD/);
+    expect(gapWindowError("2026-09-25", "2026-10-02", now)).toMatch(/overlaps the main/);
+    // 3 Nov Pacific closes at 08:00Z on the 4th: at 07:00Z it is still open
+    expect(gapWindowError("2026-11-03", "2026-11-03", Date.parse("2026-11-04T07:00:00Z"))).toMatch(/not closed/);
   });
 });

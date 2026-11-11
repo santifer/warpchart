@@ -25,18 +25,19 @@ describe("derived cache keys", () => {
   });
 
   it("keys with nothing embedded keep the strings they had, so those caches stay warm", () => {
-    expect(cacheKey("dossier")).toBe("dossier-v17");
+    expect(cacheKey("dossier")).toBe("dossier-v18");
     expect(cacheKey("vitals")).toBe("vitals-v10");
     expect(cacheKey("trafficVault")).toBe("traffic-vault-v4");
     expect(cacheKey("prFlow")).toBe("prflow-v1");
     expect(cacheKey("curve")).toBe("embed-chart-curve-v6");
     expect(cacheKey("archiveMonthly")).toBe("archive-monthly-v1");
     expect(cacheKey("buildersWall")).toBe("builders-wall-v2");
-    expect(cacheKey("explorerData")).toBe("explorer-data-v4.dossier17");
+    expect(cacheKey("explorerData")).toBe("explorer-data-v5.dossier18");
     expect(cacheKey("velocityRankMeta")).toBe("velocity-rank-meta-v2");
     expect(cacheKey("velocityRankMonth")).toBe("velocity-rank-month-v2");
     expect(cacheKey("velocityRankReconstructed")).toBe("velocity-rank-reconstructed-v3");
     expect(cacheKey("ladderBands")).toBe("ladder-bands-v1");
+    expect(cacheKey("velocityRankReconstructedGaps")).toBe("velocity-rank-reconstructed-gaps-v1");
   });
 });
 

@@ -19,12 +19,14 @@ export const SHAPE_VERSION = {
   // 30-day-total shape (uniqueCloners30, no clonesHistory) was live for about
   // an hour. v11: uniqueCloners14d. v15: npmLast30MissingDays/npmLast30Estimate,
   // npm holes dropped from npmHistory. v16: vitals contributors = GitHub's
-  // sidebar count, may be null. v17: npmLatest.
-  dossier: 17,
+  // sidebar count, may be null. v17: npmLatest. v18: a dossier built on a
+  // failed npm call is no longer stored; v17 entries may still hold one.
+  dossier: 18,
   // ExplorerData's own fields, ChartInputs and Neighbor (src/lib/explorer.ts,
   // src/lib/types.ts). v2/v3 were dossier bumps it had to copy by hand;
-  // v4: neighbors gained trend/v7_to and inputs vTrend/vAsOf.
-  explorerData: 4,
+  // v4: neighbors gained trend/v7_to and inputs vTrend/vAsOf. v5: npmPartial;
+  // an entry built on a failed npm call is no longer stored.
+  explorerData: 5,
   // Vitals (src/lib/vitals.ts). v7: sample counts passing for totals. v8:
   // onboarding.goodFirstIssuesFree. v9: contributors = GitHub's sidebar.
   // v10: census.githubDaily.
@@ -49,6 +51,8 @@ export const SHAPE_VERSION = {
   velocityRankMonth: 2,
   // v3: the window runs to 30 Sep (gap fill)
   velocityRankReconstructed: 3,
+  // the rebuilt gap days, one window per hole (velocity-rank/reconstructed-gaps)
+  velocityRankReconstructedGaps: 1,
   // the daily ladder's monthly rank zones (ladderBands, src/lib/velocity-rank.ts)
   ladderBands: 1,
 } as const;
@@ -69,6 +73,7 @@ const CACHED: Record<ShapeType, { prefix: string; embeds: ShapeType[] }> = {
   velocityRankMeta: { prefix: "velocity-rank-meta", embeds: [] },
   velocityRankMonth: { prefix: "velocity-rank-month", embeds: [] },
   velocityRankReconstructed: { prefix: "velocity-rank-reconstructed", embeds: [] },
+  velocityRankReconstructedGaps: { prefix: "velocity-rank-reconstructed-gaps", embeds: [] },
   ladderBands: { prefix: "ladder-bands", embeds: [] },
 };
 

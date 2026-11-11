@@ -32,12 +32,13 @@ export default function Panel({
       style={{ animationDelay: `${delay}ms` }}
     >
       <header className="flex items-center justify-between gap-3 border-b border-grid px-4 py-2.5 sm:px-5">
-        <div className="flex items-baseline gap-3 min-w-0">
+        {/* the title keeps its width; the meta is what truncates */}
+        <div className="flex shrink-0 items-baseline gap-3">
           <span className="module-index shrink-0">{index} /</span>
-          <h2 className="module-title truncate">{title}</h2>
+          <h2 className="module-title whitespace-nowrap">{title}</h2>
         </div>
-        <div className="flex shrink-0 items-center gap-3">
-          {meta ? <div className="numeral hidden text-label text-dim sm:block">{meta}</div> : null}
+        <div className="flex min-w-0 items-center gap-3">
+          {meta ? <div className="numeral hidden min-w-0 truncate text-label text-dim sm:block">{meta}</div> : null}
           {action ?? null}
         </div>
       </header>

@@ -53,7 +53,7 @@ const read = (): string | null => {
   }
 };
 
-export default function TrafficPanel({ repo }: { repo: string }) {
+export default function TrafficPanel({ repo, compact = false }: { repo: string; compact?: boolean }) {
   const C = usePalette();
   const [vault, setVault] = useState<TrafficVault | null>(null);
   // a key this browser holds that the server refused, or that returned nothing.
@@ -144,6 +144,15 @@ export default function TrafficPanel({ repo }: { repo: string }) {
 
   // teaser: shown to everyone on the public console (privacy is the pitch)
   if (!vault) {
+    // Command Deck: a locked panel folds to one line, so it never takes a
+    // screen's worth of height from panels with data
+    if (compact)
+      return (
+        <div className="numeral flex items-center justify-between gap-3 text-micro">
+          <span className="locked-status font-display tracking-[0.3em] text-accent">◈ PRIVATE</span>
+          <span className="locked-cta truncate text-faint">open your private vault link to see views, clones and referrers</span>
+        </div>
+      );
     return (
       <div className="flex h-[230px] flex-col items-center justify-center gap-2 text-center">
         <span className="font-display text-label tracking-[0.3em] text-accent">◈ PRIVATE TRAFFIC VAULT</span>
@@ -165,7 +174,8 @@ export default function TrafficPanel({ repo }: { repo: string }) {
   const rows = view.map((d) => {
     const b = !people ? d.ciBand : null;
     return {
-      label: d.d.slice(5).replace("-", "/"),
+      // "Sep 4", the date format of every other chart on the page and the deck
+      label: new Date(`${d.d}T00:00:00Z`).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" }),
       views: people ? d.viewsU : d.views,
       clones: people ? d.clonesU : d.clones,
       ciMin: b?.ciMin ?? null,
@@ -190,7 +200,7 @@ export default function TrafficPanel({ repo }: { repo: string }) {
   const stale = lagDays >= 2;
 
   return (
-    <div className="flex h-full flex-col gap-2">
+    <div className="vault-root flex h-full flex-col gap-2">
       <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1">
         {/* PER-DAY totals are addable; per-day UNIQUES are not (a person who
             comes back on Tuesday is two of them). So the people view heads with
@@ -272,7 +282,7 @@ export default function TrafficPanel({ repo }: { repo: string }) {
       </div>
 
       {/* taller with the band: its 3 legend entries would otherwise eat the plot */}
-      <div className={`${split ? "h-[210px]" : "h-[160px]"} w-full`}>
+      <div className={`vault-chart ${split ? "h-[210px]" : "h-[160px]"} w-full`}>
         <ResponsiveContainer width="100%" height="100%">
           {/* left margin + YAxis width are paired: a busy repo puts 5 digits on
               the axis, and the old -16/40 clipped them to their last 3 ("18377"
@@ -320,7 +330,9 @@ export default function TrafficPanel({ repo }: { repo: string }) {
         </ResponsiveContainer>
       </div>
 
-      {split && vault.ci ? (
+      {/* the method note is reading for the console; the deck (a wall
+          screen) keeps the chart, its legend and the referrers */}
+      {split && vault.ci && !compact ? (
         <span className="numeral text-micro leading-relaxed text-faint">
           our ci = this repo&apos;s own GitHub Actions checkout jobs, counted per day. A checkout is at least one clone,
           and no month here has run above ~4.7 clones per checkout, so the split is a band: checkouts ×{vault.ci.low} is
