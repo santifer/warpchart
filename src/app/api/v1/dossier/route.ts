@@ -26,7 +26,7 @@
 // covers everything.
 import { NextRequest, NextResponse } from "next/server";
 import { repoStats, repoOvertakes, SITE } from "@/lib/api-v1";
-import { getCachedDossier } from "@/lib/explorer";
+import { getCachedDossierChecked } from "@/lib/explorer";
 import { loadVitals, vitalsEntitled } from "@/lib/vitals";
 import { vitalsReading } from "@/lib/vitals-reading";
 import { settle, valueOf } from "@/lib/blob-read";
@@ -104,13 +104,14 @@ export async function GET(req: NextRequest) {
   const stats = repoStats(repo);
   if (!stats) return BAD(`${repo} is not in the worldwide top-1000 registry`, 404);
 
-  const [dossier, vitalsRead] = await Promise.all([
-    getCachedDossier(owner, name).catch(() => null),
+  const [checked, vitalsRead] = await Promise.all([
+    getCachedDossierChecked(owner, name).catch(() => ({ dossier: null, partial: true })),
     settle(loadVitals(owner, name), "vitals"),
   ]);
   const vitals = valueOf(vitalsRead);
   const vitalsState = vitalsReading(vitalsRead, vitalsEntitled(owner, name)).state;
 
+  const dossier = checked.dossier;
   // the window anchors on the newest day any series has, so ?range works even
   // when a feed is a few days behind
   const newest = [
@@ -278,7 +279,18 @@ export async function GET(req: NextRequest) {
 
       overtakes: repoOvertakes(repo),
     },
-    // a failed read must not sit at the edge for 15 min either
-    { headers: { "Cache-Control": vitalsState === "failed" ? "no-store" : "public, s-maxage=900, stale-while-revalidate=3600" } },
+    // a failed vitals read is not stored at the CDN at all, and a partial
+    // dossier (an npm call failed, or none at all) only for a minute: the next
+    // reader retries instead of reading the gap for 15 minutes (#42)
+    {
+      headers: {
+        "Cache-Control":
+          vitalsState === "failed"
+            ? "no-store"
+            : checked.partial
+              ? "public, s-maxage=60"
+              : "public, s-maxage=900, stale-while-revalidate=3600",
+      },
+    },
   );
 }

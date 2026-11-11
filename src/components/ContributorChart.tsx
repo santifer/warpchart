@@ -21,7 +21,7 @@
 //
 // Every number and sentence below is computed from the series at render time.
 // Nothing is hardcoded: the copy recomputes as the data moves.
-import { useMemo } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { VitalsCensus, VitalsBusFactor } from "@/lib/vitals";
 
 const DAY = 864e5;
@@ -86,13 +86,35 @@ function monthSegments(points: [string, number][], endMs: number): Seg[] {
   return out;
 }
 
+const LBL_DEFAULT = 172;
+
 export default function ContributorChart({
   census,
   busFactor,
+  compact = false,
 }: {
   census: VitalsCensus;
   busFactor: VitalsBusFactor | null;
+  // Command Deck: the chart and bus factor only; the sentences stay in the
+  // console, where they are read rather than glanced at
+  compact?: boolean;
 }) {
+  // Command Deck: the chart's own box, measured in layout px
+  const boxRef = useRef<HTMLDivElement | null>(null);
+  const [measured, setMeasured] = useState<{ w: number; h: number } | null>(null);
+  useEffect(() => {
+    const el = boxRef.current;
+    if (!compact || !el) return;
+    const fit = () => {
+      const w = Math.round(el.clientWidth);
+      const h = Math.round(el.clientHeight);
+      if (w > 0 && h > 0) setMeasured((m) => (m && m.w === w && m.h === h ? m : { w, h }));
+    };
+    fit();
+    const ro = new ResizeObserver(fit);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [compact]);
   const pts = useMemo(
     () => (census.github != null ? (census.githubDaily ?? []) : []),
     [census.github, census.githubDaily],
@@ -126,14 +148,22 @@ export default function ContributorChart({
   const { endMs, t0, segs, maxRate, cur, best, last30 } = model;
 
   // ---- geometry ----
-  const W = 960,
-    X0 = 8,
-    X1 = W - 52,
-    CT = 12,
-    CB = 102,
-    HT = 116,
-    HB = 154,
-    LBL = 172;
+  // Console: a fixed 960x180 canvas scaled to the width. Command Deck
+  // (compact): the canvas IS the box it is given (1 unit = 1 px), so a tall
+  // cell gives a tall chart and the type stays at a readable 11 px.
+  const box = compact ? measured : null;
+  const W = box ? Math.max(320, box.w) : 960;
+  const TH = box ? Math.max(140, box.h) : LBL_DEFAULT + 8;
+  const fz = box ? 11 : 9;
+  const X0 = 8,
+    X1 = W - (box ? 60 : 52),
+    CT = box ? 18 : 12,
+    LBL = TH - (box ? 6 : 8),
+    HB = LBL - (box ? 20 : 18),
+    // short box: the bars yield first (24-70 units) so the curve keeps a
+    // readable slope instead of collapsing to a line
+    HT = box ? HB - Math.min(70, Math.max(24, Math.round((HB - CT) * 0.3))) : 116,
+    CB = box ? HT - 22 : 102;
   const x = (t: number) => X0 + ((t - t0) / (endMs - t0)) * (X1 - X0);
   const yMax = Math.max(50, Math.ceil(N / 50) * 50);
   const y = (v: number) => CB - (v / yMax) * (CB - CT);
@@ -155,7 +185,7 @@ export default function ContributorChart({
   const fastest = cur.rate >= maxRate - 1e-9;
 
   return (
-    <div className="flex flex-col gap-2">
+    <div className={`flex flex-col gap-2 ${compact ? "min-h-0 flex-1" : ""}`}>
       <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
         <span className="numeral text-micro tracking-[0.1em] text-faint">
           CONTRIBUTORS · GITHUB&apos;S COUNT
@@ -166,9 +196,11 @@ export default function ContributorChart({
         </span>
       </div>
 
+      <div ref={boxRef} className={compact ? "contrib-box min-h-[150px] flex-1" : ""}>
       <svg
-        viewBox={`0 0 ${W} ${LBL + 8}`}
-        className="block w-full"
+        viewBox={`0 0 ${W} ${TH}`}
+        className={box ? "block h-full w-full" : "block w-full"}
+        preserveAspectRatio={box ? "none" : undefined}
         role="img"
         aria-label="Cumulative contributors, GitHub's count, over time, daily"
       >
@@ -185,7 +217,7 @@ export default function ContributorChart({
           x={X0}
           y={y(yMax) - 4}
           className="numeral"
-          fontSize="9"
+          fontSize={fz}
           fill="var(--faint)"
         >
           {yMax}
@@ -210,7 +242,7 @@ export default function ContributorChart({
               y={LBL}
               textAnchor={w < 34 ? "end" : "middle"}
               className="numeral"
-              fontSize="9.5"
+              fontSize={fz + 0.5}
               letterSpacing="1"
               fill="var(--faint)"
             >
@@ -235,7 +267,7 @@ export default function ContributorChart({
           x={x(endMs) + 8}
           y={y(N) + 4}
           className="numeral"
-          fontSize="14"
+          fontSize={box ? 15 : 14}
           fontWeight="600"
           fill="var(--ink)"
         >
@@ -255,16 +287,21 @@ export default function ContributorChart({
                 fill="var(--accent)"
                 opacity={s.partial ? 0.95 : 0.55}
               />
-              <text
-                x={bw < 34 ? x(s.b) : bx + bw / 2}
-                y={by - 3}
-                textAnchor={bw < 34 ? "end" : "middle"}
-                className="numeral"
-                fontSize="9"
-                fill={s.rate === maxRate ? "var(--warn)" : "var(--faint)"}
-              >
-                {s.rate.toFixed(1)}/d
-              </text>
+              {/* a bar too narrow for its label (the current partial month)
+                  only labels itself when the previous month's label is not
+                  already sitting at the same spot */}
+              {bw < 34 && segs.indexOf(s) > 0 && x(s.b) - x(segs[segs.indexOf(s) - 1].b) < fz * 5 ? null : (
+                <text
+                  x={bw < 34 ? x(s.b) : bx + bw / 2}
+                  y={by - 3}
+                  textAnchor={bw < 34 ? "end" : "middle"}
+                  className="numeral"
+                  fontSize={fz}
+                  fill={s.rate === maxRate ? "var(--warn)" : "var(--faint)"}
+                >
+                  {s.rate.toFixed(1)}/d
+                </text>
+              )}
             </g>
           );
         })}
@@ -272,7 +309,7 @@ export default function ContributorChart({
           x={X0}
           y={HT - 3}
           className="numeral"
-          fontSize="8.5"
+          fontSize={fz - 0.5}
           letterSpacing="1"
           fill="var(--faint)"
           opacity=".8"
@@ -280,6 +317,7 @@ export default function ContributorChart({
           NEW CONTRIBUTORS / DAY
         </text>
       </svg>
+      </div>
 
       {busFactor ? (
         // wraps on a phone: the shares go under the bar instead of pushing it to
@@ -311,6 +349,7 @@ export default function ContributorChart({
         </div>
       ) : null}
 
+      {compact ? null : (<>
       <div className="numeral text-micro leading-relaxed text-faint">
         <>
           <span className="text-dim">{N} contributors</span> since{" "}
@@ -351,6 +390,7 @@ export default function ContributorChart({
         · {capMonth(cur.label)} spans {curDays} day{curDays === 1 ? "" : "s"} ·
         bots and AI accounts count, as on GitHub
       </span>
+      </>)}
     </div>
   );
 }
