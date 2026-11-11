@@ -217,8 +217,11 @@ export function mergeReconstructed(recorded, rebuilt) {
   const first = days[0] ?? "9999";
   const last = days.at(-1) ?? "9999";
   const firstRanked = recorded.filter((p) => p.rank != null).map((p) => p.day).sort()[0] ?? "9999";
+  // a gap-window row (p.gap: a hole rebuilt after the main window, always a
+  // CLOSED day) may also sit past the table's last day: the erased day right
+  // before the newest capture shows at once instead of a day later
   const fill = rebuilt.filter(
-    (p) => !have.has(p.day) && p.why !== "unborn" && p.day < last && (p.day < first || p.day > firstRanked),
+    (p) => !have.has(p.day) && p.why !== "unborn" && (p.day < last || p.gap) && (p.day < first || p.day > firstRanked),
   );
   return [...fill, ...recorded].sort((a, b) => (a.day < b.day ? -1 : a.day > b.day ? 1 : 0));
 }
@@ -240,4 +243,46 @@ export function historyCovers(weeks, { more, from, stars }) {
   if (!(Math.abs(total - stars) <= Math.max(1000, stars * 0.05)))
     return { ok: false, why: `history from ${new Date(oldest).toISOString().slice(0, 10)} adds up to ${total}, the repo has ${stars}` };
   return { ok: true };
+}
+
+// The table is rebuilt from the moat every day, so a point lost in the moat
+// (2026-11-04: a stale shard write erased 2026-11-03 for 2,676 repos) would
+// silently drop a day already ranked from complete data. A recorded day stays;
+// a day the rebuild still computes replaces it; new days are added. Oldest first.
+export function keepRecordedDays(prev, rebuilt) {
+  const byDay = new Map((prev ?? []).map((d) => [d.day, d]));
+  for (const d of rebuilt ?? []) {
+    // the rebuild never carries `hours` for a day whose captures left the
+    // route-history meta (90 days): keep the window it was published with
+    const was = byDay.get(d.day);
+    byDay.set(d.day, d.hours == null && was?.hours != null ? { ...d, hours: was.hours } : d);
+  }
+  return [...byDay.values()].sort((a, b) => (a.day < b.day ? -1 : 1));
+}
+
+// The gap file (velocity-rank/reconstructed-gaps.json) holds one WINDOW per
+// hole opened after the main reconstruction: { windows: [{ from, to, days,
+// repos, ... }] }. A new window is ADDED; re-running the same range replaces
+// it; a window that overlaps another is refused (two rebuilt rows on one day).
+// Returns { ok, windows } or { ok:false, why }.
+export function addGapWindow(existing, win) {
+  const list = (existing?.windows ?? []).filter((w) => !(w.from === win.from && w.to === win.to));
+  const clash = list.find((w) => !(win.to < w.from || win.from > w.to));
+  if (clash) return { ok: false, why: `window ${win.from}..${win.to} overlaps ${clash.from}..${clash.to}` };
+  return { ok: true, windows: [...list, win].sort((a, b) => (a.from < b.from ? -1 : 1)) };
+}
+
+// A gap window must be a real, CLOSED range: ISO days, from <= to, and the
+// Pacific-time day `to` over (it ends at 08:00Z the next day in winter, 07:00Z
+// in summer) with a margin, or GitHub's history still has a half day.
+export const MAIN_RECONSTRUCTION_TO = "2026-09-30";
+export function gapWindowError(from, to, now = Date.now()) {
+  const iso = /^\d{4}-\d{2}-\d{2}$/;
+  if (!iso.test(from ?? "") || !iso.test(to ?? "")) return "VR_GAP_FROM/VR_GAP_TO must be YYYY-MM-DD";
+  if (from > to) return `VR_GAP_FROM ${from} is after VR_GAP_TO ${to}`;
+  // the main reconstruction covers through 30 Sep: two rebuilt rows on one day
+  if (from <= MAIN_RECONSTRUCTION_TO) return `VR_GAP_FROM ${from} overlaps the main reconstruction (through ${MAIN_RECONSTRUCTION_TO})`;
+  const closes = Date.parse(`${to}T00:00:00Z`) + 864e5 + 10 * 3600e3; // +1 day 08:00Z + 2 h
+  if (!(now > closes)) return `${to} is not closed yet in Pacific time (wait until ${new Date(closes).toISOString()})`;
+  return null;
 }

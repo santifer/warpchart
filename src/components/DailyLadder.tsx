@@ -15,7 +15,8 @@
 // owner's god mode adds the cut-off figures and each day's zone in the tooltip.
 import { useMemo, useRef, useState, useSyncExternalStore } from "react";
 import {
-  ComposedChart, Bar, Line, Scatter, XAxis, YAxis, CartesianGrid, Tooltip,
+  ComposedChart,
+  ReferenceLine, Bar, Line, Scatter, XAxis, YAxis, CartesianGrid, Tooltip,
   Legend, ResponsiveContainer, ReferenceArea,
 } from "recharts";
 import { useLive } from "./LiveProvider";
@@ -186,8 +187,64 @@ export default function DailyLadder({
     >
     <div ref={ref} className={`w-full touch-pan-y ${fill ? "min-h-0 flex-1" : "h-[250px]"}`} style={{ cursor: canPan ? "ew-resize" : undefined }}>
       <ResponsiveContainer width="100%" height="100%">
-        <ComposedChart data={view} margin={{ top: 6, right: fill ? 20 : 4, left: -14, bottom: 0 }}>
-          {areas.map((a) => (
+        <ComposedChart data={view} margin={{ top: 6, right: fill ? 66 : 4, left: -14, bottom: 0 }}>
+          {/* deck: thresholds as thin neutral lines, labelled at the right
+              edge (FT style); tinted zones and their swatch legend read as
+              colours nobody could match in a short cell */}
+          {fill
+            ? areas
+                .filter((a) => a.y1 > 0 && a.y1 <= yTop)
+                .map((a) => (
+                  <ReferenceLine
+                    key={`t-${a.key}`}
+                    yAxisId="day"
+                    segment={[
+                      { x: a.x1, y: a.y1 },
+                      { x: a.x2, y: a.y1 },
+                    ]}
+                    stroke={C.dim}
+                    strokeOpacity={0.55}
+                    strokeDasharray="3 3"
+                    ifOverflow="hidden"
+                    label={
+                      view.length && a.x2 === view[view.length - 1].label
+                        ? { value: `top ${rankOf(a.tier)}`, position: "right", offset: 8, fill: C.dim, fontSize: 10 }
+                        : !areas.some((n) => n.tier === a.tier && n.key.slice(0, 7) > a.key.slice(0, 7) && n.y1 > 0 && n.y1 <= yTop)
+                          ? // its next month runs above the axis: name it where it leaves
+                            { value: `top ${rankOf(a.tier)} ↑`, position: "insideTopRight", fill: C.dim, fontSize: 10 }
+                          : undefined
+                    }
+                  />
+                ))
+            : null}
+          {/* deck: the vertical step where a threshold changes month to
+              month, so each tier reads as one continuous stepped line */}
+          {fill
+            ? BAND_TIERS.flatMap(({ key }) => {
+                const seq = areas.filter((a) => a.tier === key && a.y1 > 0);
+                return seq.slice(1).map((b, i) => {
+                  const a = seq[i];
+                  const ya = Math.min(a.y1, yTop);
+                  const yb = Math.min(b.y1, yTop);
+                  if (ya === yb) return null;
+                  return (
+                    <ReferenceLine
+                      key={`s-${b.key}`}
+                      yAxisId="day"
+                      segment={[
+                        { x: b.x1, y: ya },
+                        { x: b.x1, y: yb },
+                      ]}
+                      stroke={C.dim}
+                      strokeOpacity={0.55}
+                      strokeDasharray="3 3"
+                      ifOverflow="hidden"
+                    />
+                  );
+                });
+              })
+            : null}
+          {!fill && areas.map((a) => (
             <ReferenceArea
               key={a.key}
               yAxisId="day"
@@ -211,9 +268,9 @@ export default function DailyLadder({
             tick={{ fill: C.faint, fontSize: fill ? 11 : 9 }}
             tickLine={false}
             axisLine={{ stroke: C.grid }}
-            // the deck labels one day every 14, counted from a fixed epoch so
-            // the step is regular and does not shift while panning
-            ticks={fill ? view.filter((r) => Math.round(Date.parse(`${r.d}T00:00:00Z`) / 864e5) % 14 === 0).map((r) => r.label) : undefined}
+            // the deck labels one day every 14, counted back from today, the
+            // same marks as the World rank axis beside it
+            ticks={fill ? view.filter((r) => (Math.round(Date.parse(`${todayKey}T00:00:00Z`) / 864e5) - Math.round(Date.parse(`${r.d}T00:00:00Z`) / 864e5)) % 14 === 0).map((r) => r.label) : undefined}
             interval={fill ? 0 : 3}
             minTickGap={fill ? 0 : 5}
           />
@@ -318,16 +375,29 @@ export default function DailyLadder({
               <span className="numeral text-micro text-faint">
                 <span style={{ color: C.ink }} aria-hidden>━</span> 7d avg
               </span>
+              {bundle.spikes.length ? (
+                <span className="numeral text-micro text-faint" title="a day with a known cause (post, launch, mention); hover the bar">
+                  <span style={{ color: C.ink }} aria-hidden>◆</span> event
+                </span>
+              ) : null}
               <span className="numeral text-micro text-faint">
                 <span style={{ color: C.dim }} aria-hidden>┅</span> night floor
                 {lastFloor !== null ? <span className="text-ink"> {Math.round(lastFloor)}/h</span> : null}
               </span>
             </>
           ) : null}
-          {shown.map(({ key }) => (
+          {fill && shown.length ? (
+            <span className="numeral text-micro text-faint">
+              <span style={{ color: C.dim }} aria-hidden>┄</span> top-N thresholds
+            </span>
+          ) : null}
+          {!fill && shown.map(({ key }) => (
             <span key={key} className="numeral text-micro tracking-[0.18em] text-faint">
               {/* the deck keeps the rank and drops the tier name (in the tooltip) */}
-              <span style={{ color: TC[key] }} aria-hidden>◆</span> {fill ? tierLabel(key).split(" · ").pop() : tierLabel(key)}
+              {/* zones are background bands: a swatch in the deck, so the ◆ glyph
+                  means only "event" there */}
+              <span style={{ color: TC[key] }} aria-hidden>{fill ? "▮" : "◆"}</span>{" "}
+              {fill ? (tierLabel(key).split(" · ").pop() ?? "").replace("TOP ", "") : tierLabel(key)}
               {god && lastBand ? ` · ≥${fmt(lastBand.t[key])}/d` : ""}
             </span>
           ))}

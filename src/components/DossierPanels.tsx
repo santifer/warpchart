@@ -69,7 +69,9 @@ export function PulsePanel({
       className={className}
       delay={delay}
     >
-      <div className="flex min-h-[150px] flex-col justify-between gap-4 py-1">
+      {/* compact (Command Deck): sized to its content, so the backlog bar
+          sits right under the figures instead of 50 px below them */}
+      <div className={`flex flex-col gap-4 py-1 ${compact ? "" : "min-h-[150px] justify-between"}`}>
         {d ? (
           <>
             <div className="grid grid-cols-2 gap-x-6 gap-y-4 sm:grid-cols-4">
@@ -129,6 +131,7 @@ export function UsagePanel({
   className = "",
   delay = 0,
   compact = false,
+  withChart = false,
 }: {
   dossier: Dossier | null;
   index?: string;
@@ -139,6 +142,8 @@ export function UsagePanel({
   // them), and the clone count in the neutral numeral colour: warn is for
   // things that need attention, and a clone total does not
   compact?: boolean;
+  // Command Deck AUDIENCE: the figures strip AND the acquisition chart
+  withChart?: boolean;
 }) {
   const d = dossier;
   const withDownloads = (d?.releases ?? []).filter((r) => r.downloads > 0).slice(0, 4);
@@ -157,7 +162,7 @@ export function UsagePanel({
       className={className}
       delay={delay}
     >
-      <div className="flex min-h-[150px] flex-col gap-3 py-1">
+      <div className={`flex flex-col gap-3 py-1 ${compact ? "" : "min-h-[150px]"}`}>
         {hasUsage ? (
           <>
             {(() => {
@@ -193,22 +198,30 @@ export function UsagePanel({
                       : null;
                 const missing = d!.npmLast30MissingDays ?? 0;
                 const Row = ({ label, sub, value, title }: { label: string; sub: string; value: string; title?: string }) => (
-                  <div className="flex items-baseline justify-between gap-3 py-1" title={title}>
-                    <div className="flex min-w-0 flex-col gap-0.5">
-                      <span className="numeral truncate text-micro tracking-[0.15em] text-faint">{label}</span>
-                      <span className="numeral truncate text-micro text-dim">{sub}</span>
-                    </div>
-                    <span className="numeral shrink-0 text-xl leading-none text-ink">{value}</span>
+                  // two grid rows: label and value share the first, the subtitle
+                  // spans the whole cell below, so a long subtitle never pushes
+                  // the value away from its label
+                  <div className="usage-row grid grid-cols-[minmax(0,1fr)_auto] items-baseline gap-x-3 gap-y-0.5 py-1 @[26rem]:grid-cols-[minmax(0,65%)_auto]" title={title}>
+                    <span className="numeral min-w-0 truncate text-micro tracking-[0.15em] text-faint">{label}</span>
+                    <span className="numeral shrink-0 text-xl leading-none text-ink sm:text-2xl">{value}</span>
+                    <span className="numeral col-span-2 truncate text-micro text-dim">{sub}</span>
                   </div>
                 );
                 return (
-                  <div className="flex flex-col divide-y divide-grid/60">
+                  // full width, so rows start at the title's edge; on a wide cell
+                  // the value sits in a column at ~65 % (label and value stay close)
+                  <div className="deck-usage-rows flex w-full flex-col divide-y divide-grid/60 [container-type:inline-size]">
                     {est !== null ? (
                       <div>
-                        <Row label="NPM INSTALLS · 30D" sub={lastNpm ? `through ${lastNpm}` : d!.npmPkg ?? ""} value={est} title={d!.npmPkg ?? undefined} />
-                        {missing > 0 && d!.npmLast30 !== null ? (
+                        {/* deck strip: the estimate's disclosure joins the date on
+                            one line (both stay visible), so the strip is one line
+                            shorter on a short screen */}
+                        <Row label="NPM INSTALLS · 30D"
+                          sub={`${lastNpm ? `through ${lastNpm}` : d!.npmPkg ?? ""}${compact && missing > 0 && d!.npmLast30 !== null ? ` · ${fmt(d!.npmLast30)} measured + ${missing}d est.` : ""}`}
+                          value={est} title={d!.npmPkg ?? undefined} />
+                        {missing > 0 && d!.npmLast30 !== null && !compact ? (
                           <span className="numeral block pb-1 text-micro leading-snug text-dim">
-                            {fmt(d!.npmLast30)} measured + {missing} unrecorded days, estimated
+                            {fmt(d!.npmLast30)} measured + {missing} days estimated
                           </span>
                         ) : null}
                       </div>
@@ -285,7 +298,7 @@ export function UsagePanel({
                 </div>
               );
             })()}
-            {!compact &&
+            {(!compact || withChart) &&
             ((d!.npmHistory && d!.npmHistory.length >= 2) ||
               (d!.clonesHistory && d!.clonesHistory.length >= 2)) ? (
               <UsageChart npm={d!.npmHistory ?? []} clones={d!.clonesHistory} />

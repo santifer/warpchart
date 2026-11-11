@@ -18,7 +18,7 @@
 // fullscreen).
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import LiveNumber from "./LiveNumber";
-import GalacticChart, { DECK_LOCAL_H } from "./GalacticChart";
+import GalacticChart from "./GalacticChart";
 import Panel from "./Panel";
 import CurveChart from "./CurveChart";
 import VelocityChart from "./VelocityChart";
@@ -26,6 +26,13 @@ import DailyLadder from "./DailyLadder";
 import RankChart from "./RankChart";
 import Projections from "./Projections";
 import { PulsePanel, UsagePanel } from "./DossierPanels";
+import VitalSignsPanel from "./VitalSignsPanel";
+import PrFlowPanel from "./PrFlowPanel";
+import TrafficPanel from "./TrafficPanel";
+import GodVelocityRank from "./GodVelocityRank";
+import MissionLog from "./MissionLog";
+import type { Vitals } from "@/lib/vitals";
+import type { PrFlow } from "@/lib/prflow";
 import { useLive } from "./LiveProvider";
 import type { DashboardBundle } from "@/lib/bundle";
 import type { LadderBand } from "@/lib/ladder-bands";
@@ -119,6 +126,10 @@ function Tile({
   // a repo name longer than ~10 characters (code-server, awesome-python…)
   // does not fit a phone's half-width cell at the counters' size
   const long = typeof children === "string" && children.length > 10;
+  // a repo name too long for the tile at desktop size (Prompt-Engineering-
+  // Guide): the value steps down a size before it truncates, so the name
+  // that IS the tile's information stays whole
+  const veryLong = typeof children === "string" && children.length > 16;
   const color =
     tone === "accent" ? "text-accent" : tone === "warn" ? "text-warn" : tone === "dim" ? "text-faint" : "text-ink";
   return (
@@ -126,10 +137,12 @@ function Tile({
       <span className="module-title !text-micro truncate">{label}</span>
       {/* fixed-height value line, bottom-aligned: big and normal values share
           one baseline across the strip */}
-      <span className="flex h-8 items-end justify-between gap-2">
+      {/* the sparkline sits a fixed gap after its number, so a wide tile
+          does not push it away from the value it belongs to */}
+      <span className="flex h-8 items-end gap-5">
         <span
           className={`numeral leading-none ${spark ? "shrink-0" : "truncate"} ${
-            big ? "text-2xl sm:text-3xl" : long ? "text-lg sm:text-2xl" : "text-xl sm:text-2xl"
+            big ? "text-2xl sm:text-3xl" : veryLong ? "text-sm 2xl:text-base" : long ? "text-lg sm:text-2xl" : "text-xl sm:text-2xl"
           } ${color} ${
             big && tone === "accent" ? "glow-accent" : ""
           }`}
@@ -140,8 +153,11 @@ function Tile({
       </span>
       {/* phones have no hover tooltip: the context line may wrap to two lines
           there instead of being cut; from sm up it is one line, full text in title */}
-      <span className="numeral line-clamp-2 text-micro text-faint sm:line-clamp-none sm:truncate">
-        {sub ?? "\u00a0"}
+      {/* the context line may take two lines: it can carry a staleness
+          warning ("rate over a day old") that must not be cut */}
+      <span className="numeral line-clamp-2 text-micro leading-snug text-faint">
+        {/* a wrap may only fall between "·" segments, never inside one */}
+        {typeof sub === "string" ? sub.split(" · ").map((seg) => seg.replace(/ /g, "\u00a0")).join(" · ") : (sub ?? "\u00a0")}
       </span>
     </div>
   );
@@ -154,6 +170,8 @@ export default function CommandDeck({
   onPinTarget,
   onExit,
   ladderBands = null,
+  vitals = null,
+  prFlow = null,
 }: {
   bundle: DashboardBundle;
   dossier: Dossier | null;
@@ -161,6 +179,8 @@ export default function CommandDeck({
   onPinTarget: (r: string | null) => void;
   onExit: () => void;
   ladderBands?: LadderBand[] | null;
+  vitals?: Vitals | null;
+  prFlow?: PrFlow | null;
 }) {
   const live = useLive();
   const hostRef = useRef<HTMLDivElement | null>(null);
@@ -184,6 +204,71 @@ export default function CommandDeck({
     [bundle, live.stars, live.rank, live.neighbors, live.nowMs]
   );
 
+  // Wall-panel zoom: 1 up to a 1920x1080 frame, then the smaller of the two
+  // ratios (a 3440x1440 ultrawide gets 1.33: text, cells and charts grow
+  // together and the grid keeps the proportions it was designed in).
+  const [wall, setWall] = useState({ z: 1, w: 0, h: 0 });
+  useEffect(() => {
+    const fit = () => {
+      const w = window.innerWidth;
+      const h = window.innerHeight;
+      const z = Math.max(1, Math.min(w / 1920, h / 1080));
+      setWall((p) => (p.z === z && p.w === w && p.h === h ? p : { z, w, h }));
+    };
+    fit();
+    window.addEventListener("resize", fit);
+    return () => window.removeEventListener("resize", fit);
+  }, []);
+
+  // Three views in one frame (wall-panel playlist): GROWTH, HEALTH,
+  // AUDIENCE. 1/2/3 or the tabs switch; ROTATE cycles every 45 s for a
+  // screen left on. The KPI strip stays fixed across all three.
+  const VIEWS = ["growth", "health", "audience"] as const;
+  const [view, setView] = useState<(typeof VIEWS)[number]>("growth");
+  const [rotate, setRotate] = useState(false);
+  // GROWTH has two layouts under trial (Santiago, 3-nov: "quiero ambos modos,
+  // que se puedan conmutar"): "race" = the star race leads; "ladder" = the
+  // race is a shorter band on top and the daily ladder takes the large cell.
+  // L or the button switches; the choice is kept in this browser.
+  const [growthLayout, setGrowthLayout] = useState<"race" | "ladder">("race");
+  useEffect(() => {
+    try {
+      // read after mount: localStorage does not exist on the server render
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      if (localStorage.getItem("wc_deck_growth") === "ladder") setGrowthLayout("ladder");
+    } catch {}
+  }, []);
+  const toggleLayout = () =>
+    setGrowthLayout((l) => {
+      const next = l === "race" ? "ladder" : "race";
+      try {
+        localStorage.setItem("wc_deck_growth", next);
+      } catch {}
+      return next;
+    });
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const i = ["1", "2", "3"].indexOf(e.key);
+      if (i >= 0) {
+        setView(VIEWS[i]);
+        setRotate(false);
+      }
+      if (e.key === "l" || e.key === "L") toggleLayout();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  useEffect(() => {
+    if (!rotate) return;
+    const t = setInterval(
+      () => setView((v) => VIEWS[(VIEWS.indexOf(v) + 1) % VIEWS.length]),
+      45_000,
+    );
+    return () => clearInterval(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rotate]);
+
   // Dedicated 1s clock: the shared live tick is 30s, too coarse for a deck.
   const [clockMs, setClockMs] = useState(() => Date.now());
   useEffect(() => {
@@ -196,26 +281,36 @@ export default function CommandDeck({
   // depends on the viewport AND on the fullscreen transition, so it is
   // watched with a ResizeObserver rather than guessed from window resizes.
   const heroHole = useRef<HTMLDivElement | null>(null);
-  const [canvas, setCanvas] = useState<{ w: number; maxPx: number; px: number } | null>(null);
+  // The deck shows the console's own star chart (route to the core,
+  // instructions, every neighbour): its canvas is 520 units tall and as wide
+  // as its hole (1200-2400). The box is capped so the chart never overflows
+  // the cell's height. Layout px (clientWidth/Height): under the wall-panel
+  // zoom getBoundingClientRect returns screen px.
+  const [canvas, setCanvas] = useState<{ fitW: number; maxPx: number; px: number } | null>(null);
   useEffect(() => {
     const el = heroHole.current;
     if (!el) return;
     const measure = () => {
-      const r = el.getBoundingClientRect();
+      const r = { width: el.clientWidth, height: el.clientHeight };
       if (r.height < 120 || r.width < 280) return;
-      // 3400: the deck's race row is wide and short; a lower cap letterboxed
-      // the canvas inside its card (the type floor keeps labels legible)
-      const w = Math.min(Math.max(Math.round((r.width / r.height) * DECK_LOCAL_H), 1000), 3400);
-      const maxPx = Math.floor(r.height * (w / DECK_LOCAL_H));
-      // the svg renders at the hole's width minus its px-2 padding, capped by maxPx
-      const next = { w, maxPx, px: Math.min(Math.round(r.width) - 16, maxPx) };
-      setCanvas((c) => (c && c.w === next.w && c.maxPx === next.maxPx && c.px === next.px ? c : next));
+      // ladder layout: the race is a wide, short band, so its canvas takes
+      // the band's own aspect (the 520-unit height stays) instead of being
+      // capped at 2400 and drawn narrow in the middle of the band
+      const fitW =
+        growthLayout === "ladder"
+          ? Math.min(Math.max(Math.round((r.width * 520) / r.height), 1200), 4000)
+          : Math.min(Math.max(Math.round(r.width), 1200), 2400);
+      const maxPx = Math.floor(r.height * (fitW / 520));
+      // the width the svg actually renders at (hole minus px-2, capped by maxPx)
+      const px = Math.min(Math.round(r.width) - 16, maxPx);
+      const next = { fitW, maxPx, px };
+      setCanvas((c) => (c && c.fitW === next.fitW && c.maxPx === next.maxPx && c.px === next.px ? c : next));
     };
     measure();
     const ro = new ResizeObserver(measure);
     ro.observe(el);
     return () => ro.disconnect();
-  }, []);
+  }, [growthLayout]);
 
   useEffect(() => {
     const el = hostRef.current;
@@ -284,10 +379,22 @@ export default function CommandDeck({
   return (
     <div
       ref={hostRef}
-      className="fixed inset-0 z-50 flex flex-col gap-2 overflow-hidden bg-void px-3 py-2.5 sm:px-4 sm:py-3"
+      className="fixed inset-0 z-50 overflow-hidden bg-void"
     >
       <div className="space-backdrop" />
       <div className="space-grid" />
+      {/* wall-panel scale: the layout is drawn for a 1920x1080 frame; a larger
+          screen (an ultrawide, a TV) zooms the whole deck, type and charts
+          together, instead of leaving laptop-size text in giant cells.
+          The frame's own size is the viewport divided by the zoom. */}
+      <div
+        className="relative flex flex-col gap-2 px-3 py-2.5 sm:px-4 sm:py-3"
+        style={
+          wall.z > 1
+            ? { zoom: wall.z, width: wall.w / wall.z, height: wall.h / wall.z }
+            : { width: "100%", height: "100%" }
+        }
+      >
 
       {/* bar: identity and time, one thin line */}
       <div className="relative flex shrink-0 items-center justify-between gap-4 px-1">
@@ -321,6 +428,43 @@ export default function CommandDeck({
           </span>
         </div>
         <div className="flex shrink-0 items-center gap-4">
+          <nav className="flex items-center gap-1" aria-label="deck views">
+            {VIEWS.map((v, i) => (
+              <button
+                key={v}
+                onClick={() => {
+                  setView(v);
+                  setRotate(false);
+                }}
+                aria-pressed={view === v}
+                className={`numeral border px-2 py-0.5 text-micro tracking-[0.2em] transition-colors ${
+                  view === v ? "border-accent/60 text-accent" : "border-grid text-dim hover:text-ink"
+                }`}
+              >
+                <span className="text-faint">{i + 1}</span> {v.toUpperCase()}
+              </button>
+            ))}
+            <button
+              onClick={() => setRotate((r) => !r)}
+              aria-pressed={rotate}
+              title="show GROWTH, HEALTH and AUDIENCE in turn, 45 s each, for a screen left on; press a tab or 1/2/3 to stop"
+              // a mode, not a fourth view: no tab frame, set apart by a divider
+              className={`numeral ml-2 hidden border-l border-grid py-0.5 pl-4 text-micro tracking-[0.2em] transition-colors sm:inline ${
+                rotate ? "text-accent" : "text-faint hover:text-ink"
+              }`}
+            >
+              {rotate ? "■ STOP CYCLE" : "▶ AUTO-CYCLE"}
+            </button>
+            {view === "growth" ? (
+              <button
+                onClick={toggleLayout}
+                title="GROWTH layout under trial: race-led or ladder-led (key L); kept in this browser"
+                className="numeral hidden py-0.5 pl-3 text-micro tracking-[0.2em] text-faint transition-colors hover:text-ink sm:inline"
+              >
+                <span className="text-faint">L</span> {growthLayout === "race" ? "RACE-LED" : "LADDER-LED"}
+              </button>
+            ) : null}
+          </nav>
           <span className="numeral hidden text-sm text-dim sm:inline" suppressHydrationWarning>
             {new Date(clockMs).toISOString().slice(11, 19)} UTC
           </span>
@@ -414,7 +558,49 @@ export default function CommandDeck({
       {/* body: the REAL console cards on a 12-column grid (globals.css
           .deck-body). Each cell is a fixed slot; charts take `fill` and grow
           to it, list panels scroll inside their own cell. */}
-      <div className="deck-body relative">
+      {view === "health" ? (
+        // half and half: PR flow shares the width with Vital Signs
+        <div className="deck-view deck-view-half relative">
+          <div className="deck-view-main">
+            {/* on a short screen the panel scrolls inside itself; the frame never does */}
+            <div className="deck-panel-scroll">
+              <VitalSignsPanel repo={repo} name={repo.split("/")[1] ?? ""} vitals={vitals} index="01" compact />
+            </div>
+          </div>
+          <div className="deck-view-side">
+            {/* PR flow leads the column; pulse closes it as the 30-day totals */}
+            <div className="deck-panel-scroll deck-prflow">
+              <PrFlowPanel flow={prFlow} index="02" />
+            </div>
+            <PulsePanel dossier={dossier} index="03" compact />
+          </div>
+        </div>
+      ) : null}
+      {view === "audience" ? (
+        // Santiago (4-nov): the owner's two charts lead, tall; under them
+        // Real usage (figures on top, then the console's acquisition chart)
+        // beside the mission log, which scrolls in its own box
+        <div className="deck-audience relative">
+          <div className="deck-audience-top">
+            <Panel index="01" title="Traffic vault" meta="private · kept past GitHub's 14-day window">
+              <TrafficPanel repo={repo} compact />
+            </Panel>
+            <Panel index="02" title="Daily velocity rank" meta="by new stars each day">
+              <GodVelocityRank repo={repo} compact />
+            </Panel>
+          </div>
+          <UsagePanel dossier={dossier} index="03" compact withChart className="deck-usage-wide" />
+          <Panel index="04" title="Mission log" meta={`${bundle.events.length} events · scroll`} className="deck-log deck-log-scroll">
+            <MissionLog events={bundle.events} captain={bundle.captain} />
+          </Panel>
+        </div>
+      ) : null}
+      {/* kept mounted (inline display, which beats the unlayered .deck-body
+          rule) so the race keeps its measured canvas across view switches */}
+      <div
+        className={`deck-body relative ${growthLayout === "ladder" ? "deck-body--ladder" : ""}`}
+        style={view === "growth" ? undefined : { display: "none" }}
+      >
         {/* the race gets the same header as every other card, so the most
             important cell is titled like one */}
         <section className="hud deck-hero relative flex flex-col overflow-hidden">
@@ -424,14 +610,14 @@ export default function CommandDeck({
               <h2 className="module-title truncate">Star race</h2>
             </div>
             <span className="numeral hidden truncate text-label text-dim sm:block">
-              your neighbors by stars · gates in Next gates
+              destination: {bundle.apex ? `${shortName(bundle.apex.r)} · ${fmt(bundle.apex.s)} stars` : "the #1"}
             </span>
           </header>
           <div className="relative min-h-0 flex-1">
           <div ref={heroHole} className="absolute inset-0 flex items-center justify-center px-2">
             {canvas ? (
               <div className="w-full" style={{ maxWidth: canvas.maxPx }}>
-                <GalacticChart inputs={inputs} target={target} onPinTarget={onPinTarget} deck deckW={canvas.w} deckPx={canvas.px} noRoute />
+                <GalacticChart inputs={inputs} target={target} onPinTarget={onPinTarget} fitW={canvas.fitW} deckPx={canvas.px} hideHelp shortBand={growthLayout === "ladder"} />
               </div>
             ) : null}
           </div>
@@ -442,31 +628,30 @@ export default function CommandDeck({
           <Projections bundle={bundle} compact dense />
         </Panel>
 
-        <Panel index="03" title="Stars / hour" meta="24h vs prev · UTC" className="deck-vel">
+        <Panel index="04" title="Stars / hour" meta="24h vs prev · UTC" className="deck-vel">
           <VelocityChart fill />
         </Panel>
         <Panel
-          index="04"
+          index="05"
           title="Daily ladder"
           // the zones' definition lives on the header's ⓘ, so the legend stays one line
           meta={
-            <span title="zones = stars a day needed to rank top 10 / 50 / 100 / 250 by new stars among the 1,000 most-starred repos, monthly median">
-              night floor 00-05 UTC · ⓘ zones
+            <span title="thresholds = stars a day needed to rank top 10 / 50 / 100 / 250 by new stars among the 1,000 most-starred repos, monthly median">
+              night floor 00-05 UTC · ⓘ thresholds
             </span>
           }
           className="deck-ladder"
         >
           <DailyLadder bundle={bundle} fill bands={ladderBands} />
         </Panel>
-        <Panel index="05" title="World rank" meta="hourly" className="deck-rank">
+        <Panel index="06" title="World rank" meta="hourly" className="deck-rank">
           <RankChart bundle={bundle} fill />
         </Panel>
 
-        <Panel index="06" title="Cumulative" meta={`since ${bundle.meta?.created_at?.slice(0, 10) ?? "launch"}`} className="deck-cum">
+        <Panel index="03" title="Cumulative" meta={`since ${bundle.meta?.created_at?.slice(0, 10) ?? "launch"}`} className="deck-cum">
           <CurveChart repo={repo} fill />
         </Panel>
-        <PulsePanel dossier={dossier} index="07" className="deck-pulse deck-scroll" compact />
-        <UsagePanel dossier={dossier} index="08" className="deck-usage deck-scroll" compact />
+      </div>
       </div>
     </div>
   );
