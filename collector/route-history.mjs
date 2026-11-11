@@ -23,7 +23,8 @@ import { readFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import { put, get } from "@vercel/blob";
 import { DATA_DIR, topReposDeep } from "./lib.mjs";
-import { acceptUniverse } from "./guards.mjs";
+import { acceptUniverse, staleShards } from "./guards.mjs";
+import { readJsonStrict } from "./blob-read.mjs";
 import { markPartial, markComplete, readFresh, partialKey } from "./blob.mjs";
 
 const SHARDS = 32; // MUST match src/lib/rank-history.ts
@@ -49,18 +50,21 @@ function shardOf(repo) {
   return (h >>> 0) % SHARDS;
 }
 
-async function readJson(key, useCache = true) {
+// 404 -> null, any other failure THROWS (collector/blob-read.mjs), always from
+// origin. A swallowed error used to read as an empty shard/archive/meta and the
+// write-back erased it; a stale CDN copy erased 2026-11-03 in 9 shards. A throw
+// stops the script before the next write: the day stays open for the next run.
+async function readJson(key) {
   try {
-    // useCache=false bypasses the Blob CDN cache so a just-written object is read
-    // back from origin (a stale CDN copy would drop the same-run archive append).
-    const res = await get(key, { access: "private", token, useCache });
-    if (res?.statusCode === 200 && res.stream) {
-      return JSON.parse(await new Response(res.stream).text());
-    }
-  } catch {
-    /* missing or transient */
+    return await readJsonStrict(get, key, { token, useCache: false });
+  } catch (e) {
+    // leave a marker so the retry cap and the watchdog see it at once (a bare
+    // throw only showed up as a 36 h stale family), then stop before any write
+    const day = new Date().toISOString().slice(0, 10);
+    await markPartial("route-history", { day, reason: `read failed: ${String(e?.message ?? e).slice(0, 160)}` }).catch(() => {});
+    console.log(`[route-history] NOT recording ${day}: ${e?.message ?? e}. Nothing more written; the day stays open.`);
+    process.exit(0);
   }
-  return null;
 }
 
 async function writeJson(key, value) {
@@ -159,12 +163,31 @@ const cutoffIso = (() => {
   return all.length > CAP_DAYS ? all[all.length - CAP_DAYS] : all[0];
 })();
 
+// Read every hot shard FROM ORIGIN before writing any (useCache:false): on
+// 2026-11-04 the CDN served 9 shards as they were before 2026-11-03, and the
+// write-back erased that day for 2,676 repos. A shard that has data but lacks
+// the last recorded day is a stale read: nothing is written, the day stays
+// open for the next run, and the watchdog gets a marker.
+const hotShards = [];
+for (let i = 0; i < SHARDS; i++) {
+  const { today: tlist, seed: slist } = byShard[i];
+  hotShards.push(tlist.length || slist.length ? await readJson(`${PREFIX}/shard-${i}.json`) : null);
+}
+// with days recorded, every shard that gets repos today must exist: a missing
+// one is a lost read, not a new shard (10k repos fill all 32)
+const stale = staleShards(hotShards.map((h, i) => (h === null && (byShard[i].today.length || byShard[i].seed.length) ? { dates: [], series: { "?": [] } } : h)), lastDay);
+if (stale.length) {
+  await markPartial("route-history", { day: today, reason: `stale or missing shard(s) ${stale.join(",")}: no ${lastDay}` });
+  console.log(`[route-history] NOT recording ${today}: ${stale.length} shard(s) read without ${lastDay} (${stale.join(",")}): a stale copy, or a shard that is gone. Nothing written; the day stays open.`);
+  process.exit(0);
+}
+
 let totalPoints = 0;
 let maxShardBytes = 0;
 for (let i = 0; i < SHARDS; i++) {
   const { today: tlist, seed: slist } = byShard[i];
   if (!tlist.length && !slist.length) continue;
-  const shard = (await readJson(`${PREFIX}/shard-${i}.json`)) ?? { dates: [], series: {} };
+  const shard = hotShards[i] ?? { dates: [], series: {} };
   shard.dates ??= [];
   shard.series ??= {};
 
@@ -188,7 +211,7 @@ for (let i = 0; i < SHARDS; i++) {
   }
   if (evicting.length) {
     const aKey = `${PREFIX}/archive/shard-${i}.json`;
-    const arch = (await readJson(aKey, false)) ?? { series: {} };
+    const arch = (await readJson(aKey)) ?? { series: {} };
     arch.series ??= {};
     for (const [repo, day, rank, stars] of evicting) {
       const arr = (arch.series[repo] ??= []);

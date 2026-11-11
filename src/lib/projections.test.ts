@@ -155,12 +155,19 @@ describe("one gate eta on every surface", () => {
     "components/VerticalChart.tsx",
     "components/GalacticChart.tsx",
     "components/Projections.tsx",
-    "components/CommandDeck.tsx",
   ];
   const src = (f: string) => readFileSync(fileURLToPath(new URL(`../${f}`, import.meta.url)), "utf8");
   it.each(SURFACES)("%s takes its gate eta from milestoneEta", (f) => {
     const code = src(f);
     expect(code).toMatch(/\bmilestoneEta\(/);
+    expect(code).not.toMatch(/drift \?\? 0/);
+    expect(code).not.toMatch(/fmtEtaDays\([^)]*\/[^)]*\)/);
+  });
+  // The deck shows its gates through the Projections panel (it dropped its own
+  // NEXT GATE tile), so it must not grow a formula of its own again.
+  it("components/CommandDeck.tsx shows its gates through Projections", () => {
+    const code = src("components/CommandDeck.tsx");
+    expect(code).toMatch(/<Projections\b/);
     expect(code).not.toMatch(/drift \?\? 0/);
     expect(code).not.toMatch(/fmtEtaDays\([^)]*\/[^)]*\)/);
   });

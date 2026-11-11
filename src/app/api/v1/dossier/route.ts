@@ -24,7 +24,7 @@
 // covers everything.
 import { NextRequest, NextResponse } from "next/server";
 import { repoStats, repoOvertakes, SITE } from "@/lib/api-v1";
-import { getCachedDossier } from "@/lib/explorer";
+import { getCachedDossierChecked } from "@/lib/explorer";
 import { loadVitals } from "@/lib/vitals";
 import { loadMeta } from "@/lib/history";
 
@@ -100,11 +100,12 @@ export async function GET(req: NextRequest) {
   const stats = repoStats(repo);
   if (!stats) return BAD(`${repo} is not in the worldwide top-1000 registry`, 404);
 
-  const [dossier, vitals] = await Promise.all([
-    getCachedDossier(owner, name).catch(() => null),
+  const [checked, vitals] = await Promise.all([
+    getCachedDossierChecked(owner, name).catch(() => ({ dossier: null, partial: true })),
     loadVitals(owner, name).catch(() => null),
   ]);
 
+  const dossier = checked.dossier;
   // the window anchors on the newest day any series has, so ?range works even
   // when a feed is a few days behind
   const newest = [
@@ -268,6 +269,9 @@ export async function GET(req: NextRequest) {
 
       overtakes: repoOvertakes(repo),
     },
-    { headers: { "Cache-Control": "public, s-maxage=900, stale-while-revalidate=3600" } },
+    // a partial dossier (an npm call failed, or none at all) is served but not
+    // stored at the CDN either: the next reader retries instead of reading the
+    // gap for 15 minutes (#42)
+    { headers: { "Cache-Control": checked.partial ? "public, s-maxage=60" : "public, s-maxage=900, stale-while-revalidate=3600" } },
   );
 }
