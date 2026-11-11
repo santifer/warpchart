@@ -70,7 +70,7 @@ export interface Dossier extends DossierRaw {
 // private (e.g. santifer/career-ops keeps the app private but publishes the
 // `npx @santifer/career-ops` installer, ~4k downloads/month, which the bare
 // package.json lookup missed). First candidate with real download data wins.
-async function resolveNpmUsage(
+export async function resolveNpmUsage(
   owner: string,
   name: string,
   rootPkg: string | null,
@@ -84,25 +84,35 @@ async function resolveNpmUsage(
   npmVersionsStart: string | null;
   npmVersionsThrough: string | null;
   npmLatest: string | null; // npm's `latest` dist-tag today; the week above can predate it
+  npmTransient: boolean; // an npm call failed: the fields above may be missing, not absent
 }> {
   // Every name the repo has carried, canonical first (see npm-candidates.ts:
   // a transfer renames the repo, never the package).
   const candidates = npmCandidates(owner, name, rootPkg);
+  // set when a window/range call failed even after its retry: whatever this
+  // returns is then partial and must not be cached (see getCachedDossier)
+  let transient = false;
+  const onTransient = () => {
+    transient = true;
+  };
   for (const cand of candidates) {
     // Fetch the point total and the daily history in PARALLEL, so a candidate
-    // costs ~one 8s timeout instead of two back-to-back. No retry and no total
-    // race-cap (an earlier cap was cutting a slow-but-valid npm mid-resolution
-    // and blanking the whole npm channel): worst case is 3 candidates x ~8s =
+    // costs ~one 8s timeout instead of two back-to-back. No total race-cap (an
+    // earlier cap was cutting a slow-but-valid npm mid-resolution and blanking
+    // the whole npm channel). npmFetch retries a 5xx or a network error once,
+    // never a timeout or a 429, so the worst case stays 3 candidates x ~8s =
     // ~24s (a missing package is a fast 404, not a timeout, so in practice only
-    // the one that exists costs anything), under the /r/ maxDuration; npm resolves as reliably as a
-    // single lookup.
+    // the one that exists costs anything), under the /r/ maxDuration.
     const [dl, npmHistory, npmVersions, npmLatest] = await Promise.all([
-      npmDownloadsWindow(cand),
-      npmDownloadsRange(cand),
+      npmDownloadsWindow(cand, onTransient),
+      npmDownloadsRange(cand, onTransient),
       npmVersionWeek(cand),
       npmLatestVersion(cand),
     ]);
     if (dl !== null) {
+      // a package npm counts downloads for cannot have a year of zeros: an
+      // empty series next to a positive total is npm mid-reindex, not a fact
+      if (dl.downloads > 0 && npmHistory !== null && npmHistory.length === 0) onTransient();
       // holes out (see npm-gaps.ts); the 30-day total is npm's own and stays as
       // published, its missing days counted against npm's OWN window
       const cleaned = npmHistory ? cleanNpmSeries(npmHistory) : null;
@@ -123,18 +133,25 @@ async function resolveNpmUsage(
         npmVersionsStart: versions?.start ?? null,
         npmVersionsThrough: versions?.end ?? null,
         npmLatest,
+        npmTransient: transient,
       };
     }
   }
-  return { npmPkg: null, npmLast30: null, npmLast30MissingDays: null, npmLast30Estimate: null, npmHistory: null, npmVersions: null, npmVersionsStart: null, npmVersionsThrough: null, npmLatest: null };
+  return { npmTransient: transient, npmPkg: null, npmLast30: null, npmLast30MissingDays: null, npmLast30Estimate: null, npmHistory: null, npmVersions: null, npmVersionsStart: null, npmVersionsThrough: null, npmLatest: null };
 }
 
 // standalone cached dossier for routes that don't run the full explorer
 // assembly (the house and hosted-tenant consoles, AND the /r/ explorer panels)
 export async function fetchDossier(owner: string, name: string): Promise<Dossier | null> {
+  return (await fetchDossierChecked(owner, name)).dossier;
+}
+
+// fetchDossier plus whether an npm call failed on the way: a dossier built on a
+// failed npm call is served but never cached (getCachedDossier)
+async function fetchDossierChecked(owner: string, name: string): Promise<{ dossier: Dossier | null; partial: boolean }> {
   try {
     const raw = await repoDossier(owner, name);
-    const { npmPkg, npmLast30, npmLast30MissingDays, npmLast30Estimate, npmHistory, npmVersions, npmVersionsStart, npmVersionsThrough, npmLatest } = await resolveNpmUsage(owner, name, raw.npmPkg);
+    const { npmPkg, npmLast30, npmLast30MissingDays, npmLast30Estimate, npmHistory, npmVersions, npmVersionsStart, npmVersionsThrough, npmLatest, npmTransient } = await resolveNpmUsage(owner, name, raw.npmPkg);
     // git clones are the owner's PRIVATE traffic — surface them as a second
     // acquisition channel ONLY for the public house repo (its vault is the
     // opt-in demo). Unique cloners/day = the real-people proxy (raw count
@@ -186,7 +203,7 @@ export async function fetchDossier(owner: string, name: string): Promise<Dossier
     // and the panel read as stale. The real problem was the CHART drawing a
     // missing npm day as zero; UsageChart now ends each line at its own last
     // real day instead, so nothing has to be discarded to keep it honest.
-    return {
+    const dossier: Dossier = {
       ...raw,
       npmPkg,
       npmLast30,
@@ -201,6 +218,7 @@ export async function fetchDossier(owner: string, name: string): Promise<Dossier
       uniqueCloners14d,
       uniqueCloners14dAt,
     };
+    return { dossier, partial: npmTransient };
   } catch (err) {
     // A swallowed error here blanks BOTH dossier panels ("NO PUBLIC
     // DISTRIBUTION ARTIFACTS" + an empty maintenance pulse) with no trace
@@ -212,7 +230,7 @@ export async function fetchDossier(owner: string, name: string): Promise<Dossier
       repo: `${owner}/${name}`,
       err: err instanceof Error ? err.message.slice(0, 160) : String(err),
     });
-    return null;
+    return { dossier: null, partial: false };
   }
 }
 
@@ -224,15 +242,53 @@ export async function fetchDossier(owner: string, name: string): Promise<Dossier
 // null is retried live, once. The cost lands only on the failing path; a
 // healthy repo never pays it, and a genuinely broken one degrades exactly as
 // before instead of staying broken for a quarter of an hour.
-export const getCachedDossier = async (owner: string, name: string): Promise<Dossier | null> => {
-  const cached = await cachedDossier(owner, name);
-  if (cached) return cached;
-  return fetchDossier(owner, name);
+//
+// The same goes for a PARTIAL dossier: GitHub answered but an npm call failed
+// even after its retry. Cached, it showed the REAL USAGE chart with the clone
+// bars only and no npm for 15 minutes, so what you saw depended on the hour
+// (Santiago, 2026-11-10). It is now served to this reader and never stored,
+// the same way getCachedExplorerData treats a degraded result.
+class PartialDossier extends Error {
+  constructor(public data: Dossier | null) {
+    super("__partial_dossier__");
+  }
+}
+
+export const getCachedDossier = async (owner: string, name: string): Promise<Dossier | null> =>
+  (await getCachedDossierChecked(owner, name)).dossier;
+
+// the same, telling a caller with its own cache (the /api/v1 CDN headers)
+// whether what it got is partial and so must not be stored either
+export const getCachedDossierChecked = async (
+  owner: string,
+  name: string,
+): Promise<{ dossier: Dossier | null; partial: boolean }> => {
+  let cached: Dossier | null;
+  try {
+    cached = await cachedDossier(owner, name);
+  } catch (err) {
+    if (err instanceof PartialDossier) return { dossier: err.data, partial: true };
+    throw err;
+  }
+  if (cached) return { dossier: cached, partial: false };
+  const live = await fetchDossierChecked(owner, name);
+  return { dossier: live.dossier, partial: live.partial || live.dossier === null };
 };
+
+// what the cache stores: a whole dossier, or nothing (a throw is not stored)
+export async function dossierForCache(
+  owner: string,
+  name: string,
+  fetcher: (o: string, n: string) => Promise<{ dossier: Dossier | null; partial: boolean }> = fetchDossierChecked,
+): Promise<Dossier | null> {
+  const { dossier, partial } = await fetcher(owner, name);
+  if (partial) throw new PartialDossier(dossier);
+  return dossier;
+}
 
 const cachedDossier = (owner: string, name: string) =>
   unstable_cache(
-    () => fetchDossier(owner, name),
+    () => dossierForCache(owner, name),
     // v8: invalidate entries cached by the short-lived npm total-cap that stored
     // a null npm (unstable_cache is not deploy-scoped, so the bad entry survived
     // the fix). Bumping the key forces a fresh resolve on next view.
@@ -247,7 +303,9 @@ const cachedDossier = (owner: string, name: string) =>
     // v11: adds uniqueCloners14d. CHANGE THE SHAPE, CHANGE THE KEY, SAME COMMIT.
     // v15: adds npmLast30MissingDays/npmLast30Estimate; npm holes dropped from npmHistory.
     // v16: vitals contributors = GitHub's sidebar count, may be null.
-    ["dossier-v17", `${owner}/${name}`.toLowerCase()],
+    // v18: a dossier built on a failed npm call is no longer stored; v17
+    // entries may still hold one (served stale while revalidating), so drop them.
+    ["dossier-v18", `${owner}/${name}`.toLowerCase()],
     { revalidate: 900 },
   )();
 
@@ -263,6 +321,7 @@ export interface ExplorerData {
   // (the page renders fine without it)
   dossier: Dossier | null;
   degraded: boolean; // velocity telemetry unavailable this refresh
+  npmPartial: boolean; // an npm call failed: the dossier's npm may be missing, not absent (never cached)
   generatedAt: string;
 }
 
@@ -425,10 +484,12 @@ export async function getExplorerData(owner: string, name: string): Promise<Expl
   // the dossier (maintenance pulse + real usage) is best-effort: one extra
   // GraphQL call plus an unauthenticated npm lookup, never page-fatal
   let dossier: Dossier | null = null;
+  let npmPartial = false;
   try {
     const [o, n] = repoName.split("/");
     const raw = await repoDossier(o, n);
-    const { npmPkg, npmLast30, npmLast30MissingDays, npmLast30Estimate, npmHistory, npmVersions, npmVersionsStart, npmVersionsThrough, npmLatest } = await resolveNpmUsage(o, n, raw.npmPkg);
+    const { npmPkg, npmLast30, npmLast30MissingDays, npmLast30Estimate, npmHistory, npmVersions, npmVersionsStart, npmVersionsThrough, npmLatest, npmTransient } = await resolveNpmUsage(o, n, raw.npmPkg);
+    npmPartial = npmTransient;
     // clones (private traffic) are surfaced only via the cached dossier path
     // (getCachedDossier -> fetchDossier), which the panels actually render
     dossier = { ...raw, npmPkg, npmLast30, npmLast30MissingDays, npmLast30Estimate, npmHistory, npmVersions, npmVersionsStart, npmVersionsThrough, npmLatest, clonesHistory: null,
@@ -447,6 +508,7 @@ export async function getExplorerData(owner: string, name: string): Promise<Expl
     forkPercentile,
     dossier,
     degraded,
+    npmPartial,
     generatedAt: new Date().toISOString(),
   };
 }
@@ -464,13 +526,15 @@ class DegradedResult extends Error {
 const getCachedExplorerData = unstable_cache(
   async (owner: string, name: string) => {
     const data = await getExplorerData(owner, name);
-    if (data?.degraded) throw new DegradedResult(data);
+    // a failed npm call is as transient as missing velocity telemetry (#42)
+    if (data?.degraded || data?.npmPartial) throw new DegradedResult(data);
     return data;
   },
   // v4: neighbors gained trend/v7_to and inputs vTrend/vAsOf (v7 window fix);
   // v3: the dossier inside gained npmLatest (same commit as dossier-v17);
   // v2: npmLast30MissingDays/npmLast30Estimate, npm's holes out (dossier-v15)
-  ["explorer-data-v4"],
+  // v5: adds npmPartial; an entry built on a failed npm call is no longer stored
+  ["explorer-data-v5"],
   { revalidate: 900 },
 );
 
@@ -496,7 +560,9 @@ export async function loadExplorerData(
     return await getCachedExplorerData(owner, name);
   } catch (err) {
     if (err instanceof DegradedResult) {
-      degradedCache.set(key, { data: err.data, until: Date.now() + 180_000 });
+      // the 3-minute memo is for a GitHub storm (velocity); an npm blip alone
+      // is cheap to retry and should heal on the next view
+      if (err.data.degraded) degradedCache.set(key, { data: err.data, until: Date.now() + 180_000 });
       return err.data;
     }
     // a real "repository not found" -> null (caller decides 404 vs graceful);

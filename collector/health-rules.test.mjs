@@ -481,6 +481,13 @@ describe("npmUsageFreshness", () => {
     const r = npmUsageFreshness({ versions: { through: "2026-10-04" }, last30MissingDays: 4, last30Estimate: null }, "2026-10-09");
     expect(r.severity).toBe("warn");
   });
+  it("warns when the package has installs but the daily series is missing (#42)", () => {
+    const r = npmUsageFreshness({ package: "@santifer/career-ops", last30: 21562, series: null, versions: { through: "2026-11-09" }, latest: "1.40.0" }, "2026-11-11");
+    expect(r.severity).toBe("warn");
+    expect(r.note).toMatch(/no daily series/);
+    const ok = npmUsageFreshness({ package: "@santifer/career-ops", last30: 21562, series: { points: [{ day: "2026-11-08", d: 939 }, { day: "2026-11-09", d: 1378 }] }, versions: { through: "2026-11-09" }, latest: "1.40.0" }, "2026-11-11");
+    expect(ok.severity).toBeNull();
+  });
   it("warns when the breakdown has not moved for more than ten days", () => {
     expect(npmUsageFreshness({ versions: { through: "2026-09-25" } }, "2026-10-09").severity).toBe("warn");
   });

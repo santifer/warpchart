@@ -528,6 +528,11 @@ export function curveEndsOnTotal(curve) {
 // expected upstream noise, reported, never critical.
 export function npmUsageFreshness(npm, todayISO, maxAgeDays = 10) {
   if (!npm) return { severity: null, note: "no npm channel" };
+  // a package with a 30-day total and no daily series is the REAL USAGE chart
+  // drawing clone bars only (#42, 2026-11-10: it came and went with the hour)
+  if (npm.package && (npm.last30 ?? 0) > 0 && !(npm.series?.points?.length >= 2)) {
+    return { severity: "warn", ageDays: null, note: `${npm.package} has ${npm.last30} installs in 30 days but no daily series: the usage chart shows no npm bars` };
+  }
   const through = npm.versions?.through ?? null;
   const ageDays = through ? Math.round((Date.parse(`${todayISO}T00:00:00Z`) - Date.parse(`${through}T00:00:00Z`)) / 864e5) : null;
   const floor = npm.last30IsLowerBound ? `last30 is a floor (${npm.last30MissingDays} of 30 days missing in npm's data)` : "";
