@@ -480,20 +480,50 @@ export async function repoDossier(owner: string, name: string): Promise<DossierR
 // npm registry downloads (no auth, generous limits); null when not a package.
 // Carries npm's own window (start/end): the holes are counted against THAT
 // window, never against the last day the daily series happens to reach.
+// A failed npm call (timeout, 429, 5xx) is NOT "no package": only a 404 says
+// that. npmFetch retries a failure once and reports what still fails through
+// onTransient, so the caller can refuse to cache a panel built on it (see
+// getCachedDossier: a cached transient null hid career-ops' npm bars for a
+// whole 15-minute window, depending on the hour you looked).
+export async function npmFetch(url: string, onTransient?: () => void): Promise<Response | null> {
+  let status: number | string = "error";
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      const res = await fetch(url, { signal: AbortSignal.timeout(8000) });
+      if (res.ok || res.status === 404) return res;
+      status = res.status;
+      // a 429 is npm asking us to slow down: a retry 400 ms later from the
+      // same shared egress only adds load. Retry 5xx only.
+      if (res.status < 500) break;
+    } catch (err) {
+      // a timeout already cost 8 s; a second one would push a repo with three
+      // npm candidates past the route's maxDuration. Retry network errors only.
+      status = err instanceof Error && err.name === "TimeoutError" ? "timeout" : "network";
+      if (status === "timeout") break;
+    }
+    if (attempt === 0) await new Promise((r) => setTimeout(r, 400));
+  }
+  ghlog.warn("npm.transient", { url: url.replace("https://api.npmjs.org", ""), status });
+  onTransient?.();
+  return null;
+}
+
 export async function npmDownloadsWindow(
   pkg: string,
+  onTransient?: () => void,
 ): Promise<{ downloads: number; start: string; end: string } | null> {
   try {
-    const res = await fetch(
+    const res = await npmFetch(
       `https://api.npmjs.org/downloads/point/last-month/${encodeURIComponent(pkg)}`,
-      { signal: AbortSignal.timeout(8000) }
+      onTransient,
     );
-    if (!res.ok) return null;
+    if (!res || !res.ok) return null;
     const j = (await res.json()) as { downloads?: number; start?: string; end?: string };
     return typeof j.downloads === "number" && typeof j.start === "string" && typeof j.end === "string"
       ? { downloads: j.downloads, start: j.start, end: j.end }
       : null;
   } catch {
+    onTransient?.(); // a body that will not parse is a failed call, not an answer
     return null;
   }
 }
@@ -504,19 +534,21 @@ export async function npmDownloadsWindow(
 // package; [] = published but no downloads yet.
 export async function npmDownloadsRange(
   pkg: string,
+  onTransient?: () => void,
 ): Promise<{ day: string; d: number }[] | null> {
   try {
-    const res = await fetch(
+    const res = await npmFetch(
       `https://api.npmjs.org/downloads/range/last-year/${encodeURIComponent(pkg)}`,
-      { signal: AbortSignal.timeout(8000) }
+      onTransient,
     );
-    if (!res.ok) return null;
+    if (!res || !res.ok) return null;
     const j = (await res.json()) as { downloads?: { day: string; downloads: number }[] };
     const arr = j.downloads ?? [];
     const first = arr.findIndex((p) => p.downloads > 0);
     if (first === -1) return [];
     return arr.slice(first).map((p) => ({ day: p.day, d: p.downloads }));
   } catch {
+    onTransient?.();
     return null;
   }
 }

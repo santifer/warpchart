@@ -28,6 +28,9 @@ const BASE_W = 1200;
 // canvas (real room measured from the screen, not scaled pixels) inside
 // the component.
 const BASE_H = 520;
+// on-screen px per canvas unit of the console's star chart on a desktop
+// (the 1200-unit canvas fills the ~1352 px panel of the 1440 max-width page)
+const CONSOLE_PX_PER_UNIT = 1352 / 1200;
 // deck canvas without the route band: band A's clip (556) plus a margin
 export const DECK_LOCAL_H = 572;
 const BASE_BAND_A_Y = 200; // headroom above keeps three label tiers clear of the header
@@ -98,6 +101,8 @@ export default function GalacticChart({
   deckW,
   noRoute = false,
   deckPx,
+  hideHelp = false,
+  shortBand = false,
   fitW,
   charted,
 }: {
@@ -125,6 +130,11 @@ export default function GalacticChart({
   // on-screen width of the deck canvas in CSS px: lets the type keep a
   // legible floor instead of only following the canvas width
   deckPx?: number;
+  // the deck has no touch interaction: drop the pan/zoom how-to lines
+  hideHelp?: boolean;
+  // Command Deck ladder-led layout: the race is a short band, so passed
+  // ships (below the line) stay dots with their data on hover
+  shortBand?: boolean;
   // Same idea for wide inline showcases (landing spotlight): the measured
   // container width becomes the canvas width, so type stays at design size
   // and wide monitors get more map instead of giant letters.
@@ -136,7 +146,9 @@ export default function GalacticChart({
   const W = deck
     ? Math.min(Math.max(Math.round(deckW ?? 1680), 1200), 4800)
     : fitW
-      ? Math.min(Math.max(Math.round(fitW), 1200), 2400)
+      ? // up to 4000 for the Command Deck's short, wide race band (the
+        // console passes at most 2400)
+        Math.min(Math.max(Math.round(fitW), 1200), 4000)
       : BASE_W;
   const H = deck ? (noRoute ? DECK_LOCAL_H : 740) : BASE_H;
   // 310: the deck's scaled label tiers need the extra headroom above the band
@@ -160,10 +172,19 @@ export default function GalacticChart({
     ? noRoute
       ? Math.min(2.7, Math.max(1.1, W / 1300, fsFloor))
       : Math.min(1.8, Math.max(0.95, W / 1550))
-    : 1;
+    : fitW && deckPx
+      ? // the Command Deck draws the console chart at its own size: the type
+        // is scaled so a label renders at exactly the console's pixel size
+        // (console: 1200-unit canvas in a ~1352 px panel on desktop, x1.127)
+        Math.min(4.2, CONSOLE_PX_PER_UNIT * (W / deckPx))
+      : 1;
   // vertical step between label tiers; the deck's larger type needs a full
   // free line between two stacked labels so they never read as one block
-  const TIER_STEP = noRoute ? 50 : 40;
+  // the console chart inside the Command Deck with its type scaled up (a
+  // short hero): each label folds to two lines (name / gap · speed · eta)
+  // so the stack fits the canvas instead of running off its top
+  const twoLine = !deck && !!fitW && !!deckPx && fs > 1.15;
+  const TIER_STEP = noRoute ? 50 : twoLine ? 30 : 40;
   // The auto-zoom keeps its own, older scale: tying the zoom to the bigger
   // type widened the span and pushed the nearest rivals out of the window.
   // Bigger labels are resolved by the deck's extra tiers, not by zooming out.
@@ -891,6 +912,9 @@ export default function GalacticChart({
   // claim tiers first; whoever finds no free tier SHEDS its label and stays
   // as a bare dot (tier -1), with all its data still on hover.
   const tiers: number[] = new Array(items.length).fill(-1);
+  // labels that found no centered slot and hang to the RIGHT of their ship
+  // (text-anchor start) instead of shedding to a bare dot (short deck hero)
+  const startAnchored = new Set<number>();
   {
     // the deck's taller canvas buys two extra tiers per side
     // Tier spacing and the label's own line offsets scale with fs (fs is 1
@@ -898,9 +922,15 @@ export default function GalacticChart({
     // tiers whose text still lands below the LOCAL SYSTEM hint (y ≈ 56).
     const nTiers = deck
       ? Math.max(2, Math.min(5, Math.floor((BAND_A_Y - 69 * fs - 56) / (TIER_STEP * fs)) + 1))
-      : 3;
+      : twoLine
+        ? // only tiers whose name still lands inside the canvas; the rest shed
+          // to bare dots (data on hover), never a clipped half label
+          Math.max(1, Math.min(3, Math.floor((BAND_A_Y - 72 * fs - 8) / (TIER_STEP * fs)) + 1))
+        : 3;
     const rowsAbove: number[] = new Array(nTiers).fill(-1e9); // rightmost occupied edge per tier
-    const rowsBelow: number[] = new Array(nTiers).fill(-1e9);
+    // in a short deck hero the passed ships get one row: a second one would
+    // reach the ROUTE TO THE CORE title (Prompt-Engineering-Guide on it at 1440)
+    const rowsBelow: number[] = new Array(shortBand ? 0 : twoLine ? 1 : nTiers).fill(-1e9);
     // label priority: hunters first (the chart's most urgent object must
     // never be shed in dense zones), then chase targets with an eta, then
     // the rest of the neighbors, route dots last
@@ -922,6 +952,7 @@ export default function GalacticChart({
       // chase: their catch eta is the most urgent number on the chart
       const hunts = it.kind === "n" && it.n.gap <= 0 && it.n.catchDays !== null;
       const rows = it.kind === "n" && it.n.gap <= 0 && !hunts ? rowsBelow : rowsAbove;
+      if (rows.length === 0) continue; // no row on this side: a bare dot
       let tier = 0;
       let fits = true;
       while (x - halfW < rows[tier] + 8) {
@@ -930,6 +961,24 @@ export default function GalacticChart({
           break;
         }
         tier++;
+      }
+      if (!fits && twoLine && it.kind === "n") {
+        // second chance: the label starts at its ship and runs right, into
+        // the free space past the stack (an unlabeled dot cannot be read on
+        // a wall screen nobody hovers)
+        const xs = ax(it.s) + 6;
+        const span = halfW * 2 - 20;
+        if (xs + span <= W - 8) {
+          for (let t = 0; t < rows.length; t++) {
+            if (xs - 10 >= rows[t] + 8) {
+              rows[t] = xs + span + 10;
+              tiers[i] = t;
+              startAnchored.add(i);
+              break;
+            }
+          }
+        }
+        continue;
       }
       if (!fits) continue; // sheds its label
       rows[tier] = Math.max(rows[tier], x + halfW);
@@ -1113,7 +1162,7 @@ export default function GalacticChart({
             LOCAL SYSTEM
           </text>
           {/* how-to lines are console help, not data: the deck drops them */}
-          {!deck ? (
+          {!deck && !hideHelp ? (
             <text x={40} y={47} fill={C.faint} fontSize={10.5 * fs}>
               scroll sideways to pan · pinch to zoom · doppler tails: length = speed gap · blue = you gain the duel, red = it outruns you
             </text>
@@ -1417,12 +1466,17 @@ export default function GalacticChart({
                 }
                 const hunts = !isAhead && n.catchDays !== null;
                 const labelAbove = isAhead || hunts;
+                // in the deck a passed ship's block sits a clear gap below the
+                // hero's own label, so it never reads as career-ops' subtitle
+                const belowBase = fitW && deckPx ? 78 : 64;
                 const tierY = labelAbove
                   ? BAND_A_Y - 44 * fs - tiers[i] * TIER_STEP * fs
-                  : BAND_A_Y + 64 * fs + tiers[i] * 34 * fs;
+                  : BAND_A_Y + belowBase * fs + tiers[i] * 34 * fs;
                 // the label block stays inside the canvas: near an edge it slides
                 // inward (the leader line still drops from the ship's own x)
-                const lx = labelX(x, trunc(shortName(n.r)));
+                const anchorStart = startAnchored.has(i);
+                const lx = anchorStart ? x + 6 : labelX(x, trunc(shortName(n.r)));
+                const anchor = anchorStart ? "start" : "middle";
                 const lineY1 = labelAbove ? tierY + 8 * fs : BAND_A_Y + 6;
                 const lineY2 = labelAbove ? BAND_A_Y - 5 : tierY - 24 * fs;
                 return (
@@ -1463,33 +1517,44 @@ export default function GalacticChart({
                       </>
                     ) : null}
                     <circle className="nbr-dot" cx={x} cy={BAND_A_Y} r={3.2} fill={color} opacity={isAhead ? 0.95 : 0.55} />
-                    {nodeSigil(n.r, lx, tierY - 13 * fs, trunc(shortName(n.r)))}
+                    {nodeSigil(n.r, anchorStart ? lx + (trunc(shortName(n.r)).length * 7.6 * fs) / 2 : lx, tierY - 13 * fs, trunc(shortName(n.r)))}
                     <text className="nbr-name" x={lx} y={tierY - 13 * fs} fill={labelAbove ? C.ink : C.faint} fontSize={12.5 * fs}
-                      textAnchor="middle">
+                      textAnchor={anchor}>
                       {trunc(shortName(n.r))}
                     </text>
                     {/* passed ships compress to two lines so the below band
                         never outgrows its tier spacing or the clip */}
-                    <text x={lx} y={tierY + 1 * fs} fill={C.dim} fontSize={11 * fs} textAnchor="middle">
-                      {fmtSignedGap(n.gap)} · {Math.round(n.v)}/d
-                      {!labelAbove ? " · passed" : ""}
-                    </text>
-                    {labelAbove ? (
-                      <text x={lx} y={tierY + 14 * fs} fontSize={11 * fs} textAnchor="middle"
-                        fill={hunts ? color : n.receding ? C.warn : C.accent}>
-                        {hunts
+                    {(() => {
+                      const third = hunts
+                        ? unsteadyLabel(n.unsteady)
+                          ? `closing in · ${unsteadyLabel(n.unsteady)}`
+                          : `catches you in ${etaText(n, n.catchDays)}`
+                        : n.receding
                           ? unsteadyLabel(n.unsteady)
-                            ? `closing in · ${unsteadyLabel(n.unsteady)}`
-                            : `catches you in ${etaText(n, n.catchDays)}`
-                          : n.receding
-                            ? unsteadyLabel(n.unsteady)
-                              ? `no firm eta · ${unsteadyLabel(n.unsteady)}`
-                              : "pulling away"
-                            : unsteadyLabel(n.unsteady)
-                              ? `no firm eta · ${unsteadyLabel(n.unsteady)}`
-                              : `eta ${etaText(n, n.etaDays)}`}
-                      </text>
-                    ) : null}
+                            ? `no firm eta · ${unsteadyLabel(n.unsteady)}`
+                            : "pulling away"
+                          : unsteadyLabel(n.unsteady)
+                            ? `no firm eta · ${unsteadyLabel(n.unsteady)}`
+                            : `eta ${etaText(n, n.etaDays)}`;
+                      const thirdFill = hunts ? color : n.receding ? C.warn : C.accent;
+                      return (
+                        <>
+                          {/* passed ships compress to two lines so the below band
+                              never outgrows its tier spacing or the clip; in a short
+                              deck hero every label folds to two lines */}
+                          <text x={lx} y={tierY + 1 * fs} fill={C.dim} fontSize={11 * fs} textAnchor={anchor}>
+                            {fmtSignedGap(n.gap)} · {Math.round(n.v)}/d
+                            {!labelAbove ? " · passed" : ""}
+                            {twoLine && labelAbove ? <tspan fill={thirdFill}> · {third}</tspan> : null}
+                          </text>
+                          {labelAbove && !twoLine ? (
+                            <text x={lx} y={tierY + 14 * fs} fontSize={11 * fs} textAnchor="middle" fill={thirdFill}>
+                              {third}
+                            </text>
+                          ) : null}
+                        </>
+                      );
+                    })()}
                   </g>
                 );
               }
@@ -1668,7 +1733,7 @@ export default function GalacticChart({
           <text x={40} y={BAND_B_Y - 88} fill={C.dim} fontSize={12 * fs} letterSpacing={4} className="font-display">
             ROUTE TO THE CORE
           </text>
-          {!deck ? (
+          {!deck && !hideHelp ? (
             <text x={40} y={BAND_B_Y - 71} fill={C.faint} fontSize={10.5 * fs}>
               distance scale, widest around you · every dot is a top 1000 repo · [ ] marks the window above
             </text>
@@ -1716,15 +1781,25 @@ export default function GalacticChart({
           ))}
 
           {inputs.routeLandmarks
-            .filter((p) => Math.abs(bx(p.s) - bx(stars)) > 150)
+            // clear of the "you are here" label, whose width grows with the type
+            .filter((p) => Math.abs(bx(p.s) - bx(stars)) > 150 * Math.max(1, fs))
             .map((p, i) => (
               <g key={p.r}>
                 <line x1={bx(p.s)} y1={BAND_B_Y + 6} x2={bx(p.s)} y2={BAND_B_Y + 26 + (i % 2) * 13 * fs}
                   stroke={C.grid} strokeWidth={1} />
-                <text x={bx(p.s)} y={BAND_B_Y + 38 + (i % 2) * 13 * fs} fill={C.dim} fontSize={11 * fs}
-                  textAnchor="middle">
-                  {shortName(p.r)} · {fmtCompact(p.s)}
-                </text>
+                {(() => {
+                  // near the right edge the label ends at the edge instead of
+                  // running past it ("public-apis · 49(" at 1440)
+                  const txt = `${shortName(p.r)} · ${fmtCompact(p.s)}`;
+                  const half = (txt.length * 6.7 * fs) / 2;
+                  const over = bx(p.s) + half > W - 8;
+                  return (
+                    <text x={over ? W - 8 : bx(p.s)} y={BAND_B_Y + 38 + (i % 2) * 13 * fs} fill={C.dim} fontSize={11 * fs}
+                      textAnchor={over ? "end" : "middle"}>
+                      {txt}
+                    </text>
+                  );
+                })()}
               </g>
             ))}
 

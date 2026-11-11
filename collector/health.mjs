@@ -1213,13 +1213,17 @@ async function checkPresence() {
         const months = rec?.to ? (meta?.months ?? []).filter((m) => m >= rec.to.slice(0, 7)) : [];
         const got = await Promise.all(months.map((m) => blobJson(`velocity-rank/${m}.json`).catch(() => undefined)));
         const tableDays = got.every((g) => g?.days) ? got.flatMap((g) => g.days.map((d) => d.day)) : null;
-        const rr = velocityRankReconstructed(rec, tableDays);
+        // the gap file is optional: null = none (or a swallowed read error, which errs to a warning); undefined = unparseable, skipped
+        const gapFile = await blobJson("velocity-rank/reconstructed-gaps.json").catch(() => undefined);
+        const rr = gapFile === undefined
+          ? { severity: null, note: "gap reconstruction unreadable this run; gaps not compared" }
+          : velocityRankReconstructed(rec, tableDays, gapFile);
         if (rr.severity) r = rr;
         else r = { severity: null, note: `${r.note}; ${rr.note}` };
       }
     }
     if (r.severity) fail("presence.velocity-rank", "PRESENCE", r.severity, r.note,
-      "collector/velocity-rank.mjs runs in collect.yml right after route-history and rebuilds velocity-rank/{YYYY-MM}.json from the 64 rank-history shards; it refuses (partial marker 'velocity-rank') on any unreadable shard or when the table would lose days. The reconstructed part (before 14 Jun, plus the days cut-short sweeps left out after it) is velocity-rank/reconstructed.json, made by hand with collector/velocity-rank-backfill.mjs: a new gap after its TO needs a re-run with a later TO (and page 2 of /stargazers/history once page 1 no longer reaches FROM). Bump the cache key in src/lib/velocity-rank.ts when re-uploading. Look at its log line in the last collect run. If it refused because the table would lose days and that is real, rebuild once by hand: BLOB_READ_WRITE_TOKEN=... node collector/velocity-rank.mjs --force.");
+      "collector/velocity-rank.mjs runs in collect.yml right after route-history and rebuilds velocity-rank/{YYYY-MM}.json from the 64 rank-history shards; it refuses (partial marker 'velocity-rank') on any unreadable shard or when the table would lose days. The reconstructed part (before 14 Jun, plus the days cut-short sweeps left out after it) is velocity-rank/reconstructed.json, made by hand with collector/velocity-rank-backfill.mjs: a new gap after its TO is rebuilt in GAP MODE (VR_GAP_FROM/VR_GAP_TO), one window per hole added to velocity-rank/reconstructed-gaps.json. Bump the matching cache key in src/lib/velocity-rank.ts after an upload. Look at its log line in the last collect run. If it refused because the table would lose days and that is real, rebuild once by hand: BLOB_READ_WRITE_TOKEN=... node collector/velocity-rank.mjs --force.");
     else pass("presence.velocity-rank", "PRESENCE", r.note);
   });
 

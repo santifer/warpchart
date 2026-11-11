@@ -1474,6 +1474,14 @@ body.gx-warping .ghx-lore {
     display: none;
   }
 }
+/* a half-width deck cell: "operated by" yields to the title and the ALIVE
+   state. The panel meta stays (it carries the data's window and date,
+   "through Nov 2", "last 30 days"): it truncates, it is never hidden */
+@container (max-width: 760px) {
+  .deck-view header .vs-operated {
+    display: none !important;
+  }
+}
 /* Next gates: each dense row measures ~43px; a size container query reads
    the content box (padding excluded), so N rows need N×43; the body (the panel's last child)
    is a size container, and rows that would be cut are not drawn at all */
@@ -1547,7 +1555,8 @@ body.gx-warping .ghx-lore {
     grid-column: 9 / span 4;
     grid-row: 1;
   }
-  .deck-rank {
+  /* world rank sits next to the daily ladder: same 62 days, same marks */
+  .deck-cum {
     grid-column: 9 / span 4;
     grid-row: 2;
   }
@@ -1559,9 +1568,46 @@ body.gx-warping .ghx-lore {
     grid-column: 4 / span 6;
     grid-row: 3;
   }
-  .deck-cum {
+  .deck-rank {
     grid-column: 10 / span 3;
     grid-row: 3;
+  }
+}
+/* GROWTH, ladder-led layout (under trial, toggled with L): the race is a
+   shorter band on top beside the gates, the daily ladder takes the large
+   cell beside cumulative and world rank, stars/hour runs along the bottom */
+@media (min-width: 1280px) and (min-height: 820px) {
+  .deck-body.deck-body--ladder {
+    grid-template-rows: minmax(250px, 1.4fr) minmax(140px, 1fr) minmax(140px, 1fr) minmax(190px, 1fr);
+  }
+  .deck-body--ladder .deck-hero {
+    grid-column: 1 / span 8;
+    grid-row: 1;
+  }
+  .deck-body--ladder .deck-proj {
+    grid-column: 9 / span 4;
+    grid-row: 1;
+  }
+  .deck-body--ladder .deck-ladder {
+    grid-column: 1 / span 8;
+    grid-row: 2 / span 2;
+  }
+  /* right column: world rank, then the two pace charts side by side in
+     the bottom row with the ladder's full width freed above them */
+  /* height goes to the series whose shape needs it: world rank's steps
+     and stars/hour's daily profile take the right column; cumulative, a
+     monotone curve, reads fine as the low strip under the ladder */
+  .deck-body--ladder .deck-vel {
+    grid-column: 9 / span 4;
+    grid-row: 2 / span 3;
+  }
+  .deck-body--ladder .deck-cum {
+    grid-column: 1 / span 4;
+    grid-row: 4;
+  }
+  .deck-body--ladder .deck-rank {
+    grid-column: 5 / span 4;
+    grid-row: 4;
   }
 }
 /* ultrawide (21:9 and wider): wall-panel zoom fills the height; the spare
@@ -1575,7 +1621,7 @@ body.gx-warping .ghx-lore {
     grid-column: 1 / span 7;
   }
   .deck-proj,
-  .deck-rank {
+  .deck-cum {
     grid-column: 8 / span 5;
   }
   .deck-vel {
@@ -1584,8 +1630,25 @@ body.gx-warping .ghx-lore {
   .deck-ladder {
     grid-column: 4 / span 6;
   }
-  .deck-cum {
+  .deck-rank {
     grid-column: 10 / span 3;
+  }
+  .deck-body.deck-body--ladder {
+    grid-template-rows: minmax(250px, 1.4fr) minmax(140px, 1fr) minmax(140px, 1fr) minmax(190px, 1fr);
+  }
+  .deck-body--ladder .deck-hero,
+  .deck-body--ladder .deck-ladder {
+    grid-column: 1 / span 7;
+  }
+  .deck-body--ladder .deck-proj,
+  .deck-body--ladder .deck-vel {
+    grid-column: 8 / span 5;
+  }
+  .deck-body--ladder .deck-cum {
+    grid-column: 1 / span 4;
+  }
+  .deck-body--ladder .deck-rank {
+    grid-column: 5 / span 3;
   }
 }
 /* Real usage as a strip of three when its cell is wide */
@@ -1598,8 +1661,16 @@ body.gx-warping .ghx-lore {
   .deck-usage-rows > * {
     border-top-width: 0 !important;
   }
+  /* in the strip each figure sits beside its label, KPI-tile style, and
+     the list's row dividers go */
   .deck-usage-rows .usage-row {
-    grid-template-columns: minmax(0, 1fr) auto !important;
+    grid-template-columns: auto auto !important;
+    justify-content: start;
+    column-gap: 1.5rem;
+  }
+  .deck-usage-rows,
+  .deck-usage-rows * {
+    border-width: 0 !important;
   }
 }
 
@@ -1620,6 +1691,340 @@ body.gx-warping .ghx-lore {
   flex-direction: column;
   gap: 0.5rem;
   min-width: 0;
+  min-height: 0;
+}
+/* the last panel of a column takes what is left and scrolls inside, so a
+   column never ends early or runs past the frame */
+.deck-view-main > :last-child,
+.deck-view-side > :last-child {
+  flex: 1;
+  min-height: 0;
+}
+/* HEALTH side: PR flow grows, the pulse below it keeps its content height */
+.deck-view-side > .deck-prflow {
+  flex: 1;
+  min-height: 0;
+}
+.deck-view-side > .deck-prflow ~ :last-child {
+  flex: none;
+}
+.deck-log > div:last-child {
+  overflow-y: auto;
+}
+/* PR flow's chart takes the height its cell has left: the deck wrapper is a
+   flex column down to the chart, and the chart grows (recharts reads the
+   resolved height of a flex item fine once every ancestor has min-height 0) */
+.deck-view-side > .deck-prflow,
+.deck-view-main > .deck-panel-scroll:last-child {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.deck-view-side > .deck-prflow > section,
+.deck-view-main > .deck-panel-scroll:last-child > section {
+  flex: 1;
+  min-height: 0;
+}
+.deck-view-side > .deck-prflow > section > div:last-child,
+.deck-view-main > .deck-panel-scroll:last-child > section > div:last-child {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+.deck-view-side > .deck-prflow > section > div:last-child > *,
+.deck-view-main > .deck-panel-scroll:last-child > section > div:last-child > * {
+  min-height: 0;
+}
+.deck-view .pr-flow-chart {
+  flex: 1 1 0;
+  min-height: 150px;
+  height: auto;
+}
+.deck-view .pr-flow-body {
+  flex: 1;
+  min-height: 0;
+}
+.deck-view .pr-flow-queue {
+  flex: 1;
+  min-height: 0;
+}
+/* AUDIENCE: three bands, the last one flexible to the frame's bottom */
+.deck-audience {
+  display: grid;
+  gap: 0.5rem;
+  grid-template-rows: auto auto minmax(0, 1fr);
+  /* a single track that never grows past the frame (the log's columns
+     otherwise set the grid's width to their max-content) */
+  grid-template-columns: minmax(0, 1fr);
+  align-content: stretch;
+  flex: 1;
+  min-height: 0;
+}
+.deck-audience > * {
+  min-width: 0;
+}
+/* locked (no vault chart): each panel is one line, title and its locked
+   strip side by side, instead of a header band over a one-line body */
+@media (min-width: 1024px) {
+  .deck-audience:not(:has(.vault-chart)) .deck-audience-top > section {
+    flex-direction: row;
+    align-items: center;
+  }
+  .deck-audience:not(:has(.vault-chart)) .deck-audience-top > section > header {
+    flex: none;
+    border-bottom: 0;
+  }
+  .deck-audience:not(:has(.vault-chart)) .deck-audience-top > section > header {
+    flex: 1;
+    min-width: 0;
+  }
+  /* the status stays on one line; the call to action is what yields */
+  .deck-audience:not(:has(.vault-chart)) .deck-audience-top .locked-status {
+    white-space: nowrap;
+  }
+  .deck-audience:not(:has(.vault-chart)) .deck-audience-top > section > div:last-child {
+    flex: none !important;
+  }
+  .deck-audience:not(:has(.vault-chart)) .deck-audience-top .locked-cta {
+    display: none;
+  }
+}
+/* narrower desktops: the locked row's wide letter-spacing yields first, so
+   the window note ("kept past GitHub's 14-day window") stays readable */
+@media (min-width: 1024px) and (max-width: 1700px) {
+  .deck-audience:not(:has(.vault-chart)) .deck-audience-top .module-title,
+  .deck-audience:not(:has(.vault-chart)) .deck-audience-top .locked-status {
+    letter-spacing: 0.04em;
+  }
+  .deck-audience:not(:has(.vault-chart)) .deck-audience-top .module-index {
+    display: none;
+  }
+  .deck-audience:not(:has(.vault-chart)) .deck-audience-top > section > div:last-child {
+    padding-top: 0.5rem;
+    padding-bottom: 0.5rem;
+  }
+}
+/* Real usage figures at the KPI strip's size */
+.deck-usage-rows .usage-row > span:nth-child(2) {
+  font-size: 1.875rem;
+}
+/* AUDIENCE on a desktop (Santiago, 4-nov): the owner's two charts lead,
+   tall; under them Real usage (figures on top, the acquisition chart
+   filling the rest) beside the mission log, which scrolls in its own box.
+   Locked, the top row is the one-line strips and the bottom row gets the
+   height. Every chart is a flex item down to its recharts box. */
+@media (min-width: 1280px) {
+  .deck-audience {
+    /* the same 50/50 cut as the owner's row above, so the columns line up */
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-rows: auto minmax(0, 1fr);
+  }
+  .deck-audience:has(.vault-chart) {
+    grid-template-rows: minmax(0, 1.25fr) minmax(0, 1fr);
+  }
+  .deck-audience > .deck-audience-top {
+    grid-column: 1 / -1;
+    min-height: 0;
+  }
+  .deck-audience > .deck-usage-wide {
+    grid-column: 1;
+    grid-row: 2;
+    height: auto !important;
+  }
+  .deck-audience > .deck-log {
+    grid-column: 2;
+    grid-row: 2;
+  }
+  /* flex chains: panel body -> component root -> chart box */
+  .deck-audience-top > section,
+  .deck-audience > .deck-usage-wide,
+  .deck-audience > .deck-log {
+    min-height: 0;
+  }
+  .deck-audience:has(.vault-chart) .deck-audience-top > section > div:last-child,
+  .deck-audience > .deck-usage-wide > div:last-child {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+  }
+  .deck-audience .vault-root,
+  .deck-audience .vrank-root,
+  .deck-audience > .deck-usage-wide > div:last-child > div {
+    flex: 1;
+    min-height: 0;
+  }
+  .deck-audience .vrank-root {
+    display: flex;
+  }
+  .deck-audience .vault-chart,
+  .deck-audience .vrank-chart {
+    flex: 1 1 0;
+    height: auto !important;
+    min-height: 140px;
+  }
+  .deck-audience .usage-chart {
+    flex: 1;
+    min-height: 0;
+  }
+  .deck-audience .usage-chart-box {
+    flex: 1 1 0;
+    height: auto;
+    min-height: 110px;
+  }
+  /* Real usage: three figures in one row on top */
+  .deck-audience .deck-usage-rows {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    column-gap: 1.5rem;
+  }
+  .deck-audience .deck-usage-rows .usage-row > span:nth-child(2) {
+    font-size: 1.6rem;
+  }
+  /* label over the figure, so the window ("30D", "14D") and the estimate's
+     disclosure ("+ 7d est.") are never cut in a narrow tile */
+  .deck-audience .deck-usage-rows .usage-row {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+  .deck-audience .deck-usage-rows .usage-row > span {
+    grid-column: 1 / -1;
+    white-space: normal;
+    overflow: visible;
+    text-overflow: clip;
+  }
+  .deck-audience .deck-usage-rows .usage-row > span:nth-child(2) {
+    order: -1;
+  }
+}
+/* short desktop (<=950 px tall): the owner's row takes more of the height
+   (its headers wrap at half width) and the vault keeps a real chart */
+@media (min-width: 1280px) and (max-height: 950px) {
+  .deck-audience:has(.vault-chart) {
+    grid-template-rows: minmax(0, 1.7fr) minmax(0, 1fr);
+  }
+  .deck-audience .vault-chart,
+  .deck-audience .vrank-chart {
+    min-height: 150px;
+  }
+  .deck-audience .usage-chart-box {
+    min-height: 90px;
+  }
+}
+/* the mission log scrolls inside its own box */
+.deck-log-scroll > div:last-child {
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+}
+.deck-audience-top {
+  display: grid;
+  gap: 0.5rem;
+  grid-template-columns: minmax(0, 1fr);
+}
+@media (min-width: 1024px) {
+  .deck-audience-top {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+.deck-usage-wide {
+  container-type: inline-size;
+  height: auto !important;
+}
+.deck-log-cols {
+  min-height: 0;
+}
+/* the log shows only whole rows and full columns (MissionLog fillHeight),
+   so nothing is cut and no fade is needed: the old 24 px fade hid the last
+   row that fit */
+.deck-log-cols > div:last-child {
+  overflow: hidden;
+}
+@media (min-width: 1024px) {
+  .deck-log-cols .mission-log-list {
+    display: block;
+    column-gap: 3rem;
+    column-fill: auto;
+  }
+  .deck-log-cols .mission-log-list > li {
+    break-inside: avoid;
+    margin-bottom: 0.375rem;
+  }
+  .deck-log-cols > div:last-child > div {
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+  }
+  .deck-log-cols > div:last-child > div > ul {
+    flex: 1;
+    min-height: 0;
+  }
+}
+/* a short laptop (<=950 px tall): Vital Signs drops its operations row in the
+   deck (the console keeps it), so the view fits without scrolling */
+@media (max-height: 950px) {
+  .deck-view .deck-short-hide {
+    display: none;
+  }
+}
+/* short screens: Vital Signs keeps its ops block (lead time, revert rate,
+   the maintainer) as headline figures only; their detail rows yield, the
+   contributor chart gives up height and the fingerprint rows tighten */
+@media (max-height: 950px) {
+  .deck-view .vs-ops {
+    padding-top: 0.75rem;
+    row-gap: 0.5rem;
+  }
+  .deck-view .vs-ops > div {
+    gap: 0.375rem;
+  }
+  .deck-view .vs-ops > div > :nth-child(3) {
+    display: none;
+  }
+  .deck-view .contrib-box {
+    min-height: 140px !important;
+  }
+}
+@media (max-height: 950px) {
+
+  /* PR flow's method note (bots left out, today excluded) is a disclosure:
+     it stays, on one line that truncates */
+  .deck-view .pr-flow-note {
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    overflow: hidden;
+    line-height: 1.35;
+  }
+}
+.deck-panel-scroll {
+  min-height: 0;
+  overflow-y: auto;
+  scrollbar-width: thin;
+}
+.deck-panel-scroll > section {
+  min-height: 100%;
+}
+@media (min-width: 1280px) {
+  .deck-view {
+    overflow-y: hidden;
+    /* one row that fills the frame, so HEALTH ends on the same edge as the
+       other views and ROTATE does not jump */
+    grid-template-rows: minmax(0, 1fr);
+    align-content: stretch;
+  }
+  .deck-view > * {
+    min-height: 0;
+  }
+}
+/* deck panels whose cell is narrow: four-figure rows become 2x2 */
+.deck-view section.hud,
+.deck-body > section.hud {
+  container-type: inline-size;
+}
+@container (max-width: 560px) {
+  .deck-view .sm\:grid-cols-4,
+  .deck-body .sm\:grid-cols-4 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 @media (min-width: 1280px) {
   .deck-view {
@@ -1629,6 +2034,11 @@ body.gx-warping .ghx-lore {
 @media (min-width: 1280px) and (min-aspect-ratio: 2/1) {
   .deck-view {
     grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+  }
+}
+@media (min-width: 1280px) {
+  .deck-view.deck-view-half {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
