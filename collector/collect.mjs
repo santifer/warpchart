@@ -12,9 +12,11 @@ import { readFileSync, writeFileSync, appendFileSync, existsSync, copyFileSync, 
 import { join } from "node:path";
 import {
   DATA_DIR, readConfig, repoMeta, backwalk, countAbove,
-  nextMilestones, thresholdForRank, findNeighbors, reposVelocity, apexRepo, topRepos,
+  nextMilestones, thresholdForRank, findNeighbors, reposVelocity, apexRepo, topRepos, ROUTE_SIZE,
   buildForensics, token, warnIfRenamed,
 } from "./lib.mjs";
+import { acceptUniverse } from "./guards.mjs";
+import { markPartial, markComplete } from "./blob.mjs";
 
 token(); // fail fast
 
@@ -132,12 +134,22 @@ const routePath = join(DATA_DIR, "route.json");
 let routeRefreshed = false;
 try {
   let staleRoute = true;
+  let prevCount = null;
   if (existsSync(routePath)) {
     const prev = JSON.parse(readFileSync(routePath, "utf8"));
     staleRoute = now - new Date(prev.generated_at) > 20 * 3600 * 1000;
+    prevCount = prev.repos?.length ?? null;
   }
-  if (staleRoute) {
-    const route = await topRepos();
+  const route = staleRoute ? await topRepos() : null;
+  // The registry's index IS the rank of the top 1000, so a sweep that came back
+  // short (a page that failed or answered incomplete) would publish wrong ranks
+  // that never throw. Keep yesterday's registry and leave a marker; the
+  // 20-hour gate retries on the next run.
+  const verdict = route ? acceptUniverse(route.length, { want: ROUTE_SIZE, prev: prevCount }) : null;
+  if (route && !verdict.ok) {
+    if (!dryRun) await markPartial("route", { got: route.length, want: ROUTE_SIZE, reason: verdict.reason });
+    console.log(`[collect] NOT publishing route landmarks: ${verdict.reason}. Keeping the previous registry.`);
+  } else if (route) {
     // Daily velocity for every routed repo, free: diff against the
     // outgoing registry. It colors the whole galaxy (doppler dots) without
     // a single API call; the local band still measures live.
@@ -167,6 +179,7 @@ try {
       writeFileSync(routePath, JSON.stringify({ generated_at: nowISO, repos: withV }) + "\n");
     }
     routeRefreshed = true;
+    if (!dryRun) await markComplete("route", { got: route.length });
     console.log(`[collect] route landmarks refreshed: ${route.length} repos`);
   }
 } catch (err) {

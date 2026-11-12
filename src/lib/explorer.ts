@@ -317,11 +317,7 @@ export interface ExplorerData {
   inTop1000: boolean;
   forkRatio: number | null;
   forkPercentile: number | null;
-  // public maintenance pulse + real usage; null when the extra call failed
-  // (the page renders fine without it)
-  dossier: Dossier | null;
   degraded: boolean; // velocity telemetry unavailable this refresh
-  npmPartial: boolean; // an npm call failed: the dossier's npm may be missing, not absent (never cached)
   generatedAt: string;
 }
 
@@ -481,22 +477,11 @@ export async function getExplorerData(owner: string, name: string): Promise<Expl
   const forkPercentile =
     forkRatio !== null ? forkRatioPercentile(forkRatio, route?.repos ?? []) : null;
 
-  // the dossier (maintenance pulse + real usage) is best-effort: one extra
-  // GraphQL call plus an unauthenticated npm lookup, never page-fatal
-  let dossier: Dossier | null = null;
-  let npmPartial = false;
-  try {
-    const [o, n] = repoName.split("/");
-    const raw = await repoDossier(o, n);
-    const { npmPkg, npmLast30, npmLast30MissingDays, npmLast30Estimate, npmHistory, npmVersions, npmVersionsStart, npmVersionsThrough, npmLatest, npmTransient } = await resolveNpmUsage(o, n, raw.npmPkg);
-    npmPartial = npmTransient;
-    // clones (private traffic) are surfaced only via the cached dossier path
-    // (getCachedDossier -> fetchDossier), which the panels actually render
-    dossier = { ...raw, npmPkg, npmLast30, npmLast30MissingDays, npmLast30Estimate, npmHistory, npmVersions, npmVersionsStart, npmVersionsThrough, npmLatest, clonesHistory: null,
-                uniqueCloners14d: null, uniqueCloners14dAt: null };
-  } catch (err) {
-    log.warn("dossier.failed", { err: err instanceof Error ? err.message.slice(0, 120) : String(err) });
-  }
+  // No dossier here. This used to assemble an inline copy of fetchDossier that
+  // had drifted (it kept npm's still-accumulating day) and, cached inside this
+  // snapshot, pinned a failed fetch as `dossier: null` for 15 minutes. The page
+  // reads getCachedDossier, which retries a cached failure live and never
+  // stores a dossier built on a failed npm call (PartialDossier).
 
   return {
     inputs,
@@ -506,9 +491,7 @@ export async function getExplorerData(owner: string, name: string): Promise<Expl
     inTop1000,
     forkRatio,
     forkPercentile,
-    dossier,
     degraded,
-    npmPartial,
     generatedAt: new Date().toISOString(),
   };
 }
@@ -526,15 +509,16 @@ class DegradedResult extends Error {
 const getCachedExplorerData = unstable_cache(
   async (owner: string, name: string) => {
     const data = await getExplorerData(owner, name);
-    // a failed npm call is as transient as missing velocity telemetry (#42)
-    if (data?.degraded || data?.npmPartial) throw new DegradedResult(data);
+    if (data?.degraded) throw new DegradedResult(data);
     return data;
   },
+  // v6: the dossier moved out (the page reads getCachedDossier), and with it
+  // v5's npmPartial. CHANGE THE SHAPE, CHANGE THE KEY, SAME COMMIT.
+  // v5: adds npmPartial; an entry built on a failed npm call is no longer stored
   // v4: neighbors gained trend/v7_to and inputs vTrend/vAsOf (v7 window fix);
   // v3: the dossier inside gained npmLatest (same commit as dossier-v17);
   // v2: npmLast30MissingDays/npmLast30Estimate, npm's holes out (dossier-v15)
-  // v5: adds npmPartial; an entry built on a failed npm call is no longer stored
-  ["explorer-data-v5"],
+  ["explorer-data-v6"],
   { revalidate: 900 },
 );
 
@@ -560,9 +544,7 @@ export async function loadExplorerData(
     return await getCachedExplorerData(owner, name);
   } catch (err) {
     if (err instanceof DegradedResult) {
-      // the 3-minute memo is for a GitHub storm (velocity); an npm blip alone
-      // is cheap to retry and should heal on the next view
-      if (err.data.degraded) degradedCache.set(key, { data: err.data, until: Date.now() + 180_000 });
+      degradedCache.set(key, { data: err.data, until: Date.now() + 180_000 });
       return err.data;
     }
     // a real "repository not found" -> null (caller decides 404 vs graceful);

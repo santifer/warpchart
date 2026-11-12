@@ -324,8 +324,19 @@ export async function apexRepo() {
   return item ? { r: item.full_name, s: item.stargazers_count } : null;
 }
 
-// The worldwide top 1000 (search enumeration cap), used as route landmarks
-// and as the population for fork-ratio percentiles. 10 search calls.
+// One registry row from a search item. Shared by the top-1000 and the top-10k.
+function registryEntry(item) {
+  return {
+    r: item.full_name,
+    s: item.stargazers_count,
+    d: item.description ? item.description.slice(0, 160) : null,
+    l: item.language ?? null,
+    f: item.forks_count ?? 0,
+    t: (item.topics ?? []).slice(0, 8),
+    c: item.created_at ?? null,
+  };
+}
+
 // Rank IS the position in route.json, so the registry must be sorted by the
 // star count it shows. Search sorts by its own index, which lags the
 // stargazers_count it returns: on 2026-10-21 page 7 came back with
@@ -342,23 +353,17 @@ export function orderRegistry(items) {
   return [...best.values()].sort((a, b) => b.s - a.s);
 }
 
+// The worldwide top 1000 (search enumeration cap), used as route landmarks
+// and as the population for fork-ratio percentiles. 10 search calls. The
+// caller decides whether a short result may be published (acceptUniverse).
+export const ROUTE_SIZE = 1000;
 export async function topRepos() {
   const out = [];
-  for (let page = 1; page <= 10; page++) {
+  for (let page = 1; page <= ROUTE_SIZE / 100; page++) {
     const r = await search({
       q: "stars:>10000", sort: "stars", order: "desc", per_page: "100", page: String(page),
     });
-    for (const item of r.items ?? []) {
-      out.push({
-        r: item.full_name,
-        s: item.stargazers_count,
-        d: item.description ? item.description.slice(0, 160) : null,
-        l: item.language ?? null,
-        f: item.forks_count ?? 0,
-        t: (item.topics ?? []).slice(0, 8),
-        c: item.created_at ?? null,
-      });
-    }
+    for (const item of r.items ?? []) out.push(registryEntry(item));
   }
   return orderRegistry(out);
 }
@@ -386,15 +391,7 @@ export async function topReposDeep(limit = 10000) {
         for (const item of items) {
           if (seen.has(item.full_name)) continue;
           seen.add(item.full_name);
-          out.push({
-            r: item.full_name,
-            s: item.stargazers_count,
-            d: item.description ? item.description.slice(0, 160) : null,
-            l: item.language ?? null,
-            f: item.forks_count ?? 0,
-            t: (item.topics ?? []).slice(0, 8),
-            c: item.created_at ?? null,
-          });
+          out.push(registryEntry(item));
           added++;
         }
         if (items.length < 100) break; // window exhausted before 1000
