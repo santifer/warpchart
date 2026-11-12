@@ -8,9 +8,9 @@
 import { readdirSync, statSync, readFileSync } from "node:fs";
 import { join, relative, sep } from "node:path";
 import { put } from "@vercel/blob";
+import { PREFIX, MIRROR_SKIP } from "./sync-to-blob-core.mjs";
 
 const DATA = join(process.cwd(), "data");
-const PREFIX = "data/";
 const token = process.env.BLOB_READ_WRITE_TOKEN;
 if (!token) {
   console.error("Missing BLOB_READ_WRITE_TOKEN");
@@ -27,17 +27,13 @@ function walk(dir) {
   return out;
 }
 
-// The Polar webhook is the ONLY writer of the tenant registry (collect.mjs only
-// reads it). Re-uploading the collector's copy — which may predate a webhook
-// that landed mid-run, between this script's hydrate and mirror steps — would
-// silently clobber a just-paid tenant. Never mirror it back up.
-const SKIP = new Set(["tenants.json"]);
-
+// Keys with their own direct writer are never mirrored back up: see MIRROR_SKIP
+// in sync-to-blob-core.mjs for why each one is there.
 const files = walk(DATA);
 let n = 0;
 for (const f of files) {
   const rel = relative(DATA, f).split(sep).join("/");
-  if (SKIP.has(rel)) continue;
+  if (MIRROR_SKIP.has(rel)) continue;
   await put(PREFIX + rel, readFileSync(f), {
     access: "private",
     addRandomSuffix: false,

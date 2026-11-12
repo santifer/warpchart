@@ -71,10 +71,10 @@ a different question. It never throws, never logs, and the panel stays green.
 
 | Key / prefix | Writer | Notes |
 |---|---|---|
-| `data/**` | `scripts/sync-to-blob.mjs` (mirror of the collector's `data/`) | except `data/tenants.json` |
+| `data/**` | `scripts/sync-to-blob.mjs` (mirror of the collector's `data/`) | except the keys with their own writer below (`MIRROR_SKIP` in `scripts/sync-to-blob-core.mjs`) |
 | `data/tenants.json` | `src/lib/tenants-store.ts` (payment webhook) only | excluded from the mirror; reads with `useCache: false`, throws on anything but 404 |
 | `route-history/*` | `collector/route-history.mjs` | daily; a partial universe must not mark the day done |
-| `data/catalog.json` | `collector/catalog.mjs` (+ re-mirrored by sync) | |
+| `data/catalog.json` | `collector/catalog.mjs` only | excluded from the mirror, so its upload time, which `inventory.coverage` reads, is the producer's |
 | `prflow/*` | `collector/prflow.mjs` | full recompute each run |
 | `vitals/*` | `collector/vitals.mjs` | `_dist` only published when the sweep completed |
 | `contributors/*` | `collector/contributors.mjs` | refuses a truncated backfill |
@@ -85,6 +85,7 @@ a different question. It never throws, never logs, and the panel stays green.
 | `health/*` | `collector/health.mjs` | |
 | `live/*` | `collector/live.mjs` **and** `src/lib/live-blob.ts` (webhook seed) | two writers: the seed only writes a first point |
 | `embeds/seen.json` | `src/app/api/embeds/route.ts` **and** `src/lib/embed-track.ts` | two writers |
-| `data/attribution.json` | `collector/attribute.mjs` (+ re-mirrored by sync) | |
+| `data/attribution.json` | `collector/attribute.mjs` only | excluded from the mirror, like the catalog |
+| `data/enrichment.json` | `collector/enrich.mjs` only (run by hand) | excluded from the mirror; declared `manual` in `ARTIFACTS`, so its age raises nothing |
 
-Adding a writer to a key that already has one is a design change: say so in the PR.
+Adding a writer to a key that already has one is a design change: say so in the PR. Code that `put`s a `data/` key straight to the Blob must add it to `MIRROR_SKIP` (`scripts/sync-to-blob-core.test.mjs` fails until it does).
