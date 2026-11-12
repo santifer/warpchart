@@ -17,6 +17,8 @@ const STATIC = ["", "/codex", "/velocity", "/find", "/compare", "/pricing", "/me
 const TOP = 300; // a sane daily batch of the highest-rank consoles
 const REPO_RE = /^[\w.-]+\/[\w.-]+$/;
 const STAMP = join(DATA_DIR, "indexnow-stamp.txt");
+// IndexNow is a courtesy ping: a hung endpoint gets abandoned, not waited on.
+const TIMEOUT_MS = Number(process.env.INDEXNOW_TIMEOUT_MS) || 20_000;
 
 async function main() {
   const today = new Date().toISOString().slice(0, 10);
@@ -38,6 +40,7 @@ async function main() {
     method: "POST",
     headers: { "Content-Type": "application/json; charset=utf-8" },
     body: JSON.stringify({ host: HOST, key: KEY, keyLocation: `${BASE}/${KEY}.txt`, urlList }),
+    signal: AbortSignal.timeout(TIMEOUT_MS),
   });
   console.log(`[indexnow] submitted ${urlList.length} URLs -> HTTP ${res.status}`);
   if (res.ok || res.status === 202) writeFileSync(STAMP, today);

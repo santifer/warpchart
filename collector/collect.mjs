@@ -15,6 +15,7 @@ import {
   nextMilestones, thresholdForRank, findNeighbors, reposVelocity, apexRepo, topRepos,
   buildForensics, token, warnIfRenamed,
 } from "./lib.mjs";
+import { warmPlan, WARM_PLAN } from "./warm-core.mjs";
 
 token(); // fail fast
 
@@ -312,6 +313,7 @@ try {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(body),
+          signal: AbortSignal.timeout(15_000),
         });
         console.log(`[collect] alert sent (${lines.length} events)`);
       }
@@ -321,63 +323,20 @@ try {
   console.error(`[collect] alert failed: ${err.message}`);
 }
 
-// Optional daily cache warm (repo variable WARM_BASE_URL): pre-render the
-// high-probability charts and explorer pages so no visitor ever pays the
-// cold sampling cost for them. The warm list is small on purpose: the
-// landing's featured ranks, our live neighbors and the route landmarks.
-// The long tail stays lazy; the power law makes its cache hit rate high.
-try {
-  const base = (process.env.WARM_BASE_URL ?? "").replace(/\/$/, "");
-  if (base && !dryRun) {
-    const hour = new Date().getUTCHours();
-    if (hour >= 4 && hour < 5) {
-      const targets = new Set();
-      try {
-        const route = JSON.parse(readFileSync(routePath, "utf8")).repos ?? [];
-        for (const i of [0, 7, 24, 79, 199, 499]) if (route[i]) targets.add(route[i].r);
-      } catch { /* no route yet */ }
-      for (const n of neighbors ?? []) targets.add(n.r);
-      let warmed = 0;
-      for (const r of targets) {
-        try {
-          const res = await fetch(`${base}/api/chart?repo=${encodeURIComponent(r)}&w=800&h=240`);
-          if (res.ok) warmed++;
-          await new Promise((ok) => setTimeout(ok, 1500));
-        } catch { /* best effort */ }
-      }
-      console.log(`[collect] cache warmed: ${warmed}/${targets.size} charts`);
-    }
+// Production cache warm (repo variable WARM_BASE_URL): decided here, where
+// the neighbors and the registry refresh are known, and fetched by warm.mjs in
+// its own capped step. Fetching it here put production's render time inside
+// this step's budget.
+if (!dryRun) {
+  try {
+    let route = null;
+    try {
+      route = JSON.parse(readFileSync(routePath, "utf8"));
+    } catch { /* no route yet */ }
+    const plan = warmPlan({ route, neighbors, now, routeRefreshed });
+    writeFileSync(WARM_PLAN, JSON.stringify(plan));
+    if (plan.length) console.log(`[collect] warm planned: ${plan.length} pages`);
+  } catch (err) {
+    console.error(`[collect] warm plan failed: ${err.message}`);
   }
-} catch (err) {
-  console.error(`[collect] warm failed: ${err.message}`);
-}
-
-// Daily spotlight warm: the landing's protagonist changes with the route
-// registry's date, so right after a route refresh we pre-build its whole
-// surface (explorer page, curve, embed, OG card). Sequential with pauses
-// and gated on routeRefreshed: it never overlaps the 04 UTC warm above.
-try {
-  const base = (process.env.WARM_BASE_URL ?? "").replace(/\/$/, "");
-  if (base && !dryRun && routeRefreshed) {
-    const route = JSON.parse(readFileSync(routePath, "utf8"));
-    const day = (route.generated_at ?? "").slice(0, 10) || "fallback";
-    // selection must MATCH src/lib/demo.ts (seedFrom + band 80..680)
-    const text = "spotlight::" + day;
-    let h = 2166136261;
-    for (let i = 0; i < text.length; i++) h = Math.imul(h ^ text.charCodeAt(i), 16777619);
-    const idx = 80 + ((h >>> 0) % 600);
-    const hero = route.repos?.[idx]?.r;
-    if (hero) {
-      const q = encodeURIComponent(hero);
-      for (const path of [`/r/${hero}`, `/api/curve?repo=${q}`, `/api/chart?repo=${q}`, `/api/og?repo=${q}`]) {
-        try {
-          await fetch(`${base}${path}`);
-        } catch { /* best effort */ }
-        await new Promise((ok) => setTimeout(ok, 2000));
-      }
-      console.log(`[collect] spotlight warmed: ${hero} (#${idx + 1})`);
-    }
-  }
-} catch (err) {
-  console.error(`[collect] spotlight warm failed: ${err.message}`);
 }

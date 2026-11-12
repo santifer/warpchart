@@ -68,6 +68,8 @@ async function ghTraffic(repo, path, token) {
       Accept: "application/vnd.github+json",
       "User-Agent": "warpchart-traffic",
     },
+    // A hang throws like any other failure: this repo is skipped, its vault untouched.
+    signal: AbortSignal.timeout(30_000),
   });
   if (!res.ok) throw new Error(`${path} ${res.status}`);
   return res.json();
