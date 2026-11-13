@@ -605,3 +605,28 @@ export async function reposVelocity(fullNames, now = new Date()) {
   }
   return out;
 }
+
+// A fetch whose only point is its side effect (warming a cache, posting a
+// webhook): it ALWAYS reads the body to the end and is bounded by a timeout.
+// On 7 and 11 Nov 2026 an unread /api/og response kept its connection, and
+// with it Node, alive for 23 minutes after collect.mjs's last line; the job
+// hit its 25-minute cap and the deploy step never ran (even on good days the
+// next step started 5.6 minutes late). 45 s per call, like the watchdog gives
+// an uncached /r/ page; callers bound the whole phase with budget(). Never throws.
+// Returns { ok, status, error }: status null when no response came back.
+export async function drainFetch(url, init = {}, timeoutMs = 45_000) {
+  try {
+    const res = await fetch(url, { ...init, signal: AbortSignal.timeout(timeoutMs) });
+    await res.arrayBuffer();
+    return { ok: res.ok, status: res.status, error: null };
+  } catch (err) {
+    return { ok: false, status: null, error: err?.name === "TimeoutError" ? "timeout" : (err?.message ?? String(err)) };
+  }
+}
+
+// A wall-clock budget for a best-effort phase (cache warms): spent() turns true
+// once `ms` have passed, so N slow targets cannot add up past the job's cap.
+export function budget(ms, now = () => Date.now()) {
+  const until = now() + ms;
+  return { spent: () => now() >= until };
+}

@@ -86,5 +86,7 @@ a different question. It never throws, never logs, and the panel stays green.
 | `live/*` | `collector/live.mjs` **and** `src/lib/live-blob.ts` (webhook seed) | two writers: the seed only writes a first point |
 | `embeds/seen.json` | `src/app/api/embeds/route.ts` **and** `src/lib/embed-track.ts` | two writers |
 | `data/attribution.json` | `collector/attribute.mjs` (+ re-mirrored by sync) | |
+| `god/magic/*` | `scripts/god-magic-link.mjs` (by hand, also prunes) **and** `src/lib/magic-link.ts` (the `.used` claim and the delete on redeem) | config: weeks of silence are normal, never "stale"; keys are SHA-256, never the token |
+| `god/guests/*` | `src/lib/guest-keys.ts` (`mintGuest`, from `/unlock`) **and** `scripts/god-guests.mjs` (revoke = delete) | same |
 
 Adding a writer to a key that already has one is a design change: say so in the PR.

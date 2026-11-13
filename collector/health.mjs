@@ -34,7 +34,7 @@
 // Exit code 1 when a critical finding is open, so CI turns red by itself.
 import { writeFileSync } from "node:fs";
 import { candidatePackages } from "./npm-versions.mjs";
-import { ARTIFACTS, COLLECTOR_STALE_H, npmLagExplains, cancelledVerdict, cronLag, etaIncoherences, openPartials, pipelineRunsGate, presenceEval, presenceMap, prflowFreshness, staleArtifacts, npmUsageFreshness, contributorsDrift, contributorCurve, curveEndsOnTotal, buildersWallFreshness, buildersLangMismatch, velocityRankFreshness, velocityRankReconstructed, ladderBandsPresence, ciBandViolations, v7StampLags, v7WindowFreshness, V7_WINDOW_MAX_H } from "./health-rules.mjs";
+import { ARTIFACTS, declarationFor, COLLECTOR_STALE_H, npmLagExplains, cancelledVerdict, cronLag, etaIncoherences, openPartials, pipelineRunsGate, presenceEval, presenceMap, prflowFreshness, staleArtifacts, npmUsageFreshness, contributorsDrift, contributorCurve, curveEndsOnTotal, buildersWallFreshness, buildersLangMismatch, velocityRankFreshness, velocityRankReconstructed, ladderBandsPresence, ciBandViolations, v7StampLags, v7WindowFreshness, V7_WINDOW_MAX_H } from "./health-rules.mjs";
 
 const args = process.argv.slice(2);
 const JSON_OUT = args.includes("--json");
@@ -901,7 +901,7 @@ async function checkInventory() {
     const undeclared = new Map();
     for (const b of blobs) {
       const t = new Date(b.uploadedAt).getTime();
-      const decl = ARTIFACTS.find((a) => b.pathname === a.prefix || (a.prefix.endsWith("/") && b.pathname.startsWith(a.prefix)));
+      const decl = declarationFor(b.pathname);
       const key = decl ? decl.prefix : (b.pathname.includes("/") ? b.pathname.split("/")[0] + "/" : b.pathname);
       const bag = decl ? newest : undeclared;
       if (!bag.has(key) || bag.get(key) < t) bag.set(key, t);

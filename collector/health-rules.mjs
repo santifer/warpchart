@@ -252,7 +252,14 @@ export const ARTIFACTS = [
   { prefix: "private/installs.json", kind: "event", what: "detected install waves (private)" },
   // config: edited by a human, age means nothing
   { prefix: "data/tenants.json", kind: "config", what: "the paying-tenant list" },
+  // minted by hand (scripts/god-magic-link.mjs, /unlock guests): weeks of silence are normal
+  { prefix: "god/", kind: "config", what: "owner and guest access links" },
 ];
+
+// The declaration a stored pathname falls under (exact key, or a family that
+// ends in "/"), or undefined: an undeclared artifact nobody watches.
+export const declarationFor = (pathname, artifacts = ARTIFACTS) =>
+  artifacts.find((a) => pathname === a.prefix || (a.prefix.endsWith("/") && pathname.startsWith(a.prefix)));
 
 // Which declared periodic families are older than they may be. `newest` maps a
 // family prefix to its newest upload (ms). A timestamp that is not a number reads
