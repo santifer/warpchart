@@ -80,3 +80,13 @@ export function fmtUtcStamp(iso: string): string {
   const mm = String(d.getUTCMinutes()).padStart(2, "0");
   return `${MON[d.getUTCMonth()]} ${d.getUTCDate()} ${hh}:${mm} UTC`;
 }
+
+// "Aug 13": a UTC calendar day (a "YYYY-MM-DD" key or the epoch ms of its
+// 00:00Z). Day keys are UTC; formatting them in the viewer's zone drew every
+// bar one day early in the Americas, and the server (UTC) and the client
+// rendered different labels for the same point.
+export function fmtUtcDay(day: string | number, withYear = false): string {
+  const d = typeof day === "number" ? new Date(day) : new Date(`${day}T00:00:00Z`);
+  if (!Number.isFinite(d.getTime())) return "";
+  return `${MON[d.getUTCMonth()]} ${d.getUTCDate()}${withYear ? `, ${d.getUTCFullYear()}` : ""}`;
+}
