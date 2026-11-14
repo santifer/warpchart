@@ -11,6 +11,7 @@ import { RaceProvider, RaceToggle } from "./RaceContext";
 import type { Dossier } from "@/lib/explorer";
 import GalacticChart from "./GalacticChart";
 import VerticalChart from "./VerticalChart";
+import ChartSwitch from "./ChartSwitch";
 import CommandDeck from "./CommandDeck";
 import VelocityChart from "./VelocityChart";
 import DailyLadder from "./DailyLadder";
@@ -67,14 +68,10 @@ function ChartIsland({
     [bundle, live.stars, live.rank, live.neighbors, live.nowMs]
   );
   return (
-    <>
-      <div className="hidden landscape:block lg:block">
-        <GalacticChart inputs={inputs} target={target} onPinTarget={onPinTarget} charted={charted} />
-      </div>
-      <div className="landscape:hidden lg:hidden">
-        <VerticalChart inputs={inputs} target={target} onPinTarget={onPinTarget} charted={charted} />
-      </div>
-    </>
+    <ChartSwitch
+      wide={<GalacticChart inputs={inputs} target={target} onPinTarget={onPinTarget} charted={charted} />}
+      narrow={<VerticalChart inputs={inputs} target={target} onPinTarget={onPinTarget} charted={charted} />}
+    />
   );
 }
 

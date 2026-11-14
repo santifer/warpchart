@@ -163,6 +163,23 @@ function Tile({
   );
 }
 
+// Dedicated 1s clock: the shared live tick is 30s, too coarse for a deck. It
+// owns its own state so each tick re-renders this one span, not the deck: in
+// the deck's state it re-rendered the star map and every chart card every
+// second.
+function DeckClock() {
+  const [clockMs, setClockMs] = useState(() => Date.now());
+  useEffect(() => {
+    const t = setInterval(() => setClockMs(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, []);
+  return (
+    <span className="numeral hidden text-sm text-dim sm:inline" suppressHydrationWarning>
+      {new Date(clockMs).toISOString().slice(11, 19)} UTC
+    </span>
+  );
+}
+
 export default function CommandDeck({
   bundle,
   dossier,
@@ -268,13 +285,6 @@ export default function CommandDeck({
     return () => clearInterval(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rotate]);
-
-  // Dedicated 1s clock: the shared live tick is 30s, too coarse for a deck.
-  const [clockMs, setClockMs] = useState(() => Date.now());
-  useEffect(() => {
-    const t = setInterval(() => setClockMs(Date.now()), 1000);
-    return () => clearInterval(t);
-  }, []);
 
   // Measure the hero hole so the chart canvas matches its aspect: wide cells
   // get MORE MAP, not scaled-up pixels. The hole is a grid cell whose size
@@ -465,9 +475,7 @@ export default function CommandDeck({
               </button>
             ) : null}
           </nav>
-          <span className="numeral hidden text-sm text-dim sm:inline" suppressHydrationWarning>
-            {new Date(clockMs).toISOString().slice(11, 19)} UTC
-          </span>
+          <DeckClock />
           <button
             onClick={exit}
             className="numeral border border-grid px-2.5 py-1 text-micro tracking-[0.2em] text-dim transition-colors hover:border-accent/50 hover:text-accent"
