@@ -13,7 +13,7 @@ import {
   loadTenantTimestamps,
 } from "@/lib/history";
 import { repoEvents } from "@/lib/feed";
-import { readAlertsSent, saveAlertsSent } from "@/lib/alerts-store";
+import { readAlertsSent, saveAlertsSent, type AlertsSent } from "@/lib/alerts-store";
 import { sendEmail } from "@/lib/email";
 import type { MissionEvent } from "@/lib/types";
 
@@ -58,7 +58,17 @@ export async function GET(req: Request) {
   }
 
   const nowMs = Date.now();
-  const sent = await readAlertsSent();
+  // No watermarks, no alerts: from an empty map every repo would re-send its
+  // last 24 h. The next run retries.
+  let sent: AlertsSent;
+  try {
+    sent = await readAlertsSent();
+  } catch (e) {
+    return Response.json(
+      { ok: false, reason: `alert watermarks unreadable: ${e instanceof Error ? e.message : e}` },
+      { status: 503, headers: { "Cache-Control": "no-store" } },
+    );
+  }
   const houseRepo = loadMeta()?.repo ?? null;
   const tenants = loadTenants();
 

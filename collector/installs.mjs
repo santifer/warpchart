@@ -31,7 +31,8 @@
 // when ALERT_WEBHOOK_URL is set, posts one line per new event.
 //
 // Usage: BLOB_READ_WRITE_TOKEN=... node collector/installs.mjs
-import { put, get } from "@vercel/blob";
+import { get } from "@vercel/blob";
+import { readJsonStrict, updateJson } from "./blob.mjs";
 
 const KEY = "private/installs.json";
 const token = process.env.BLOB_READ_WRITE_TOKEN;
@@ -151,7 +152,11 @@ async function main() {
     return;
   }
 
-  const store = (await readJson(KEY)) ?? { events: [] };
+  // The events already recorded, so each one is paged once. A store we cannot
+  // read throws here: read as empty, every past wave would page again and the
+  // write below would replace the whole record with this run's events.
+  const first = await readJsonStrict(KEY);
+  const store = first.state === "data" ? first.value : { events: [] };
   const known = new Set(store.events.map((e) => `${e.repo}@${e.day}`));
   const fresh = [];
 
@@ -176,14 +181,14 @@ async function main() {
     return;
   }
 
-  store.events = [...store.events, ...fresh].sort((a, b) => (a.day < b.day ? -1 : 1));
-  store.updated_at = new Date().toISOString().replace(/\.\d{3}Z$/, "Z");
-  await put(KEY, JSON.stringify(store), {
-    access: "private",
-    addRandomSuffix: false,
-    allowOverwrite: true,
-    contentType: "application/json",
-    token,
+  // a union with whatever is stored at write time (another run may have
+  // written since the read above), never a replacement
+  const at = new Date().toISOString().replace(/\.\d{3}Z$/, "Z");
+  await updateJson(KEY, (stored) => {
+    const cur = stored ?? { events: [] };
+    const have = new Set(cur.events.map((e) => `${e.repo}@${e.day}`));
+    const events = [...cur.events, ...fresh.filter((e) => !have.has(`${e.repo}@${e.day}`))];
+    return { ...cur, events: events.sort((a, b) => (a.day < b.day ? -1 : 1)), updated_at: at };
   });
 
   for (const e of fresh) {
