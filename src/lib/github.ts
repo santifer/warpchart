@@ -83,17 +83,21 @@ export async function graphql<T>(
   // Single short retry: heavy stargazer queries already retry at the chunk
   // level, and stacking both retry ladders is what turned GitHub's bad days
   // into 60-second page renders.
-  const data = await ghFetch<{ data: T | null; errors?: { type?: string; message?: string }[] }>(
+  const data = await ghFetch<{ data: T | null; errors?: { type?: string; message?: string; path?: unknown }[] }>(
     "/graphql",
     { method: "POST", body: { query, variables }, delays: [700], timeoutMs: 9_000, auth: opts?.auth }
   );
   if (data.errors?.length) {
-    // GitHub returns PARTIAL errors (e.g. NOT_FOUND for one renamed repo in
-    // an aliased batch) alongside perfectly good data for the rest. Throwing
-    // here used to poison whole pages into degraded 0/day velocity. Only
-    // throw when there is no usable data at all.
     const kinds = [...new Set(data.errors.map((e) => e.type ?? "UNKNOWN"))];
-    if (data.data == null) {
+    // A PARTIAL answer is kept only in its one honest form: whole top-level
+    // aliases that came back null (NOT_FOUND for one renamed repo in an aliased
+    // batch) next to good data for the rest. Throwing there poisoned whole
+    // pages into degraded 0/day velocity. Anything else throws: an error
+    // NESTED inside a field (a timeout under `repository`) nulls that field
+    // while sibling searches still answer, and keeping it published the
+    // dossier's "0 issues / 0 merged PRs" as a measurement whenever GitHub
+    // degraded. Same rule as the collector's graphql() (collector/lib.mjs).
+    if (!onlyWholeAliasesMissing(data.data, data.errors)) {
       ghlog.error("graphql.failed", undefined, { kinds, sample: data.errors[0]?.message?.slice(0, 160) });
       throw new Error("GraphQL: " + JSON.stringify(data.errors).slice(0, 300));
     }
@@ -101,6 +105,23 @@ export async function graphql<T>(
   }
   if (data.data == null) throw new Error("GraphQL: empty data");
   return data.data;
+}
+
+// Twin of onlyWholeAliasesMissing in collector/lib.mjs; github.test.ts runs
+// both on the same payloads. Every error must name one top-level alias that
+// came back null, and at least one alias must have answered.
+export function onlyWholeAliasesMissing(
+  data: unknown,
+  errors: { path?: unknown }[] | null | undefined,
+): boolean {
+  if (!data || typeof data !== "object") return false;
+  const d = data as Record<string, unknown>;
+  return (
+    Array.isArray(errors) &&
+    errors.length > 0 &&
+    errors.every((e) => Array.isArray(e?.path) && e.path.length === 1 && d[e.path[0] as string] === null) &&
+    Object.values(d).some((v) => v != null)
+  );
 }
 
 export async function currentStars(owner: string, name: string): Promise<number> {
@@ -389,10 +410,11 @@ export async function stargazerPageFirst(
 // their asset downloads, and the root package.json (npm detection).
 
 export interface DossierRaw {
-  issuesOpened30: number;
-  issuesClosed30: number;
-  prsMerged30: number;
-  openIssues: number;
+  // null = GitHub did not answer that alias: unmeasured, never 0
+  issuesOpened30: number | null;
+  issuesClosed30: number | null;
+  prsMerged30: number | null;
+  openIssues: number | null;
   commits30: number | null;
   releases: { tag: string; at: string; downloads: number }[];
   npmPkg: string | null;
@@ -403,9 +425,9 @@ export async function repoDossier(owner: string, name: string): Promise<DossierR
   const since = new Date(Date.now() - 30 * 864e5);
   const day = since.toISOString().slice(0, 10);
   const d = await graphql<{
-    opened: { issueCount: number };
-    closed: { issueCount: number };
-    merged: { issueCount: number };
+    opened: { issueCount: number } | null;
+    closed: { issueCount: number } | null;
+    merged: { issueCount: number } | null;
     repository: {
       issues: { totalCount: number };
       defaultBranchRef: {
@@ -457,10 +479,13 @@ export async function repoDossier(owner: string, name: string): Promise<DossierR
     /* malformed package.json: not an npm package */
   }
   return {
-    issuesOpened30: d.opened?.issueCount ?? 0,
-    issuesClosed30: d.closed?.issueCount ?? 0,
-    prsMerged30: d.merged?.issueCount ?? 0,
-    openIssues: d.repository?.issues.totalCount ?? 0,
+    // An alias GitHub did not answer is UNMEASURED. `?? 0` published "0 issues
+    // / 0 merged PRs" on /r/, /api/v1/dossier and the CLI whenever one search
+    // came back null in a partial answer.
+    issuesOpened30: d.opened?.issueCount ?? null,
+    issuesClosed30: d.closed?.issueCount ?? null,
+    prsMerged30: d.merged?.issueCount ?? null,
+    openIssues: d.repository?.issues.totalCount ?? null,
     commits30: d.repository?.defaultBranchRef?.target?.history?.totalCount ?? null,
     releases: (d.repository?.releases.nodes ?? [])
       .filter((r) => r.publishedAt && !r.isPrerelease)
