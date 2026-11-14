@@ -1,0 +1,31 @@
+# Dependency signal. Every install in CI runs --no-audit, and `next` sat on
+# 16.2.9 for four months while critical advisories piled up with nobody told.
+# Security updates also need "Dependabot security updates" switched on under
+# Settings > Code security; this file groups them and adds a weekly sweep.
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      # next and eslint-config-next are pinned to the same exact version and
+      # must move together, or the lint config drifts from the framework
+      next:
+        patterns: ["next", "eslint-config-next"]
+      security:
+        applies-to: security-updates
+        patterns: ["*"]
+      minor-and-patch:
+        applies-to: version-updates
+        update-types: [minor, patch]
+        patterns: ["*"]
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      actions:
+        patterns: ["*"]
