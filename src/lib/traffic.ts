@@ -6,6 +6,7 @@
 import { get } from "@vercel/blob";
 import { unstable_cache } from "next/cache";
 import { allNamesOf, canonicalRepo } from "./aliases";
+import { cacheKey } from "./shape-versions";
 import { ciSplit, CI_CLONES_PER_CHECKOUT } from "../../collector/ci-checkouts-core.mjs";
 
 interface RawVault {
@@ -37,6 +38,7 @@ interface RawCi {
   days?: Record<string, { runs: number; checkouts: number }>;
 }
 
+// SHAPE: bump SHAPE_VERSION.trafficVault (src/lib/shape-versions.ts) when this changes.
 export interface TrafficVault {
   days: TrafficDay[]; // chronological, accumulated beyond GitHub's 14-day window
   referrers: { r: string; c: number; u: number }[];
@@ -164,13 +166,9 @@ async function readVault(repo: string): Promise<TrafficVault | null> {
 }
 
 export function loadTrafficVault(repo: string): Promise<TrafficVault | null> {
-  // BUMP THIS KEY WHENEVER THE SHAPE CHANGES. unstable_cache is not scoped to a
-  // deploy: without a new key the old shape keeps being served by the very
-  // deploy that added the field, and the new one reads as "missing data".
-  // v2 = added newestDay. v3 = alias-merged reads (rename survival), cached
-  // under the canonical name so old/new query names share one entry. v4 =
-  // ciBand per day + ci (the CI band of the clone series).
-  return unstable_cache(() => readVault(repo), ["traffic-vault-v4", canonicalRepo(repo).toLowerCase()], {
+  // Derived from SHAPE_VERSION.trafficVault: bump it when the shape changes.
+  // Cached under the canonical name so old/new query names share one entry.
+  return unstable_cache(() => readVault(repo), [cacheKey("trafficVault"), canonicalRepo(repo).toLowerCase()], {
     revalidate: 300,
   })();
 }
