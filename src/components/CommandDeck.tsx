@@ -31,7 +31,7 @@ import PrFlowPanel from "./PrFlowPanel";
 import TrafficPanel from "./TrafficPanel";
 import GodVelocityRank from "./GodVelocityRank";
 import MissionLog from "./MissionLog";
-import type { Vitals } from "@/lib/vitals";
+import type { VitalsReading } from "@/lib/vitals-reading";
 import type { PrFlow } from "@/lib/prflow";
 import { useLive } from "./LiveProvider";
 import type { DashboardBundle } from "@/lib/bundle";
@@ -170,7 +170,7 @@ export default function CommandDeck({
   onPinTarget,
   onExit,
   ladderBands = null,
-  vitals = null,
+  vitals,
   prFlow = null,
 }: {
   bundle: DashboardBundle;
@@ -179,7 +179,8 @@ export default function CommandDeck({
   onPinTarget: (r: string | null) => void;
   onExit: () => void;
   ladderBands?: LadderBand[] | null;
-  vitals?: Vitals | null;
+  // required: a missing reading must not render as the "locked" upsell
+  vitals: VitalsReading;
   prFlow?: PrFlow | null;
 }) {
   const live = useLive();
@@ -564,7 +565,7 @@ export default function CommandDeck({
           <div className="deck-view-main">
             {/* on a short screen the panel scrolls inside itself; the frame never does */}
             <div className="deck-panel-scroll">
-              <VitalSignsPanel repo={repo} name={repo.split("/")[1] ?? ""} vitals={vitals} index="01" compact />
+              <VitalSignsPanel repo={repo} name={repo.split("/")[1] ?? ""} reading={vitals} index="01" compact />
             </div>
           </div>
           <div className="deck-view-side">

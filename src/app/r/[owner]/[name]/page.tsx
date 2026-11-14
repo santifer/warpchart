@@ -35,7 +35,9 @@ import FirstLightBanner from "@/components/FirstLightBanner";
 import SpaceBackdrop from "@/components/SpaceBackdrop";
 import TrafficPanel from "@/components/TrafficPanel";
 import VitalSignsPanel from "@/components/VitalSignsPanel";
-import { loadVitals } from "@/lib/vitals";
+import { loadVitals, vitalsEntitled } from "@/lib/vitals";
+import { vitalsReading } from "@/lib/vitals-reading";
+import { settle, valueOf } from "@/lib/blob-read";
 import { loadPrFlow } from "@/lib/prflow";
 import PrFlowPanel from "@/components/PrFlowPanel";
 import { getCachedCodex, listCodexes } from "@/lib/codex";
@@ -123,6 +125,18 @@ export async function generateMetadata({
   };
 }
 
+// The three private reads every full console makes, in parallel: they used to
+// be awaited one after another inside the JSX, so one slow store read held the
+// whole render (and ISR regeneration) behind it.
+async function consoleReads(owner: string, name: string) {
+  const [dossier, vitals, prFlow] = await Promise.all([
+    getCachedDossier(owner, name),
+    settle(loadVitals(owner, name), "vitals"),
+    settle(loadPrFlow(owner, name), "prflow"),
+  ]);
+  return { dossier, vitals: vitalsReading(vitals, vitalsEntitled(owner, name)), prFlow: valueOf(prFlow) };
+}
+
 export default async function ExplorerPage({
   params,
 }: {
@@ -148,21 +162,18 @@ export default async function ExplorerPage({
   // this route" instead of "is it the tenant".
   const tenant = loadMeta();
   if (tenant && `${owner}/${name}`.toLowerCase() === tenant.repo.toLowerCase()) {
-    // the ladder's zones read the Blob: start now, alongside the live snapshot
-    const bandsP = ladderBands();
-    const live = await fetchLiveSnapshot(tenant.repo);
+    // the ladder's zones read the Blob too: all of it in parallel (ladderBands
+    // never rejects and gives up after 3 s)
+    const [live, reads, bands] = await Promise.all([
+      fetchLiveSnapshot(tenant.repo),
+      consoleReads(owner, name),
+      ladderBands(),
+    ]);
     const tBundle = buildBundle(undefined, live);
     return (
       <>
         <JsonLd data={repoGraph(tenant.repo, { stars: tBundle.netStars, rank: tBundle.rank })} />
-        <Dashboard
-          bundle={tBundle}
-          dossier={await getCachedDossier(owner, name)}
-          vitals={await loadVitals(owner, name)}
-          prFlow={await loadPrFlow(owner, name)}
-          charted={chartedRepos}
-          ladderBands={await bandsP}
-        />
+        <Dashboard bundle={tBundle} {...reads} charted={chartedRepos} ladderBands={bands} />
       </>
     );
   }
@@ -177,9 +188,12 @@ export default async function ExplorerPage({
   if (isHostedRepo(hostedLabel) || isOwnedBy(owner)) {
     const tHistory = loadTenantHistory(hostedLabel);
     const tTimestamps = loadTenantTimestamps(hostedLabel);
-    const bandsP = ladderBands();
-    const tLive = await fetchLiveSnapshot(hostedLabel);
     if (tHistory.length) {
+      const [tLive, reads, bands] = await Promise.all([
+        fetchLiveSnapshot(hostedLabel),
+        consoleReads(owner, name),
+        ladderBands(),
+      ]);
       const tMeta = {
         repo: hostedLabel,
         owner,
@@ -195,15 +209,7 @@ export default async function ExplorerPage({
       return (
         <>
           <JsonLd data={repoGraph(hostedLabel, { stars: hBundle.netStars, rank: hBundle.rank })} />
-          <Dashboard
-            bundle={hBundle}
-            polling={false}
-            dossier={await getCachedDossier(owner, name)}
-            vitals={await loadVitals(owner, name)}
-            prFlow={await loadPrFlow(owner, name)}
-            charted={chartedRepos}
-            ladderBands={await bandsP}
-          />
+          <Dashboard bundle={hBundle} polling={false} {...reads} charted={chartedRepos} ladderBands={bands} />
         </>
       );
     }
@@ -219,8 +225,15 @@ export default async function ExplorerPage({
   const { inputs } = data;
   const next = inputs.milestones[0] ?? null;
   const repoLabel = `${owner}/${name}`;
-  // loaded once: the panel renders from it and the console numbering starts after it
-  const prFlow = await loadPrFlow(owner, name);
+  // loaded once: the panel renders from it and the console numbering starts
+  // after it. A failed PR-flow read hides the panel for this render only (it
+  // is not cached); a failed vitals read says "unavailable", never "locked".
+  const [prFlowRead, vitalsRead] = await Promise.all([
+    settle(loadPrFlow(owner, name), "prflow"),
+    settle(loadVitals(owner, name), "vitals"),
+  ]);
+  const prFlow = valueOf(prFlowRead);
+  const vitals = vitalsReading(vitalsRead, vitalsEntitled(owner, name));
   const repoName = name;
 
   // the dossier tagline shown inline (unique content up front, not hidden
@@ -369,9 +382,10 @@ export default async function ExplorerPage({
 
       {/* VITAL SIGNS: the derived-intelligence verdict (ALIVE vs MONUMENT), full
           width above the console. Cache-only (collector-computed); null vitals
-          renders the locked upsell. Free for owned repos, paid for the rest. */}
+          renders the locked upsell only for a repo that is not entitled (see
+          vitalsReading). Free for owned repos, paid for the rest. */}
       <div className="mb-4">
-        <VitalSignsPanel repo={repoLabel} name={repoName} vitals={await loadVitals(owner, name)} />
+        <VitalSignsPanel repo={repoLabel} name={repoName} reading={vitals} />
       </div>
       {prFlow ? (
         <div className="mb-4">
