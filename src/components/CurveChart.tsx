@@ -1,10 +1,9 @@
 "use client";
 
-// Interactive cumulative chart for explorer pages: same visual language as
-// the unlocked console's CumulativeChart, fed by /api/curve (the cached
-// reconstruction shared with the SVG embed). The draw animation fires ONCE
-// when the panel enters the viewport (here we have JS, unlike a README),
-// and REPLAY re-runs it on demand. The estimated stretch beyond GitHub's
+// Interactive cumulative chart, fed by /api/curve (the cached reconstruction
+// shared with the SVG embed). The draw animation fires ONCE when the panel
+// enters the viewport (here we have JS, unlike a README), and REPLAY re-runs
+// it on demand. The estimated stretch beyond GitHub's
 // 40K pagination cap renders dashed and labeled, never disguised.
 import { useEffect, useRef, useState } from "react";
 import {
