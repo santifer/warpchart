@@ -29,11 +29,15 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v5
+        with:
+          # this job never pushes: leave no token in .git/config
+          persist-credentials: false
       - uses: actions/setup-node@v5
         with:
           node-version: 22
-      # pinned to the versions in package-lock.json
-      - run: npm install @vercel/blob@2.4.0 sharp@0.34.5 --no-save --no-audit --no-fund
+          cache: npm
+      # @vercel/blob and sharp, exactly as package-lock.json pins them
+      - run: npm ci --no-audit --no-fund
       - name: Render and publish the builders wall
         run: node collector/builders.mjs ${{ inputs.force && '--force' || '' }}
         timeout-minutes: 6
