@@ -9,6 +9,7 @@ import { loadRoute, loadMeta, lastSnapshot } from "@/lib/history";
 import { neighborsVelocity } from "@/lib/github";
 import { buildRouteLayers } from "@/lib/bundle";
 import { canonicalVelocity, velocityQuality } from "@/lib/velocity";
+import { gateMilestones } from "@/lib/projections";
 
 function seedFrom(text: string): number {
   let h = 2166136261;
@@ -67,10 +68,10 @@ export async function buildDemoSpotlight(): Promise<DemoSpotlight | null> {
   }
 
   const apex = { r: route.repos[0].r, s: route.repos[0].s };
-  const milestones = [50, 100, 200, 300, 400, 500]
-    .filter((rk) => rk < idx + 1 && route.repos.length >= rk)
-    .slice(-2)
-    .map((rk) => ({ rank: rk, threshold: route.repos[rk - 1].s, drift: null }));
+  const milestones = gateMilestones(
+    route.repos,
+    [50, 100, 200, 300, 400, 500].filter((rk) => rk < idx + 1 && route.repos.length >= rk).slice(-2),
+  );
 
   const layers = buildRouteLayers(hero.s, milestones, apex, hero.r);
   const meta = loadMeta();
