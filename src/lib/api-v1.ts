@@ -121,7 +121,11 @@ export interface VelocityEntry {
   repo: string;
   rank: number;
   stars: number;
-  velocityPerDay: number;
+  // signed canonical stars/day: negative when the repo is LOSING stars, null
+  // when unmeasured. Never clamped to 0 here: that is a ranking rule
+  // (canonicalVel0), not a number to show (#34: the leaderboard said 0 for a
+  // repo losing 24/day while /overtakes said -24).
+  velocityPerDay: number | null;
   language: string | null;
 }
 
@@ -145,7 +149,7 @@ export function velocityCsv(rows: VelocityEntry[]): string {
   const head = "rank,repo,stars,velocity_per_day,language";
   const cell = (v: string | number | null) => String(v ?? "").replace(/[,\r\n]/g, " ");
   const body = rows
-    .map((r) => [r.rank, r.repo, r.stars, r.velocityPerDay, cell(r.language)].join(","))
+    .map((r) => [r.rank, r.repo, r.stars, cell(r.velocityPerDay), cell(r.language)].join(","))
     .join("\n");
   return `${head}\n${body}\n`;
 }
@@ -155,7 +159,7 @@ export function leaderboard(limit = 20, language?: string): VelocityEntry[] {
   if (!r) return [];
   const lang = language?.trim().toLowerCase();
   return rankedRegistry(r.repos)
-    .map((p) => ({ repo: p.r, rank: p.rank, stars: p.s, velocityPerDay: Math.round(canonicalVel0(p)), language: p.l ?? null }))
+    .map((p) => ({ repo: p.r, rank: p.rank, stars: p.s, velocityPerDay: rnd(canonicalVelocity(p)), language: p.l ?? null }))
     .filter((p) => !lang || (p.language ?? "").toLowerCase() === lang)
     .slice(0, clamp(limit));
 }

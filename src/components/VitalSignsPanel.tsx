@@ -138,11 +138,14 @@ export default function VitalSignsPanel({
   name,
   vitals,
   index = "01",
+  compact = false,
 }: {
   repo: string;
   name: string;
   vitals: Vitals | null;
   index?: string;
+  // Command Deck: no prose paragraphs, so the panel fits one screen
+  compact?: boolean;
 }) {
   // ---- LOCKED: the real dashboard, blurred, behind the upsell ---------------
   if (!vitals) {
@@ -236,18 +239,20 @@ export default function VitalSignsPanel({
       meta="engineering health · live"
       action={
         <div className="flex items-center gap-4">
-          <span className="hidden sm:block">
+          <span className="vs-operated hidden whitespace-nowrap sm:block">
             <OperatedBy login={vitals.creator.login} />
           </span>
           <span
-            className={`numeral text-label tracking-[0.2em] ${alive ? "text-accent" : "text-warn"}`}
+            className={`numeral whitespace-nowrap text-label tracking-[0.2em] ${alive ? "text-accent" : "text-warn"}`}
           >
             {alive ? "● ALIVE" : "○ MONUMENT"}
           </span>
         </div>
       }
     >
-      <div className="flex flex-col gap-6 py-1">
+      {/* deck: the body fills the panel and the contributor chart takes the
+          height that is left, so nothing sits empty under the fingerprint */}
+      <div className={`flex flex-col gap-6 py-1 ${compact ? "h-full min-h-0" : ""}`}>
         {/* ═══ ACT 1 · THE THESIS — the worldwide activity rank ═══ */}
         <div className="flex flex-col gap-2">
           <span className="numeral text-micro tracking-[0.28em] text-faint">
@@ -262,7 +267,7 @@ export default function VitalSignsPanel({
               <span className="text-dim">of the {fmtCompact(vitals.universe)} most-starred on GitHub</span>
             </span>
           </div>
-          <span className="numeral text-micro leading-relaxed text-faint/70">
+          <span className={`numeral text-micro leading-relaxed text-faint/70 ${compact ? "hidden" : ""}`}>
             a live daily composite of commits, merged PRs, issues closed &amp; releases — development
             work, not stars — a snapshot, not a fixed title{since ? ` · maintained since ${since}` : ""}
           </span>
@@ -270,7 +275,7 @@ export default function VitalSignsPanel({
 
         {/* ═══ ACT 2 · THE PEOPLE — who builds this, measured daily ═══ */}
         {cm ? (
-          <div className="flex flex-col gap-3 border-t border-grid pt-5">
+          <div className={`flex flex-col gap-3 border-t border-grid pt-5 ${compact ? "min-h-0 flex-1" : ""}`}>
             <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
               <a
                 href={`https://github.com/${repo}/graphs/contributors`}
@@ -322,9 +327,9 @@ export default function VitalSignsPanel({
             {/* the evolution strip: GitHub's contributor curve + rate histogram.
                 The series comes embedded in the vitals blob (cm.census); when a
                 repo has no census yet the block simply does not render. */}
-            {cm.census ? <ContributorChart census={cm.census} busFactor={cm.busFactor ?? null} /> : null}
+            {cm.census ? <ContributorChart census={cm.census} busFactor={cm.busFactor ?? null} compact={compact} /> : null}
             {/* the sentence: pure facts, top-tier by deduction */}
-            <div className="numeral text-micro leading-relaxed text-faint">
+            <div className={`numeral text-micro leading-relaxed text-faint ${compact ? "hidden" : ""}`}>
               {/* The total is repo-wide; the merge gate and the lead time come from
                   the sampled window, so the sentence says so instead of letting a
                   sample pass for every PR. PRs are counted by their author and
@@ -370,14 +375,14 @@ export default function VitalSignsPanel({
           {fingerprint.map((f, i) => (
             <FingerBar key={f.label} label={f.label} pct={f.pct} i={i} />
           ))}
-          <span className="numeral text-micro text-faint/70">
+          <span className={`numeral text-micro text-faint/70 ${compact ? "hidden" : ""}`}>
             the notch marks the median of the {fmtCompact(vitals.universe)} — every signal sits far past
             it
           </span>
         </div>
 
         {/* ═══ ACT 4 · THE OPERATION — velocity, quality, the gate ═══ */}
-        <div className="grid grid-cols-1 gap-x-8 gap-y-6 border-t border-grid pt-5 sm:grid-cols-3">
+        <div className={`grid grid-cols-1 gap-x-8 gap-y-6 border-t border-grid pt-5 sm:grid-cols-3 ${compact ? "vs-ops" : ""}`}>
           <OpsGroup title="VELOCITY">
             {lt ? (
               <Figure
@@ -478,7 +483,7 @@ export default function VitalSignsPanel({
         {/* footer credentials — verified from public data. Important, but a
             reader scanning for traction reads rank and growth first. */}
         {ar?.agentNative || (docs && docs.chips.length > 0) ? (
-          <div className="flex flex-col gap-2 border-t border-grid pt-5">
+          <div className={`flex flex-col gap-2 border-t border-grid pt-5 ${compact ? "hidden" : ""}`}>
             <span className="numeral text-micro tracking-[0.22em] text-faint">
               VERIFIED · PUBLIC GITHUB DATA
             </span>

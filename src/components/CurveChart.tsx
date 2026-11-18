@@ -104,6 +104,21 @@ export default function CurveChart({ repo, fill }: { repo: string; fill?: boolea
   // middle (archive unavailable) draws dashed, and it is BOUNDED at exactStart
   // so the recent window we recorded never renders as a guess. Boundary and
   // exactStart points belong to both series so the pens meet without a gap.
+  // month starts inside the curve's span, every second one past six months
+  const monthTicks = (() => {
+    if (!curve.pts.length) return [] as number[];
+    const t0 = curve.pts[0].t;
+    const t1 = curve.pts[curve.pts.length - 1].t;
+    const out: number[] = [];
+    const d = new Date(t0);
+    let m = Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 1);
+    while (m <= t1) {
+      out.push(m);
+      const n = new Date(m);
+      m = Date.UTC(n.getUTCFullYear(), n.getUTCMonth() + 1, 1);
+    }
+    return out.length > 6 ? out.filter((_, i) => i % 2 === (out.length % 2 === 0 ? 1 : 0)) : out;
+  })();
   const rows: Row[] = curve.pts.map((p, i) => {
     const inEst = boundary !== null && i >= boundary && (exactStart === null || i <= exactStart);
     const inSolid = !inEst || i === boundary || i === exactStart;
@@ -114,22 +129,29 @@ export default function CurveChart({ repo, fill }: { repo: string; fill?: boolea
     <div ref={hostRef} className={`flex flex-col gap-2 ${fill ? "h-full min-h-0" : ""}`}>
       <div className={`w-full ${fill ? "min-h-0 flex-1" : "h-[280px]"}`}>
         <ResponsiveContainer width="100%" height="100%">
-          <ComposedChart key={run} data={rows} margin={{ top: 8, right: 12, bottom: 0, left: 0 }}>
+          <ComposedChart key={run} data={rows} margin={{ top: 8, right: fill ? 22 : 12, bottom: 0, left: 0 }}>
             <CartesianGrid stroke={C.grid} strokeDasharray="2 6" vertical={false} />
             <XAxis
               dataKey="t"
               type="number"
               domain={["dataMin", "dataMax"]}
+              // "Apr 26" reads as the 26th of April; the deck says the month
+              // only (the year is in the panel header), so its ticks sit on
+              // the 1st of a month: equal spacing then means equal time
+              ticks={fill ? monthTicks : undefined}
               tickFormatter={(t: number) =>
-                new Date(t).toLocaleDateString("en-US", { month: "short", year: "2-digit" })
+                fill
+                  ? new Date(t).toLocaleDateString("en-US", { month: "short", timeZone: "UTC" })
+                  : new Date(t).toLocaleDateString("en-US", { month: "short", year: "2-digit" })
               }
-              tick={{ fill: C.dim, fontSize: 12, fontFamily: "var(--font-jbmono)" }}
+              tick={{ fill: C.dim, fontSize: fill ? 11 : 12, fontFamily: "var(--font-jbmono)" }}
               tickLine={false}
               axisLine={{ stroke: C.grid }}
+              minTickGap={fill ? 0 : 5}
             />
             <YAxis
               tickFormatter={(v: number) => fmtCompact(v)}
-              tick={{ fill: C.dim, fontSize: 12, fontFamily: "var(--font-jbmono)" }}
+              tick={{ fill: C.dim, fontSize: fill ? 11 : 12, fontFamily: "var(--font-jbmono)" }}
               tickLine={false}
               axisLine={false}
               width={52}
@@ -214,8 +236,10 @@ export default function CurveChart({ repo, fill }: { repo: string; fill?: boolea
           </ComposedChart>
         </ResponsiveContainer>
       </div>
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <span className="numeral text-micro text-faint">
+      {/* the deck cell is short: the caption stays one line (full text on
+          hover) and the button shrinks, so the curve keeps the height */}
+      <div className={`flex items-center justify-between gap-2 ${fill ? "" : "flex-wrap"}`}>
+        <span className={`numeral text-micro text-faint ${fill ? "line-clamp-2 min-w-0" : ""}`}>
           {exactWide
             ? "exact api timestamps + the recent window recorded EXACTLY, daily — our own record beyond GitHub's 40K cap"
             : seam !== null
@@ -226,9 +250,11 @@ export default function CurveChart({ repo, fill }: { repo: string; fill?: boolea
         </span>
         <button
           onClick={() => setRun((r) => r + 1)}
-          className="numeral border border-grid px-3 py-1.5 text-micro tracking-[0.2em] text-dim transition-colors hover:border-accent/50 hover:text-accent"
+          className={`numeral shrink-0 border border-grid text-micro tracking-[0.2em] text-dim transition-colors hover:border-accent/50 hover:text-accent ${fill ? "px-2 py-0.5" : "px-3 py-1.5"}`}
+          title="replay the curve"
+          aria-label="replay the curve"
         >
-          ↻ REPLAY
+          {fill ? "↻" : "↻ REPLAY"}
         </button>
       </div>
     </div>

@@ -13,7 +13,7 @@
 import { readFileSync, writeFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import { execSync } from "node:child_process";
-import { DATA_DIR, ROOT, ghFetch, sleep } from "./lib.mjs";
+import { DATA_DIR, ROOT, ghFetch, sleep, drainFetch, budget } from "./lib.mjs";
 
 const ROUTE = join(DATA_DIR, "route.json");
 const ROUTE_PREV = join(DATA_DIR, "route-prev.json");
@@ -272,16 +272,20 @@ export async function runCollisionScan({ enrich = true, force = false } = {}) {
       targets.add(c.victim.r);
       targets.add(c.hunter.r);
     }
+    // best effort inside a 4-minute step whose scan already took ~30 s
+    const b = budget(2 * 60_000);
+    let done = 0;
     for (const r of targets) {
+      if (b.spent()) break;
       const q = encodeURIComponent(r);
       for (const path of [`/r/${r}`, `/api/curve?repo=${q}`, `/api/chart?repo=${q}`]) {
-        try {
-          await fetch(`${base}${path}`);
-        } catch { /* best effort */ }
+        if (b.spent()) break;
+        await drainFetch(`${base}${path}`); // always read and bounded (#34)
         await sleep(1500);
       }
+      done++;
     }
-    console.log(`[collisions] stories warmed: ${targets.size} repos`);
+    console.log(`[collisions] stories warmed: ${done}/${targets.size} repos${done < targets.size ? " (2-min budget spent)" : ""}`);
   }
   return out;
 }
