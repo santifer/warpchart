@@ -31,18 +31,6 @@ export function VelocitySilhouette() {
   );
 }
 
-export function HeatmapSilhouette() {
-  const rand = seeded(7);
-  const cells = Array.from({ length: 24 * 7 }, () => rand());
-  return (
-    <div className="grid h-[220px] grid-cols-[repeat(24,1fr)] gap-[3px] blur-[1px]" aria-hidden>
-      {cells.map((v, i) => (
-        <div key={i} style={{ background: `rgba(83, 214, 232, ${0.04 + v * 0.14})` }} />
-      ))}
-    </div>
-  );
-}
-
 export function StepsSilhouette({ h = 220 }: { h?: number }) {
   return (
     <svg viewBox="0 0 400 100" preserveAspectRatio="none" className="block w-full blur-[1.5px]" style={{ height: h }} aria-hidden>

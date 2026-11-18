@@ -94,17 +94,6 @@ export function cumulativeSeries(timestamps: string[], maxPoints = 700): CumPoin
   return out;
 }
 
-// 7x24 matrix (UTC), rows Monday..Sunday.
-export function heatmapMatrix(timestamps: string[]): number[][] {
-  const m: number[][] = Array.from({ length: 7 }, () => Array(24).fill(0));
-  for (const iso of timestamps) {
-    const d = new Date(toMs(iso));
-    const dow = (d.getUTCDay() + 6) % 7; // 0 = Monday
-    m[dow][d.getUTCHours()]++;
-  }
-  return m;
-}
-
 // Average stars/day over the trailing 7 days.
 export function velocity7d(timestamps: string[], nowMs: number): number {
   const cutoff = nowMs - 7 * DAY;

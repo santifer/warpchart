@@ -43,6 +43,8 @@ a different question. It never throws, never logs, and the panel stays green.
   | `velocity-rank-meta-vN` | `src/lib/velocity-rank.ts` | 1 h |
   | `velocity-rank-month-vN` | `src/lib/velocity-rank.ts` | 1 h |
   | `velocity-rank-reconstructed-vN` | `src/lib/velocity-rank.ts` | 24 h |
+  | `velocity-rank-reconstructed-gaps-vN` | `src/lib/velocity-rank.ts` | 24 h |
+  | `ladder-bands-vN` | `src/lib/velocity-rank.ts` | 1 h |
   | `route-history-shard` | `src/lib/rank-history.ts` | 1 h |
   | `live-snapshot` | `src/lib/live-blob.ts` | 1 min |
   | `earned-badges` | `src/lib/earned.ts` | 1 h |
@@ -102,8 +104,8 @@ These keys have a second writer, or a writer you would not guess:
 - **`data/catalog.json`, `data/attribution.json`, `data/enrichment.json`**: written straight to the Blob by `collector/catalog.mjs`, `collector/attribute.mjs` and `collector/enrich.mjs`, **and** re-uploaded by the mirror from the copy hydrated at the start of the run. In `collect.yml` the mirror runs before catalog and attribute, so it rewrites the previous version. Its upload time is the one `inventory.coverage` reads. **Known gap:** a producer of one of these three that stops still looks fresh to the watchdog.
 - **`data/tenants.json`**: the Polar webhook (`src/lib/tenants-store.ts`) only. It is kept out of the mirror, because a mirrored copy would clobber a tenant who paid mid-run. Reads use `useCache: false` and throw on anything but a 404.
 - **`health/partial/*`**: `markPartial` / `markComplete` in `collector/blob.mjs`, called by route-history, catalog, prflow, builders, velocity-rank, trending-marks and ci-checkouts. `collector/health.mjs` reads them, and writes the rest of `health/*`.
-- **`velocity-rank/*`**: `collector/velocity-rank.mjs` writes the month files and `meta.json`; `collector/velocity-rank-backfill.mjs` writes `reconstructed.json`.
-- **`god/*`**: written by the owner's scripts and by the app. `scripts/god-magic-link.mjs` writes a magic-link grant (`god/magic/{hash}.json`), and `src/lib/magic-link.ts` deletes it on redemption, leaving a `.used` claim as a tombstone. `src/lib/guest-keys.ts` writes a guest grant (`god/guests/{hash}.json`) when a guest link is redeemed, and `scripts/god-guests.mjs` deletes it to revoke. Only hashes are stored.
+- **`velocity-rank/*`**: `collector/velocity-rank.mjs` writes the month files and `meta.json`; `collector/velocity-rank-backfill.mjs`, run by hand, writes `reconstructed.json` and, in gap mode, `reconstructed-gaps.json`.
+- **`god/*`**: written by the owner's scripts and by the app. `scripts/god-magic-link.mjs` writes a magic-link grant (`god/magic/{hash}.json`) by hand and prunes expired ones, and `src/lib/magic-link.ts` deletes a grant on redemption, leaving a `.used` claim as a tombstone. `src/lib/guest-keys.ts` (`mintGuest`, from `/unlock`) writes a guest grant (`god/guests/{hash}.json`), and `scripts/god-guests.mjs` deletes it to revoke. Keys are SHA-256 hashes, never the token. `ARTIFACTS` declares `god/` as config, because weeks without a new link are normal.
 - **`live/*`**: `collector/live.mjs` **and** `src/lib/live-blob.ts`. The webhook seeds one first point at provisioning.
 - **`embeds/seen.json`**: `src/lib/embed-track.ts` (a first sighting) **and** `src/app/api/embeds/route.ts` (`?forget=`). Both read, modify and write the whole map without a lock.
 - **Written by the app, not the collector:** `alerts/sent.json` (`/api/cron/alerts`), `badges-earned.json` (`/api/cron/badges`) and `codex/*` (`src/lib/codex.ts`, on a repo's first visit).

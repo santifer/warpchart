@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { acceptPrCount, acceptUniverse } from "./guards.mjs";
+import { acceptPrCount, acceptUniverse, staleShards } from "./guards.mjs";
 
 describe("acceptUniverse: a truncated day is never recorded as a day", () => {
   // the two short days that inflated every percentile in September 2026
@@ -49,5 +49,29 @@ describe("acceptPrCount: a full recompute cannot lose PRs", () => {
 
   it("accepts the first run (nothing to compare with)", () => {
     expect(acceptPrCount(2634, null).ok).toBe(true);
+  });
+});
+
+// Incident 2026-11-04: the 06:05Z run read 9 of the 32 hot shards from a stale
+// Blob CDN copy (one written before 2026-11-03), appended 2026-11-04 to it and
+// wrote it back: 2,676 repos lost their 2026-11-03 point for good, the day fell
+// to 7,324 repos / 735 of the top 1,000, and the velocity-rank table froze at
+// 2 Nov (it refused to shrink). Real shapes from route-history/shard-2.json.
+describe("staleShards: a shard read without the last recorded day is never written back", () => {
+  const fresh = { dates: ["2026-11-01", "2026-11-02", "2026-11-03"], series: { "a/b": [["2026-11-03", 10, 900]] } };
+  const stale = { dates: ["2026-11-01", "2026-11-02"], series: { "c/d": [["2026-11-02", 20, 800]] } };
+  it("flags the shard whose copy predates the last recorded day", () => {
+    expect(staleShards([fresh, stale, fresh], "2026-11-03")).toEqual([1]);
+  });
+  it("a missing or empty shard is not stale (a new shard starts empty)", () => {
+    expect(staleShards([null, { dates: [], series: {} }, fresh], "2026-11-03")).toEqual([]);
+  });
+  it("a shard that should exist but read as nothing is caught by the caller's placeholder", () => {
+    // route-history maps a null read of a shard that gets repos today to a
+    // non-empty placeholder without dates, so a lost read refuses the write
+    expect(staleShards([{ dates: [], series: { "?": [] } }], "2026-11-03")).toEqual([0]);
+  });
+  it("no recorded day yet: nothing can be stale", () => {
+    expect(staleShards([stale], null)).toEqual([]);
   });
 });

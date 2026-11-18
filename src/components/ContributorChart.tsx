@@ -11,18 +11,17 @@
 //   width = days). With unequal bins that is the only honest shape: area equals
 //   people, and a strong short month is TALL and narrow, not small.
 //
-// ONE reading when it exists: GitHub's own contributor count, rebuilt from the
+// ONE reading, always: GitHub's own contributor count, rebuilt from the
 // commit history with GitHub's rule and ending exactly on the figure GitHub
 // shows (the "N contributors" link above). One number on the page, the same one
-// a reader finds on the repo (2026-10-11). Without it (no live figure, or the
-// rebuild too far off to calibrate) the chart falls back to the census toggle:
-//   AUTHORS   - people who authored a landed commit (the strict census)
-//   CREDITED  - authors plus Co-authored-by humans. AI co-credits never become
-//               people.
+// a reader finds on the repo (2026-10-11). There is no other count to fall
+// back to (Santiago, 2026-10-30: the authors / co-authored toggle is gone):
+// without GitHub's curve the chart is not drawn, and the watchdog's
+// presence.contributor-curve opens an issue.
 //
 // Every number and sentence below is computed from the series at render time.
 // Nothing is hardcoded: the copy recomputes as the data moves.
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { VitalsCensus, VitalsBusFactor } from "@/lib/vitals";
 
 const DAY = 864e5;
@@ -87,25 +86,40 @@ function monthSegments(points: [string, number][], endMs: number): Seg[] {
   return out;
 }
 
+const LBL_DEFAULT = 172;
+
 export default function ContributorChart({
   census,
   busFactor,
+  compact = false,
 }: {
   census: VitalsCensus;
   busFactor: VitalsBusFactor | null;
+  // Command Deck: the chart and bus factor only; the sentences stay in the
+  // console, where they are read rather than glanced at
+  compact?: boolean;
 }) {
-  const [mode, setMode] = useState<"a" | "c">("a");
-  const gh = census.githubDaily?.length && census.github != null;
-  const pts = gh
-    ? census.githubDaily!
-    : mode === "a"
-      ? census.authorsDaily
-      : census.creditedDaily;
-  const N = gh
-    ? census.github!
-    : mode === "a"
-      ? census.authors
-      : census.credited;
+  // Command Deck: the chart's own box, measured in layout px
+  const boxRef = useRef<HTMLDivElement | null>(null);
+  const [measured, setMeasured] = useState<{ w: number; h: number } | null>(null);
+  useEffect(() => {
+    const el = boxRef.current;
+    if (!compact || !el) return;
+    const fit = () => {
+      const w = Math.round(el.clientWidth);
+      const h = Math.round(el.clientHeight);
+      if (w > 0 && h > 0) setMeasured((m) => (m && m.w === w && m.h === h ? m : { w, h }));
+    };
+    fit();
+    const ro = new ResizeObserver(fit);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [compact]);
+  const pts = useMemo(
+    () => (census.github != null ? (census.githubDaily ?? []) : []),
+    [census.github, census.githubDaily],
+  );
+  const N = census.github ?? 0;
 
   const model = useMemo(() => {
     if (!pts.length) return null;
@@ -134,14 +148,22 @@ export default function ContributorChart({
   const { endMs, t0, segs, maxRate, cur, best, last30 } = model;
 
   // ---- geometry ----
-  const W = 960,
-    X0 = 8,
-    X1 = W - 52,
-    CT = 12,
-    CB = 102,
-    HT = 116,
-    HB = 154,
-    LBL = 172;
+  // Console: a fixed 960x180 canvas scaled to the width. Command Deck
+  // (compact): the canvas IS the box it is given (1 unit = 1 px), so a tall
+  // cell gives a tall chart and the type stays at a readable 11 px.
+  const box = compact ? measured : null;
+  const W = box ? Math.max(320, box.w) : 960;
+  const TH = box ? Math.max(140, box.h) : LBL_DEFAULT + 8;
+  const fz = box ? 11 : 9;
+  const X0 = 8,
+    X1 = W - (box ? 60 : 52),
+    CT = box ? 18 : 12,
+    LBL = TH - (box ? 6 : 8),
+    HB = LBL - (box ? 20 : 18),
+    // short box: the bars yield first (24-70 units) so the curve keeps a
+    // readable slope instead of collapsing to a line
+    HT = box ? HB - Math.min(70, Math.max(24, Math.round((HB - CT) * 0.3))) : 116,
+    CB = box ? HT - 22 : 102;
   const x = (t: number) => X0 + ((t - t0) / (endMs - t0)) * (X1 - X0);
   const yMax = Math.max(50, Math.ceil(N / 50) * 50);
   const y = (v: number) => CB - (v / yMax) * (CB - CT);
@@ -163,60 +185,24 @@ export default function ContributorChart({
   const fastest = cur.rate >= maxRate - 1e-9;
 
   return (
-    <div className="flex flex-col gap-2">
+    <div className={`flex flex-col gap-2 ${compact ? "min-h-0 flex-1" : ""}`}>
       <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
-        {gh ? (
-          <span className="numeral text-micro tracking-[0.1em] text-faint">
-            CONTRIBUTORS · GITHUB&apos;S COUNT
-          </span>
-        ) : (
-          <div
-            className="flex border border-grid"
-            role="tablist"
-            aria-label="Contributor definition"
-          >
-            {(
-              [
-                [
-                  "a",
-                  `AUTHORS ${census.authors}`,
-                  "People who authored at least one landed commit. Bots and service accounts excluded.",
-                ],
-                [
-                  "c",
-                  `+ CO-AUTHORED ${census.credited}`,
-                  "Authors plus people credited with Co-authored-by on landed commits (squashes, suggestions, pairing). AI co-credits are not counted as people.",
-                ],
-              ] as const
-            ).map(([m, label, tip]) => (
-              <button
-                key={m}
-                title={tip}
-                role="tab"
-                aria-selected={mode === m}
-                onClick={() => setMode(m)}
-                className={`numeral cursor-pointer px-3 py-1 text-micro tracking-[0.1em] transition-colors ${
-                  mode === m
-                    ? "bg-accent/15 text-accent"
-                    : "text-faint hover:text-dim"
-                }`}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
-        )}
+        <span className="numeral text-micro tracking-[0.1em] text-faint">
+          CONTRIBUTORS · GITHUB&apos;S COUNT
+        </span>
         <span className="numeral text-micro text-faint">
           <span className="text-accent">{last30}</span> of {N} arrived in the
           last 30 days
         </span>
       </div>
 
+      <div ref={boxRef} className={compact ? "contrib-box min-h-[150px] flex-1" : ""}>
       <svg
-        viewBox={`0 0 ${W} ${LBL + 8}`}
-        className="block w-full"
+        viewBox={`0 0 ${W} ${TH}`}
+        className={box ? "block h-full w-full" : "block w-full"}
+        preserveAspectRatio={box ? "none" : undefined}
         role="img"
-        aria-label={`Cumulative ${gh ? "contributors, GitHub's count," : mode === "a" ? "authors" : "credited contributors"} over time, daily`}
+        aria-label="Cumulative contributors, GitHub's count, over time, daily"
       >
         <line x1={X0} y1={CB} x2={X1} y2={CB} stroke="var(--grid)" />
         <line
@@ -231,7 +217,7 @@ export default function ContributorChart({
           x={X0}
           y={y(yMax) - 4}
           className="numeral"
-          fontSize="9"
+          fontSize={fz}
           fill="var(--faint)"
         >
           {yMax}
@@ -256,7 +242,7 @@ export default function ContributorChart({
               y={LBL}
               textAnchor={w < 34 ? "end" : "middle"}
               className="numeral"
-              fontSize="9.5"
+              fontSize={fz + 0.5}
               letterSpacing="1"
               fill="var(--faint)"
             >
@@ -281,7 +267,7 @@ export default function ContributorChart({
           x={x(endMs) + 8}
           y={y(N) + 4}
           className="numeral"
-          fontSize="14"
+          fontSize={box ? 15 : 14}
           fontWeight="600"
           fill="var(--ink)"
         >
@@ -301,16 +287,21 @@ export default function ContributorChart({
                 fill="var(--accent)"
                 opacity={s.partial ? 0.95 : 0.55}
               />
-              <text
-                x={bw < 34 ? x(s.b) : bx + bw / 2}
-                y={by - 3}
-                textAnchor={bw < 34 ? "end" : "middle"}
-                className="numeral"
-                fontSize="9"
-                fill={s.rate === maxRate ? "var(--warn)" : "var(--faint)"}
-              >
-                {s.rate.toFixed(1)}/d
-              </text>
+              {/* a bar too narrow for its label (the current partial month)
+                  only labels itself when the previous month's label is not
+                  already sitting at the same spot */}
+              {bw < 34 && segs.indexOf(s) > 0 && x(s.b) - x(segs[segs.indexOf(s) - 1].b) < fz * 5 ? null : (
+                <text
+                  x={bw < 34 ? x(s.b) : bx + bw / 2}
+                  y={by - 3}
+                  textAnchor={bw < 34 ? "end" : "middle"}
+                  className="numeral"
+                  fontSize={fz}
+                  fill={s.rate === maxRate ? "var(--warn)" : "var(--faint)"}
+                >
+                  {s.rate.toFixed(1)}/d
+                </text>
+              )}
             </g>
           );
         })}
@@ -318,16 +309,15 @@ export default function ContributorChart({
           x={X0}
           y={HT - 3}
           className="numeral"
-          fontSize="8.5"
+          fontSize={fz - 0.5}
           letterSpacing="1"
           fill="var(--faint)"
           opacity=".8"
         >
-          NEW{" "}
-          {gh ? "CONTRIBUTORS" : mode === "a" ? "AUTHORS" : "CREDITED PEOPLE"} /
-          DAY
+          NEW CONTRIBUTORS / DAY
         </text>
       </svg>
+      </div>
 
       {busFactor ? (
         // wraps on a phone: the shares go under the bar instead of pushing it to
@@ -359,47 +349,22 @@ export default function ContributorChart({
         </div>
       ) : null}
 
+      {compact ? null : (<>
       <div className="numeral text-micro leading-relaxed text-faint">
-        {gh ? (
-          <>
-            <span className="text-dim">{N} contributors</span> since{" "}
-            {capMonth(segs[0].label)} by GitHub&apos;s count: the accounts
-            GitHub credits on a landed commit, as author or co-author.
-            {othersPct !== null ? (
-              <>
-                {" "}
-                <span className="text-accent">
-                  {othersPct}% of all commits
-                </span>{" "}
-                come from someone other than the maintainer.
-              </>
-            ) : null}
-          </>
-        ) : mode === "a" ? (
-          <>
-            <span className="text-dim">{N} people</span> have authored a landed
-            commit since {capMonth(segs[0].label)}.
-            {othersPct !== null ? (
-              <>
-                {" "}
-                <span className="text-accent">
-                  {othersPct}% of all commits
-                </span>{" "}
-                come from someone other than the maintainer.
-              </>
-            ) : null}
-          </>
-        ) : (
-          <>
-            <span className="text-dim">{N} people</span> are credited on landed
-            commits since {capMonth(segs[0].label)}: {census.authors} authors
-            plus{" "}
-            <span className="text-accent">
-              {census.credited - census.authors} co-authors
-            </span>{" "}
-            via squashes, suggestions and agentic pairing.
-          </>
-        )}{" "}
+        <>
+          <span className="text-dim">{N} contributors</span> since{" "}
+          {capMonth(segs[0].label)} by GitHub&apos;s count: the accounts GitHub
+          credits on a landed commit, as author or co-author.
+          {othersPct !== null ? (
+            <>
+              {" "}
+              <span className="text-accent">
+                {othersPct}% of all commits
+              </span>{" "}
+              come from someone other than the maintainer.
+            </>
+          ) : null}
+        </>{" "}
         {capMonth(best.label)} brought{" "}
         <span className="text-dim">{best.nw} first-timers</span>;{" "}
         {fastest ? (
@@ -414,42 +379,18 @@ export default function ContributorChart({
           </>
         )}
       </div>
-      {gh ? (
-        // One count on the panel, so no legend of definitions: just how the
-        // curve is drawn. GitHub's figure has no dates; the curve does.
-        <span className="numeral text-micro leading-relaxed text-faint/60">
-          GitHub&apos;s contributor count, drawn from the commit history and
-          ending on the figure GitHub shows
-          {census.measuredAt
-            ? ` · measured ${census.measuredAt.slice(0, 10)}`
-            : ""}{" "}
-          · {capMonth(cur.label)} spans {curDays} day{curDays === 1 ? "" : "s"}{" "}
-          · bots and AI accounts count, as on GitHub
-        </span>
-      ) : (
-        <>
-          <span className="numeral text-micro text-faint/60">
-            commit census
-            {census.measuredAt
-              ? ` · measured ${census.measuredAt.slice(0, 10)}`
-              : ""}{" "}
-            · {capMonth(cur.label)} spans {curDays} day
-            {curDays === 1 ? "" : "s"} · bots and service accounts excluded
-            {mode === "c"
-              ? ` · AI co-credits tracked apart (${census.aiCoCredits})`
-              : ""}
-          </span>
-          {/* Fallback only: three counts sit on the panel (GitHub's, authors,
-              co-authored); say what each one counts (2026-10-11). */}
-          <span className="numeral text-micro leading-relaxed text-faint/60">
-            <span className="text-faint">contributors</span> = GitHub&apos;s own
-            count, its method · <span className="text-faint">authors</span> =
-            people with a landed commit ·{" "}
-            <span className="text-faint">co-authored</span> = authors plus
-            people credited on a commit
-          </span>
-        </>
-      )}
+      {/* One count on the panel, so no legend of definitions: just how the
+          curve is drawn. GitHub's figure has no dates; the curve does. */}
+      <span className="numeral text-micro leading-relaxed text-faint/60">
+        GitHub&apos;s contributor count, drawn from the commit history and
+        ending on the figure GitHub shows
+        {census.measuredAt
+          ? ` · measured ${census.measuredAt.slice(0, 10)}`
+          : ""}{" "}
+        · {capMonth(cur.label)} spans {curDays} day{curDays === 1 ? "" : "s"} ·
+        bots and AI accounts count, as on GitHub
+      </span>
+      </>)}
     </div>
   );
 }

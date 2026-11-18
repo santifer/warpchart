@@ -199,7 +199,7 @@ export default function PrFlowPanel({ flow, index = "02" }: { flow: PrFlow | nul
 
   return (
     <Panel id={PR_FLOW_ANCHOR} index={index} title="PR flow" meta={`in / out · through ${fmtDay(flow.through ?? last.day ?? "")}`}>
-      <div className="flex flex-col gap-4">
+      <div className="pr-flow-body flex flex-col gap-4">
         <div className="grid grid-cols-2 gap-x-4 gap-y-3 sm:grid-cols-4">
           <Stat label="IN · 7D" value={fmt(in7)} sub="PRs opened" tone={C.warn} />
           <Stat label="OUT · 7D" value={fmt(out7)} sub={`${fmt(merged7)} merged`} tone={C.accent} />
@@ -215,7 +215,7 @@ export default function PrFlowPanel({ flow, index = "02" }: { flow: PrFlow | nul
           />
         </div>
 
-        <div className="flex flex-col gap-1.5">
+        <div className="pr-flow-queue flex flex-col gap-1.5">
           <div className="flex items-center justify-between gap-2">
             <span className="numeral text-micro tracking-[0.2em] text-faint">QUEUE · DAILY IN / OUT</span>
             <div className="flex gap-1">
@@ -234,9 +234,9 @@ export default function PrFlowPanel({ flow, index = "02" }: { flow: PrFlow | nul
             </div>
           </div>
 
-          <div className="h-[260px] w-full">
+          <div className="pr-flow-chart h-[260px] w-full">
             <ResponsiveContainer width="100%" height="100%">
-              <ComposedChart data={rows} margin={{ top: 6, right: 8, bottom: 0, left: 4 }}>
+              <ComposedChart data={rows} margin={{ top: 6, right: 24, bottom: 0, left: 4 }}>
                 <CartesianGrid stroke={C.grid} strokeDasharray="2 6" vertical={false} />
                 <XAxis
                   dataKey="t"
@@ -293,7 +293,7 @@ export default function PrFlowPanel({ flow, index = "02" }: { flow: PrFlow | nul
               </span>
             ))}
           </div>
-          <span className="numeral text-micro text-faint">
+          <span className="pr-flow-note numeral text-micro text-faint">
             UTC days, from each PR&apos;s own timestamps · {fmt(flow.botsExcluded)} bot PRs left out · today
             is added once it closes
           </span>

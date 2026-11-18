@@ -114,7 +114,8 @@ async function dossierView(repo, args, asJson) {
 
   rule("REGISTRY");
   kv("worldwide rank", accent("#" + fmt(r.rank)));
-  kv("stars", bold(fmt(r.stars)) + (r.velocityPerDay != null ? accent("  ▲ " + r.velocityPerDay + "/day") : ""));
+  const vel = r.velocityPerDay; // signed: a repo can be losing stars; null = unmeasured
+  kv("stars", bold(fmt(r.stars)) + (vel > 0 ? accent("  ▲ " + vel + "/day") : vel < 0 ? accent("  ▼ " + -vel + "/day") : ""));
   kv("forks", fmt(r.forks ?? 0), r.stars ? `${((r.forks / r.stars) * 100).toFixed(1)}% of stars` : "");
   if (r.nextGate) kv("next gate", accent("top " + r.nextGate.rank), fmt(r.nextGate.gap) + " ★ to go");
 
@@ -140,7 +141,7 @@ async function dossierView(repo, args, asJson) {
   const c = d.contributors;
   if (c) {
     rule("WHO BUILDS IT");
-    kv("contributors", c.total != null ? bold(fmt(c.total)) : dim("unknown"), [c.total != null ? "as GitHub counts them" : "", c.authors != null ? `${c.authors} commit authors (warpchart census)` : ""].filter(Boolean).join(" · "));
+    kv("contributors", c.total != null ? bold(fmt(c.total)) : dim("unknown"), c.total != null ? "as GitHub counts them" : "");
     if (c.aiCoCredits) kv("AI co-credits", fmt(c.aiCoCredits), "counted, never people");
     kv("merged PRs", fmt(c.mergedTotal ?? 0), c.mergedByDistinct === 1 ? "a single maintainer gate" : c.mergedByDistinct + " maintainers");
     if (c.busFactor) kv("bus factor", `${Math.round(c.busFactor.top1Share * 100)}% / ${Math.round(c.busFactor.top5Share * 100)}%`, "top 1 / top 5 of all commits");
@@ -208,7 +209,6 @@ async function contributorsView(repo, args, asJson) {
   console.log();
   // one headline: GitHub's own count, the figure on the repo page
   kv("contributors", c.total != null ? bold(fmt(c.total)) : dim("unknown"), c.total != null ? "as GitHub counts them" : "");
-  if (c.authors != null) kv("commit authors", fmt(c.authors), "warpchart census, bots excluded");
   if (c.aiCoCredits) kv("AI co-credits", fmt(c.aiCoCredits), "counted, never people");
   if (c.busFactor) kv("bus factor", `${Math.round(c.busFactor.top1Share * 100)}% / ${Math.round(c.busFactor.top5Share * 100)}%`, "top 1 / top 5 of all commits");
   const s = c.series?.github ?? c.series?.authors;
@@ -270,7 +270,7 @@ async function repoView(repo, asJson) {
   if (asJson) { process.stdout.write(JSON.stringify(stats, null, 2) + "\n"); return; }
   banner(bold(stats.repo || repo));
   const v = stats.velocityPerDay;
-  console.log(`  ${dim("RANK")} ${accent("#" + fmt(stats.rank))}    ${dim("STARS")} ${bold(fmt(stats.stars))}    ${v != null ? accent("▲ " + v + "/day") : ""}`);
+  console.log(`  ${dim("RANK")} ${accent("#" + fmt(stats.rank))}    ${dim("STARS")} ${bold(fmt(stats.stars))}    ${v > 0 ? accent("▲ " + v + "/day") : v < 0 ? accent("▼ " + -v + "/day") : ""}`);
   console.log();
   try {
     const curve = await getJSON(`/api/curve?repo=${encodeURIComponent(repo)}`);
@@ -315,7 +315,9 @@ async function leaderboardView(limit, lang) {
   banner("worldwide leaderboard" + (lang ? dim(" · " + lang) : ""));
   console.log();
   if (!leaderboard.length) console.log("  " + dim("no repos for that filter"));
-  rankedList(leaderboard, (f) => bold(fmt(f.stars) + "★") + (f.velocityPerDay ? dim("  ▲" + f.velocityPerDay + "/d") : ""));
+  // velocityPerDay is signed (a repo can be losing stars) and null when unmeasured
+  const pace = (v) => (v > 0 ? dim("  ▲" + v + "/d") : v < 0 ? dim("  ▼" + -v + "/d") : "");
+  rankedList(leaderboard, (f) => bold(fmt(f.stars) + "★") + pace(f.velocityPerDay));
   console.log();
 }
 
@@ -387,7 +389,9 @@ async function compareView(repos) {
     const name = (r.stats?.repo || r.repo).padEnd(26).slice(0, 26);
     if (!r.stats) { console.log(`  ${bold(name)}  ${dim("not in top-1000")}`); continue; }
     const s = r.stats;
-    console.log(`  ${bold(name)}  ${accent(("#" + fmt(s.rank)).padEnd(8))}${(fmt(s.stars) + "★").padEnd(12)}${accent("▲" + (s.velocityPerDay ?? 0) + "/d")}`);
+    const v = s.velocityPerDay; // null = unmeasured, never "▲0"
+    const pace = v == null ? dim("—") : accent((v < 0 ? "▼" + -v : "▲" + v) + "/d");
+    console.log(`  ${bold(name)}  ${accent(("#" + fmt(s.rank)).padEnd(8))}${(fmt(s.stars) + "★").padEnd(12)}${pace}`);
   }
   console.log();
 }

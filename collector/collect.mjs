@@ -13,7 +13,7 @@ import { join } from "node:path";
 import {
   DATA_DIR, readConfig, repoMeta, backwalk, countAbove,
   nextMilestones, thresholdForRank, findNeighbors, reposVelocity, apexRepo, topRepos,
-  buildForensics, token, warnIfRenamed,
+  buildForensics, token, warnIfRenamed, drainFetch, budget,
 } from "./lib.mjs";
 
 token(); // fail fast
@@ -308,12 +308,14 @@ try {
         const url = process.env.ALERT_WEBHOOK_URL;
         const text = lines.map((l) => `▸ ${meta.nameWithOwner}: ${l}`).join("\n");
         const body = url.includes("hooks.slack.com") ? { text } : { content: text };
-        await fetch(url, {
+        const r = await drainFetch(url, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(body),
-        });
-        console.log(`[collect] alert sent (${lines.length} events)`);
+        }, 15_000);
+        console.log(r.ok
+          ? `[collect] alert sent (${lines.length} events)`
+          : `[collect] alert FAILED (${lines.length} events): ${r.status ?? r.error}`);
       }
     }
   }
@@ -337,15 +339,15 @@ try {
         for (const i of [0, 7, 24, 79, 199, 499]) if (route[i]) targets.add(route[i].r);
       } catch { /* no route yet */ }
       for (const n of neighbors ?? []) targets.add(n.r);
-      let warmed = 0;
+      let warmed = 0, tried = 0;
+      const b = budget(3 * 60_000); // best effort: never worth the deploy step
       for (const r of targets) {
-        try {
-          const res = await fetch(`${base}/api/chart?repo=${encodeURIComponent(r)}&w=800&h=240`);
-          if (res.ok) warmed++;
-          await new Promise((ok) => setTimeout(ok, 1500));
-        } catch { /* best effort */ }
+        if (b.spent()) break;
+        tried++;
+        if ((await drainFetch(`${base}/api/chart?repo=${encodeURIComponent(r)}&w=800&h=240`)).ok) warmed++;
+        await new Promise((ok) => setTimeout(ok, 1500));
       }
-      console.log(`[collect] cache warmed: ${warmed}/${targets.size} charts`);
+      console.log(`[collect] cache warmed: ${warmed}/${targets.size} charts${tried < targets.size ? ` (3-min budget spent after ${tried})` : ""}`);
     }
   }
 } catch (err) {
@@ -369,15 +371,27 @@ try {
     const hero = route.repos?.[idx]?.r;
     if (hero) {
       const q = encodeURIComponent(hero);
-      for (const path of [`/r/${hero}`, `/api/curve?repo=${q}`, `/api/chart?repo=${q}`, `/api/og?repo=${q}`]) {
-        try {
-          await fetch(`${base}${path}`);
-        } catch { /* best effort */ }
-        await new Promise((ok) => setTimeout(ok, 2000));
+      const paths = [`/r/${hero}`, `/api/curve?repo=${q}`, `/api/chart?repo=${q}`, `/api/og?repo=${q}`];
+      let ok = 0;
+      const b = budget(2 * 60_000);
+      for (const path of paths) {
+        if (b.spent()) break;
+        if ((await drainFetch(`${base}${path}`)).ok) ok++; // best effort, but always read and bounded
+        await new Promise((done) => setTimeout(done, 2000));
       }
-      console.log(`[collect] spotlight warmed: ${hero} (#${idx + 1})`);
+      console.log(`[collect] spotlight warmed: ${hero} (#${idx + 1}) · ${ok}/${paths.length} ok`);
     }
   }
 } catch (err) {
   console.error(`[collect] spotlight warm failed: ${err.message}`);
 }
+
+// Safety net: everything above is awaited, so after the last line nothing
+// should keep Node alive. If something does (an unread response, a stray
+// timer), exit in 30 s and SAY so, instead of hanging silently until the job's
+// 25-minute cap cancels the deploy (#34). unref(): it never delays a clean exit.
+setTimeout(() => {
+  // an annotation, so pipeline.chronic-step notices if it starts happening every run
+  console.error("::error title=collect exit guard::something kept the process alive 30 s after the last line; exiting");
+  process.exit(process.exitCode ?? 0);
+}, 30_000).unref();

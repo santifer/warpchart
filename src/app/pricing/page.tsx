@@ -183,7 +183,7 @@ function personalizedPlans(d: NonNullable<ExplorerData>): Plan[] {
       perks: [
         `Traffic Vault: ${name}'s clones, views and referrers, the data GitHub deletes every 14 days, kept forever`,
         `Exact hourly history of ${name} from the second you pay (it cannot be backfilled)`,
-        `${name}'s full console unlocked: rank trajectory, daily ladder, heatmap, spike forensics`,
+        `${name}'s full console unlocked: rank trajectory, daily ladder, spike forensics`,
         huntersPerk,
         gatePerk,
         `Exact live star counter on ${name}'s README badge and embed`,

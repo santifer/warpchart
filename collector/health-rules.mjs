@@ -252,7 +252,14 @@ export const ARTIFACTS = [
   { prefix: "private/installs.json", kind: "event", what: "detected install waves (private)" },
   // config: edited by a human, age means nothing
   { prefix: "data/tenants.json", kind: "config", what: "the paying-tenant list" },
+  // minted by hand (scripts/god-magic-link.mjs, /unlock guests): weeks of silence are normal
+  { prefix: "god/", kind: "config", what: "owner and guest access links" },
 ];
+
+// The declaration a stored pathname falls under (exact key, or a family that
+// ends in "/"), or undefined: an undeclared artifact nobody watches.
+export const declarationFor = (pathname, artifacts = ARTIFACTS) =>
+  artifacts.find((a) => pathname === a.prefix || (a.prefix.endsWith("/") && pathname.startsWith(a.prefix)));
 
 // Which declared periodic families are older than they may be. `newest` maps a
 // family prefix to its newest upload (ms). A timestamp that is not a number reads
@@ -405,20 +412,48 @@ export function velocityRankFreshness(meta, rhLast, rhAt, now = Date.now(), grac
   return { severity: "warn", note: `velocity-rank table stops at ${meta.lastTo}, rank-history has ${rhLast} (${sinceH.toFixed(0)} h ago)` };
 }
 
+// DAILY LADDER ZONES (src/lib/ladder-bands.ts, served by velocity-rank.ts
+// ladderBands): the house console must carry its monthly rank zones, and the
+// newest must be THIS month. A new month borrows the last 30 days, and refuses
+// to when the table stopped, so a stalled table reaches this check as a
+// missing month instead of old cut-offs repainted as current. The 1st of a
+// month is let through: the page and the zones are cached for up to an hour
+// each. Zones are a reference drawn behind the bars, not a published figure,
+// so their absence is a warning, never critical.
+export function ladderBandsPresence(html, todayISO) {
+  const n = /data-ladder-bands="(\d+)"/.exec(html ?? "");
+  if (!n) return { severity: "warn", note: "no daily ladder on the house console (data-ladder-bands attribute missing)" };
+  if (Number(n[1]) === 0) return { severity: "warn", note: "the daily ladder carries no rank zones (ladderBands answered null)" };
+  const last = /data-ladder-bands-last="(\d{4}-\d{2})"/.exec(html)?.[1] ?? null;
+  const month = todayISO.slice(0, 7);
+  const [y, m] = month.split("-").map(Number);
+  const prev = new Date(Date.UTC(y, m - 2, 1)).toISOString().slice(0, 7);
+  if (last === month || (todayISO.slice(8, 10) === "01" && last === prev)) {
+    return { severity: null, note: `${n[1]} monthly zones, newest ${last}` };
+  }
+  return { severity: "warn", note: `the newest ladder zone is ${last ?? "unreadable"}, not ${month}` };
+}
+
 // The reconstructed days (velocity-rank/reconstructed.json, written by hand by
 // collector/velocity-rank-backfill.mjs): before the live record, and the gaps
 // cut-short sweeps left in it. Nothing rewrites it, so it fails two ways:
 //   - gone or truncated: the chart silently starts on 14 Jun, not in April;
 //   - outrun: a NEW gap in the table after rec.to stays a silent hole
 //     (tableDays = the table's days; null = not read this run, not compared).
-export function velocityRankReconstructed(rec, tableDays = null) {
+export function velocityRankReconstructed(rec, tableDays = null, gapFile = null) {
   if (!rec) return { severity: "warn", note: "velocity-rank/reconstructed.json missing: the chart starts at the live record" };
   const repos = Object.keys(rec.repos ?? {}).length;
   if (!(rec.days?.length >= 60) || repos < 1900) return { severity: "warn", note: `reconstructed table truncated: ${rec.days?.length ?? 0} days, ${repos} repos` };
-  const gaps = tableDays ? gapsAfter(tableDays, rec.to) : [];
+  // the gap file's windows (holes rebuilt after the main window) are covered;
+  // a window short of the universe is a broken rebuild, not a cover
+  const windows = gapFile?.windows ?? [];
+  const thin = windows.find((w) => !(w.days?.length >= 1) || Object.keys(w.repos ?? {}).length < 1900);
+  if (thin) return { severity: "warn", note: `gap reconstruction ${thin.from}..${thin.to} truncated: ${thin.days?.length ?? 0} days, ${Object.keys(thin.repos ?? {}).length} repos` };
+  const covered = new Set(windows.flatMap((w) => w.days ?? []));
+  const gaps = tableDays ? gapsAfter(tableDays, rec.to).filter((d) => !covered.has(d)) : [];
   if (gaps.length)
-    return { severity: "warn", note: `${gaps.length} velocity-rank day(s) unmeasured after the reconstruction ends (${rec.to}): ${gaps.slice(0, 5).join(", ")}; re-run collector/velocity-rank-backfill.mjs with a later TO` };
-  return { severity: null, note: `reconstructed ${rec.from} .. ${rec.to}, ${repos} repos` };
+    return { severity: "warn", note: `${gaps.length} velocity-rank day(s) unmeasured after the reconstruction ends (${rec.to}): ${gaps.slice(0, 5).join(", ")}; rebuild them with collector/velocity-rank-backfill.mjs in gap mode (VR_GAP_FROM/VR_GAP_TO)` };
+  return { severity: null, note: `reconstructed ${rec.from} .. ${rec.to}, ${repos} repos${windows.length ? `; gaps rebuilt: ${windows.map((w) => `${w.from}..${w.to}`).join(", ")}` : ""}` };
 }
 
 // The Traffic Vault's CI band (collector/ci-checkouts-core.mjs) rests on one
@@ -464,8 +499,8 @@ export function buildersLangMismatch(langs, served) {
 
 // The contributor chart draws GitHub's own count over time and must END on the
 // figure the panel prints (one number on the page, 2026-10-11). A missing curve
-// means the calibration refused (rebuild >5% off) or the census never ran: the
-// chart silently fell back to the authors/co-authored toggle.
+// means neither rebuild matched GitHub's figure (githubCurve) or the census
+// never ran: the chart is not drawn (no fallback count since 2026-10-30).
 export function contributorCurve(contributors) {
   if (!contributors) return { severity: null, note: "no contributors block" };
   const total = contributors.total ?? null;
@@ -473,7 +508,7 @@ export function contributorCurve(contributors) {
   if (total == null) return { severity: null, note: "no live figure; covered by presence.contributors" };
   // critical, not warn: on 2026-10-16 the house panel fell back to "516
   // authors" for hours and only Santiago saw it (a warn opens no issue)
-  if (last == null) return { severity: "critical", note: `no GitHub-count curve; the chart fell back to the census toggle (total ${total})` };
+  if (last == null) return { severity: "critical", note: `no GitHub-count curve; the contributor chart is not drawn (total ${total})` };
   return last === total
     ? { severity: null, note: `curve ends on ${total}, GitHub's figure` }
     : { severity: "warn", note: `curve ends on ${last} but the panel prints ${total}` };
@@ -500,6 +535,11 @@ export function curveEndsOnTotal(curve) {
 // expected upstream noise, reported, never critical.
 export function npmUsageFreshness(npm, todayISO, maxAgeDays = 10) {
   if (!npm) return { severity: null, note: "no npm channel" };
+  // a package with a 30-day total and no daily series is the REAL USAGE chart
+  // drawing clone bars only (#42, 2026-11-10: it came and went with the hour)
+  if (npm.package && (npm.last30 ?? 0) > 0 && !(npm.series?.points?.length >= 2)) {
+    return { severity: "warn", ageDays: null, note: `${npm.package} has ${npm.last30} installs in 30 days but no daily series: the usage chart shows no npm bars` };
+  }
   const through = npm.versions?.through ?? null;
   const ageDays = through ? Math.round((Date.parse(`${todayISO}T00:00:00Z`) - Date.parse(`${through}T00:00:00Z`)) / 864e5) : null;
   const floor = npm.last30IsLowerBound ? `last30 is a floor (${npm.last30MissingDays} of 30 days missing in npm's data)` : "";
