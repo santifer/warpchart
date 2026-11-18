@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { COLLECTOR_STALE_H as APP_STALE_H } from "../src/lib/staleness.ts";
-import { ARTIFACTS, COLLECTOR_STALE_H, npmLagExplains, cancelledVerdict, cronLag, etaIncoherences, maxAgeFromEnv, newestRunMs, pickFreshestRuns, pipelineRunsGate, RUNS_LIST_TOL_H, runsListStale, openPartials, presenceEval, presenceLost, presenceMap, prflowFreshness, npmUsageFreshness, contributorsDrift, contributorCurve, buildersWallFreshness, buildersLangMismatch, velocityRankFreshness, velocityRankReconstructed, ladderBandsPresence, gapsAfter, ciBandViolations, curveEndsOnTotal, staleArtifacts, watchdogStale, v7StampLags, v7WindowFreshness } from "./health-rules.mjs";
+import { ARTIFACTS, declarationFor, COLLECTOR_STALE_H, npmLagExplains, cancelledVerdict, cronLag, etaIncoherences, maxAgeFromEnv, newestRunMs, pickFreshestRuns, pipelineRunsGate, RUNS_LIST_TOL_H, runsListStale, openPartials, presenceEval, presenceLost, presenceMap, prflowFreshness, npmUsageFreshness, contributorsDrift, contributorCurve, buildersWallFreshness, buildersLangMismatch, velocityRankFreshness, velocityRankReconstructed, ladderBandsPresence, gapsAfter, ciBandViolations, curveEndsOnTotal, staleArtifacts, watchdogStale, v7StampLags, v7WindowFreshness } from "./health-rules.mjs";
 
 describe("prflowFreshness", () => {
   // 26-sep: the first run after 00:00Z was cancelled and 25-sep never closed.
@@ -757,5 +757,31 @@ describe("ladderBandsPresence", () => {
   });
   it("handles the year boundary", () => {
     expect(ladderBandsPresence(html(7, "2026-12"), "2027-01-01").severity).toBeNull();
+  });
+});
+
+// #34 (2026-11-13): inventory.undeclared stayed yellow for a week over god/
+// (the hand-minted magic and guest links). The families in the real store
+// listing that day, one made-up file name per family (real god/ keys are
+// SHA-256 of a secret and stay out of a public repo): each needs a declaration.
+describe("every family in the store is declared", () => {
+  const STORE_2026_11_13 = [
+    "alerts/sent.json", "badges-earned.json", "builders/career-ops-hq--career-ops.json",
+    "ci-checkouts/career-ops-hq--career-ops.json", "codex/facebook--react.json",
+    "contributors/career-ops-hq--career-ops.json", "data/attribution.json", "data/catalog.json",
+    "data/collisions.json", "data/enrichment.json", "data/forensics.json", "data/history.jsonl",
+    "data/indexnow-stamp.txt", "data/meta.json", "data/milestones.json", "data/route-prev.json",
+    "data/route.json", "data/stargazer_timestamps.txt", "data/tenants.json", "embeds/x.json",
+    "god/magic/0f3a.json", "god/guests/9c1e.json", "god/magic/0f3a.used",
+    "health/latest.json", "live/career-ops-hq--career-ops.json", "npm-versions/career-ops-hq--career-ops.json",
+    "prflow/career-ops-hq--career-ops.json", "private/followers.json", "private/installs.json",
+    "route-history/meta.json", "route-history/shard-0.json", "traffic/career-ops-hq--career-ops.json",
+    "trending/career-ops-hq--career-ops.json", "velocity-rank/2026-11-12.json", "vitals/career-ops-hq--career-ops.json",
+  ];
+  it("has no undeclared family", () => {
+    expect(STORE_2026_11_13.filter((p) => !declarationFor(p))).toEqual([]);
+  });
+  it("god/ is config: hand-minted links are never 'stale'", () => {
+    expect(declarationFor("god/magic/0f3a.json")?.kind).toBe("config");
   });
 });
