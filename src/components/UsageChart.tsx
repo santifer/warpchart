@@ -166,7 +166,7 @@ export default function UsageChart({
   };
 
   return (
-    <div className="flex flex-col gap-1.5">
+    <div className="usage-chart flex flex-col gap-1.5">
       <div className="flex items-center justify-between gap-2">
         <span className="numeral text-micro tracking-[0.2em] text-faint">
           {hasClones ? "ACQUISITION OVER TIME" : "INSTALLS OVER TIME"}
@@ -187,7 +187,7 @@ export default function UsageChart({
         </div>
       </div>
 
-      <div className="h-[260px] w-full">
+      <div className="usage-chart-box h-[260px] w-full">
         <ResponsiveContainer width="100%" height="100%">
           <ComposedChart data={rows} margin={{ top: 6, right: 26, bottom: 0, left: 4 }}>
             <CartesianGrid stroke={C.grid} strokeDasharray="2 6" vertical={false} />

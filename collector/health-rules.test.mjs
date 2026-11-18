@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { COLLECTOR_STALE_H as APP_STALE_H } from "../src/lib/staleness.ts";
-import { ARTIFACTS, COLLECTOR_STALE_H, npmLagExplains, cancelledVerdict, cronLag, etaIncoherences, maxAgeFromEnv, newestRunMs, pickFreshestRuns, pipelineRunsGate, RUNS_LIST_TOL_H, runsListStale, openPartials, presenceEval, presenceLost, presenceMap, prflowFreshness, npmUsageFreshness, contributorsDrift, contributorCurve, buildersWallFreshness, buildersLangMismatch, velocityRankFreshness, velocityRankReconstructed, gapsAfter, curveEndsOnTotal, staleArtifacts, watchdogStale, v7StampLags, v7WindowFreshness } from "./health-rules.mjs";
+import { ARTIFACTS, declarationFor, COLLECTOR_STALE_H, npmLagExplains, cancelledVerdict, cronLag, etaIncoherences, maxAgeFromEnv, newestRunMs, pickFreshestRuns, pipelineRunsGate, RUNS_LIST_TOL_H, runsListStale, openPartials, presenceEval, presenceLost, presenceMap, prflowFreshness, npmUsageFreshness, contributorsDrift, contributorCurve, buildersWallFreshness, buildersLangMismatch, velocityRankFreshness, velocityRankReconstructed, ladderBandsPresence, gapsAfter, ciBandViolations, curveEndsOnTotal, staleArtifacts, watchdogStale, v7StampLags, v7WindowFreshness } from "./health-rules.mjs";
 
 describe("prflowFreshness", () => {
   // 26-sep: the first run after 00:00Z was cancelled and 25-sep never closed.
@@ -481,6 +481,13 @@ describe("npmUsageFreshness", () => {
     const r = npmUsageFreshness({ versions: { through: "2026-10-04" }, last30MissingDays: 4, last30Estimate: null }, "2026-10-09");
     expect(r.severity).toBe("warn");
   });
+  it("warns when the package has installs but the daily series is missing (#42)", () => {
+    const r = npmUsageFreshness({ package: "@santifer/career-ops", last30: 21562, series: null, versions: { through: "2026-11-09" }, latest: "1.40.0" }, "2026-11-11");
+    expect(r.severity).toBe("warn");
+    expect(r.note).toMatch(/no daily series/);
+    const ok = npmUsageFreshness({ package: "@santifer/career-ops", last30: 21562, series: { points: [{ day: "2026-11-08", d: 939 }, { day: "2026-11-09", d: 1378 }] }, versions: { through: "2026-11-09" }, latest: "1.40.0" }, "2026-11-11");
+    expect(ok.severity).toBeNull();
+  });
   it("warns when the breakdown has not moved for more than ten days", () => {
     expect(npmUsageFreshness({ versions: { through: "2026-09-25" } }, "2026-10-09").severity).toBe("warn");
   });
@@ -509,7 +516,7 @@ describe("contributorCurve", () => {
   it("warns when the curve and the number disagree", () => {
     expect(contributorCurve({ total: 614, series: { github: win(row("2026-10-11", 616)) } }).severity).toBe("warn");
   });
-  it("warns when the chart fell back to the census toggle", () => {
+  it("flags a missing GitHub-count curve (chart not drawn)", () => {
     // the dossier of 2026-10-11 before this change: no github series at all
     expect(contributorCurve({ total: 611, series: { github: null, authors: win(row("2026-10-11", 480)), credited: win() } }).severity).toBe("critical");
   });
@@ -641,6 +648,23 @@ describe("velocityRankReconstructed", () => {
     const repos = Object.fromEntries(Array.from({ length: 2000 }, (_, i) => [`r/${i}`, {}]));
     expect(velocityRankReconstructed({ from: "2026-04-01", to: "2026-06-13", days: Array(74).fill("d"), repos }).severity).toBeNull();
   });
+  // incident 2026-11-04: 2026-11-03 erased from the moat, rebuilt in the gap file
+  const repos = Object.fromEntries(Array.from({ length: 2000 }, (_, i) => [`r/${i}`, {}]));
+  const main = { from: "2026-04-01", to: "2026-09-30", days: Array(183).fill("d"), repos };
+  const table = ["2026-10-01", "2026-11-01", "2026-11-02", "2026-11-04"].concat(
+    Array.from({ length: 30 }, (_, i) => `2026-10-${String(i + 2).padStart(2, "0")}`),
+  );
+  it("a table hole the gap file does not cover warns", () => {
+    expect(velocityRankReconstructed(main, table, null).note).toMatch(/2026-11-03/);
+  });
+  it("the gap file's window covers the hole: no warning", () => {
+    const gap = { windows: [{ from: "2026-11-03", to: "2026-11-03", days: ["2026-11-03"], repos }] };
+    expect(velocityRankReconstructed(main, table, gap).severity).toBeNull();
+  });
+  it("a gap window short of the universe is a broken rebuild, not a cover", () => {
+    const gap = { windows: [{ from: "2026-11-03", to: "2026-11-03", days: ["2026-11-03"], repos: { a: {} } }] };
+    expect(velocityRankReconstructed(main, table, gap).note).toMatch(/truncated/);
+  });
 });
 
 describe("npmLagExplains: a family stale because npm stopped publishing is not our outage", () => {
@@ -693,5 +717,71 @@ describe("velocityRankReconstructed: a new gap after the reconstruction", () => 
   it("gapsAfter ignores the days up to rec.to and the open end", () => {
     expect(gapsAfter(["2026-09-02", "2026-09-05"], "2026-09-02")).toEqual(["2026-09-03", "2026-09-04"]);
     expect(gapsAfter([], "2026-09-30")).toEqual([]);
+  });
+});
+
+describe("ciBandViolations", () => {
+  const vault = { "2026-08-25": { c: 5174 }, "2026-10-21": { c: 8391 }, "2026-10-22": { c: 100 } };
+  it("21 Oct is consistent (1,361 checkouts x 1 <= 8,391 clones)", () => {
+    expect(ciBandViolations({ "2026-10-21": { checkouts: 1361 } }, vault).severity).toBeNull();
+  });
+  it("a day counting more CI than clones is a warn naming it", () => {
+    const r = ciBandViolations({ "2026-08-25": { checkouts: 6000 } }, vault);
+    expect(r.severity).toBe("warn");
+    expect(r.note).toContain("2026-08-25");
+  });
+  it("the vault's newest day is skipped: GitHub may still be closing it", () => {
+    expect(ciBandViolations({ "2026-10-22": { checkouts: 900 } }, vault).severity).toBeNull();
+  });
+  it("days only one side has are not compared", () => {
+    expect(ciBandViolations({ "2026-10-22": { checkouts: 9999 } }, { "2026-10-21": { c: 10 } }).severity).toBeNull();
+  });
+});
+
+describe("ladderBandsPresence", () => {
+  // what React renders on the ladder's wrapper (DailyLadder.tsx)
+  const html = (n, last) => `<div class="flex w-full flex-col gap-1.5 " data-ladder-bands="${n}" data-ladder-bands-last="${last}"><div class="w-full">`;
+
+  it("passes with zones whose newest month is this month", () => {
+    expect(ladderBandsPresence(html(5, "2026-10"), "2026-10-26")).toMatchObject({ severity: null });
+  });
+  it("warns when the server handed over no zones", () => {
+    expect(ladderBandsPresence(html(0, ""), "2026-10-26").severity).toBe("warn");
+  });
+  it("warns when the ladder is not on the page at all", () => {
+    expect(ladderBandsPresence("<html>no ladder</html>", "2026-10-26").severity).toBe("warn");
+  });
+  it("lets the 1st of a month through on last month's zone (caches), not the 2nd", () => {
+    expect(ladderBandsPresence(html(5, "2026-10"), "2026-11-01").severity).toBeNull();
+    expect(ladderBandsPresence(html(5, "2026-10"), "2026-11-02")).toMatchObject({ severity: "warn", note: expect.stringContaining("not 2026-11") });
+  });
+  it("handles the year boundary", () => {
+    expect(ladderBandsPresence(html(7, "2026-12"), "2027-01-01").severity).toBeNull();
+  });
+});
+
+// #34 (2026-11-13): inventory.undeclared stayed yellow for a week over god/
+// (the hand-minted magic and guest links). The families in the real store
+// listing that day, one made-up file name per family (real god/ keys are
+// SHA-256 of a secret and stay out of a public repo): each needs a declaration.
+describe("every family in the store is declared", () => {
+  const STORE_2026_11_13 = [
+    "alerts/sent.json", "badges-earned.json", "builders/career-ops-hq--career-ops.json",
+    "ci-checkouts/career-ops-hq--career-ops.json", "codex/facebook--react.json",
+    "contributors/career-ops-hq--career-ops.json", "data/attribution.json", "data/catalog.json",
+    "data/collisions.json", "data/enrichment.json", "data/forensics.json", "data/history.jsonl",
+    "data/indexnow-stamp.txt", "data/meta.json", "data/milestones.json", "data/route-prev.json",
+    "data/route.json", "data/stargazer_timestamps.txt", "data/tenants.json", "embeds/x.json",
+    "god/magic/0f3a.json", "god/guests/9c1e.json", "god/magic/0f3a.used",
+    "health/latest.json", "live/career-ops-hq--career-ops.json", "npm-versions/career-ops-hq--career-ops.json",
+    "prflow/career-ops-hq--career-ops.json", "private/followers.json", "private/installs.json",
+    "route-history/meta.json", "route-history/shard-0.json", "traffic/career-ops-hq--career-ops.json",
+    "trending/career-ops-hq--career-ops.json", "velocity-rank/2026-11-12.json", "vitals/career-ops-hq--career-ops.json",
+  ];
+  it("has no undeclared family", () => {
+    expect(STORE_2026_11_13.filter((p) => !declarationFor(p))).toEqual([]);
+  });
+  it("god/ is config: hand-minted links are never 'stale'", () => {
+    expect(declarationFor("god/magic/0f3a.json")?.kind).toBe("config");
   });
 });

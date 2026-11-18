@@ -13,7 +13,7 @@ import { join } from "node:path";
 import {
   DATA_DIR, readConfig, repoMeta, backwalk, countAbove,
   nextMilestones, thresholdForRank, findNeighbors, reposVelocity, apexRepo, topRepos,
-  buildForensics, token, warnIfRenamed,
+  buildForensics, token, warnIfRenamed, drainFetch,
 } from "./lib.mjs";
 import { warmPlan, WARM_PLAN } from "./warm-core.mjs";
 
@@ -309,13 +309,14 @@ try {
         const url = process.env.ALERT_WEBHOOK_URL;
         const text = lines.map((l) => `▸ ${meta.nameWithOwner}: ${l}`).join("\n");
         const body = url.includes("hooks.slack.com") ? { text } : { content: text };
-        await fetch(url, {
+        const r = await drainFetch(url, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(body),
-          signal: AbortSignal.timeout(15_000),
-        });
-        console.log(`[collect] alert sent (${lines.length} events)`);
+        }, 15_000);
+        console.log(r.ok
+          ? `[collect] alert sent (${lines.length} events)`
+          : `[collect] alert FAILED (${lines.length} events): ${r.status ?? r.error}`);
       }
     }
   }
@@ -340,3 +341,13 @@ if (!dryRun) {
     console.error(`[collect] warm plan failed: ${err.message}`);
   }
 }
+
+// Safety net: everything above is awaited, so after the last line nothing
+// should keep Node alive. If something does (an unread response, a stray
+// timer), exit in 30 s and SAY so, instead of hanging silently until the job's
+// 25-minute cap cancels the deploy (#34). unref(): it never delays a clean exit.
+setTimeout(() => {
+  // an annotation, so pipeline.chronic-step notices if it starts happening every run
+  console.error("::error title=collect exit guard::something kept the process alive 30 s after the last line; exiting");
+  process.exit(process.exitCode ?? 0);
+}, 30_000).unref();

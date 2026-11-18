@@ -5,7 +5,7 @@ import {
 } from "./history";
 import {
   hourlyBuckets, dailyCounts, movingAverage, madrugadaFloor,
-  cumulativeSeries, heatmapMatrix, velocity7d, recentTimestamps,
+  cumulativeSeries, velocity7d, recentTimestamps,
   rankSeries, thresholdSeries,
 } from "./series";
 import { driftPerDay } from "./projections";
@@ -42,7 +42,6 @@ export interface DashboardBundle {
   ma7: (number | null)[];
   floor: FloorPoint[];
   cumulative: CumPoint[];
-  heatmap: number[][];
   v7d: number;
   // v7d's trend and window close when it is the registry v7 (null otherwise)
   vTrend: VelocityTrend | null;
@@ -206,8 +205,8 @@ export function buildBundle(
   // Hourly surge attribution is house-only (attribution.json never exists for a
   // tenant's data), so it merges only into the house Mission Log.
   const surges = src ? [] : (loadAttribution()?.surges ?? []);
-  const events = detectEvents(history, dailyAll, spikes, surgeEvents(surges));
-  const captain = captainsLog(dailyAll, latest?.rank ?? null);
+  const events = detectEvents(history, dailyAll, spikes, surgeEvents(surges), 60);
+  const captain = captainsLog(dailyAll);
 
   // engagement: fork/star ratio vs the top 1000 population
   const route = loadRoute();
@@ -245,7 +244,6 @@ export function buildBundle(
     ma7: movingAverage(daily, 7),
     floor: madrugadaFloor(timestamps, lifeDays, nowMs),
     cumulative: cumulativeSeries(timestamps),
-    heatmap: heatmapMatrix(timestamps),
     v7d: focalV7 ?? velocity7d(timestamps, nowMs),
     vTrend: focalQ.trend,
     vAsOf: focalQ.v7_to,

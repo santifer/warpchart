@@ -32,3 +32,19 @@ export function acceptPrCount(got, prev, { tolerance = 0.02, floor = 10, pending
   if (pendingGot === got) return { ok: true, reason: `confirmed on two runs: ${prev} -> ${got}` };
   return { ok: false, reason: `${got} human PRs, the last run had ${prev} (pagination stopped early?)` };
 }
+
+// A hot shard is read, appended to and written back. If the read returned a
+// copy from before the last recorded day (a stale Blob CDN copy), writing it
+// back erases that day for every repo in the shard, and it never throws
+// (2026-11-04: 9 of 32 shards, 2,676 repos lost 2026-11-03). Returns the
+// indices of shards that HAVE data but lack lastDay; an empty or missing shard
+// is a new one, not a stale one.
+export function staleShards(shards, lastDay) {
+  if (!lastDay) return [];
+  const out = [];
+  shards.forEach((s, i) => {
+    const has = s && Object.keys(s.series ?? {}).length > 0;
+    if (has && !(s.dates ?? []).includes(lastDay)) out.push(i);
+  });
+  return out;
+}
