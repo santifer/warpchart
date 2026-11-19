@@ -107,3 +107,30 @@ describe("/compare: one stars/day per repo", () => {
     expect(src.match(/compareRate\(/g)?.length).toBeGreaterThanOrEqual(2);
   });
 });
+
+// The sensor for the rule above: no app surface derives a rank from the
+// registry's array position. The landing teaser and /velocity did until this
+// test existed ("#N" there could disagree with /r/ by a place or two).
+describe("one rank definition: no positional rank anywhere in the app", () => {
+  it("no `rank: i + 1` or `rank = idx + 1` outside src/lib/rank.ts", async () => {
+    const { readdirSync, statSync } = await import("node:fs");
+    const { join } = await import("node:path");
+    const root = new URL("..", import.meta.url).pathname;
+    const walk = (d: string): string[] =>
+      readdirSync(d).flatMap((f) => {
+        const p = join(d, f);
+        if (statSync(p).isDirectory()) return walk(p);
+        return /\.(ts|tsx)$/.test(f) && !/\.test\.tsx?$/.test(f) ? [p] : [];
+      });
+    const hits = walk(root)
+      .filter((f) => !f.endsWith("lib/rank.ts"))
+      .flatMap((f) =>
+        readFileSync(f, "utf8")
+          .split("\n")
+          .map((l, n) => [l, n] as const)
+          .filter(([l]) => /\brank\s*[:=]\s*(i|idx|index)\s*\+\s*1\b/.test(l))
+          .map(([l, n]) => `${f.slice(root.length)}:${n + 1}: ${l.trim()}`),
+      );
+    expect(hits).toEqual([]);
+  });
+});
