@@ -10,6 +10,7 @@ import { unstable_cache } from "next/cache";
 import { repoRankSeries } from "./rank-history";
 import { mergeReconstructed, reconstructDays, repoDailyRanks, repoReconstructedRanks } from "../../collector/velocity-rank-core.mjs";
 import { allNamesOf } from "./aliases";
+import { cacheKey } from "./shape-versions";
 import { monthlyTierBands, type LadderBand } from "./ladder-bands";
 
 export interface VelocityRankDay {
@@ -68,14 +69,14 @@ const found = <T,>(what: string) => (v: T | null): T => {
 };
 const readMetaCached = unstable_cache(
   async () => found<Meta>("velocity-rank/meta.json")(await readBlob<Meta>("velocity-rank/meta.json")),
-  ["velocity-rank-meta-v2"],
+  [cacheKey("velocityRankMeta")],
   { revalidate: 3600 },
 );
 const readMeta = () => readMetaCached().catch(() => null);
 const readMonth = (m: string) =>
   unstable_cache(
     async () => found<{ days: VelocityRankDay[] }>(m)(await readBlob<{ days: VelocityRankDay[] }>(`velocity-rank/${m}.json`)),
-    ["velocity-rank-month-v2", m],
+    [cacheKey("velocityRankMonth"), m],
     { revalidate: 3600 },
   )().catch(() => null);
 
@@ -95,10 +96,11 @@ const readReconstructedCached = unstable_cache(
     if (!r?.days?.length) throw new Error("velocity-rank/reconstructed.json missing");
     return r;
   },
-  ["velocity-rank-reconstructed-v3"], // v3: the window runs to 30 Sep (gap fill)
+  [cacheKey("velocityRankReconstructed")],
   { revalidate: 86_400 },
 );
-// re-uploading the file needs a NEW key above, or the old one is served a day
+// re-uploading the file needs a bump of SHAPE_VERSION.velocityRankReconstructed
+// (src/lib/shape-versions.ts), or the old one is served a day
 const readReconstructed = () => readReconstructedCached().catch(() => null);
 // holes opened after the main reconstruction (velocity-rank-backfill.mjs gap
 // mode): a short window of its own, same shape, same rules. First: 2026-11-03,
@@ -110,9 +112,10 @@ const readGapsCached = unstable_cache(
     if (!r?.windows?.length) throw new Error("velocity-rank/reconstructed-gaps.json missing");
     return r.windows;
   },
-  // re-uploading the gap file (a new window) needs a NEW key, or the old
-  // copy is served for up to a day
-  ["velocity-rank-reconstructed-gaps-v1"],
+  // re-uploading the gap file (a new window) needs a bump of
+  // SHAPE_VERSION.velocityRankReconstructedGaps, or the old copy is served
+  // for up to a day
+  [cacheKey("velocityRankReconstructedGaps")],
   { revalidate: 86_400 },
 );
 const readGaps = () => readGapsCached().catch(() => [] as Reconstructed[]);
@@ -188,7 +191,7 @@ const ladderBandsCached = unstable_cache(
     if (!bands.length) throw new Error("no ladder bands");
     return bands;
   },
-  ["ladder-bands-v1"],
+  [cacheKey("ladderBands")],
   { revalidate: 3600 },
 );
 // null = no zones this render (the ladder draws plain bars, the watchdog's
