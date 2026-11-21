@@ -17,7 +17,7 @@ import type { Palette } from "@/lib/theme";
 import { usePalette } from "@/lib/usePalette";
 import { dopplerTilt } from "@/lib/doppler";
 import { fmt, fmtCompact, fmtEtaDays, shortName } from "@/lib/format";
-import { neighborEtas, unsteadyLabel, etaText, type NeighborEta } from "@/lib/projections";
+import { neighborEtas, unsteadyLabel, etaText, milestoneEta, type NeighborEta } from "@/lib/projections";
 
 const W = 390;
 const AXIS_X = 30;
@@ -315,14 +315,12 @@ export default function VerticalChart({
           .filter((m) => (m.at ?? m.threshold) > loS && (m.at ?? m.threshold) < hiS)
           .map((m) => {
             const gy = gateY(m);
-            // gate ETA, same model as the StatusBar headline ("top N in X"):
-            // gap to the threshold over our v7d minus the threshold's drift.
-            // Anchoring it ON the line ties that number to a spot on the climb,
-            // so a nearer ship reading a longer eta (it sits further up, past
-            // the gate) no longer looks like a contradiction.
-            const gGap = Math.max(0, m.threshold - stars);
-            const net = vOwn - (m.drift ?? 0);
-            const gEta = gGap === 0 ? "crossed" : net > 0 ? `in ${fmtEtaDays(gGap / net)}` : null;
+            // gate ETA, the same milestoneEta as the StatusBar headline ("top
+            // N in X"). Anchoring it ON the line ties that number to a spot on
+            // the climb, so a nearer ship reading a longer eta (it sits further
+            // up, past the gate) no longer looks like a contradiction.
+            const e = milestoneEta(m.rank, m.threshold, stars, vOwn, m.drift);
+            const gEta = e.gap === 0 ? "crossed" : e.etaDays !== null ? `in ${fmtEtaDays(e.etaDays)}` : null;
             return (
               <g key={m.rank}>
                 <line

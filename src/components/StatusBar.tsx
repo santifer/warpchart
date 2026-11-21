@@ -6,6 +6,7 @@ import CodexModal from "./CodexModal";
 import BadgeRow from "./BadgeRow";
 import type { DashboardBundle } from "@/lib/bundle";
 import { fmt, fmtEtaDays, timeAgo } from "@/lib/format";
+import { milestoneEta } from "@/lib/projections";
 
 function Metric({
   label,
@@ -35,10 +36,10 @@ export default function StatusBar({ bundle }: { bundle: DashboardBundle }) {
   let gap: number | null = null;
   let eta: string | null = null;
   if (next) {
-    gap = Math.max(0, next.threshold - live.stars);
-    const net = bundle.v7d - (next.drift ?? 0);
+    const e = milestoneEta(next.rank, next.threshold, live.stars, bundle.v7d, next.drift);
+    gap = e.gap;
     // gap is always > 0 now: `next` is by definition a gate not yet cleared
-    eta = net > 0 ? fmtEtaDays(gap / net) : "n/a";
+    eta = e.etaDays !== null ? fmtEtaDays(e.etaDays) : "n/a";
   }
 
   return (

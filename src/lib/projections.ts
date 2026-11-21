@@ -3,6 +3,7 @@
 import type { Neighbor } from "./types";
 import { projectCrossing, type Unsteady, type VelocityQuality } from "./compare";
 import { fmtEtaDays, fmtEtaRange } from "./format";
+import { canonicalVelocity } from "./velocity";
 
 const DAY = 86_400_000;
 
@@ -33,10 +34,16 @@ export interface MilestoneEta {
   gap: number;
   drift: number | null; // null = still calibrating
   etaDays: number | null; // null = not reachable at current pace
-  confidence?: "firm" | "soft" | "noisy";
+  confidence?: "firm" | "soft" | "noisy" | "upper";
   etaRange?: { min: number; max: number } | null;
 }
 
+// THE eta to a top-N gate, on every surface (StatusBar, DailyBriefing,
+// Projections, CommandDeck, both star charts, /r/ and /pricing). A gate is a
+// rival like any other: the repo holding rank N, whose stars rise at `drift`
+// a day. So the crossing is projectCrossing's, never a local `gap / net`: six
+// hand-copied versions had drifted apart, and /pricing subtracted no drift.
+// A gate already passed (live stars) is 0 days away.
 export function milestoneEta(
   rank: number,
   threshold: number,
@@ -45,27 +52,43 @@ export function milestoneEta(
   drift: number | null
 ): MilestoneEta {
   const gap = Math.max(0, threshold - stars);
-  const net = vOwn - (drift ?? 0);
-  const etaDays = gap === 0 ? 0 : net > 0 ? Math.round((gap / net) * 10) / 10 : null;
+  if (gap === 0) return { rank, threshold, gap, drift, etaDays: 0, confidence: "firm", etaRange: null };
+  // drift null = not measured yet: the gate is read as standing still, which
+  // is the optimistic case, and surfaces that show drift say "calibrating"
+  const x = projectCrossing(stars, vOwn, threshold, drift ?? 0);
+  const reachable = x.closing > 0;
+  return {
+    rank,
+    threshold,
+    gap,
+    drift,
+    etaDays: reachable ? x.etaDays : null,
+    confidence: x.confidence,
+    etaRange: reachable ? x.etaRange : null,
+  };
+}
 
-  // confidence similar to projectCrossing
-  let confidence: MilestoneEta["confidence"] = "firm";
-  if (etaDays === null) confidence = "noisy";
-  else if (net < 3 || etaDays > 25) confidence = "noisy";
-  else if (etaDays > 8) confidence = "soft";
+// The top-N gates of a ranked registry: rank N's stars are the threshold and
+// rank N's rate is how fast it moves. /r/ and the landing demo build their
+// gates here.
+export function gateMilestones(
+  ranked: { s: number; v?: number | null; v7?: number | null }[],
+  ranks: number[],
+): { rank: number; threshold: number; drift: number | null }[] {
+  return ranks
+    .filter((rk) => rk >= 1 && rk <= ranked.length)
+    .map((rk) => ({ rank: rk, threshold: ranked[rk - 1].s, drift: gateDrift(ranked[rk - 1]) }));
+}
 
-  // Calculate range for soft/noisy projections
-  let etaRange: { min: number; max: number } | null = null;
-  if (etaDays !== null && (confidence === "soft" || confidence === "noisy")) {
-    const pct = confidence === "soft" ? 0.4 : 0.6;
-    const delta = Math.max(1, Math.round(etaDays * pct));
-    etaRange = {
-      min: Math.max(0, Math.round((etaDays - delta) * 10) / 10),
-      max: Math.round((etaDays + delta) * 10) / 10,
-    };
-  }
-
-  return { rank, threshold, gap, drift, etaDays, confidence, etaRange };
+// How fast a gate moves: the canonical rate of the repo holding that rank
+// (v7 ?? v). It was hard-coded null on /r/ and the landing demo, so every
+// gate stood still and every eta was optimistic: langchain at #60 read ~5
+// months to the top 50 while the repo holding #50 grew five times faster.
+// A gate does not fall (the next repo up takes the rank), so never below 0;
+// null when the holder's rate is unknown.
+export function gateDrift(holder: { v?: number | null; v7?: number | null } | null | undefined): number | null {
+  const v = holder ? canonicalVelocity(holder) : null;
+  return v === null ? null : Math.max(0, v);
 }
 
 export interface NeighborEta extends Neighbor {
