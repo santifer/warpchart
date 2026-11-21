@@ -255,11 +255,16 @@ export function curveTag(owner: string, name: string): string {
 // failure to retry. Re-deriving it per visit would multiply cost without ever
 // improving the shape. The rank collector adds repos to the moat daily, and the
 // version bump purges everything when the reconstruction itself changes.
+// The (owner, name) arguments are part of the cache key, so they go in
+// lowercased: /r/Foo/Bar and /r/foo/bar (and their ?repo= embeds) share one
+// reconstruction instead of each paying the REST sampling. GitHub resolves
+// either casing, and the curve's repo label comes from GitHub (basic.r), so the
+// stored value is unchanged and CURVE_VERSION does not move.
 export function cachedSampleCurve(owner: string, name: string): Promise<Curve> {
   return unstable_cache(sampleCurve, [`embed-chart-curve-v${CURVE_VERSION}`], {
     revalidate: 21_600,
     tags: [curveTag(owner, name)],
-  })(owner, name);
+  })(owner.toLowerCase(), name.toLowerCase());
 }
 
 // Overlay the LIVE star total on a cached curve: the SHAPE can be hours old
