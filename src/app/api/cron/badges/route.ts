@@ -5,6 +5,7 @@
 // repo keeps a badge forever even after it stops meeting the gate.
 import { allActiveBadges } from "@/lib/badges";
 import { readEarnedBadgesFresh, saveEarnedBadges } from "@/lib/earned";
+import { reqLog } from "@/lib/log";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -23,8 +24,10 @@ export async function GET(req: Request) {
     return new Response("forbidden", { status: 403, headers: { "Cache-Control": "no-store" } });
   }
 
+  const log = reqLog("cron-badges");
   const active = allActiveBadges();
   if (!active.length) {
+    log.error("catalog.unavailable");
     return Response.json(
       { ok: false, reason: "catalog unavailable" },
       { status: 503, headers: { "Cache-Control": "no-store" } },
@@ -43,6 +46,7 @@ export async function GET(req: Request) {
     }
   }
   if (added) await saveEarnedBadges(earned);
+  log.info("tick", { active: active.length, added, repos: Object.keys(earned).length });
 
   return Response.json(
     { ok: true, added, repos: Object.keys(earned).length },

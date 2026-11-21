@@ -15,6 +15,7 @@ import {
 import { repoEvents } from "@/lib/feed";
 import { readAlertsSent, saveAlertsSent } from "@/lib/alerts-store";
 import { sendEmail } from "@/lib/email";
+import { reqLog } from "@/lib/log";
 import type { MissionEvent } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -24,15 +25,16 @@ const ALERTABLE = new Set(["gate", "overtake", "record", "spike"]);
 const SITE = "https://warpchart.dev";
 const DAY = 86_400_000;
 
-async function notifyOperator(text: string) {
+async function notifyOperator(text: string): Promise<boolean> {
   const hook = process.env.ALERT_WEBHOOK_URL;
-  if (!hook) return;
+  if (!hook) return false;
   const payload = hook.includes("slack.com") ? { text } : { content: text };
-  await fetch(hook, {
+  const res = await fetch(hook, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
   }).catch(() => null);
+  return res?.ok ?? false;
 }
 
 function alertEmail(repo: string, fresh: MissionEvent[]): { subject: string; text: string } {
@@ -57,6 +59,7 @@ export async function GET(req: Request) {
     return new Response("forbidden", { status: 403, headers: { "Cache-Control": "no-store" } });
   }
 
+  const log = reqLog("cron-alerts");
   const nowMs = Date.now();
   const sent = await readAlertsSent();
   const houseRepo = loadMeta()?.repo ?? null;
@@ -106,14 +109,17 @@ export async function GET(req: Request) {
         replyTo: process.env.WELCOME_REPLY_TO || "hi@santifer.io",
       });
       if (delivered) emailsSent++;
+      else log.warn("alert.undelivered", { repo: t.repo, events: fresh.length, channel: "email" });
     } else if (t.isHouse) {
       // operator visibility is best-effort; the RSS feed is the durable record
-      await notifyOperator(`WARPCHART alerts · ${t.repo}: ${fresh.map((e) => e.text).join(" · ")}`);
+      const notified = await notifyOperator(`WARPCHART alerts · ${t.repo}: ${fresh.map((e) => e.text).join(" · ")}`);
+      if (!notified) log.warn("operator.unnotified", { repo: t.repo, events: fresh.length });
       delivered = true;
     } else {
       // a tenant with no email has no channel: do NOT advance, so the alert
       // retries (from the 24h baseline) once an address is added.
       delivered = false;
+      log.warn("alert.undelivered", { repo: t.repo, events: fresh.length, channel: "none" });
     }
 
     if (delivered && latest && latest > (sent[lk] ?? "")) {
@@ -122,9 +128,12 @@ export async function GET(req: Request) {
     }
   }
 
-  await saveAlertsSent(sent);
+  // a lost watermark re-sends today's alerts tomorrow, so it is an error
+  const saved = await saveAlertsSent(sent);
+  if (!saved) log.error("watermark.save-failed");
+  log.info("tick", { targets: targets.length, alerted, emailsSent, saved });
   return Response.json(
-    { ok: true, targets: targets.length, alerted, emailsSent },
+    { ok: saved, targets: targets.length, alerted, emailsSent },
     { headers: { "Cache-Control": "no-store" } },
   );
 }
