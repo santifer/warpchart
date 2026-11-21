@@ -4,6 +4,7 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
+import { rankQuery } from "./rules.mjs";
 
 export const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 export const DATA_DIR = join(ROOT, "data");
@@ -242,7 +243,7 @@ export async function search(params) {
 
 // How many repos have strictly more stars than `stars`. Worldwide rank = countAbove + 1.
 export async function countAbove(stars) {
-  const r = await search({ q: `stars:>${stars}`, per_page: "1" });
+  const r = await search({ q: rankQuery(stars), per_page: "1" });
   return r.total_count;
 }
 
@@ -302,20 +303,8 @@ export async function backwalk(owner, name, { stopAfter = null, maxPages = Infin
   return { timestamps, stars, complete, pages };
 }
 
-// Next round-number rank milestones below the current rank.
-// rank 409 -> [400, 300, 200, 100]; rank 101 -> [100, 90, 80, 70]; rank 4870 -> [4000, 3000, 2000, 1000].
-export function nextMilestones(rank, count = 4) {
-  if (!Number.isFinite(rank) || rank <= 1) return [];
-  const out = [];
-  let unit = Math.pow(10, Math.floor(Math.log10(rank - 1)));
-  let m = Math.floor((rank - 1) / unit) * unit;
-  while (out.length < count && m >= 1) {
-    out.push(m);
-    if (m - unit < 1 && unit > 1) unit = unit / 10;
-    m -= unit;
-  }
-  return out;
-}
+// Next round-number rank milestones below the current rank (collector/rules.mjs).
+export { nextMilestones } from "./rules.mjs";
 
 // The galactic core: the #1 most-starred repo in the world.
 export async function apexRepo() {

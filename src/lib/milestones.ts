@@ -1,6 +1,6 @@
 // Next round-number rank milestones below the current rank.
 // rank 409 -> [400, 300, 200, 100]; rank 101 -> [100, 90, 80, 70].
-// Mirror of the same helper in collector/lib.mjs.
+// Twin of nextMilestones() in collector/rules.mjs (src/lib/parity.test.ts).
 export function nextMilestones(rank: number, count = 4): number[] {
   if (!Number.isFinite(rank) || rank <= 1) return [];
   const out: number[] = [];
