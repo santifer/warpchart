@@ -25,6 +25,7 @@ Answer these six in the PR (or the commit message) before writing code:
 ## Done means verified on what production serves
 
 - `npm test`, `npx eslint .` and `npx tsc --noEmit` pass. CI runs the same, plus the build.
+- These need Node ≥ 22.12 (`nvm use` reads `.nvmrc`). On Node 20 `npm test` dies with a `rolldown-binding.wasi.cjs` error: switch Node, do not reinstall dependencies or skip the tests.
 - After the deploy: `npm run verify:deploy -- --url=/the/page --expect="the literal text" --wait=15`. Paste its `VERIFICADO:` line. A green workflow or a finished deploy is not evidence.
 - Every production deploy triggers `smoke.yml`: the real pages in WebKit (iPhone, both themes, and desktop), checking broken images, horizontal scroll and AA contrast. Run it locally with `npx playwright test` (`e2e/selftest.spec.ts` proves the sensors still catch a broken page).
 
