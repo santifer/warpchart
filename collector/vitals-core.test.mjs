@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { derivePrAnalysis, gfiFromCounts, gfiQueries, parseSidebarContributors, rankMaintainers } from "./vitals-core.mjs";
+import {
+  adoptionFromVault,
+  derivePrAnalysis,
+  gfiFromCounts,
+  gfiQueries,
+  parseSidebarContributors,
+  rankMaintainers,
+} from "./vitals-core.mjs";
 
 const now = Date.parse("2026-09-26T12:00:00Z");
 const DAY = 864e5;
@@ -101,5 +108,60 @@ describe("good first issues: count openings, not signs", () => {
   it("never lets the free count exceed the labeled one", () => {
     const d = { a: { issueCount: 3 }, b: { issueCount: 0 }, c: { issueCount: 5 }, d: { issueCount: 0 } };
     expect(gfiFromCounts(d).goodFirstIssuesFree).toBe(3);
+  });
+});
+
+describe("adoptionFromVault", () => {
+  const today = "2026-08-13";
+  const days = (from, n) =>
+    Array.from({ length: n }, (_, i) => new Date(Date.parse(`${from}T00:00:00Z`) + i * DAY).toISOString().slice(0, 10));
+  // the vault as traffic.mjs writes it: per-day {c, u}, plus GitHub's own
+  // deduplicated 14-day reading and the day it was taken
+  const vaultOf = (keys, { views = { c: 3000, u: 1000 }, clones = { c: 2600, u: 1300 }, at = "2026-08-13" } = {}) => ({
+    views: Object.fromEntries(keys.map((d) => [d, { ...views }])),
+    clones: Object.fromEntries(keys.map((d) => [d, { ...clones }])),
+    uniq14: { cloners: 29_837, visitors: 40_000, at },
+  });
+
+  // 2026-08-13: the dossier stopped summing per-day uniques into "unique
+  // cloners" (91,685 summed vs 29,837 deduplicated), but /api/v1/dossier kept
+  // publishing the same sum for the week as adoption.uniqueClonersWeek.
+  it("counts the week's clone events, and no summed uniques", () => {
+    const ad = adoptionFromVault(vaultOf(days("2026-08-01", 13)), today);
+    expect(ad.clonesWeek).toBe(7 * 2600);
+    expect(ad).not.toHaveProperty("uniqueClonersWeek");
+    expect(ad).not.toHaveProperty("clonesPerCloner");
+    expect(ad.cloneConvPct).toBe(130);
+  });
+
+  // Windows are temporal, never by count: with a hole in the vault, the last 7
+  // ENTRIES reached back three weeks and still called it a week.
+  it("is the 7 UTC days before today, not the last 7 entries", () => {
+    const old = days("2026-07-20", 7).map((d) => [d, { c: 1, u: 1 }]);
+    const vault = vaultOf(days("2026-08-06", 7));
+    Object.assign(vault.clones, Object.fromEntries(old));
+    Object.assign(vault.views, Object.fromEntries(old));
+    // today's partial day never counts
+    vault.clones[today] = { c: 999_999, u: 999_999 };
+    vault.views[today] = { c: 999_999, u: 999_999 };
+    expect(adoptionFromVault(vault, today).clonesWeek).toBe(7 * 2600);
+  });
+
+  it("is null for a vault that stopped collecting, never a partial week", () => {
+    const stale = vaultOf(days("2026-07-25", 14), { at: "2026-08-07" });
+    expect(adoptionFromVault(stale, today)).toBeNull();
+  });
+
+  it("reads a day GitHub answered for and left out as zero", () => {
+    const keys = days("2026-08-06", 7).filter((d) => d !== "2026-08-09");
+    expect(adoptionFromVault(vaultOf(keys), today).clonesWeek).toBe(6 * 2600);
+    const unanswered = vaultOf(keys);
+    delete unanswered.uniq14;
+    expect(adoptionFromVault(unanswered, today)).toBeNull();
+  });
+
+  it("is null without a vault", () => {
+    expect(adoptionFromVault(null, today)).toBeNull();
+    expect(adoptionFromVault({ views: {} }, today)).toBeNull();
   });
 });

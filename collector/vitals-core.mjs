@@ -154,3 +154,46 @@ export function gfiFromCounts(d) {
   const freeRaw = Math.max(c, e);
   return { goodFirstIssues: open, goodFirstIssuesFree: Math.min(freeRaw, open) };
 }
+
+// Clone conversion from the Traffic Vault: the 7 complete UTC days before
+// `today`, by DATE. `days.slice(-7)` was a window by count: with a hole in the
+// vault it reached back past the week and still called the result a week.
+//
+// Sums `c` (clone events) for the week, never `u`. `u` is uniques PER DAY: one
+// person who clones on five days adds five to a sum of `u`. That sum shipped
+// here as `uniqueClonersWeek`, the same 3x overstatement the dossier dropped on
+// 2026-08-13 (91,685 summed vs 29,837 deduplicated by GitHub). It is gone, and
+// so is `clonesPerCloner`, which divided by it.
+//
+// The conversion stays a ratio of per-day uniques on BOTH sides (cloner-days
+// over visitor-days), so the units cancel; it is not a headcount either.
+//
+// A day GitHub answered for and left out had no traffic: the vault's latest
+// reading (`uniq14.at`) covers its own 14 days. A day nobody asked GitHub about
+// is unknown, and an unknown day means no week: null, never a partial sum.
+export function adoptionFromVault(vault, today) {
+  if (!vault?.views || !vault?.clones) return null;
+  const DAY = 864e5;
+  const end = Date.parse(`${today}T00:00:00Z`);
+  if (!Number.isFinite(end)) return null;
+  const window = Array.from({ length: 7 }, (_, i) => new Date(end - (7 - i) * DAY).toISOString().slice(0, 10));
+  const at = vault.uniq14?.at ?? null;
+  const from = at ? new Date(Date.parse(`${at}T00:00:00Z`) - 13 * DAY).toISOString().slice(0, 10) : null;
+  const answered = (d) => at !== null && d >= from && d <= at;
+  const read = (series, d) => series[d] ?? (answered(d) ? { c: 0, u: 0 } : null);
+  let uV = 0;
+  let uC = 0;
+  let cC = 0;
+  for (const d of window) {
+    const v = read(vault.views, d);
+    const c = read(vault.clones, d);
+    if (!v || !c) return null;
+    uV += v.u || 0;
+    uC += c.u || 0;
+    cC += c.c || 0;
+  }
+  return {
+    cloneConvPct: uV > 0 ? Math.round((uC / uV) * 100) : null,
+    clonesWeek: cC,
+  };
+}
