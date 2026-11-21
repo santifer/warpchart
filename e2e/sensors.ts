@@ -3,6 +3,14 @@ import type { Page } from "@playwright/test";
 // What a visitor would call "broken", measured in the page itself. Each sensor
 // returns the offending items (empty = healthy) so a failure names its cause.
 
+// The text a visitor can actually read. Not textContent (what toContainText
+// reads by default): that includes the JSON-LD <script> the layout injects
+// into every <body>, so "/" and "/velocity" passed the render check on an
+// empty shell.
+export function visibleText(page: Page) {
+  return page.evaluate(() => document.body.innerText);
+}
+
 // An <img> the browser finished and could not decode (a failed redirect, a
 // 404, an invalid source). Lazy images not yet requested are not "complete".
 export function brokenImages(page: Page) {
