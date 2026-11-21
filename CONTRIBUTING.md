@@ -32,4 +32,4 @@ src/app/          dashboard page, /r/ explorer, /api/badge, /api/og, live APIs
 
 ## Good first issues
 
-See [docs/good-first-issues.md](docs/good-first-issues.md).
+They are open issues, labelled [good first issue](https://github.com/santifer/warpchart/labels/good%20first%20issue).
