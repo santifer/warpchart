@@ -3,9 +3,10 @@
 // /api/cron/badges job writes it once a day (a UNION — only ever adds a key the
 // first time a repo earns it, with the date). Every render reads it cached. A
 // miss returns {} and badges degrade to live-only: nothing breaks.
-import { get, put } from "@vercel/blob";
+import { get } from "@vercel/blob";
 import { unstable_cache } from "next/cache";
 import type { EarnedBadges } from "./badges";
+import { updateJson, keepsEveryKey } from "./blob";
 
 const PATH = "badges-earned.json";
 
@@ -28,20 +29,26 @@ export async function loadEarnedBadges(): Promise<EarnedBadges> {
   return unstable_cache(read, ["earned-badges"], { revalidate: 3600 })();
 }
 
-// The cron writer must see the freshest store before unioning, so it bypasses
-// the render cache.
-export function readEarnedBadgesFresh(): Promise<EarnedBadges> {
-  return read();
-}
-
-export async function saveEarnedBadges(map: EarnedBadges): Promise<void> {
-  const token = process.env.BLOB_READ_WRITE_TOKEN;
-  if (!token) return;
-  await put(PATH, JSON.stringify(map), {
-    access: "private",
-    token,
-    contentType: "application/json",
-    addRandomSuffix: false,
-    allowOverwrite: true,
+// The cron writer: a union into the freshest store (updateJson reads from
+// origin and throws on anything but a 404). It used to read through read()
+// above, where a 503 is {}: the union then started from nothing and the write
+// replaced every earned date with today's. Returns how many pairs were new.
+export async function recordEarnedBadges(active: { r: string; key: string }[], today: string) {
+  let added = 0;
+  const { value } = await updateJson<EarnedBadges>(PATH, (stored) => {
+    const map = structuredClone(stored ?? {});
+    added = 0;
+    for (const { r, key } of active) {
+      const lk = r.toLowerCase();
+      map[lk] ??= {};
+      if (!map[lk][key]) {
+        map[lk][key] = today;
+        added++;
+      }
+    }
+    if (!added) return undefined;
+    keepsEveryKey(stored, map, PATH);
+    return map;
   });
+  return { added, repos: Object.keys(value ?? {}).length };
 }

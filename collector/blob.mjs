@@ -51,6 +51,65 @@ export async function writeJson(key, value) {
   });
 }
 
+// THE READ-MODIFY-WRITE PATH. readFresh above is for checks that can shrug off
+// a miss; a writer that merges into what it read cannot. If a Blob 5xx reads as
+// "empty", the merge starts from nothing and the write REPLACES years of vault
+// with one run's worth, and GitHub has already discarded the days it held.
+//
+// readJsonStrict: only a 404 is absence. Anything else (5xx, network, a body
+// that is not JSON) throws, so the caller writes nothing.
+export async function readJsonStrict(key) {
+  if (!token()) throw new Error(`[blob] ${key}: no BLOB_READ_WRITE_TOKEN`);
+  const { get } = await blob();
+  const res = await get(key, { access: "private", token: token(), useCache: false });
+  if (res === null) return { state: "absent" };
+  if (res?.statusCode !== 200 || !res.stream) throw new Error(`[blob] ${key}: unexpected read (${res?.statusCode})`);
+  return { state: "data", value: JSON.parse(await new Response(res.stream).text()), etag: res.blob?.etag || null };
+}
+
+// Conditional write: with an etag, the put only lands if nobody wrote the key
+// since we read it (BlobPreconditionFailedError otherwise). Without one (the key
+// was absent) it is a plain write.
+export async function writeJsonIf(key, value, etag) {
+  const { put } = await blob();
+  await put(key, JSON.stringify(value), {
+    access: "private",
+    token: token(),
+    addRandomSuffix: false,
+    allowOverwrite: true,
+    contentType: "application/json",
+    ...(etag ? { ifMatch: etag } : {}),
+  });
+}
+
+// A shrink guard's verdict. Thrown from an updateJson merge: nothing is written,
+// and the caller leaves a partial marker so the watchdog sees the refusal.
+export class RefusedWrite extends Error {
+  name = "RefusedWrite";
+}
+
+// read -> merge -> conditional write, retried on a lost race. `merge` gets the
+// stored value (undefined when absent) and returns the value to write, or
+// undefined to write nothing. It may run more than once: keep it pure.
+// `read` replaces the plain strict read of `key` (same return shape), for a
+// writer that seeds from more than one key (traffic after a rename).
+export async function updateJson(key, merge, { attempts = 3, read = () => readJsonStrict(key) } = {}) {
+  const m = await blob();
+  for (let i = 0; i < attempts; i++) {
+    const cur = await read();
+    const next = await merge(cur.state === "data" ? cur.value : undefined);
+    if (next === undefined) return { written: false, value: cur.state === "data" ? cur.value : undefined };
+    try {
+      await writeJsonIf(key, next, cur.state === "data" ? cur.etag : null);
+      return { written: true, value: next };
+    } catch (e) {
+      if (e instanceof m.BlobPreconditionFailedError || e?.name === "BlobPreconditionFailedError") continue;
+      throw e;
+    }
+  }
+  throw new Error(`[blob] ${key}: lost the write race ${attempts} times`);
+}
+
 export const partialKey = (family) => `health/partial/${family}.json`;
 
 // `since` = the FIRST refusal of this episode (kept across refusals, so the
