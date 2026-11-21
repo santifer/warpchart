@@ -5,6 +5,9 @@
   "bin": {
     "warpchart": "./warpchart.mjs"
   },
+  "files": [
+    "warpchart.mjs"
+  ],
   "type": "module",
   "engines": {
     "node": ">=18"

@@ -60,6 +60,16 @@ describe("derivePrAnalysis", () => {
     expect(leadTime.windowDays).toBe(90);
   });
 
+  // A sweep that could not read mergedBy (every node null) used to publish
+  // mergedByDistinct: 1, which the panel rendered as "sole maintainer".
+  it("reports the merge gate as unmeasured when no PR names its merger", () => {
+    const nodes = [pr("a", now - DAY, 2, null), pr("b", now - 2 * DAY, 3, null), pr("c", now - 3 * DAY, 1, null)];
+    const { community } = derivePrAnalysis({ nodes, now });
+    expect(community.prsSampled).toBe(3);
+    expect(community.mergedByDistinct).toBeNull();
+    expect(community.maintainers).toEqual([]);
+  });
+
   it("keeps bots out of contributors and maintainers", () => {
     const nodes = [pr("dependabot[bot]", now - DAY, 1, "github-actions"), pr("human", now - DAY)];
     const { community } = derivePrAnalysis({ nodes, now });
