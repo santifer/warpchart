@@ -17,11 +17,6 @@
       "count": 1
     }
   },
-  "src/components/CumulativeChart.tsx": {
-    "react-hooks/immutability": {
-      "count": 1
-    }
-  },
   "src/components/DailyBriefing.tsx": {
     "react-hooks/purity": {
       "count": 1
