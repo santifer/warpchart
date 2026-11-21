@@ -29,6 +29,13 @@ jobs:
           cache: npm
       - run: npm ci --no-audit --no-fund
 
+      # A signal, not a gate: a critical advisory in a runtime dependency shows
+      # up as a failed (amber) step without blocking an unrelated change. The
+      # install above skips the audit, so this is where the advisories surface.
+      - name: Audit runtime dependencies (non-blocking)
+        continue-on-error: true
+        run: npm audit --omit=dev --audit-level=critical
+
       - name: Typecheck
         run: npx tsc --noEmit --incremental false
 
