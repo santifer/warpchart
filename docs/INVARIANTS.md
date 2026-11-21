@@ -37,7 +37,7 @@ a different question. It never throws, never logs, and the panel stays green.
 
 ## 3. GitHub API
 
-- **GraphQL partial errors:** aliased batches return `errors` (e.g. NOT_FOUND for one renamed repo) together with valid `data`. Throw only when there is no data at all; otherwise warn and keep the rest. Both clients do this (`collector/lib.test.mjs`, `src/lib/github.test.ts`).
+- **GraphQL partial errors:** aliased batches return `errors` (e.g. NOT_FOUND for one renamed repo) together with valid `data`. Keep the rest only when every error names one whole top-level alias that came back `null` and another alias answered; warn and read the missing alias as `null`, never `0`. Anything else throws, including an error NESTED inside a field (a timeout under `repository` nulls it while sibling searches still answer; keeping that published "0 issues / 0 merged PRs"). One rule, two copies: `onlyWholeAliasesMissing` in `collector/lib.mjs` and `src/lib/github.ts`, held together by a parity test (`src/lib/github.test.ts`; also `collector/lib.test.mjs`).
 - **GraphQL answers HTTP 200 with a `FORBIDDEN` error object**, not a 403. Token failover for GraphQL lives in `graphql()`, not in the status check.
 - **A 403 with `x-ratelimit-remaining > 0` and no `retry-after` is a permission error, not quota.** Fail over to the next token instead of sleeping (`collector/lib.test.mjs`). Each run logs which token of the pool served REST and GraphQL.
 - Listing stargazers of repos we do not own is closed by GitHub. The Actions installation token and fine-grained PATs cannot list stargazers at all; only classic PAT/OAuth tokens can.
