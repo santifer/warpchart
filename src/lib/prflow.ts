@@ -5,11 +5,12 @@
 //
 // Same contract as vitals.ts: a page view NEVER hits GitHub, and gating is
 // presence. The collector only writes the file for the unlocked set, so null
-// here means "not tracked" and the panel simply does not render. It is public
+// here means "not tracked" and the panel simply does not render. A failed read
+// rejects instead, and is not cached. It is public
 // on an unlocked page (it is public GitHub data), unlike the Traffic Vault.
-import { get } from "@vercel/blob";
 import { unstable_cache } from "next/cache";
 import { allNamesOf } from "./aliases";
+import { readPrivateJson } from "./blob-read";
 
 // [day, opened, merged, closedUnmerged, openAtClose, medianAgeDaysOfOpen]
 export type PrFlowDay = [string, number, number, number, number, number | null];
@@ -31,18 +32,13 @@ async function readPrFlow(owner: string, name: string): Promise<PrFlow | null> {
   if (!token) return null;
   // rewritten on every run (a full recompute, not an accumulation), so a renamed
   // repo only needs the newest name first and older names as fallback
+  // Only a 404 moves on to the next name: a failed read throws, so it is never
+  // cached as "not tracked" (readPrivateJson).
   for (const rn of [...allNamesOf(`${owner}/${name}`)].reverse()) {
-    try {
-      // useCache:false: the Blob CDN would otherwise freeze a rewritten file for
-      // weeks; the 15-min unstable_cache below is the real dedup
-      const res = await get(blobKey(rn), { access: "private", token, useCache: false });
-      if (res?.statusCode === 200 && res.stream) {
-        const flow = JSON.parse(await new Response(res.stream).text()) as PrFlow;
-        return flow.days?.length ? flow : null;
-      }
-    } catch {
-      /* missing (not tracked) or transient: try the next historical name */
-    }
+    // useCache:false: the Blob CDN would otherwise freeze a rewritten file for
+    // weeks; the 15-min unstable_cache below is the real dedup
+    const flow = await readPrivateJson<PrFlow>(blobKey(rn), token, { useCache: false });
+    if (flow) return flow.days?.length ? flow : null;
   }
   return null;
 }
