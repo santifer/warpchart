@@ -5,6 +5,7 @@ import { unstable_cache } from "next/cache";
 import { loadTimestamps, loadMeta, lastSnapshot } from "@/lib/history";
 import { repoBasic, stargazerPageFirst, lowFuel } from "@/lib/github";
 import { repoRankTrajectory } from "@/lib/rank-history";
+import { BlobReadError } from "@/lib/blob-read";
 import { reqLog } from "@/lib/log";
 
 export interface Curve {
@@ -29,6 +30,7 @@ export interface Curve {
   // true when no per-star source was reachable and the shape is a floor
   // (creation -> now) rather than a reconstruction. Callers cache these for
   // minutes, not hours, so a repo recovers as soon as a real source returns.
+  // Also true when our own daily record (rank-history) could not be read.
   degraded?: boolean;
 }
 
@@ -146,7 +148,9 @@ async function restSample(owner: string, name: string, stars: number, repo: stri
 //                                 free (already collected for the rank moat)
 //   3. the public event archive - monthly shape for the deep past, non-fatal
 //   4. a two-point floor        - creation -> now, dashed and marked degraded
-async function sampleCurve(owner: string, name: string): Promise<Curve> {
+// rankHistory "skip" builds the curve without our own daily record: only for
+// when that record could not be read (see cachedSampleCurve).
+async function sampleCurve(owner: string, name: string, rankHistory: "read" | "skip" = "read"): Promise<Curve> {
   const basic = await repoBasic(owner, name);
   const log = reqLog("curve", { repo: basic.r });
   const pts = await restSample(owner, name, basic.s, basic.r);
@@ -167,7 +171,9 @@ async function sampleCurve(owner: string, name: string): Promise<Curve> {
     // within the live total (defensive against unstars / late corrections).
     // Free: already collected daily for the worldwide-rank moat, zero GitHub
     // cost, and for a foreign repo it is now the ONLY per-day source there is.
-    const traj = await repoRankTrajectory(basic.r).catch(() => []);
+    // A failed read REJECTS here (never `[]`): an empty record would cache a
+    // top-10k repo's curve as "no daily source" for 6 h.
+    const traj = rankHistory === "read" ? await repoRankTrajectory(basic.r) : [];
     const exactRecent = traj
       .filter((p) => (!restLast || p.t > restLast.t) && p.stars > (restLast?.v ?? 0))
       .filter((p) => p.stars <= basic.s + 50)
@@ -255,11 +261,21 @@ export function curveTag(owner: string, name: string): string {
 // failure to retry. Re-deriving it per visit would multiply cost without ever
 // improving the shape. The rank collector adds repos to the moat daily, and the
 // version bump purges everything when the reconstruction itself changes.
-export function cachedSampleCurve(owner: string, name: string): Promise<Curve> {
-  return unstable_cache(sampleCurve, [`embed-chart-curve-v${CURVE_VERSION}`], {
-    revalidate: 21_600,
-    tags: [curveTag(owner, name)],
-  })(owner, name);
+// A curve built while the rank-history store was unreadable is NOT cached: the
+// read rejects out of unstable_cache (which stores nothing), and the fallback
+// below is rebuilt per request without our daily record, marked degraded, until
+// the store answers again.
+export async function cachedSampleCurve(owner: string, name: string): Promise<Curve> {
+  try {
+    return await unstable_cache(sampleCurve, [`embed-chart-curve-v${CURVE_VERSION}`], {
+      revalidate: 21_600,
+      tags: [curveTag(owner, name)],
+    })(owner, name);
+  } catch (err) {
+    if (!(err instanceof BlobReadError)) throw err;
+    reqLog("curve", { repo: `${owner}/${name}` }).warn("rank-history.unreadable", { err: err.message.slice(0, 200) });
+    return { ...(await sampleCurve(owner, name, "skip")), degraded: true };
+  }
 }
 
 // Overlay the LIVE star total on a cached curve: the SHAPE can be hours old

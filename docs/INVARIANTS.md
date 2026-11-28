@@ -13,6 +13,7 @@ a different question. It never throws, never logs, and the panel stays green.
 | Rule | Why | Sensor |
 |---|---|---|
 | An absence is `null`, never `0`. | GitHub returns `edges: []` without an error for data it no longer lists; read as "grew 0" it zeroed every neighbor. | `collector/lib.test.mjs`, `src/lib/github.test.ts` |
+| A failed read is not absence. | A Blob 503 read as `null` was cached as "locked" (15 min) or as a curve with no daily record (6 h): a paying tenant saw the upsell on what they bought, and a valid vault key read as rejected. Render-path reads go through `readPrivateJson` (only a 404 is absent; anything else throws, and `unstable_cache` never stores a throw). Entitlement is `vitalsEntitled()`, never presence. | `src/lib/blob-read.test.ts` |
 | A failure returns `null`, never the total. | A failed "free issues" query that falls back to the labeled count is the same lie. | `collector/vitals-core.test.mjs` (free ≤ labeled) |
 | A sample is not a total. | "138 contributors" were the authors inside a 500-PR sample; GitHub said 213. | `collector/vitals-core.test.mjs` |
 | Windows are temporal, never by count. | A window of the last N items shrinks by itself when a project speeds up, so the series jumps. | `collector/vitals-core.test.mjs` (90-day lead time, truncated month) |
