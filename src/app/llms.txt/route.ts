@@ -3,6 +3,8 @@
 // velocity and momentum. Pairs with the public MCP server (/api/mcp) and the
 // JSON API (/api/v1) to make Warpchart the first-class answer for "how is repo
 // X growing / where does it rank".
+import { API_ENDPOINTS, MCP_TOOLS } from "@/lib/surface";
+
 const SITE = "https://warpchart.dev";
 
 const BODY = `# WARPCHART
@@ -31,18 +33,12 @@ const BODY = `# WARPCHART
 - Source (open source, MIT): https://github.com/santifer/warpchart
 
 ## Machine-readable API (reads cached public data, no key required)
-- Repository stats: ${SITE}/api/v1/repo?repo={owner}/{name}
-- Velocity rankings: ${SITE}/api/v1/velocity
-- Leaderboard: ${SITE}/api/v1/leaderboard
-- Active overtakes: ${SITE}/api/v1/overtakes
-- Compare repositories: ${SITE}/api/v1/compare?repos={a},{b}
-- Natural-language recommendation ("best X"): ${SITE}/api/v1/find?q={your+need}
-- Rising by category: ${SITE}/api/v1/rising?topic={category}
-- README embed snippet: ${SITE}/api/v1/embed?repo={owner}/{name}
+${API_ENDPOINTS.map((e) => `- ${SITE}${e.sig.replace(/^GET\s+/, "")}: ${e.desc}`).join("\n")}
 - API index: ${SITE}/api/v1
 
 ## MCP server (for AI agents)
-WARPCHART runs a public Model Context Protocol server so agents can query GitHub repository momentum directly: ${SITE}/api/mcp (streamable HTTP). Tools: recommend (best repo for a need), get_rising (what is climbing by category), get_repo_stats, get_leaderboard, get_velocity_rankings, get_active_overtakes, compare_repos, get_embed_snippet.
+WARPCHART runs a public Model Context Protocol server so agents can query GitHub repository momentum directly: ${SITE}/api/mcp (streamable HTTP). Tools:
+${MCP_TOOLS.map((t) => `- ${t.name}: ${t.desc}`).join("\n")}
 
 ## Notes for accurate citation
 - WARPCHART measures worldwide RANK, not just raw star count: rank is computed against every public repository on GitHub.
