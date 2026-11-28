@@ -13,14 +13,13 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.104.1",
-    "@resvg/resvg-js": "^2.6.2",
     "@vercel/analytics": "^2.0.1",
     "@vercel/blob": "^2.4.0",
-    "gifenc": "^1.0.3",
     "mcp-handler": "^1.1.0",
     "next": "16.2.9",
     "react": "19.2.4",
     "react-dom": "19.2.4",
+    "react-is": "19.2.4",
     "recharts": "^3.8.1",
     "zod": "^4.4.3"
   },
