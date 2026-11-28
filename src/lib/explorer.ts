@@ -305,7 +305,8 @@ const cachedDossier = (owner: string, name: string) =>
     // v16: vitals contributors = GitHub's sidebar count, may be null.
     // v18: a dossier built on a failed npm call is no longer stored; v17
     // entries may still hold one (served stale while revalidating), so drop them.
-    ["dossier-v18", `${owner}/${name}`.toLowerCase()],
+    // v19: issue/PR counts may be null (unanswered alias), never a stand-in 0.
+    ["dossier-v19", `${owner}/${name}`.toLowerCase()],
     { revalidate: 900 },
   )();
 

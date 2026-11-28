@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { onlyWholeAliasesMissing as collectorRule } from "../../collector/lib.mjs";
 
 // The web app's GitHub client must agree with the collector's on what an
 // unmeasurable window is (collector/lib.test.mjs has the twin of these).
@@ -81,7 +82,10 @@ describe("graphql partial errors", () => {
     vi.stubGlobal(
       "fetch",
       vi.fn(async () =>
-        json(200, { data: { r0: node("big/repo", 61000), r1: null }, errors: [{ type: "NOT_FOUND" }] }),
+        json(200, {
+          data: { r0: node("big/repo", 61000), r1: null },
+          errors: [{ type: "NOT_FOUND", path: ["r1"], message: "Could not resolve to a Repository with the name 'old/name'." }],
+        }),
       ),
     );
     const { graphql } = await import("@/lib/github");
@@ -94,5 +98,76 @@ describe("graphql partial errors", () => {
     vi.stubGlobal("fetch", vi.fn(async () => json(200, { data: null, errors: [{ type: "FORBIDDEN" }] })));
     const { graphql } = await import("@/lib/github");
     await expect(graphql("{ x }")).rejects.toThrow(/GraphQL/);
+  });
+});
+
+// The dossier's own aliased query as GitHub answers it on a bad day: a timeout
+// NESTED under `repository` nulls it while the three sibling searches answer.
+const NESTED = {
+  data: { opened: { issueCount: 41 }, closed: { issueCount: 37 }, merged: { issueCount: 12 }, repository: null },
+  errors: [{ type: "TIMEOUT", path: ["repository", "releases"], message: "Timeout on validation of query" }],
+};
+// One whole alias unanswered (a search that did not come back), the rest good.
+const ONE_ALIAS = {
+  data: {
+    opened: null,
+    closed: { issueCount: 37 },
+    merged: null,
+    repository: {
+      issues: { totalCount: 230 },
+      defaultBranchRef: { target: { history: { totalCount: 88 } } },
+      releases: { nodes: [] },
+      object: null,
+    },
+  },
+  errors: [
+    { type: "SERVICE_UNAVAILABLE", path: ["opened"], message: "search timed out" },
+    { type: "SERVICE_UNAVAILABLE", path: ["merged"], message: "search timed out" },
+  ],
+};
+
+describe("graphql partial errors: the collector's rule", () => {
+  // The app kept ANY answer that had data. The dossier then published
+  // "0 issues / 0 merged PRs" on /r/, /api/v1/dossier and the CLI whenever
+  // GitHub degraded; the collector had stopped doing this on 2026-09-26.
+  it("throws on an error nested inside a field, even when siblings answered", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => json(200, NESTED)));
+    const { graphql, repoDossier } = await import("@/lib/github");
+    await expect(graphql("{ x }")).rejects.toThrow(/Timeout/);
+    await expect(repoDossier("a", "b")).rejects.toThrow(/GraphQL/);
+  });
+
+  it("reads an unanswered alias as unmeasured, never 0", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => json(200, ONE_ALIAS)));
+    const { repoDossier } = await import("@/lib/github");
+    const d = await repoDossier("a", "b");
+    expect(d.issuesOpened30).toBeNull();
+    expect(d.prsMerged30).toBeNull();
+    expect(d.issuesClosed30).toBe(37);
+    expect(d.openIssues).toBe(230);
+    expect(d.commits30).toBe(88);
+  });
+});
+
+describe("onlyWholeAliasesMissing: app and collector agree", () => {
+  const CASES: [string, unknown, unknown][] = [
+    ["nested error under a nulled field", NESTED.data, NESTED.errors],
+    ["whole aliases missing, others answered", ONE_ALIAS.data, ONE_ALIAS.errors],
+    ["NOT_FOUND alias next to a good one", { r0: { id: 1 }, r1: null }, [{ type: "NOT_FOUND", path: ["r1"] }]],
+    ["every alias missing", { r0: null, r1: null }, [{ path: ["r0"] }, { path: ["r1"] }]],
+    ["error without a path", { r0: { id: 1 }, r1: null }, [{ type: "FORBIDDEN" }]],
+    ["error naming an alias that answered", { r0: { id: 1 } }, [{ path: ["r0"] }]],
+    ["no data", null, [{ path: ["r0"] }]],
+    ["no errors", { r0: { id: 1 } }, []],
+  ];
+  it.each(CASES)("%s", async (_, data, errors) => {
+    const { onlyWholeAliasesMissing } = await import("@/lib/github");
+    expect(onlyWholeAliasesMissing(data, errors as { path?: unknown }[])).toBe(collectorRule(data, errors));
+  });
+
+  it("keeps exactly the whole-alias case", async () => {
+    const { onlyWholeAliasesMissing } = await import("@/lib/github");
+    const kept = CASES.filter(([, d, e]) => onlyWholeAliasesMissing(d, e as { path?: unknown }[])).map(([n]) => n);
+    expect(kept).toEqual(["whole aliases missing, others answered", "NOT_FOUND alias next to a good one"]);
   });
 });
