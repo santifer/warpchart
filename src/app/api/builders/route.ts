@@ -12,6 +12,7 @@ import { REPO } from "@/lib/config";
 import { canonicalRepo } from "@/lib/aliases";
 import { embedCache } from "@/lib/embed";
 import { reqLog } from "@/lib/log";
+import { cacheKey } from "@/lib/shape-versions";
 
 export const dynamic = "force-dynamic";
 
@@ -29,7 +30,7 @@ const LANG_BY_LOWER = new Map(LANGS.map((l) => [l.toLowerCase(), l]));
 // is dropped from the messages file, which is a deliberate act.
 const readWall = unstable_cache(
   (slug: string, lang: string) => loadWall(get, process.env.BLOB_READ_WRITE_TOKEN, slug, lang),
-  ["builders-wall-v2"],
+  [cacheKey("buildersWall")],
   { revalidate: 1800 },
 );
 const readWallOrNull = (slug: string, lang: string) =>
