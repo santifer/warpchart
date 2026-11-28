@@ -8,6 +8,7 @@ import { canonicalRepo } from "@/lib/aliases";
 import { currentStars, worldwideRank, lowFuel } from "@/lib/github";
 import { canonicalVelocity } from "@/lib/velocity";
 import { fmt } from "@/lib/format";
+import { rankByStars } from "@/lib/rank";
 import { fmtEmbed, adaptiveTtl, embedCache, TENANT_EMBED_CACHE } from "@/lib/embed";
 import { noteEmbedHit } from "@/lib/embed-track";
 
@@ -86,12 +87,19 @@ export async function GET(req: Request) {
       rank = last.rank;
       stars = last.stars;
       exact = true;
+      // ONE clock per badge. A live star count next to the snapshot's rank was
+      // two readings from two moments in one image; a live count is re-ranked
+      // live too, and if either call fails both come from the snapshot.
       const meta = loadMeta();
       if (meta && !lowFuel()) {
         try {
           const [owner, name] = meta.repo.split("/");
-          stars = Math.max(stars, await currentStars(owner, name));
-        } catch { /* the hourly snapshot is an acceptable fallback */ }
+          const live = await currentStars(owner, name);
+          if (live > stars) {
+            rank = await worldwideRank(live);
+            stars = live;
+          }
+        } catch { /* the hourly snapshot, rank and stars together */ }
       }
       const cutoff = Date.now() - 24 * 3600_000;
       let past = null;
@@ -108,13 +116,12 @@ export async function GET(req: Request) {
       // they pasted it: resolve renames so those badges survive a transfer.
       const canonical = canonicalRepo(repoParam);
       const route = loadRoute();
-      const idx = route
-        ? route.repos.findIndex((p) => p.r.toLowerCase() === canonical.toLowerCase())
-        : -1;
-      if (idx >= 0) {
-        rank = idx + 1;
-        stars = route!.repos[idx].s;
-        cacheControl = embedCache(adaptiveTtl(stars, canonicalVelocity(route!.repos[idx])));
+      const e = route?.repos.find((p) => p.r.toLowerCase() === canonical.toLowerCase());
+      if (e && route) {
+        // counted against the registry, never its array position (src/lib/rank.ts)
+        rank = rankByStars(route.repos, e.s);
+        stars = e.s;
+        cacheControl = embedCache(adaptiveTtl(stars, canonicalVelocity(e)));
       } else {
         const [owner, name] = canonical.split("/");
         stars = await currentStars(owner, name);

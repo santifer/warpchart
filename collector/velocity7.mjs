@@ -27,8 +27,8 @@ import { join } from "node:path";
 import { get } from "@vercel/blob";
 import { DATA_DIR, allNamesOf } from "./lib.mjs";
 import { measureRepo, v7Stamp } from "./velocity7-core.mjs";
+import { SHARDS, shardOf } from "./rules.mjs";
 
-const SHARDS = 32; // MUST match src/lib/rank-history.ts and route-history.mjs
 const PREFIX = "route-history";
 
 const token = process.env.BLOB_READ_WRITE_TOKEN;
@@ -37,16 +37,6 @@ if (!token) {
   process.exit(0);
 }
 
-// deterministic fnv-1a, identical to shardOf() in route-history.mjs + rank-history.ts
-function shardOf(repo) {
-  let h = 2166136261;
-  const s = repo.toLowerCase();
-  for (let i = 0; i < s.length; i++) {
-    h ^= s.charCodeAt(i);
-    h = Math.imul(h, 16777619);
-  }
-  return (h >>> 0) % SHARDS;
-}
 
 async function readJson(key) {
   try {

@@ -11,6 +11,7 @@ import BadgeSigil from "@/components/BadgeSigil";
 import { classifiedRegistry } from "@/lib/badges";
 import { loadRoute, loadCollisions, loadMeta, loadCatalog } from "@/lib/history";
 import { canonicalVelocity, canonicalVel0 } from "@/lib/velocity";
+import { rankedRegistry } from "@/lib/rank";
 import { fmtCompact, fmtEtaDays, fmt } from "@/lib/format";
 
 // 15 min: the data file is daily, but ETAs age in render time, so rebuilds
@@ -35,7 +36,8 @@ export default function VelocityPage() {
   // canonical velocity everywhere: the stable 7-day route rate (v7), falling back
   // to v only where v7 is missing — so the board matches /r/, the OG card and the
   // API instead of ranking on the noisy ~1-day rate.
-  const ranked = (route?.repos ?? []).map((p, i) => ({ ...p, rank: i + 1, vEff: canonicalVelocity(p) }));
+  // counted ranks (src/lib/rank.ts), never the registry's array position
+  const ranked = rankedRegistry(route?.repos ?? []).map((p) => ({ ...p, vEff: canonicalVelocity(p) }));
   const withV = ranked.filter((p) => p.vEff != null && p.vEff > 0);
 
   // the scan runs once per daily route refresh, but this page rebuilds

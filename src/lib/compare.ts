@@ -107,6 +107,15 @@ export function rateAt(pts: CurvePoint[], t: number, windowMs = 7 * DAY): number
   return days > 0 ? Math.max(0, (v - vPrev) / days) : 0;
 }
 
+// THE stars/day /compare prints for a repo, everywhere on the page: the
+// canonical registry rate (v7, from /api/v1/compare) when there is one, else
+// the curve's own trailing 7-day slope. The legend read the first and the
+// "Fastest now" line the second, so one panel showed two rates for one repo.
+export function compareRate(canonical: number | null | undefined, pts: CurvePoint[]): number {
+  if (canonical != null) return canonical;
+  return pts.length ? rateAt(pts, pts[pts.length - 1].t) : 0;
+}
+
 // THE single projection. When does repo A meet repo B, given their current
 // star counts and per-day velocities? Pure, now-independent (callers add the
 // date as `now + etaDays*DAY`), so the race chart, the neighbor scan-cards, the

@@ -17,6 +17,7 @@ import VerticalChart from "@/components/VerticalChart";
 import { buildDemoSpotlight } from "@/lib/demo";
 import { buildGalaxy } from "@/lib/galaxy";
 import { canonicalVelocity } from "@/lib/velocity";
+import { rankedRegistry } from "@/lib/rank";
 import { loadRoute, loadMeta } from "@/lib/history";
 import { listCodexes } from "@/lib/codex";
 import { fmtCompact } from "@/lib/format";
@@ -59,8 +60,9 @@ export default async function Home() {
   // landing teaser for the velocity rankings: today's three fastest movers, on
   // the CANONICAL 7-day rate (v7, ~1-day v fallback) so the first velocity a
   // visitor sees matches /velocity and the /r/ page they click into.
-  const fastest = (route?.repos ?? [])
-    .map((p, i) => ({ r: p.r, v: canonicalVelocity(p), rank: i + 1 }))
+  // counted ranks (src/lib/rank.ts), so the "#N" agrees with /velocity and /r/
+  const fastest = rankedRegistry(route?.repos ?? [])
+    .map((p) => ({ r: p.r, v: canonicalVelocity(p), rank: p.rank }))
     .filter((p): p is { r: string; v: number; rank: number } => p.v !== null && p.v > 0)
     .sort((a, b) => b.v - a.v)
     .slice(0, 3);
