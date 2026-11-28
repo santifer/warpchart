@@ -6,14 +6,12 @@
 // paged on almost every normal cycle (the real cron cadence is ~5 h).
 import { lastSnapshot } from "@/lib/history";
 import { lowFuel } from "@/lib/github";
-import { reqLog } from "@/lib/log";
+import { reqLog, type Log } from "@/lib/log";
 import { pageMark } from "@/lib/staleness";
 
 export const dynamic = "force-dynamic";
 
-const log = reqLog("monitor");
-
-async function page(title: string, message: string) {
+async function page(log: Log, title: string, message: string) {
   const token = process.env.MOSHI_WEBHOOK_TOKEN;
   if (!token) {
     log.warn("page.skipped", { reason: "MOSHI_WEBHOOK_TOKEN missing", title });
@@ -38,6 +36,7 @@ export async function GET(req: Request) {
   if (process.env.CRON_SECRET && auth !== `Bearer ${process.env.CRON_SECRET}`) {
     return new Response("unauthorized", { status: 401 });
   }
+  const log = reqLog("monitor");
 
   const snap = lastSnapshot();
   const ageMin = snap ? Math.round((Date.now() - Date.parse(snap.ts)) / 60_000) : null;
@@ -46,12 +45,13 @@ export async function GET(req: Request) {
 
   if (ageMin === null) {
     alerts.push("no snapshot data at all");
-    await page("⚠️ warpchart collector", "no snapshot data found in the deployment");
+    await page(log, "⚠️ warpchart collector", "no snapshot data found in the deployment");
   } else {
     const mark = pageMark(ageMin);
     if (mark) {
       alerts.push(`collector quiet ${ageMin}min`);
       await page(
+        log,
         "⚠️ warpchart collector quiet",
         `last snapshot ${Math.round(ageMin / 60)}h ago (${snap!.ts}); a normal gap is up to ~8h. Check the collect workflow: github.com/santifer/warpchart/actions`
       );
@@ -61,6 +61,7 @@ export async function GET(req: Request) {
   if (fuel === "low") {
     alerts.push("token pool low");
     await page(
+      log,
       "⛽ warpchart low fuel",
       "every GitHub token is nearly exhausted; long-tail scans are paused until the window resets (max 1h)"
     );
