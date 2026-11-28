@@ -18,6 +18,16 @@ export function acceptUniverse(got, { want, prev = null, ratio = 0.9 } = {}) {
   return { ok: true, reason: null };
 }
 
+// The Vital Signs reference distribution ranks a repo "#N of {universe}", and
+// a rank is the one number on that panel that cannot be approximated. Publish
+// only a sweep that reached the end of its list AND measured most of it. The
+// old rule (`done >= 30`) published 30 measured of 999 as a whole universe
+// whenever the per-repo calls failed on the way.
+export function acceptDistribution(measured, { complete, targets, prev = null }) {
+  if (!complete) return { ok: false, reason: "sweep not finished" };
+  return acceptUniverse(measured, { want: targets, prev });
+}
+
 // PR flow is a full recompute from every PR the repo ever had, so the count of
 // human PRs can only fall if GitHub deletes some (rare: spam removals). A drop
 // beyond a small tolerance means the pagination stopped early.
