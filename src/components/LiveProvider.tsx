@@ -8,6 +8,7 @@ import {
 } from "react";
 import type { DashboardBundle } from "@/lib/bundle";
 import type { Neighbor } from "@/lib/types";
+import { pollWhileVisible } from "@/lib/visible-poll";
 
 const HOUR = 3600_000;
 const DAY = 86_400_000;
@@ -132,16 +133,16 @@ export default function LiveProvider({
       }
     }
 
-    pollFast();
-    pollNeighbors();
-    const fast = setInterval(pollFast, 60_000);
-    const slow = setInterval(pollNeighbors, 300_000);
-    const tick = setInterval(() => setNowMs(Date.now()), 30_000);
+    // paused while the tab is hidden; on return everything runs at once, so
+    // the console is caught up before anyone reads it (visible-poll.ts)
+    const stopPolling = pollWhileVisible([
+      { run: pollFast, everyMs: 60_000 },
+      { run: pollNeighbors, everyMs: 300_000 },
+      { run: () => setNowMs(Date.now()), everyMs: 30_000 },
+    ]);
     return () => {
       stop = true;
-      clearInterval(fast);
-      clearInterval(slow);
-      clearInterval(tick);
+      stopPolling();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [polling]);

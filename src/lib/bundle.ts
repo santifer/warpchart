@@ -14,7 +14,7 @@ import { repoBadges, type RepoBadges } from "./badges";
 import { canonicalVelocity, velocityQuality } from "./velocity";
 import type {
   RepoMetaFile, Snapshot, HourPoint, DayPoint, CumPoint, RankPoint,
-  FloorPoint, Neighbor, Apex, RouteRepo, MissionEvent, Spike,
+  FloorPoint, Neighbor, Apex, RouteRepo, RouteFile, MissionEvent, Spike,
   VelocityTrend,
 } from "./types";
 
@@ -76,6 +76,43 @@ export function forkRatioPercentile(
   return Math.round((below / ratios.length) * 100);
 }
 
+// A route entry as the CLIENT receives it. All 1000 of them ship in every /r/
+// page's payload (the local window pans anywhere on the route), so only what
+// the charts read goes: name, stars, rank, the canonical rate, the scan card's
+// description and language, and v7/trend/v7_to for velocityQuality (which
+// ignores trend and v7_to unless v7 is set). Forks (f) and the 1-day rate (v1)
+// stay on the server, and an absent value is left out instead of sent as null:
+// every reader already treats a missing field as null (`p.v != null`,
+// `p.d ?? null`).
+export function clientRouteRepo(
+  p: RouteFile["repos"][number],
+  rank: number,
+): RouteRepo {
+  const out: RouteRepo = { r: p.r, s: p.s, rank };
+  const v = canonicalVelocity(p);
+  if (v != null) out.v = v;
+  if (p.d) out.d = p.d;
+  if (p.l) out.l = p.l;
+  if (p.v7 != null) {
+    out.v7 = p.v7;
+    if (p.trend != null) out.trend = p.trend;
+    if (p.v7_to != null) out.v7_to = p.v7_to;
+  }
+  return out;
+}
+
+// The charted frontier (repos with a codex) as one page needs it. The full
+// listing is every slug ever charted and grows with every new visitor, but the
+// charts only ask "is THIS ship charted?" for ships they can draw: the focal
+// repo, its neighbors and the route registry. Shipping the rest only grows the
+// payload. Listing slugs are lowercase (the Blob key form); matching ignores
+// case, the way the charts' own lookup does.
+export function chartedAmong(charted: string[], drawable: Iterable<string>): string[] {
+  const want = new Set<string>();
+  for (const r of drawable) want.add(r.toLowerCase());
+  return charted.filter((r) => want.has(r.toLowerCase()));
+}
+
 // Every dot on the route band is a real repo from the worldwide top 1000.
 // Sampling halves per band away from the core: all repos in the top band,
 // every 2nd in the next, every 4th, every 8th... (generalizes to any depth).
@@ -92,7 +129,7 @@ export function buildRouteLayers(
   // tails, drift positions, promoted-dot ETAs and scan-card readouts all read
   // dot.v, so this one override makes the explorer chart agree with /velocity,
   // the API and the headline figure instead of showing the 1-day diff.
-  const ranked: RouteRepo[] = route.repos.map((p, i) => ({ ...p, rank: i + 1, v: canonicalVelocity(p) }));
+  const ranked: RouteRepo[] = route.repos.map((p, i) => clientRouteRepo(p, i + 1));
   const thresholdsAsc = milestones
     .map((m) => m.threshold)
     .filter((t) => t > stars)
