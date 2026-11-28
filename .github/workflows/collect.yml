@@ -43,9 +43,11 @@ jobs:
       - uses: actions/setup-node@v5
         with:
           node-version: 22
+          cache: npm
       # @vercel/blob is the only dependency the sync scripts need (the collector
-      # itself is built-ins only).
-      - run: npm install @vercel/blob --no-save --no-audit --no-fund
+      # itself is built-ins only). From the lockfile, never a floating install:
+      # this job holds the Blob token and a push token.
+      - run: npm ci --no-audit --no-fund
 
       # 1. Hydrate data/ from the PRIVATE Blob store — the accumulated history
       #    no longer lives in git, so the collector reads its prior state here.

@@ -21,11 +21,17 @@ jobs:
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v5
+        with:
+          # this job never pushes: leave no token in .git/config
+          persist-credentials: false
       - uses: actions/setup-node@v5
         with:
           node-version: 22
-      # only dependency the live collector needs (lib.mjs is built-ins only)
-      - run: npm install @vercel/blob --no-save --no-audit --no-fund
+          cache: npm
+      # @vercel/blob is the only dependency the live collector needs (lib.mjs
+      # is built-ins only), installed from the lockfile and the npm cache:
+      # this runs every 10 minutes with the Blob token in reach.
+      - run: npm ci --no-audit --no-fund
       - run: node collector/live.mjs
         env:
           # automatic Actions token covers the ~6 public-data reads per repo
