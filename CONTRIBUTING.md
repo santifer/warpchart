@@ -12,7 +12,10 @@ Thanks for wanting to improve Warpchart. The codebase is intentionally small and
 
 ## Dev setup
 
+Node 22.12 or newer is required (`.nvmrc` pins 22). vitest 5 crashes on Node 20 with a misleading `rolldown-binding.wasi.cjs` error; reinstalling dependencies does not fix it.
+
 ```bash
+nvm use
 npm install
 GH_TOKEN=$(gh auth token) node collector/bootstrap.mjs   # seed data/ for your test repo
 GITHUB_TOKEN=$(gh auth token) npm run dev
