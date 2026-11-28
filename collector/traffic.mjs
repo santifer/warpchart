@@ -15,8 +15,8 @@
 // Usage: BLOB_READ_WRITE_TOKEN=... TRAFFIC_TOKEN=... node collector/traffic.mjs
 import { readFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
-import { put, get } from "@vercel/blob";
 import { DATA_DIR, readConfig, allNamesOf, canonicalRepo } from "./lib.mjs";
+import { readJsonStrict, updateJson, RefusedWrite, markPartial, markComplete } from "./blob.mjs";
 
 const blobToken = process.env.BLOB_READ_WRITE_TOKEN;
 if (!blobToken) {
@@ -46,19 +46,32 @@ async function readVault(repo) {
   // key: seed from every historical name (newest first) so the un-replicable
   // history migrates into the canonical key on the first post-rename write
   // instead of restarting from empty.
+  //
+  // Only "absent under every name" is a new vault. A read that fails throws
+  // and aborts this repo: falling through to the next name would merge into an
+  // older copy (or nothing) and overwrite the canonical vault with it.
   for (const name of [...allNamesOf(repo)].reverse()) {
-    try {
-      const res = await get(blobKey(name), { access: "private", token: blobToken });
-      if (res?.statusCode === 200 && res.stream) {
-        const v = JSON.parse(await new Response(res.stream).text());
-        v.repo = repo;
-        return v;
-      }
-    } catch {
-      /* first run / transient: try the previous name */
-    }
+    const r = await readJsonStrict(blobKey(name));
+    if (r.state === "absent") continue;
+    // the etag only guards the key we write; a vault seeded from an old name
+    // is written to the canonical key, which was absent
+    const own = blobKey(name) === blobKey(repo);
+    return { state: "data", value: { ...r.value, repo }, etag: own ? r.etag : null };
   }
-  return { repo, views: {}, clones: {}, referrers: [], referrersAt: null, updatedAt: null };
+  return { state: "data", value: { repo, views: {}, clones: {}, referrers: [], referrersAt: null, updatedAt: null }, etag: null };
+}
+
+// The vault only ever grows: a merge that holds fewer days (or fewer referrer
+// refreshes) than what was stored means the read was not the whole vault.
+function shrinkGuard(before, after) {
+  const n = (o) => Object.keys(o ?? {}).length;
+  for (const [what, b, a] of [
+    ["view-days", n(before.views), n(after.views)],
+    ["clone-days", n(before.clones), n(after.clones)],
+    ["referrer refreshes", before.referrerChanges?.length ?? 0, after.referrerChanges?.length ?? 0],
+  ]) {
+    if (a < b) throw new RefusedWrite(`${what} would shrink from ${b} to ${a}`);
+  }
 }
 
 async function ghTraffic(repo, path, token) {
@@ -99,103 +112,118 @@ if (!repos.size) {
 
 let ok = 0;
 let skipped = 0;
+const refused = [];
 for (const repo of repos) {
   const token = tokenFor(repo);
   if (!token) {
     skipped++;
     continue;
   }
+  let views, clones, referrers;
   try {
-    const [views, clones, referrers] = await Promise.all([
+    [views, clones, referrers] = await Promise.all([
       ghTraffic(repo, "views?per=day", token),
       ghTraffic(repo, "clones?per=day", token),
       ghTraffic(repo, "popular/referrers", token),
     ]);
-    const vault = await readVault(repo);
-    vault.views ??= {};
-    vault.clones ??= {};
-    // merge the 14-day daily series by date; the latest read of a day wins
-    // (today's count keeps growing, so the most recent snapshot is authoritative)
-    for (const v of views.views ?? []) {
-      vault.views[v.timestamp.slice(0, 10)] = { c: v.count, u: v.uniques };
-    }
-    for (const c of clones.clones ?? []) {
-      vault.clones[c.timestamp.slice(0, 10)] = { c: c.count, u: c.uniques };
-    }
-    // THE ONLY DEDUPLICATED HEADCOUNT GITHUB GIVES. The per-day rows above carry
-    // per-DAY uniques: summing them counts one person once per day they showed
-    // up, so a 72-day sum ran 3x the real figure (91,685 vs 29,837 on
-    // 2026-08-13) and the public panel was labelling it "unique cloners".
-    // These two top-level fields are deduplicated across the API's own 14-day
-    // window and are the only numbers that may ever carry the word "unique".
-    // They cannot be accumulated either: two 14-day windows overlap in people,
-    // not just in days, so we keep the LATEST reading and its date, never a sum.
-    vault.uniq14 = {
-      cloners: clones?.uniques ?? null,
-      visitors: views?.uniques ?? null,
-      // the window GitHub actually answered for, so a stale vault is visible
-      // rather than silently passing for today
-      at: new Date().toISOString().slice(0, 10),
-    };
+  } catch (err) {
+    skipped++;
+    console.error(`[traffic] ${repo} skipped: ${err.message}`);
+    continue;
+  }
+  // From here on a failure is the vault's, not GitHub's: the stored vault was
+  // unreadable or the merge was refused. Either way it is kept as it was, and
+  // the watchdog hears about it.
+  try {
     const stamp = new Date().toISOString();
-    vault.referrers = (referrers ?? [])
-      .slice(0, 10)
-      .map((r) => ({ r: r.referrer, c: r.count, u: r.uniques }));
-    vault.referrersAt = stamp.slice(0, 10);
-    // Keep a PER-RUN history of referrer snapshots (one every ~2h). The 14-day
-    // aggregate alone cannot pinpoint which domain drove a specific HOUR's spike;
-    // diffing the two snapshots that bracket the spike can ("t.co jumped +1,400
-    // the hour 67 stars landed"). collector/attribute.mjs consumes this. ~250
-    // entries ≈ 3 weeks at the 2h cadence.
-    vault.referrerHistory = vault.referrerHistory ?? [];
-    vault.referrerHistory.push({ at: stamp, refs: vault.referrers });
-    vault.referrerHistory = vault.referrerHistory.slice(-250);
+    const { value: vault } = await updateJson(
+      blobKey(repo),
+      (stored) => {
+        const vault = structuredClone(stored);
+        vault.views ??= {};
+        vault.clones ??= {};
+        // merge the 14-day daily series by date; the latest read of a day wins
+        // (today's count keeps growing, so the most recent snapshot is authoritative)
+        for (const v of views.views ?? []) {
+          vault.views[v.timestamp.slice(0, 10)] = { c: v.count, u: v.uniques };
+        }
+        for (const c of clones.clones ?? []) {
+          vault.clones[c.timestamp.slice(0, 10)] = { c: c.count, u: c.uniques };
+        }
+        // THE ONLY DEDUPLICATED HEADCOUNT GITHUB GIVES. The per-day rows above carry
+        // per-DAY uniques: summing them counts one person once per day they showed
+        // up, so a 72-day sum ran 3x the real figure (91,685 vs 29,837 on
+        // 2026-08-13) and the public panel was labelling it "unique cloners".
+        // These two top-level fields are deduplicated across the API's own 14-day
+        // window and are the only numbers that may ever carry the word "unique".
+        // They cannot be accumulated either: two 14-day windows overlap in people,
+        // not just in days, so we keep the LATEST reading and its date, never a sum.
+        vault.uniq14 = {
+          cloners: clones?.uniques ?? null,
+          visitors: views?.uniques ?? null,
+          // the window GitHub actually answered for, so a stale vault is visible
+          // rather than silently passing for today
+          at: new Date().toISOString().slice(0, 10),
+        };
+        vault.referrers = (referrers ?? [])
+          .slice(0, 10)
+          .map((r) => ({ r: r.referrer, c: r.count, u: r.uniques }));
+        vault.referrersAt = stamp.slice(0, 10);
+        // Keep a PER-RUN history of referrer snapshots (one every ~2h). The 14-day
+        // aggregate alone cannot pinpoint which domain drove a specific HOUR's spike;
+        // diffing the two snapshots that bracket the spike can ("t.co jumped +1,400
+        // the hour 67 stars landed"). collector/attribute.mjs consumes this. ~250
+        // entries ≈ 3 weeks at the 2h cadence.
+        vault.referrerHistory = vault.referrerHistory ?? [];
+        vault.referrerHistory.push({ at: stamp, refs: vault.referrers });
+        vault.referrerHistory = vault.referrerHistory.slice(-250);
 
-    // REFRESH-ANCHORED SERIES: one entry per REAL change of GitHub's aggregate,
-    // kept forever (~1 row/day, a few KB a year). Deduped by content.
-    //
-    // WHY NOT one-per-day-by-clock, which is what this was for about an hour.
-    // Measured over 273 snapshots: 214 of 241 intra-day pairs are BYTE
-    // IDENTICAL. GitHub does not recompute this feed every 2h, it recomputes it
-    // ONCE A DAY (median gap between changes: 24.0h) at a wandering hour -
-    // usually 05:00-13:00Z, mode 08:00Z, but one landed at 20:23Z. So a clock
-    // anchor is fragile in both directions: anchor early and you always capture
-    // yesterday's figure until the one day the refresh comes at 01:00Z; anchor
-    // late and the 20:23Z refresh flips a day. Anchoring on the CHANGE itself
-    // has no such failure mode and needs no assumption about GitHub's schedule.
-    //
-    // WHY IT MATTERS. GitHub only serves referrers as a 14-day ROLLING
-    // aggregate, so a fall can be an old day leaving the window rather than a
-    // source going quiet - the trap that made github.com look like it dropped
-    // 19% after the org transfer when its real daily inflow had RISEN ~56%
-    // (reconstructed as flow(t) = agg(t) - agg(t-1) + flow(t-14), replicated
-    // independently by search-ops). That inversion needs one clean reading per
-    // refresh; capture jitter is what pushed reconstructed flow negative.
-    const lastRefs = vault.referrerChanges?.at(-1)?.refs;
-    const sameAsLast =
-      lastRefs !== undefined &&
-      JSON.stringify(lastRefs.map((r) => [r.r, r.c, r.u]).sort()) ===
-        JSON.stringify(vault.referrers.map((r) => [r.r, r.c, r.u]).sort());
-    vault.referrerChanges = vault.referrerChanges ?? [];
-    if (!sameAsLast) vault.referrerChanges.push({ at: stamp, refs: vault.referrers });
+        // REFRESH-ANCHORED SERIES: one entry per REAL change of GitHub's aggregate,
+        // kept forever (~1 row/day, a few KB a year). Deduped by content.
+        //
+        // WHY NOT one-per-day-by-clock, which is what this was for about an hour.
+        // Measured over 273 snapshots: 214 of 241 intra-day pairs are BYTE
+        // IDENTICAL. GitHub does not recompute this feed every 2h, it recomputes it
+        // ONCE A DAY (median gap between changes: 24.0h) at a wandering hour -
+        // usually 05:00-13:00Z, mode 08:00Z, but one landed at 20:23Z. So a clock
+        // anchor is fragile in both directions: anchor early and you always capture
+        // yesterday's figure until the one day the refresh comes at 01:00Z; anchor
+        // late and the 20:23Z refresh flips a day. Anchoring on the CHANGE itself
+        // has no such failure mode and needs no assumption about GitHub's schedule.
+        //
+        // WHY IT MATTERS. GitHub only serves referrers as a 14-day ROLLING
+        // aggregate, so a fall can be an old day leaving the window rather than a
+        // source going quiet - the trap that made github.com look like it dropped
+        // 19% after the org transfer when its real daily inflow had RISEN ~56%
+        // (reconstructed as flow(t) = agg(t) - agg(t-1) + flow(t-14), replicated
+        // independently by search-ops). That inversion needs one clean reading per
+        // refresh; capture jitter is what pushed reconstructed flow negative.
+        const lastRefs = vault.referrerChanges?.at(-1)?.refs;
+        const sameAsLast =
+          lastRefs !== undefined &&
+          JSON.stringify(lastRefs.map((r) => [r.r, r.c, r.u]).sort()) ===
+            JSON.stringify(vault.referrers.map((r) => [r.r, r.c, r.u]).sort());
+        vault.referrerChanges = vault.referrerChanges ?? [];
+        if (!sameAsLast) vault.referrerChanges.push({ at: stamp, refs: vault.referrers });
 
-    vault.updatedAt = stamp;
-
-    await put(blobKey(repo), JSON.stringify(vault), {
-      access: "private",
-      addRandomSuffix: false,
-      allowOverwrite: true,
-      contentType: "application/json",
-      token: blobToken,
-    });
+        vault.updatedAt = stamp;
+        shrinkGuard(stored, vault);
+        return vault;
+      },
+      { read: () => readVault(repo) },
+    );
     ok++;
     console.log(
       `[traffic] ${repo}: ${Object.keys(vault.views).length} view-days, ${Object.keys(vault.clones).length} clone-days, ${vault.referrers.length} referrers (vault kept)`,
     );
   } catch (err) {
     skipped++;
-    console.error(`[traffic] ${repo} skipped: ${err.message}`);
+    refused.push(`${repo}: ${err.message}`);
+    console.error(`[traffic] ${repo}: vault NOT written, the stored one is kept (${err.message})`);
   }
 }
+
+if (refused.length) await markPartial("traffic", { reason: refused.join("; ") });
+else if (ok) await markComplete("traffic", { vaulted: ok });
 
 console.log(`[traffic] done: ${ok} vaulted, ${skipped} skipped (no token or no access)`);
